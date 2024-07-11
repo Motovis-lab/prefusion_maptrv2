@@ -1,0 +1,4 @@
+refs
+data
+*.zip
+**/__pycache__
