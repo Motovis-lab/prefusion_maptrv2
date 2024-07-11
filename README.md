@@ -15,14 +15,14 @@ Already a pro? Just edit this README.md and make it your own. Want to make it ea
 
 ```
 cd existing_repo
-git remote add origin https://gitlab.com/auto-ai1/prefusion.git
+git remote add origin https://gitlab.com/auto-ai-ragtag/prefusion.git
 git branch -M main
 git push -uf origin main
 ```
 
 ## Integrate with your tools
 
-- [ ] [Set up project integrations](https://gitlab.com/auto-ai1/prefusion/-/settings/integrations)
+- [ ] [Set up project integrations](https://gitlab.com/auto-ai-ragtag/prefusion/-/settings/integrations)
 
 ## Collaborate with your team
 
