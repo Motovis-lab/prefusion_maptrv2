@@ -10,6 +10,8 @@ import virtual_camera as vc
 
 from scipy.spatial.transform import Rotation
 
+from prefusion.registry import TRANSFORMS
+
 
 class Transformable:
     """
@@ -742,7 +744,7 @@ class Polyline3D(Transformable):
         return self
 
 
-    def to_tensor(self, **kwargs):
+    def to_tensor(self, bev_resolution, **kwargs):
         return self
 
 
@@ -793,13 +795,18 @@ class OccSdfBev(Transformable):
 
     '''
     self.data = {
-        'src_view_range': [x_min, x_max, y_min, y_max, z_min, z_max], # ego system
-        'dst_view_range': [x_min, x_max, y_min, y_max, z_min, z_max], # ego system
-        'occ': <N x H x W>, # H <=> (x_min, x_max), W <=> (y_min, y_max)
+        'src_view_range': [back, front, right, left, bottom, up], # in ego system
+        'dst_view_range': [back, front, right, left, bottom, up], # in ego system
+        'occ': <N x H x W>, # H <=> (xmin, xmax), W <=> (ymin, ymax)
         'sdf': <1 x H x W>,
         'height': <1 x H x W>,
         'mask': <1 x H x W>,
     }
+    
+    back, front, right, left, bottom, up  
+    ||    ||     ||     ||    ||      ||
+    xmin, xmax,  ymin,  ymax, zmin,   zmax
+
     bev: backward-right-up (H, W, Z)
     ego: x-y-z, forward-left-up
     '''
@@ -905,7 +912,7 @@ class OccSdfBev(Transformable):
         return self
 
 
-    def to_tensor(self, **kwargs):
+    def to_tensor(self, dst_bev_resolution, **kwargs):
         return self
 
 
@@ -1280,4 +1287,5 @@ available_transforms = [
     ToTensor
 ]
 
-# [TRANSFORMS.register_module(module=transform) for transform in available_transforms]
+for transform in available_transforms:
+    TRANSFORMS.register_module(module=transform)
