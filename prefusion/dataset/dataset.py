@@ -322,8 +322,11 @@ class GroupBatchDataset(Dataset):
                 for transform in self.transforms:
                     transform(*transformables, seeds=[group_seed, batch_seed, frame_seed])
 
+        group_batch = []
         for frame_batch in zip(*batch):
-            yield frame_batch
+            group_batch.append(frame_batch)
+        
+        return group_batch
 
 
 

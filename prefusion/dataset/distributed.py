@@ -6,7 +6,7 @@ import torch.distributed as dist
 from copy import copy
 from typing import TypeVar, Optional, Iterator
 from torch.utils.data import Sampler
-from .dataset_bak import GroupBatchDataset
+from .dataset import GroupBatchDataset
 
 # __all__ = ["DistributedGroupSampler", ]
 
