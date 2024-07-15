@@ -1017,15 +1017,10 @@ class RandomChooseOneTransform(Transform):
 
 
 
-class MultiRandomTransforms(Transform):
+class RandomTransformSequence(Transform):
     def __init__(self, transforms, *, scope='frame') -> None:
         self.transforms = transforms
         self.scope = scope
-    
-    def __repr__(self) -> str:
-        for transform in self.transforms:
-            print(transform.__name__)
-        return 'A random sequence of transforms: '
     
     def __call__(self, *transformables, seeds=[None, None, None], **kwargs):
         for seed in seeds:
