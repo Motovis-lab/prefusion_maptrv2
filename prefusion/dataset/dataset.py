@@ -11,9 +11,9 @@ import numpy as np
 from pathlib import Path
 from typing import List, Tuple, Dict
 
-from scipy.spatial.transform import Rotation
 from torch.utils.data import Dataset
 from mmengine.registry import DATASETS
+from prefusion.registry import TRANSFORMS
 
 # 'camera_images', 'lidar_points', 
 # 'camera_segs', 'camera_depths',
@@ -100,7 +100,6 @@ class GroupBatchDataset(Dataset):
         assert phase in ['train', 'val', 'test']
         self.phase = phase
         self.info = mmengine.load(info_path)
-        self.dictionary = dictionary
         self.AVAILABLE_TRANSFORMABLE_KEYS = (
             'camera_images', 'lidar_points', 
             'camera_segs', 'camera_depths',
@@ -108,11 +107,20 @@ class GroupBatchDataset(Dataset):
             'polyline_3d', 'polygon_3d', 'parkingslot_3d', 'trajectory',
             'seg_bev', 'occ_sdf_bev', 'occ_sdf_3d'
         )
+        for key in dictionary:
+            assert key in self.AVAILABLE_TRANSFORMABLE_KEYS, \
+                f"{key} is not a valid transformable key from {self.AVAILABLE_TRANSFORMABLE_KEYS}"
         for key in transformable_keys:
             assert key in self.AVAILABLE_TRANSFORMABLE_KEYS, \
                 f"{key} is not a valid transformable key from {self.AVAILABLE_TRANSFORMABLE_KEYS}"
+        self.dictionary = dictionary
         self.transformable_keys = transformable_keys
-        self.transforms = transforms
+        self.transforms = []
+        for transform in transforms:
+            if isinstance(transform, dict):
+                self.transforms.append(TRANSFORMS.build(transform))
+            else:
+                self.transforms.append(transform)
 
         if indices_path is not None:
             indices = [line.strip() for line in open(indices_path, 'w')]
@@ -263,7 +271,7 @@ class GroupBatchDataset(Dataset):
         for scene_id in self.scene_ids:
             scene_groups.append(self.scene_ids[scene_id])
         self.groups = scene_groups
-    
+
 
     def _sample_groups_by_class_balance(self):
         raise NotImplementedError
@@ -335,7 +343,7 @@ class GroupBatchDataset(Dataset):
         scene = self.info[scene_id]
         frame = scene['frame_info'][frame_id]
         
-        camera_images = []
+        camera_images = {}
         for camera_id in frame['camera_image']:
             data = {
                 'cam_id': camera_id,
@@ -347,7 +355,7 @@ class GroupBatchDataset(Dataset):
             data['ego_mask'] = mmcv.imread(
                 self.data_root / scene['scene_info']['camera_mask'][camera_id], flag='grayscale'
             )
-            camera_images.append(Image(data))
+            camera_images[camera_id] = Image(data)
         
         return camera_images
     
@@ -364,7 +372,7 @@ class GroupBatchDataset(Dataset):
         scene_id, frame_id = index.split('/')
         scene = self.info[scene_id]
         frame = scene['frame_info'][frame_id]
-        camera_segs = []
+        camera_segs = {}
         for camera_id in frame['camera_image_seg']:
             data = {
                 'cam_id': camera_id,
@@ -376,7 +384,7 @@ class GroupBatchDataset(Dataset):
             data['ego_mask'] = mmcv.imread(
                 self.data_root / scene['scene_info']['camera_mask'][camera_id], flag='grayscale'
             )
-            camera_segs.append(ImageSegMask(data, self.dictionary['camera_segs']))
+            camera_segs[camera_id] = ImageSegMask(data, self.dictionary['camera_segs'])
 
         return camera_segs
 
@@ -385,7 +393,7 @@ class GroupBatchDataset(Dataset):
         scene_id, frame_id = index.split('/')
         scene = self.info[scene_id]
         frame = scene['frame_info'][frame_id]
-        camera_depths = []
+        camera_depths = {}
         for camera_id in frame['camera_image_depth']:
             data = {
                 'cam_id': camera_id,
@@ -397,7 +405,7 @@ class GroupBatchDataset(Dataset):
             data['ego_mask'] = mmcv.imread(
                 self.data_root / scene['scene_info']['camera_mask'][camera_id], flag='grayscale'
             )
-            camera_depths.append(ImageDepth(data))
+            camera_depths[camera_id] = ImageDepth(data)
 
         return camera_depths
 

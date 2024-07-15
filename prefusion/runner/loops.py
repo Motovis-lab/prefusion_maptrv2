@@ -2,7 +2,7 @@
 from mmengine.registry import LOOPS
 from mmengine.runner import EpochBasedTrainLoop, ValLoop, TestLoop
 
-from src.dataset.dataset import GroupBatchDataset
+from prefusion.dataset.dataset import GroupBatchDataset
 
 
 @LOOPS.register_module()
