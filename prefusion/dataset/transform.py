@@ -1198,10 +1198,8 @@ def random_transform_class_factory(cls_name, transform_func):
         self.prob = prob
         self.kwargs = kwargs
 
-    def __call__(self, *transformables, seeds=[None, None, None], **kwargs):
-        for seed in seeds:
-            if self.scope in str(seed):
-                random.seed(seed)
+    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
+        random.seed(seeds[self.scope])
         if random.random() > self.prob:
             return list(transformables)
         return [None if i is None else getattr(i, transform_func)(**self.kwargs) for i in transformables]
@@ -1253,10 +1251,8 @@ class RandomChooseOneTransform(Transform):
         self.transform_probs = transform_probs
         self.prob = prob
 
-    def __call__(self, *transformables, seeds=[None, None, None], **kwargs):
-        for seed in seeds:
-            if self.scope in str(seed):
-                random.seed(seed)
+    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
+        random.seed(seeds[self.scope])
         if random.random() <= self.prob:
             transform = random.choices(
                 population=self.transforms,
@@ -1274,7 +1270,7 @@ class RandomTransformSequence(Transform):
         self.transforms = transforms
         self.scope = scope
     
-    def __call__(self, *transformables, seeds=[None, None, None], **kwargs):
+    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
         for seed in seeds:
             if seed is not None:
                 random.seed(seed)
@@ -1308,10 +1304,8 @@ class RandomImageISP(Transform):
             self.sequence.append({transform: eval(f"{transform}")})
         self.kwargs = kwargs
     
-    def __call__(self, *transformables, seeds=[None, None, None], **kwargs):
-        for seed in seeds:
-            if self.scope in str(seed):
-                random.seed(seed)
+    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
+        random.seed(seeds[self.scope])
         
         if self.random_sequence:
             random.shuffle(self.sequence)
@@ -1450,18 +1444,14 @@ class FastRayLookUpTable(Transform):
         )
         self.cam_ids = list(camera_feature_configs.keys())
     
-    def __call__(self, *transformables, seeds=[None, None, None], **kwargs):
-        scope_seed = None
-        for seed in seeds:
-            if self.scope in str(seed):
-                scope_seed = seed
+    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
         camera_images = {}
         for transformable in transformables:
             if isinstance(transformable, Image):
                 cam_id = transformable.data['cam_id']
                 if cam_id in self.cam_ids:
                     camera_images[cam_id] = transformable
-        LUT = self.lut_gen.generate(camera_images, seed=scope_seed)
+        LUT = self.lut_gen.generate(camera_images, seed=seeds[self.scope])
         for cam_id in camera_images:
             camera_images[cam_id].data['fast_ray_LUT'] = LUT[cam_id]
         return transformables
@@ -1474,10 +1464,8 @@ class RandomExtrinsicImage(Transform):
         self.prob = prob
         self.angles = angles
 
-    def __call__(self, *transformables, seeds=[None, None, None], **kwargs):
-        for seed in seeds:
-            if self.scope in str(seed):
-                random.seed(seed)
+    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
+        random.seed(seeds[self.scope])
         if random.random() > self.prob:
             return list(transformables)
         
@@ -1508,10 +1496,8 @@ class RandomRotationSpace(Transform):
         self.angles = angles
         self.prob_inverse_cameras_rotation = prob_inverse_cameras_rotation
 
-    def __call__(self, *transformables, seeds=[None, None, None], **kwargs):
-        for seed in seeds:
-            if self.scope in str(seed):
-                random.seed(seed)
+    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
+        random.seed(seeds[self.scope])
         if random.random() > self.prob:
             return list(transformables)
         
@@ -1554,10 +1540,8 @@ class RandomMirrorSpace(Transform):
         if 'Z' in self.flip_mode:
             self.flip_mat[2, 2] = -1
 
-    def __call__(self, *transformables, seeds=[None, None, None], **kwargs):
-        for seed in seeds:
-            if self.scope in str(seed):
-                random.seed(seed)
+    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
+        random.seed(seeds[self.scope])
         if random.random() > self.prob:
             return list(transformables)
 

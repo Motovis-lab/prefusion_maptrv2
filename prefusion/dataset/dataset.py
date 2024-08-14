@@ -331,11 +331,11 @@ class GroupBatchDataset(Dataset):
             batch.append(group_of_inputs)
 
         # apply transforms
-        batch_seed = 'batch_{}'.format(int.from_bytes(os.urandom(2), byteorder="big"))
+        batch_seed = int.from_bytes(os.urandom(2), byteorder="big")
         for group_of_inputs in batch:
-            group_seed = 'group_{}'.format(int.from_bytes(os.urandom(2), byteorder="big"))
+            group_seed = int.from_bytes(os.urandom(2), byteorder="big")
             for input_dict in group_of_inputs:
-                frame_seed = 'frame_{}'.format(int.from_bytes(os.urandom(2), byteorder="big"))
+                frame_seed = int.from_bytes(os.urandom(2), byteorder="big")
                 transformables = []
                 for key in input_dict['transformables']:
                     transformable = input_dict['transformables'][key]
@@ -344,7 +344,7 @@ class GroupBatchDataset(Dataset):
                     else:
                         transformables.append(transformable)
                 for transform in self.transforms:
-                    transform(*transformables, seeds=[group_seed, batch_seed, frame_seed])
+                    transform(*transformables, seeds={'group': group_seed, 'batch': batch_seed, 'frame': frame_seed})
 
         group_batch = []
         for frame_batch in zip(*batch):
