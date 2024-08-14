@@ -2,7 +2,7 @@ numpy
 scipy
 nuscenes-devkit
 opencv-python-headless
-virtual-camera>=0.4.0
+virtual-camera>=0.4.2
 open3d>=0.18.0
 torch>=2.3.0
 torchvision>=0.18.0

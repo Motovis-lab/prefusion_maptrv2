@@ -12,8 +12,10 @@ from pathlib import Path
 from typing import List, Tuple, Dict
 
 from torch.utils.data import Dataset
-from mmengine.registry import DATASETS
+from mmengine.registry import DATASETS, FUNCTIONS
 from prefusion.registry import TRANSFORMS
+
+from .transform import ToTensor
 
 # 'camera_images', 'lidar_points', 
 # 'camera_segs', 'camera_depths',
@@ -28,15 +30,7 @@ from .transform import (
     SegBev, OccSdfBev, OccSdf3D
 )
 
-
-
-def get_cam_type(name):
-    if 'perspective' in name.lower():
-        return 'PerspectiveCamera'
-    elif 'fisheye' in name.lower():
-        return 'FisheyeCamera'
-    else:
-        raise ValueError('Unknown camera type')
+from .utils import get_cam_type
 
 
 def get_frame_index(sequence, timestamp):
@@ -45,12 +39,18 @@ def get_frame_index(sequence, timestamp):
             return t
 
 
+@FUNCTIONS.register_module()
+def collate_dict(batch):
+    return batch[0]
+
+
 
 @DATASETS.register_module()
 class GroupBatchDataset(Dataset):
     '''
     A novel dataset class for batching sequence groups for multi-module data.
     '''
+    # TODO: implement visualization?
     
     def __init__(self, name, *, 
                  data_root, 
@@ -75,6 +75,17 @@ class GroupBatchDataset(Dataset):
         - data_root (str): Root directory of the dataset.
         - info_path (str): Path to the information file.
         - dictionary (dict): Dictionary for each transformable.
+            - dictionary = {
+                'bbox_3d': {
+                    'branch_0': {
+                        'classes': [<>, <>, ...], 
+                        'attrs:': [<>, <>, ...]
+                    }, 
+                    'branch_1': {...}
+                },
+                'bbox_bev': {...},
+                'polyline_3d': {...},
+            }
         - transformable_keys (list): List of transformable keys. Keys should be in dictionary.
         - transforms (list): Transform classes for preprocessing transformables. Build by TRANSFORMS.
         - phase (str): Specifies the phase ('train', 'val', or 'test') of the dataset; default is 'train'.
@@ -97,8 +108,8 @@ class GroupBatchDataset(Dataset):
         super().__init__()
         self.name = name
         self.data_root = Path(data_root)
-        assert phase in ['train', 'val', 'test']
-        self.phase = phase
+        assert phase.lower() in ['train', 'val', 'test']
+        self.phase = phase.lower()
         self.info = mmengine.load(info_path)
         self.AVAILABLE_TRANSFORMABLE_KEYS = (
             'camera_images', 'lidar_points', 
@@ -116,11 +127,17 @@ class GroupBatchDataset(Dataset):
         self.dictionary = dictionary
         self.transformable_keys = transformable_keys
         self.transforms = []
+        is_to_tensor = False
         for transform in transforms:
             if isinstance(transform, dict):
-                self.transforms.append(TRANSFORMS.build(transform))
-            else:
-                self.transforms.append(transform)
+                transform = TRANSFORMS.build(transform)
+                # self.transforms.append(TRANSFORMS.build(transform))
+            self.transforms.append(transform)
+            if isinstance(transform, ToTensor):
+                is_to_tensor = True
+        if is_to_tensor:
+            assert isinstance(self.transforms[-1], ToTensor), \
+                "ToTensor should be placed at last."        
 
         if indices_path is not None:
             indices = [line.strip() for line in open(indices_path, 'w')]
@@ -173,7 +190,7 @@ class GroupBatchDataset(Dataset):
             'prev_exists': True,
             'next_exists': True,
             'transformables': {}
-        }
+        }  # TODO: add ego pose transformation
         for key in self.transformable_keys:
             input_dict['transformables'][key] = eval(f'self.load_{key}')(index)
 
@@ -288,7 +305,6 @@ class GroupBatchDataset(Dataset):
             return int(np.ceil(len(self.groups) / self.batch_size))
 
 
-
     def __getitem__(self, idx):
         
         if idx >= len(self):
@@ -323,8 +339,8 @@ class GroupBatchDataset(Dataset):
                 transformables = []
                 for key in input_dict['transformables']:
                     transformable = input_dict['transformables'][key]
-                    if isinstance(transformable, (list, tuple)):
-                        transformables.extend(transformable)
+                    if isinstance(transformable, dict):
+                        transformables.extend(transformable.values())                    
                     else:
                         transformables.append(transformable)
                 for transform in self.transforms:
@@ -530,12 +546,3 @@ class GroupBatchDataset(Dataset):
         file_path = frame['occ_sdf']['occ_sdf_3d']
         raise NotImplementedError
     
-
-
-
-
-
-
-
-
-    # class SequenceGroupDataset(Dataset):

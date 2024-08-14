@@ -3,12 +3,22 @@ import inspect
 
 import cv2
 import mmcv
+import torch
 import numpy as np
 
 import virtual_camera as vc
 # import albumentations as AT
 
 from scipy.spatial.transform import Rotation
+
+from .utils import (
+    expand_line_2d, _sign, INF_DIST,
+    vec_point2line_along_direction, 
+    dist_point2line_along_direction,
+    get_cam_type,
+    VoxelLookUpTableGenerator
+)
+
 
 from prefusion.registry import TRANSFORMS
 
@@ -150,12 +160,21 @@ ZoomBlur
 class Image(Transformable):
     """
     - self.data = {
-        'img': <img_arr>,
-        'ego_mask': <arr>,
-        'cam_id': <str>,
-        'cam_type': < 'FisheyeCamera' | 'PerspectiveCamera' >
+        'img': \<img_arr\>,
+        'ego_mask': \<arr\>,
+        'cam_id': \<str\>,
+        'cam_type': \< 'FisheyeCamera' | 'PerspectiveCamera' \>
         'extrinsic': (R, t),
-        'intrinsic': [cx, cy, fx, fy, *distortion_params]
+        'intrinsic': [cx, cy, fx, fy, *distortion_params],
+        'fast_ray_LUT': \<fast_ray_LUT\>
+    }
+    - \<fast_ray_LUT\> = {
+        uu: uu, 
+        vv: vv, 
+        dd: dd, 
+        valid_map: valid_map,
+        valid_map_sampled: valid_map_sampled,
+        norm_density_map: norm_density_map
     }
     """
 
@@ -163,10 +182,10 @@ class Image(Transformable):
         super().__init__(data)
         assert self.data['cam_type'] in ['FisheyeCamera', 'PerspectiveCamera']
 
-    def at_transform(self, func_name, **kwargs):
-        func = getattr(AT, func_name)(**kwargs)
-        self.data['img'] = func(image=self.data['img'])['image']
-        return self
+    # def at_transform(self, func_name, **kwargs):
+    #     func = getattr(AT, func_name)(**kwargs)
+    #     self.data['img'] = func(image=self.data['img'])['image']
+    #     return self
 
     def adjust_brightness(self, brightness=1, **kwargs):
         self.data['img'] = mmcv.adjust_brightness(self.data['img'], factor=brightness)
@@ -252,7 +271,7 @@ class Image(Transformable):
             ego_mask=self.data['ego_mask']
         )
         if len(intrinsic) < len(self.data['intrinsic']):
-            intrinsic_new = list(intrinsic) + self.data['intrinsic'][len(intrinsic):]
+            intrinsic_new = list(intrinsic) + list(self.data['intrinsic'][len(intrinsic):])
         else:
             intrinsic_new = intrinsic
         camera_new = camera_class(
@@ -313,6 +332,24 @@ class Image(Transformable):
     
 
     def to_tensor(self, **kwargs):
+        '''
+        self.data = {
+            'img': \<img_arr\>,
+            'ego_mask': \<arr\>,
+            'cam_id': \<str\>,
+            'cam_type': \< 'FisheyeCamera' | 'PerspectiveCamera' \>
+            'extrinsic': (R, t),
+            'intrinsic': [cx, cy, fx, fy, *distortion_params],
+            'fast_ray_LUT': \<fast_ray_LUT\>
+        }
+        \<fast_ray_LUT\> = {
+            uu: uu, 
+            vv: vv, 
+            dd: dd, 
+            valid_map: valid_map,
+            valid_map_sampled: valid_map_sampled,
+            norm_density_map: norm_density_map
+        }'''
         return self
 
 
@@ -320,7 +357,7 @@ class Image(Transformable):
 class LidarPoints(Transformable):
     '''
     self.data = {
-        'positions': <N x 3 array>, in ego-systemssss
+        'positions': <N x 3 array>, in ego-system
         'intensity': <N x 1 array>
     }
     '''
@@ -403,7 +440,7 @@ class ImageSegMask(Transformable):
             ego_mask=self.data['ego_mask']
         )
         if len(intrinsic) < len(self.data['intrinsic']):
-            intrinsic_new = list(intrinsic) + self.data['intrinsic'][len(intrinsic):]
+            intrinsic_new = list(intrinsic) + list(self.data['intrinsic'][len(intrinsic):])
         else:
             intrinsic_new = intrinsic
         camera_new = camera_class(
@@ -533,7 +570,7 @@ class ImageDepth(Transformable):
             ego_mask=self.data['ego_mask']
         )
         if len(intrinsic) < len(self.data['intrinsic']):
-            intrinsic_new = list(intrinsic) + self.data['intrinsic'][len(intrinsic):]
+            intrinsic_new = list(intrinsic) + list(self.data['intrinsic'][len(intrinsic):])
         else:
             intrinsic_new = intrinsic
         camera_new = camera_class(
@@ -541,7 +578,9 @@ class ImageDepth(Transformable):
             self.data['extrinsic'],
             intrinsic_new
         )
-        self.data['dep_img'], self.data['ego_mask'] = vc.render_image(self.data['dep_img'], camera_old, camera_new)
+        self.data['dep_img'], self.data['ego_mask'] = vc.render_image(
+            self.data['dep_img'], camera_old, camera_new, interpolation=cv2.INTER_NEAREST
+        )
         self.data['intrinsic'] = intrinsic_new
         
         return self
@@ -605,7 +644,10 @@ class ImageDepth(Transformable):
 
 class Bbox3D(Transformable):
     """
-    - self.data = [element, element, ...]
+    - self.data = {
+        'elements:' [element, element, ...],
+        'tensor': <tensor>
+      }
     - element = {
         'class': 'class.vehicle.passenger_car',
         'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
@@ -618,7 +660,7 @@ class Bbox3D(Transformable):
         'translation': array([[-15.70570354], [ 11.88484971], [ -0.61029085]]), # VERTICAL
         'track_id': '10035_0', # NOT USED
         'velocity': array([[0.], [0.], [0.]])
-    }
+     }
     """
 
     def __init__(self, data: list, dictionary: dict):
@@ -641,24 +683,25 @@ class Bbox3D(Transformable):
         # filter elements by dictionary
         available_elements = []
         for branch in dictionary:
-            available_elements.extend(branch['classes'])
-        self.data = []
+            available_elements.extend(dictionary[branch]['classes'])
+        self.data = {'elements': []}
         for element in data:
             if element['class'] in available_elements:
-                self.data.append(element)
+                self.data['elements'].append(element)
         
     
-
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
         # in the mirror world, assume that a object is left-right symmetrical
         flip_mat_self = np.eye(3)
         flip_mat_self[1, 1] = -1
-        for element in self.data:
+        for element in self.data['elements']:
             element['rotation'] = flip_mat @ element['rotation'] @ flip_mat_self.T
             # here translation is a row array
             element['translation'] = flip_mat @ element['translation']
             element['velocity'] = flip_mat @ element['velocity']
+        
+        # TODO: flip classname for arrows
         
         return self
     
@@ -667,7 +710,7 @@ class Bbox3D(Transformable):
         # rmat = R_e'e = R_ee'.T
         # R_c = R_ec
         # R_c' = R_e'c = R_e'e @ R_ec
-        for element in self.data:
+        for element in self.data['elements']:
             element['rotation'] = rmat @ element['rotation']
             element['translation'] = rmat @ element['translation']
             element['velocity'] = rmat @ element['velocity']
@@ -709,7 +752,10 @@ class Square3D(Bbox3D):
 
 class Polyline3D(Transformable):
     '''
-    - self.data = [element, element, ...]
+    - self.data = {
+        'elements:' [element, element, ...],
+        'tensor': <tensor>
+      }
     - element = {
         'class': 'class.road_marker.lane_line',
         'attr': <dict>,
@@ -721,16 +767,16 @@ class Polyline3D(Transformable):
         # filter elements by dictionary
         available_elements = []
         for branch in dictionary:
-            available_elements.extend(branch['classes'])
-        self.data = []
+            available_elements.extend(dictionary[branch]['classes'])
+        self.data = {'elements': []}
         for element in data:
             if element['class'] in available_elements:
-                self.data.append(element)
+                self.data['elements'].append(element)
 
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
         # here points is a row array
-        for element in self.data:
+        for element in self.data['elements']:
             element['points'] = element['points'] @ flip_mat.T
         
         return self
@@ -739,19 +785,224 @@ class Polyline3D(Transformable):
         # rmat = R_e'e = R_ee'.T
         # R_c = R_ec
         # R_c' = R_e'c = R_e'e @ R_ec
-        for element in self.data:
+        for element in self.data['elements']:
             element['points'] = element['points'] @ rmat.T
         return self
 
 
-    def to_tensor(self, bev_resolution, **kwargs):
+    def to_tensor(self, voxel_shape, voxel_range, **kwargs):
+        # voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
+        # voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+
+        Z, X, Y = voxel_shape
+        
+        fx = X / (voxel_range[1][1] - voxel_range[1][0])
+        fy = Y / (voxel_range[2][1] - voxel_range[2][0])
+        cx = - voxel_range[1][0] * fx - 0.5
+        cy = - voxel_range[2][0] * fy - 0.5
+
+        xx, yy = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
+        points_grid = np.float32([xx, yy])
+
+        # to_tensor(self, bev_resolution, bev_range, **kwargs)
+        # W, H = bev_resolution
+        # # 'bev_range': [back, front, right, left, bottom, up], # in ego system
+        # fx = H / (bev_range[0] - bev_range[1])
+        # fy = W / (bev_range[2] - bev_range[3])
+        # cx = - bev_range[1] * fx - 0.5
+        # cy = - bev_range[3] * fy - 0.5
+
+        # xx, yy = np.meshgrid(np.arange(W), np.arange(H))
+        # points_grid = np.float32([xx, yy])
+
+        tensor_data = {}
+        for branch in self.dictionary:
+            polylines = []
+            class_inds = []
+            attr_inds = []
+            for element in self.data['elements']:
+                if element['class'] in branch['classes']:
+                    points = element['points']
+                    polylines.append(np.array([
+                        points[..., 0] * fx + cx,
+                        points[..., 1] * fy + cy,
+                        points[..., 2]
+                    ]).T)
+                    class_inds.append(self.dictionary[branch]['classes'].index(element['class']))
+                    attr_inds.append(self.dictionary[branch]['attrs'].index(element['attr']))
+                    # TODO: add ignore_mask according to ignore classes and attrs
+            num_class_channels = len(self.dictionary[branch]['classes'])
+            num_attr_channels = len(self.dictionary[branch]['attrs'])
+            branch_seg_im = np.zeros((1 + num_class_channels + num_attr_channels, H, W))
+
+            line_ims = []
+            dist_ims = []
+            vec_ims = []
+            dir_ims = []
+            height_ims = []
+
+            for polyline, class_ind, attr_ind in zip(polylines, class_inds, attr_inds):
+                for line_3d in zip(polyline[:-1], polyline[1:]):
+                    line_3d = np.float32(line_3d)
+                    line_bev = line_3d[:, :2]
+                    polygon = expand_line_2d(line_bev, radius=0.5)
+                    polygon_int = np.round(polygon).astype(int)
+                    # seg_bev_im
+                    cv2.fillPoly(branch_seg_im[0], [polygon_int], 1)
+                    cv2.fillPoly(branch_seg_im[1 + class_ind], [polygon_int], 1)
+                    cv2.fillPoly(branch_seg_im[1 + num_class_channels + attr_ind], [polygon_int], 1)
+                    # line segment
+                    line_im = cv2.fillPoly(np.zeros((H, W)), [polygon_int], 1)
+                    line_ims.append(line_im)
+                    # line direction regressions
+                    line_dir = line_bev[1] - line_bev[0]
+                    line_length = np.linalg.norm(line_dir)
+                    line_dir /= line_length
+                    line_dir_vert = line_dir[::-1] * [1, -1]
+                    vec_map = vec_point2line_along_direction(points_grid, line_bev, line_dir_vert)
+                    dist_im = line_im * np.linalg.norm(vec_map, axis=0) + (1 - line_im) * INF_DIST
+                    vec_im = line_im * vec_map
+                    abs_dir_im = line_im * np.float32([
+                        np.abs(line_dir[0]),
+                        np.abs(line_dir[1]),
+                        line_dir[0] * line_dir[1]
+                    ])[..., None, None]
+                    dist_ims.append(dist_im)
+                    vec_ims.append(vec_im)
+                    dir_ims.append(abs_dir_im)
+                    # height map
+                    h2s = (line_3d[1, 2] - line_3d[0, 2]) / max(1e-3, line_length)
+                    height_im =  line_3d[0, 2] + h2s * line_im * np.linalg.norm(
+                        points_grid + vec_map - line_bev[0][..., None, None], axis=0
+                    )
+                    height_ims.append(height_im)
+
+            index_im = np.argmin(np.array(dist_ims), axis=0)
+            branch_vec_im = np.choose(index_im, vec_ims)
+            branch_dist_im = np.choose(index_im, dist_ims)
+            branch_dir_im = np.choose(index_im, dir_ims)
+            branch_height_im = np.choose(index_im, height_ims)
+
+            branch_reg_im = np.concatenate([
+                branch_seg_im * branch_dist_im[None],
+                branch_vec_im,
+                branch_dir_im,
+                branch_height_im[None]
+            ], axis=0)
+            # TODO: add branch_ignore_seg_mask according to ignore classes and attrs
+
+            tensor_data[branch] = {
+                'seg': torch.tensor(branch_seg_im),
+                'reg': torch.tensor(branch_reg_im)
+            }
+        
+        self.data['tensor'] = tensor_data
+
         return self
 
 
 
 class Polygon3D(Polyline3D):
     
-    def to_tensor(self, **kwargs):
+    def to_tensor(self, voxel_shape, voxel_range, **kwargs):
+        # voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
+        # voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+
+        Z, X, Y = voxel_shape
+        
+        fx = X / (voxel_range[1][1] - voxel_range[1][0])
+        fy = Y / (voxel_range[2][1] - voxel_range[2][0])
+        cx = - voxel_range[1][0] * fx - 0.5
+        cy = - voxel_range[2][0] * fy - 0.5
+
+        xx, yy = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
+        points_grid = np.float32([xx, yy])
+
+        tensor_data = {}
+        for branch in self.dictionary:
+            polylines = []
+            class_inds = []
+            attr_inds = []
+            for element in self.data['elements']:
+                if element['class'] in branch['classes']:
+                    points = element['points']
+                    polylines.append(np.array([
+                        points[..., 0] * fx + cx,
+                        points[..., 1] * fy + cy,
+                        points[..., 2]
+                    ]).T)
+                    class_inds.append(self.dictionary[branch]['classes'].index(element['class']))
+                    attr_inds.append(self.dictionary[branch]['attrs'].index(element['attr']))
+                    # TODO: add ignore_mask according to ignore classes and attrs
+            num_class_channels = len(self.dictionary[branch]['classes'])
+            num_attr_channels = len(self.dictionary[branch]['attrs'])
+            branch_seg_im = np.zeros((2 + num_class_channels + num_attr_channels, H, W))
+
+            line_ims = []
+            dist_ims = []
+            vec_ims = []
+            dir_ims = []
+            height_ims = []
+
+            for polyline, class_ind, attr_ind in zip(polylines, class_inds, attr_inds):
+                polyline_int = np.round(polyline).astype(int)
+                # seg_bev_im
+                cv2.fillPoly(branch_seg_im[2 + class_ind], [polyline_int], 1)
+                cv2.fillPoly(branch_seg_im[2 + num_class_channels + attr_ind], [polyline_int], 1)
+                for line_3d in zip(polyline[:-1], polyline[1:]):
+                    line_3d = np.float32(line_3d)
+                    line_bev = line_3d[:, :2]
+                    polygon = expand_line_2d(line_bev, radius=0.5)
+                    polygon_int = np.round(polygon).astype(int)
+                    # edge_seg_bev_im
+                    cv2.fillPoly(branch_seg_im[0], [polygon_int], 1)
+                    # line segment
+                    line_im = cv2.fillPoly(np.zeros((H, W)), [polygon_int], 1)
+                    line_ims.append(line_im)
+                    # line direction regressions
+                    line_dir = line_bev[1] - line_bev[0]
+                    line_length = np.linalg.norm(line_dir)
+                    line_dir /= line_length
+                    line_dir_vert = line_dir[::-1] * [1, -1]
+                    vec_map = vec_point2line_along_direction(points_grid, line_bev, line_dir_vert)
+                    dist_im = line_im * np.linalg.norm(vec_map, axis=0) + (1 - line_im) * INF_DIST
+                    vec_im = line_im * vec_map
+                    abs_dir_im = line_im * np.float32([
+                        np.abs(line_dir[0]),
+                        np.abs(line_dir[1]),
+                        line_dir[0] * line_dir[1]
+                    ])[..., None, None]
+                    dist_ims.append(dist_im)
+                    vec_ims.append(vec_im)
+                    dir_ims.append(abs_dir_im)
+                    # height map
+                    h2s = (line_3d[1, 2] - line_3d[0, 2]) / max(1e-3, line_length)
+                    height_im =  line_3d[0, 2] + h2s * line_im * np.linalg.norm(
+                        points_grid + vec_map - line_bev[0][..., None, None], axis=0
+                    )
+                    height_ims.append(height_im)
+
+            index_im = np.argmin(np.array(dist_ims), axis=0)
+            branch_vec_im = np.choose(index_im, vec_ims)
+            branch_dist_im = np.choose(index_im, dist_ims)
+            branch_dir_im = np.choose(index_im, dir_ims)
+            branch_height_im = np.choose(index_im, height_ims)
+
+            branch_reg_im = np.concatenate([
+                branch_seg_im * branch_dist_im[None],
+                branch_vec_im,
+                branch_dir_im,
+                branch_height_im[None]
+            ], axis=0)
+            # TODO: add branch_ignore_seg_mask according to ignore classes and attrs
+
+            tensor_data[branch] = {
+                'seg': torch.tensor(branch_seg_im),
+                'reg': torch.tensor(branch_reg_im)
+            }
+        
+        self.data['tensor'] = tensor_data
+
         return self
 
 
@@ -764,7 +1015,7 @@ class ParkingSlot3D(Polyline3D):
         flip_mat_self = np.eye(3)
         flip_mat_self[1, 1] = -1
         # here points is a row array
-        for element in self.data:
+        for element in self.data['elements']:
             element['points'] = flip_mat_self @ element['points'] @ flip_mat.T
         
         return self
@@ -776,11 +1027,14 @@ class ParkingSlot3D(Polyline3D):
 
 class Trajectory(Transformable):
     '''
-    - self.data = [element, element, ...]
+    - self.data = {
+        'elements': [element, element, ...],
+        'tensor': <tensor>
+    }
     - element = [(R, t), (R, t), ...]
     '''
     def __init__(self, data: list):
-        self.data = data
+        self.data = {'elements': data}
 
 
 
@@ -796,7 +1050,6 @@ class OccSdfBev(Transformable):
     '''
     self.data = {
         'src_view_range': [back, front, right, left, bottom, up], # in ego system
-        'dst_view_range': [back, front, right, left, bottom, up], # in ego system
         'occ': <N x H x W>, # H <=> (xmin, xmax), W <=> (ymin, ymax)
         'sdf': <1 x H x W>,
         'height': <1 x H x W>,
@@ -912,7 +1165,7 @@ class OccSdfBev(Transformable):
         return self
 
 
-    def to_tensor(self, dst_bev_resolution, **kwargs):
+    def to_tensor(self, bev_resolution, bev_range, **kwargs):
         return self
 
 
@@ -977,8 +1230,7 @@ RandomPosterize = random_transform_class_factory("RandomPosterize", "posterize")
 RandomChannelShuffle = random_transform_class_factory("RandomChannelShuffle", "channel_shuffle")
 RandomAutoContrast = random_transform_class_factory("RandomAutoContrast", "auto_contrast")
 RandomSolarize = random_transform_class_factory("RandomSolarize", "solarize")
-RandomImequalize = random_transform_class_factory("RandomImEqualize", "imequalize")
-
+RandomImEqualize = random_transform_class_factory("RandomImEqualize", "imequalize")
 
 RandomIntrinsicParam = random_transform_class_factory("RandomIntrinsicParam", "intrinsic_jitter")
 RandomExtrinsicParam = random_transform_class_factory("RandomExtrinsicParam", "extrinsic_jitter")
@@ -1113,8 +1365,10 @@ class IntrinsicImage(Transform):
                 W, H = self.resolutions[cam_id]
                 cx = (W - 1) / 2
                 cy = (H - 1) / 2
-                fx = W / 2
-                fy = W / 2
+                if get_cam_type(cam_id) in ['FisheyeCamera']:
+                    fx = fy = W / 4
+                else:
+                    fx = fy = W / 2
                 intrinsic = [cx, cy, fx, fy]
                 self.intrinsics[cam_id] = intrinsic
         else:
@@ -1156,6 +1410,60 @@ class ExtrinsicImage(Transform):
                 if transformable.data['cam_id'] in self.cam_ids:
                     del_extrinsic = self.del_extrinsics[transformable.data['cam_id']]
                     transformable.apply_extrinsic(del_extrinsic)
+        return transformables
+
+
+
+class FastRayLookUpTable(Transform):
+    
+    def __init__(self, voxel_feature_config, camera_feature_configs, scope="frame"):
+        '''
+        voxel_feature_config = dict(
+            voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
+            voxel_range=([-0.5, 2.5], [36, -12], [12, -12]),
+            ego_distance_max=40,
+            ego_distance_step=2
+        )
+        general_camera_feature_config = dict(
+            ray_distance_num_channel=64,
+            ray_distance_start=0.25,
+            ray_distance_step=0.25,
+            feature_downscale=1,
+        )
+        camera_feature_configs = dict(
+            VCAMERA_FISHEYE_FRONT=general_camera_feature_config,
+            VCAMERA_PERSPECTIVE_FRONT_LEFT=general_camera_feature_config,
+            VCAMERA_PERSPECTIVE_BACK_LEFT=general_camera_feature_config,
+            VCAMERA_FISHEYE_LEFT=general_camera_feature_config,
+            VCAMERA_PERSPECTIVE_BACK=general_camera_feature_config,
+            VCAMERA_FISHEYE_BACK=general_camera_feature_config,
+            VCAMERA_PERSPECTIVE_FRONT_RIGHT=general_camera_feature_config,
+            VCAMERA_PERSPECTIVE_BACK_RIGHT=general_camera_feature_config,
+            VCAMERA_FISHEYE_RIGHT=general_camera_feature_config,
+            VCAMERA_PERSPECTIVE_FRONT=general_camera_feature_config
+        )
+        '''
+        super().__init__(scope=scope)
+        self.lut_gen = VoxelLookUpTableGenerator(
+            voxel_feature_config=voxel_feature_config,
+            camera_feature_configs=camera_feature_configs
+        )
+        self.cam_ids = list(camera_feature_configs.keys())
+    
+    def __call__(self, *transformables, seeds=[None, None, None], **kwargs):
+        scope_seed = None
+        for seed in seeds:
+            if self.scope in str(seed):
+                scope_seed = seed
+        camera_images = {}
+        for transformable in transformables:
+            if isinstance(transformable, Image):
+                cam_id = transformable.data['cam_id']
+                if cam_id in self.cam_ids:
+                    camera_images[cam_id] = transformable
+        LUT = self.lut_gen.generate(camera_images, seed=scope_seed)
+        for cam_id in camera_images:
+            camera_images[cam_id].data['fast_ray_LUT'] = LUT[cam_id]
         return transformables
 
 
@@ -1271,6 +1579,16 @@ class ScaleTime(Transform):
 
 
 available_transforms = [
+    RandomBrightness,
+    RandomSaturation,
+    RandomContrast,
+    RandomHue,
+    RandomSharpness,
+    RandomPosterize,
+    RandomChannelShuffle,
+    RandomAutoContrast,
+    RandomSolarize,
+    RandomImEqualize,
     RandomImageISP, 
     IntrinsicImage, 
     ExtrinsicImage, 
