@@ -17,11 +17,22 @@ def expand_line_2d(line, radius=1):
     return np.float32([point_0, point_1, point_2, point_3])
 
 
+def _add_new_axis(arr, n):
+    for _ in range(n):
+        arr = arr[..., None]
+    return arr
+
 def vec_point2line_along_direction(point, line, direction):
     point = np.float32(point)
-    num_extra_dim = [None,] * (len(point.shape) - 1)
-    line = np.float32(line)[..., *num_extra_dim]
-    vec = np.float32(direction)[..., *num_extra_dim]
+    try:
+        num_extra_dim = [None,] * (len(point.shape) - 1)
+        line = np.float32(line)[..., *num_extra_dim]
+        vec = np.float32(direction)[..., *num_extra_dim]
+    except:
+        n_extra_dim = len(point.shape) - 1
+        line = _add_new_axis(np.float32(line), n_extra_dim)
+        vec = _add_new_axis(np.float32(direction), n_extra_dim)
+
     vec_l = line[1] - line[0]
     vec_p = line[1] - point
     C1 = vec[1] * vec_l[0] - vec[0] * vec_l[1]

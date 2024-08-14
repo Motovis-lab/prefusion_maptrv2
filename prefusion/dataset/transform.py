@@ -790,16 +790,30 @@ class Polyline3D(Transformable):
         return self
 
 
-    def to_tensor(self, bev_resolution, bev_range, **kwargs):
-        W, H = bev_resolution
-        # 'bev_range': [back, front, right, left, bottom, up], # in ego system
-        fx = H / (bev_range[0] - bev_range[1])
-        fy = W / (bev_range[2] - bev_range[3])
-        cx = - bev_range[1] * fx - 0.5
-        cy = - bev_range[3] * fy - 0.5
+    def to_tensor(self, voxel_shape, voxel_range, **kwargs):
+        # voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
+        # voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
 
-        xx, yy = np.meshgrid(np.arange(W), np.arange(H))
+        Z, X, Y = voxel_shape
+        
+        fx = X / (voxel_range[1][1] - voxel_range[1][0])
+        fy = Y / (voxel_range[2][1] - voxel_range[2][0])
+        cx = - voxel_range[1][0] * fx - 0.5
+        cy = - voxel_range[2][0] * fy - 0.5
+
+        xx, yy = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
         points_grid = np.float32([xx, yy])
+
+        # to_tensor(self, bev_resolution, bev_range, **kwargs)
+        # W, H = bev_resolution
+        # # 'bev_range': [back, front, right, left, bottom, up], # in ego system
+        # fx = H / (bev_range[0] - bev_range[1])
+        # fy = W / (bev_range[2] - bev_range[3])
+        # cx = - bev_range[1] * fx - 0.5
+        # cy = - bev_range[3] * fy - 0.5
+
+        # xx, yy = np.meshgrid(np.arange(W), np.arange(H))
+        # points_grid = np.float32([xx, yy])
 
         tensor_data = {}
         for branch in self.dictionary:
@@ -890,15 +904,18 @@ class Polyline3D(Transformable):
 
 class Polygon3D(Polyline3D):
     
-    def to_tensor(self, bev_resolution, bev_range, **kwargs):
-        W, H = bev_resolution
-        # 'bev_range': [back, front, right, left, bottom, up], # in ego system
-        fx = H / (bev_range[0] - bev_range[1])
-        fy = W / (bev_range[2] - bev_range[3])
-        cx = - bev_range[1] * fx - 0.5
-        cy = - bev_range[3] * fy - 0.5
+    def to_tensor(self, voxel_shape, voxel_range, **kwargs):
+        # voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
+        # voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
 
-        xx, yy = np.meshgrid(np.arange(W), np.arange(H))
+        Z, X, Y = voxel_shape
+        
+        fx = X / (voxel_range[1][1] - voxel_range[1][0])
+        fy = Y / (voxel_range[2][1] - voxel_range[2][0])
+        cx = - voxel_range[1][0] * fx - 0.5
+        cy = - voxel_range[2][0] * fy - 0.5
+
+        xx, yy = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
         points_grid = np.float32([xx, yy])
 
         tensor_data = {}
@@ -1213,8 +1230,7 @@ RandomPosterize = random_transform_class_factory("RandomPosterize", "posterize")
 RandomChannelShuffle = random_transform_class_factory("RandomChannelShuffle", "channel_shuffle")
 RandomAutoContrast = random_transform_class_factory("RandomAutoContrast", "auto_contrast")
 RandomSolarize = random_transform_class_factory("RandomSolarize", "solarize")
-RandomImequalize = random_transform_class_factory("RandomImEqualize", "imequalize")
-
+RandomImEqualize = random_transform_class_factory("RandomImEqualize", "imequalize")
 
 RandomIntrinsicParam = random_transform_class_factory("RandomIntrinsicParam", "intrinsic_jitter")
 RandomExtrinsicParam = random_transform_class_factory("RandomExtrinsicParam", "extrinsic_jitter")
@@ -1563,6 +1579,16 @@ class ScaleTime(Transform):
 
 
 available_transforms = [
+    RandomBrightness,
+    RandomSaturation,
+    RandomContrast,
+    RandomHue,
+    RandomSharpness,
+    RandomPosterize,
+    RandomChannelShuffle,
+    RandomAutoContrast,
+    RandomSolarize,
+    RandomImEqualize,
     RandomImageISP, 
     IntrinsicImage, 
     ExtrinsicImage, 

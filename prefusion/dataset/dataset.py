@@ -108,8 +108,8 @@ class GroupBatchDataset(Dataset):
         super().__init__()
         self.name = name
         self.data_root = Path(data_root)
-        assert phase in ['train', 'val', 'test']
-        self.phase = phase
+        assert phase.lower() in ['train', 'val', 'test']
+        self.phase = phase.lower()
         self.info = mmengine.load(info_path)
         self.AVAILABLE_TRANSFORMABLE_KEYS = (
             'camera_images', 'lidar_points', 
@@ -127,15 +127,15 @@ class GroupBatchDataset(Dataset):
         self.dictionary = dictionary
         self.transformable_keys = transformable_keys
         self.transforms = []
-        has_to_tensor = False
+        is_to_tensor = False
         for transform in transforms:
             if isinstance(transform, dict):
                 transform = TRANSFORMS.build(transform)
                 # self.transforms.append(TRANSFORMS.build(transform))
             self.transforms.append(transform)
             if isinstance(transform, ToTensor):
-                has_to_tensor = True
-        if has_to_tensor:
+                is_to_tensor = True
+        if is_to_tensor:
             assert isinstance(self.transforms[-1], ToTensor), \
                 "ToTensor should be placed at last."        
 
@@ -190,7 +190,7 @@ class GroupBatchDataset(Dataset):
             'prev_exists': True,
             'next_exists': True,
             'transformables': {}
-        }
+        }  # TODO: add ego pose transformation
         for key in self.transformable_keys:
             input_dict['transformables'][key] = eval(f'self.load_{key}')(index)
 
