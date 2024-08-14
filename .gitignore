@@ -3,3 +3,6 @@ data
 *.zip
 **/__pycache__
 work_dir
+.vscode
+log
+logs
