@@ -2,20 +2,16 @@
 
 import os
 import random
+from pathlib import Path
+from typing import List, Tuple, Dict, Union
+from collections import defaultdict
 
 import mmcv
 import mmengine
 import torch
 import numpy as np
-
-from pathlib import Path
-from typing import List, Tuple, Dict
-
 from torch.utils.data import Dataset
 from mmengine.registry import DATASETS, FUNCTIONS
-from prefusion.registry import TRANSFORMS
-
-from .transform import ToTensor
 
 # 'camera_images', 'lidar_points', 
 # 'camera_segs', 'camera_depths',
@@ -30,7 +26,7 @@ from .transform import (
     SegBev, OccSdfBev, OccSdf3D
 )
 
-from .utils import get_cam_type
+from .utils import get_cam_type, build_transforms
 
 
 def get_frame_index(sequence, timestamp):
@@ -51,6 +47,13 @@ class GroupBatchDataset(Dataset):
     A novel dataset class for batching sequence groups for multi-module data.
     '''
     # TODO: implement visualization?
+    AVAILABLE_TRANSFORMABLE_KEYS = (
+        'camera_images', 'lidar_points', 
+        'camera_segs', 'camera_depths',
+        'bbox_3d', 'bbox_bev', 'square_3d', 'cylinder_3d', 'oriented_cylinder_3d',
+        'polyline_3d', 'polygon_3d', 'parkingslot_3d', 'trajectory',
+        'seg_bev', 'occ_sdf_bev', 'occ_sdf_3d'
+    )
     
     def __init__(self, name, *, 
                  data_root, 
@@ -111,51 +114,17 @@ class GroupBatchDataset(Dataset):
         assert phase.lower() in ['train', 'val', 'test']
         self.phase = phase.lower()
         self.info = mmengine.load(info_path)
-        self.AVAILABLE_TRANSFORMABLE_KEYS = (
-            'camera_images', 'lidar_points', 
-            'camera_segs', 'camera_depths',
-            'bbox_3d', 'bbox_bev', 'square_3d', 'cylinder_3d', 'oriented_cylinder_3d',
-            'polyline_3d', 'polygon_3d', 'parkingslot_3d', 'trajectory',
-            'seg_bev', 'occ_sdf_bev', 'occ_sdf_3d'
-        )
-        for key in dictionary:
-            assert key in self.AVAILABLE_TRANSFORMABLE_KEYS, \
-                f"{key} is not a valid transformable key from {self.AVAILABLE_TRANSFORMABLE_KEYS}"
-        for key in transformable_keys:
-            assert key in self.AVAILABLE_TRANSFORMABLE_KEYS, \
-                f"{key} is not a valid transformable key from {self.AVAILABLE_TRANSFORMABLE_KEYS}"
+        self._assert_availability(list(dictionary.keys()))
+        self._assert_availability(transformable_keys)
         self.dictionary = dictionary
         self.transformable_keys = transformable_keys
-        self.transforms = []
-        is_to_tensor = False
-        for transform in transforms:
-            if isinstance(transform, dict):
-                transform = TRANSFORMS.build(transform)
-                # self.transforms.append(TRANSFORMS.build(transform))
-            self.transforms.append(transform)
-            if isinstance(transform, ToTensor):
-                is_to_tensor = True
-        if is_to_tensor:
-            assert isinstance(self.transforms[-1], ToTensor), \
-                "ToTensor should be placed at last."        
+        self.transforms = build_transforms(transforms)
 
         if indices_path is not None:
             indices = [line.strip() for line in open(indices_path, 'w')]
-            self.scene_ids = {}
-            for index in indices:
-                scene_id, frame_id = index.split('/')
-                if scene_id in self.info:
-                    if scene_id not in self.scene_ids:
-                        self.scene_ids[scene_id] = []
-                    if frame_id in self.info[scene_id]['frame_info']:
-                        self.scene_ids[scene_id].append(index)
-            for scene_id in self.scene_ids:
-                self.scene_ids[scene_id] = sorted(self.scene_ids[scene_id])
+            self.scene_ids = self._prepare_indices(self.info, indices=indices)
         else:
-            self.scene_ids = {}
-            for scene_id in self.info:
-                frame_list = sorted(self.info[scene_id]['frame_info'].keys())
-                self.scene_ids[scene_id] = [f'{scene_id}/{frame_id}' for frame_id in frame_list]
+            self.scene_ids = self._prepare_indices(self.info)
 
         self.batch_size = batch_size
         self.drop_last = drop_last
@@ -166,7 +135,36 @@ class GroupBatchDataset(Dataset):
         
         self.seed_dataset = seed_dataset
         self.sample_groups()
+
+    @classmethod
+    def _assert_availability(cls, keys: List[str]) -> None:
+        for key in keys:
+            assert key in cls.AVAILABLE_TRANSFORMABLE_KEYS, \
+                f"{key} is not a valid transformable key from {cls.AVAILABLE_TRANSFORMABLE_KEYS}"
     
+
+    @staticmethod
+    def _prepare_indices(info: Dict, indices: List[str] = None) -> Dict[str, List[str]]:
+        if indices is None:
+            indices = {}
+            for scene_id in info:
+                frame_list = sorted(info[scene_id]['frame_info'].keys())
+                if frame_list:
+                    indices[scene_id] = [f'{scene_id}/{frame_id}' for frame_id in frame_list]
+            return indices
+        
+        safe_indices = defaultdict(list)
+        for index in indices:
+            scene_id, frame_id = index.split('/')
+            if scene_id in info:
+                if frame_id in info[scene_id]['frame_info']:
+                    safe_indices[scene_id].append(index)
+        for scene_id in safe_indices:
+            safe_indices[scene_id] = sorted(safe_indices[scene_id])
+        
+        return safe_indices
+            
+
     def __repr__(self):
         return ''.join([
             f'An instance of {self.__class__}: (\n',
