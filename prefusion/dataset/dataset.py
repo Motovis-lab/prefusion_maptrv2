@@ -150,19 +150,19 @@ class GroupBatchDataset(Dataset):
             for scene_id in info:
                 frame_list = sorted(info[scene_id]['frame_info'].keys())
                 if frame_list:
-                    indices[scene_id] = [f'{scene_id}/{frame_id}' for frame_id in frame_list]
+                    indices[scene_id] = sorted([f'{scene_id}/{frame_id}' for frame_id in frame_list])
             return indices
         
-        safe_indices = defaultdict(list)
+        available_indices = defaultdict(list)
         for index in indices:
             scene_id, frame_id = index.split('/')
             if scene_id in info:
                 if frame_id in info[scene_id]['frame_info']:
-                    safe_indices[scene_id].append(index)
-        for scene_id in safe_indices:
-            safe_indices[scene_id] = sorted(safe_indices[scene_id])
+                    available_indices[scene_id].append(index)
+        for scene_id in available_indices:
+            available_indices[scene_id] = sorted(available_indices[scene_id])
         
-        return safe_indices
+        return available_indices
             
 
     def __repr__(self):
