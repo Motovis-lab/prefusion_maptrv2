@@ -356,12 +356,13 @@ class GroupBatchDataset(Dataset):
         scene_id, frame_id = index.split('/')
         scene = self.info[scene_id]
         frame = scene['frame_info'][frame_id]
+        calib = self.info[scene_id]['scene_info']['calibration']
         
         camera_images = {}
         for camera_id in frame['camera_image']:
             data = {
                 'cam_id': camera_id,
-                'cam_type': get_cam_type(camera_id),
+                'cam_type': calib[camera_id]['camera_type'],
                 'frame_id': frame_id,
             }
             data.update(scene['scene_info']['calibration'][camera_id])
