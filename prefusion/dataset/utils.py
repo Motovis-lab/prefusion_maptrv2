@@ -1,7 +1,10 @@
+from typing import List
+
 import cv2
 import numpy as np
 import virtual_camera as vc
 
+from prefusion.registry import TRANSFORMS
 
 INF_DIST = 1e8
 
@@ -24,14 +27,9 @@ def _add_new_axis(arr, n):
 
 def vec_point2line_along_direction(point, line, direction):
     point = np.float32(point)
-    try:
-        num_extra_dim = [None,] * (len(point.shape) - 1)
-        line = np.float32(line)[..., *num_extra_dim]
-        vec = np.float32(direction)[..., *num_extra_dim]
-    except:
-        n_extra_dim = len(point.shape) - 1
-        line = _add_new_axis(np.float32(line), n_extra_dim)
-        vec = _add_new_axis(np.float32(direction), n_extra_dim)
+    n_extra_dim = len(point.shape) - 1
+    line = _add_new_axis(np.float32(line), n_extra_dim)
+    vec = _add_new_axis(np.float32(direction), n_extra_dim)
 
     vec_l = line[1] - line[0]
     vec_p = line[1] - point
@@ -245,4 +243,15 @@ class VoxelLookUpTableGenerator:
             LUT[key]['norm_density_map'] = density_maps_norm[key_ind]
         
         return LUT
-        
+
+def build_transforms(transforms: List) -> List: 
+    from prefusion.dataset.transform import ToTensor
+    if any([isinstance(t, ToTensor) for t in transforms]) and not isinstance(transforms[-1], ToTensor):
+        raise ValueError("ToTensor should be placed at last.")
+    built_transforms = []
+    for transform in transforms:
+        if isinstance(transform, dict):
+            transform = TRANSFORMS.build(transform)
+            # built_transforms.append(TRANSFORMS.build(transform))
+        built_transforms.append(transform)
+    return built_transforms
