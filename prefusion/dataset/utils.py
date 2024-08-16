@@ -1,7 +1,10 @@
+from typing import List
+
 import cv2
 import numpy as np
 import virtual_camera as vc
 
+from prefusion.registry import TRANSFORMS
 
 INF_DIST = 1e8
 
@@ -245,4 +248,15 @@ class VoxelLookUpTableGenerator:
             LUT[key]['norm_density_map'] = density_maps_norm[key_ind]
         
         return LUT
-        
+
+def build_transforms(transforms: List) -> List: 
+    from prefusion.dataset.transform import ToTensor
+    if any([isinstance(t, ToTensor) for t in transforms]) and not isinstance(transforms[-1], ToTensor):
+        raise ValueError("ToTensor should be placed at last.")
+    built_transforms = []
+    for transform in transforms:
+        if isinstance(transform, dict):
+            transform = TRANSFORMS.build(transform)
+            # built_transforms.append(TRANSFORMS.build(transform))
+        built_transforms.append(transform)
+    return built_transforms
