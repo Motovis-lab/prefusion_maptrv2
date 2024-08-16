@@ -24,14 +24,9 @@ def _add_new_axis(arr, n):
 
 def vec_point2line_along_direction(point, line, direction):
     point = np.float32(point)
-    try:
-        num_extra_dim = [None,] * (len(point.shape) - 1)
-        line = np.float32(line)[..., *num_extra_dim]
-        vec = np.float32(direction)[..., *num_extra_dim]
-    except:
-        n_extra_dim = len(point.shape) - 1
-        line = _add_new_axis(np.float32(line), n_extra_dim)
-        vec = _add_new_axis(np.float32(direction), n_extra_dim)
+    n_extra_dim = len(point.shape) - 1
+    line = _add_new_axis(np.float32(line), n_extra_dim)
+    vec = _add_new_axis(np.float32(direction), n_extra_dim)
 
     vec_l = line[1] - line[0]
     vec_p = line[1] - point
