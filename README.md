@@ -250,9 +250,9 @@ train.txt
 
 ### 清单
 - Transformables
-  - camera_images: List[Image]
-  - camera_segs: List[ImageSegMask]
-  - camera_depths: List[ImageDepth]
+  - camera_images: CameraImageSet
+  - camera_segs: CameraImageSegMaskSet
+  - camera_depths: CameraImageDepthSet
   - lidar_points: LidarPoints
   - bbox3d: Bbox3D
   - bboxbev: BboxBev
