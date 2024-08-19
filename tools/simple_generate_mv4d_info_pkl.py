@@ -24,6 +24,7 @@ def prepare_scene(scene_root: Path, num_workers: int = 0) -> Dict:
         "scene_info": {
             "calibration": prepare_calibration(scene_root),
             "camera_mask": prepare_camera_mask(scene_root),
+            "depth_mode": prepare_depth_mode(scene_root),
         },
         "meta_info": {
             "space_range": {
@@ -61,6 +62,10 @@ def prepare_calibration(scene_root: Path) -> Dict:
 def prepare_camera_mask(scene_root: Path) -> Dict:
     camera_mask_dir = scene_root / "self_mask" / "camera"
     return {cam_path.stem: cam_path for cam_path in camera_mask_dir.iterdir()}
+
+
+def prepare_depth_mode(scene_root: Path) -> Dict:
+    return {p.stem: "d" for p in (scene_root / "camera").iterdir()}
 
 
 def prepare_all_frame_infos(scene_root: Path, num_workers: int = 0) -> Dict:

@@ -112,35 +112,19 @@ def dataset_info(img324, img325, seg324, seg325, camera_ego_mask324, camera_ego_
     return {
         "20230901_000000": {
             "scene_info": {
-                "camera_mask": {
-                    "front": camera_ego_mask324,
-                    "back": camera_ego_mask325,
-                },
+                "camera_mask": { "front": camera_ego_mask324, "back": camera_ego_mask325, },
                 "calibration": {
-                    "front": {
-                        "extrinsic": (np.eye(3), np.ones(3)),
-                        "camera_type": "PerspectiveCamera",
-                    },
-                    "back": {
-                        "extrinsic": (np.eye(3), np.ones(3)),
-                        "camera_type": "FisheyeCamera",
-                    }
+                    "front": { "extrinsic": (np.eye(3), np.ones(3)), "camera_type": "PerspectiveCamera", },
+                    "back": { "extrinsic": (np.eye(3), np.ones(3)), "camera_type": "FisheyeCamera", }
                 },
+                "depth_mode": { "front": "d", "back": "z", },
+                "dictionary": { "camera_segs": ["lane", "arrow", "slot"], }
             },
             "frame_info": {
                 "1692759619664": {
-                    "camera_image": {
-                        "front": img324,
-                        "back": img325,
-                    },
-                    "camera_image_seg": {
-                        "front": seg324,
-                        "back": seg325,
-                    },
-                    "camera_image_depth": {
-                        "front": img324,
-                        "back": img325,
-                    },
+                    "camera_image": { "front": img324, "back": img325, },
+                    "camera_image_seg": { "front": seg324, "back": seg325, },
+                    "camera_image_depth": { "front": img324, "back": img325, },
                 }
             }
         }
@@ -175,16 +159,14 @@ def test_camera_image_set_2(dataset_info, img324, img325):
 
 
 def test_camera_image_seg_mask(dataset_info, seg324, seg325):
-    dictionary = {"camera_segs": ["lane", "arrow", "slot"]}
-    seg1 = CameraImageSegMask.from_info("front", Path("/"), dataset_info, "20230901_000000/1692759619664", dictionary)
-    seg2 = CameraImageSegMask.from_info("back", Path("/"), dataset_info, "20230901_000000/1692759619664", dictionary)
+    seg1 = CameraImageSegMask.from_info("front", Path("/"), dataset_info, "20230901_000000/1692759619664")
+    seg2 = CameraImageSegMask.from_info("back", Path("/"), dataset_info, "20230901_000000/1692759619664")
     np.testing.assert_almost_equal(seg1.data['img'], cv2.imread(seg324))
     np.testing.assert_almost_equal(seg2.data['img'], cv2.imread(seg325))
 
 
 def test_camera_image_seg_mask_set(dataset_info):
-    dictionary = {"camera_segs": ["lane", "arrow", "slot"]}
-    seg_set = CameraImageSegMaskSet.from_info(Path("/"), dataset_info, "20230901_000000/1692759619664", dictionary)
+    seg_set = CameraImageSegMaskSet.from_info(Path("/"), dataset_info, "20230901_000000/1692759619664")
     rotmat = np.array([
         [0.5, 0.5, 0],
         [0.5, -0.5, 0],
@@ -195,14 +177,16 @@ def test_camera_image_seg_mask_set(dataset_info):
 
 
 def test_camera_image_depth(dataset_info, img324, img325):
-    seg1 = CameraImageDepth.from_info("front", Path("/"), dataset_info, "20230901_000000/1692759619664", depth_mode='d')
-    seg2 = CameraImageDepth.from_info("back", Path("/"), dataset_info, "20230901_000000/1692759619664", depth_mode='d')
+    seg1 = CameraImageDepth.from_info("front", Path("/"), dataset_info, "20230901_000000/1692759619664")
+    seg2 = CameraImageDepth.from_info("back", Path("/"), dataset_info, "20230901_000000/1692759619664")
     np.testing.assert_almost_equal(seg1.data['dep_img'], cv2.imread(img324))
     np.testing.assert_almost_equal(seg2.data['dep_img'], cv2.imread(img325))
+    assert seg1.data['depth_mode'] == 'd'
+    assert seg2.data['depth_mode'] == 'z'
 
 
 def test_camera_image_depth_set(dataset_info):
-    seg_set = CameraImageDepthSet.from_info(Path("/"), dataset_info, "20230901_000000/1692759619664", depth_mode='d')
+    seg_set = CameraImageDepthSet.from_info(Path("/"), dataset_info, "20230901_000000/1692759619664")
     rotmat = np.array([
         [0.5, 0.5, 0],
         [0.5, -0.5, 0],

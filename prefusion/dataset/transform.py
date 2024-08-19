@@ -508,13 +508,13 @@ class CameraImageSegMask(Transformable):
     }
     """
 
-    def __init__(self, data: dict, dictionary: dict):
+    def __init__(self, data: dict):
         super().__init__(data)
         assert self.data['cam_type'] in ['FisheyeCamera', 'PerspectiveCamera']
 
 
     @classmethod
-    def from_info(cls, cam_id: str, data_root: Path, dataset_info: dict, index: str, dictionary: dict): # TODO: may need to refactor, due to interface oblique
+    def from_info(cls, cam_id: str, data_root: Path, dataset_info: dict, index: str): # TODO: may need to refactor, due to interface oblique
         """Create CameraImageSegMask object from dataset info dict.
 
         Parameters
@@ -527,8 +527,6 @@ class CameraImageSegMask(Transformable):
             the info dict (usually loaded from info pkl file) of the whole dataset.
         index : str
             the index of current data, e.g. "20230901_000000/1692759619664"
-        dictionary: dict
-            the dictionary of the whole dataset, e.g. the corresponding class of each channel.
         """
         scene_id, frame_id = index.split('/')
         scene = dataset_info[scene_id]
@@ -542,8 +540,7 @@ class CameraImageSegMask(Transformable):
                 img=mmcv.imread(data_root / frame['camera_image_seg'][cam_id], flag='unchanged'),
                 ego_mask=mmcv.imread( data_root / scene['scene_info']['camera_mask'][cam_id], flag='grayscale' ),
                 **calib[cam_id],
-            ),
-            dictionary['camera_segs']
+            )
         )
 
 
@@ -658,7 +655,7 @@ class CameraImageSegMaskSet(TransformableSet):
     transformable_cls = CameraImageSegMask
 
     @classmethod
-    def from_info(cls, data_root: Path, dataset_info: dict, index: str, dictionary: dict): # TODO: may need to refactor, due to interface oblique
+    def from_info(cls, data_root: Path, dataset_info: dict, index: str): # TODO: may need to refactor, due to interface oblique
         """Create CameraImageSegMaskSet object from dataset info dict.
 
         Parameters
@@ -669,14 +666,12 @@ class CameraImageSegMaskSet(TransformableSet):
             the info dict (usually loaded from info pkl file) of the whole dataset.
         index : str
             the index of current data, e.g. "20230901_000000/1692759619664"
-        dictionary: dict
-            the dictionary of the whole dataset, e.g. the corresponding class of each channel.
         """
         scene_id, frame_id = index.split('/')
         scene = dataset_info[scene_id]
         frame = scene['frame_info'][frame_id]
         camera_ids = list(frame['camera_image_seg'].keys())
-        transformables = [CameraImageSegMask.from_info(cam_id, data_root, dataset_info, index, dictionary) for cam_id in camera_ids]
+        transformables = [CameraImageSegMask.from_info(cam_id, data_root, dataset_info, index) for cam_id in camera_ids]
         return CameraImageSegMaskSet(transformables)
 
 
@@ -687,22 +682,17 @@ class CameraImageDepth(Transformable):
         'ego_mask': <arr>,
         'cam_type': < 'FisheyeCamera' | 'PerspectiveCamera' >
         'extrinsic': (R, t),
-        'intrinsic': [cx, cy, fx, fy, *distortion_params]
+        'intrinsic': [cx, cy, fx, fy, *distortion_params],
+        'depth_mode': < 'z' | 'd' > ('z': depth in z axis of camera coordinate, 'd': depth in distance of point to camera optical point)
     }
     """
-    def __init__(self, data: dict, depth_mode='d'):
-        '''
-        - depth_mode: 'z' or 'd'
-          - 'z': depth in z axis of camera coordinate
-          - 'd': depth in distance of point to camera optical point
-        '''
+    def __init__(self, data: dict):
         super().__init__(data)
         assert self.data['cam_type'] in ['FisheyeCamera', 'PerspectiveCamera']
-        assert depth_mode in ['z', 'd']
-        self.depth_mode = depth_mode
+        assert self.data['depth_mode'] in ['z', 'd']
 
     @classmethod
-    def from_info(cls, cam_id: str, data_root: Path, dataset_info: dict, index: str, depth_mode: str = 'd' ): # TODO: may need to refactor, due to interface oblique
+    def from_info(cls, cam_id: str, data_root: Path, dataset_info: dict, index: str): # TODO: may need to refactor, due to interface oblique
         """Create CameraImageDepth object from dataset info dict.
 
         Parameters
@@ -729,9 +719,9 @@ class CameraImageDepth(Transformable):
                 frame_id=frame_id,
                 dep_img=mmcv.imread(data_root / frame['camera_image_depth'][cam_id], flag='unchanged'),
                 ego_mask=mmcv.imread( data_root / scene['scene_info']['camera_mask'][cam_id], flag='grayscale' ),
+                depth_mode=scene['scene_info']['depth_mode'][cam_id],
                 **calib[cam_id],
-            ),
-            depth_mode=depth_mode
+            )
         )
 
 
@@ -811,11 +801,11 @@ class CameraImageDepth(Transformable):
             self.data['intrinsic']
         )
         # TODO: get real points from depth then remap to image
-        if self.depth_mode == 'd':
+        if self.data["depth_mode"] == 'd':
             self.data['dep_img'], self.data['ego_mask'] = vc.render_image(
                 self.data['dep_img'], camera_old, camera_new, interpolation=cv2.INTER_NEAREST
             )
-        elif self.depth_mode == 'z':
+        elif self.data["depth_mode"] == 'z':
             raise NotImplementedError
         self.data['extrinsic'] = (R_new, t_new)
         
@@ -853,7 +843,7 @@ class CameraImageDepthSet(TransformableSet):
     transformable_cls = CameraImageDepth
 
     @classmethod
-    def from_info(cls, data_root: Path, dataset_info: dict, index: str, depth_mode: str = 'd'): # TODO: may need to refactor, due to interface oblique
+    def from_info(cls, data_root: Path, dataset_info: dict, index: str): # TODO: may need to refactor, due to interface oblique
         """Create CameraImageDepthSet object from dataset info dict.
 
         Parameters
@@ -864,14 +854,12 @@ class CameraImageDepthSet(TransformableSet):
             the info dict (usually loaded from info pkl file) of the whole dataset.
         index : str
             the index of current data, e.g. "20230901_000000/1692759619664"
-        depth_mode: dict
-            the mode of depth, choices: ['z' or 'd']
         """
         scene_id, frame_id = index.split('/')
         scene = dataset_info[scene_id]
         frame = scene['frame_info'][frame_id]
         camera_ids = list(frame['camera_image_depth'].keys())
-        transformables = [CameraImageDepth.from_info(cam_id, data_root, dataset_info, index, depth_mode=depth_mode) for cam_id in camera_ids]
+        transformables = [CameraImageDepth.from_info(cam_id, data_root, dataset_info, index) for cam_id in camera_ids]
         return CameraImageDepthSet(transformables)
 
 
