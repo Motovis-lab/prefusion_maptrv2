@@ -19,8 +19,9 @@ from mmengine.registry import DATASETS, FUNCTIONS
 # 'polyline3d', 'polygon3d', 'parkingslot3d', 'trajectory',
 # 'seg_bev', 'occ_sdf_bev', 'occ_sdf_3d'
 from .transform import (
-    Image, LidarPoints, 
-    ImageSegMask, ImageDepth, 
+    CameraImage, CameraImageSet, LidarPoints, 
+    CameraImageSegMask, CameraImageSegMaskSet, 
+    CameraImageDepth, CameraImageDepthSet,
     Bbox3D, BboxBev, Cylinder3D, OrientedCylinder3D, Square3D, 
     Polyline3D, Polygon3D, ParkingSlot3D, Trajectory,
     SegBev, OccSdfBev, OccSdf3D
@@ -47,6 +48,7 @@ class GroupBatchDataset(Dataset):
     A novel dataset class for batching sequence groups for multi-module data.
     '''
     # TODO: implement visualization?
+    # TODO: conceptualize and create ModelFood and ModelFoodArranger (naming is temporary), registered ModelFoodArranger should be passed to Dataset.
     AVAILABLE_TRANSFORMABLE_KEYS = (
         'camera_images', 'lidar_points', 
         'camera_segs', 'camera_depths',
@@ -58,7 +60,7 @@ class GroupBatchDataset(Dataset):
     def __init__(self, name, *, 
                  data_root, 
                  info_path, 
-                 dictionary,
+                 dictionary,  # TODO: to combine with transformable_keys (because they are required to have the same keys)
                  transformable_keys,
                  transforms,
                  phase='train',
@@ -351,28 +353,8 @@ class GroupBatchDataset(Dataset):
         return group_batch
 
 
-
-    def load_camera_images(self, index: str):
-        scene_id, frame_id = index.split('/')
-        scene = self.info[scene_id]
-        frame = scene['frame_info'][frame_id]
-        
-        camera_images = {}
-        for camera_id in frame['camera_image']:
-            data = {
-                'cam_id': camera_id,
-                'cam_type': get_cam_type(camera_id),
-                'frame_id': frame_id,
-            }
-            data.update(scene['scene_info']['calibration'][camera_id])
-            data['img'] = mmcv.imread(self.data_root / frame['camera_image'][camera_id])
-            data['ego_mask'] = mmcv.imread(
-                self.data_root / scene['scene_info']['camera_mask'][camera_id], flag='grayscale'
-            )
-            camera_images[camera_id] = Image(data)
-        
-        return camera_images
-    
+    def load_camera_images(self, index: str) -> CameraImageSet:
+        return CameraImageSet.from_info(self.data_root, self.info, index)
 
     def load_lidar_points(self, index: str):
         scene_id, frame_id = index.split('/')
@@ -382,46 +364,12 @@ class GroupBatchDataset(Dataset):
         raise NotImplementedError
 
 
-    def load_camera_segs(self, index: str) -> List[ImageSegMask]:
-        scene_id, frame_id = index.split('/')
-        scene = self.info[scene_id]
-        frame = scene['frame_info'][frame_id]
-        camera_segs = {}
-        for camera_id in frame['camera_image_seg']:
-            data = {
-                'cam_id': camera_id,
-                'cam_type': get_cam_type(camera_id),
-                'frame_id': frame_id,
-            }
-            data.update(scene['scene_info']['calibration'][camera_id])
-            data['img'] = mmcv.imread(self.data_root / frame['camera_image_seg'][camera_id], flag='unchanged')
-            data['ego_mask'] = mmcv.imread(
-                self.data_root / scene['scene_info']['camera_mask'][camera_id], flag='grayscale'
-            )
-            camera_segs[camera_id] = ImageSegMask(data, self.dictionary['camera_segs'])
-
-        return camera_segs
+    def load_camera_segs(self, index: str) -> CameraImageSegMaskSet:
+        return CameraImageSegMaskSet.from_info(self.data_root, self.info, index, self.dictionary)
 
 
-    def load_camera_depths(self, index: str):
-        scene_id, frame_id = index.split('/')
-        scene = self.info[scene_id]
-        frame = scene['frame_info'][frame_id]
-        camera_depths = {}
-        for camera_id in frame['camera_image_depth']:
-            data = {
-                'cam_id': camera_id,
-                'cam_type': get_cam_type(camera_id),
-                'frame_id': frame_id,
-            }
-            data.update(scene['scene_info']['calibration'][camera_id])
-            data['dep_img'] = mmcv.imread(self.data_root / frame['camera_image_depth'][camera_id], flag='unchanged')
-            data['ego_mask'] = mmcv.imread(
-                self.data_root / scene['scene_info']['camera_mask'][camera_id], flag='grayscale'
-            )
-            camera_depths[camera_id] = ImageDepth(data)
-
-        return camera_depths
+    def load_camera_depths(self, index: str) -> CameraImageDepthSet:
+        return CameraImageDepthSet.from_info(self.data_root, self.info, index, depth_mode='d')
 
 
     def load_bbox_3d(self, index):

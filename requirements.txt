@@ -1,5 +1,9 @@
 numpy>=1.26.2
+copious>=0.1.20
+loguru
 scipy
+tqdm
+easydict==1.13
 nuscenes-devkit
 opencv-python-headless
 virtual-camera>=0.0.4.3
