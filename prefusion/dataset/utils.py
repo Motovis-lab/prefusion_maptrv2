@@ -151,14 +151,10 @@ class VoxelLookUpTableGenerator:
         self.voxel_points = get_voxel_points_in_ego(self.voxel_shape, self.voxel_range)
     
     def generate(self, camera_images, seed=None):
-        '''
-        inputs:
-        - camera_images: \<list of Image transformables\>
-        - seed: seed for randomness of sampled valid_map
-
-        outputs: 
-        - LUT = {
-            \<cam_id\>: dict(
+        """
+        ```python
+        LUT = dict(
+            cam_id=dict(
                 uu=uu, 
                 vv=vv, 
                 dd=dd, 
@@ -166,8 +162,21 @@ class VoxelLookUpTableGenerator:
                 valid_map_sampled=valid_map_sampled,
                 norm_density_map=norm_density_map
             )
-        }
-        '''
+        )
+        ```
+
+        Parameters
+        ----------
+        camera_images : dict
+            dict of Image transformables
+        seed : _type_, optional
+            seed for randomness of sampled valid_map, by default None
+
+        Returns
+        -------
+        LUT : dict
+        """
+
         ego_distance_max = self.voxel_feature_config['ego_distance_max']
         ego_distance_step = self.voxel_feature_config['ego_distance_step']
         distances_ego = np.linalg.norm(self.voxel_points, axis=0)
