@@ -269,11 +269,11 @@ train.txt
 - Transforms
   - RandomImageOmit
   - RandomImageISP
-  - IntrinsicImage
-  - ExtrinsicImage
+  - ApplyIntrinsic
+  - ApplyExtrinsic
   - RandomIntrinsicParam
   - RandomExtrinsicParam
-  - RandomExtrinsicImage
+  - RandomApplyExtrinsic
   - RandomMirrorSpace
   - RandomMirrorTime
   - RandomScaleSpace

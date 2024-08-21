@@ -1,4 +1,5 @@
 import random
+import copy
 import inspect
 import functools
 from pathlib import Path
@@ -97,7 +98,7 @@ class Transformable:
     
     @transform_method
     def intrinsic_jitter(self, **kwargs):
-        raise self
+        raise NotImplementedError
     
     @transform_method
     def apply_intrinsic(self, **kwargs):
@@ -105,7 +106,7 @@ class Transformable:
     
     @transform_method
     def extrinsic_jitter(self, **kwargs):
-        raise self
+        raise NotImplementedError
     
     @transform_method
     def apply_extrinsic(self, **kwargs):
@@ -187,20 +188,22 @@ class TransformableSet(Transformable):
     """A set of transformables of the same type. A TransformableSet is also a Transformable."""
     transformable_cls = Transformable  # each subclass of TransformableSet should have its own transformable_cls for protection purpose.
 
-    def __init__(self, transformables: list):
+    def __init__(self, transformables: dict):
         self.transformables = transformables
         self.validate_transformable_class()
     
     def validate_transformable_class(self):
-        if not all([isinstance(t, self.transformable_cls) for t in self.transformables]):
+        if not all([isinstance(t, self.transformable_cls) for tid, t in self.transformables.items()]):
             raise TypeError(f"transformables of {self.__class__.__name__} should all be of type {self.transformable_cls.__class__.__name__}, but got {[type(t) for t in self.transformables]}")
     
     def __repr__(self):
         return f"{self.__class__.__name__}(transformables={self.transformables})"
     
     def _apply_transform(self, method_name, *args, **kwargs):
-        for transformable in self.transformables:
-            getattr(transformable, method_name)(*args, **kwargs)
+        for t_id, transformable in self.transformables.items():
+            transformable_concerned_args = [arg[t_id] if isinstance(arg, dict) and t_id in arg else arg for arg in args]
+            transformable_concerned_kwargs = {k: kwargs[k][t_id] if isinstance(kwargs[k], dict) and t_id in kwargs[k] else kwargs[k] for k in kwargs}
+            getattr(transformable, method_name)(*transformable_concerned_args, **transformable_concerned_kwargs)
         return self
     
     def __getattribute__(self, name):
@@ -216,6 +219,7 @@ class TransformableSet(Transformable):
 
     def get_data(self, **kwargs):
         return self.transformables
+
 
 
 class CameraImage(Transformable):
@@ -322,6 +326,7 @@ class CameraImage(Transformable):
     
 
     def intrinsic_jitter(self, percentile=0.5, **kwargs):
+        # TODO: may need to move the random operation outside of the transform method.
         cx, cy, fx, fy, *distortion_params = self.data['intrinsic']
         scale = percentile * 0.01
         cx_ = random.uniform(1 - scale, 1 + scale) * cx
@@ -333,6 +338,7 @@ class CameraImage(Transformable):
     
 
     def extrinsic_jitter(self, angle=1, translation=0.05, **kwargs):
+        # TODO: may need to move the random operation outside of the transform method.
         R, t = self.data['extrinsic']
         del_R = Rotation.from_euler(
             'xyz', 
@@ -464,8 +470,7 @@ class CameraImageSet(TransformableSet):
         scene_id, frame_id = index.split('/')
         scene = dataset_info[scene_id]
         frame = scene['frame_info'][frame_id]
-        camera_ids = list(frame['camera_image'].keys())
-        transformables = [CameraImage.from_info(cam_id, data_root, dataset_info, index) for cam_id in camera_ids]
+        transformables = {cam_id: CameraImage.from_info(cam_id, data_root, dataset_info, index) for cam_id in frame['camera_image']}
         return CameraImageSet(transformables)
 
 
@@ -670,8 +675,7 @@ class CameraImageSegMaskSet(TransformableSet):
         scene_id, frame_id = index.split('/')
         scene = dataset_info[scene_id]
         frame = scene['frame_info'][frame_id]
-        camera_ids = list(frame['camera_image_seg'].keys())
-        transformables = [CameraImageSegMask.from_info(cam_id, data_root, dataset_info, index) for cam_id in camera_ids]
+        transformables = {cam_id: CameraImageSegMask.from_info(cam_id, data_root, dataset_info, index) for cam_id in frame['camera_image_seg']}
         return CameraImageSegMaskSet(transformables)
 
 
@@ -858,8 +862,7 @@ class CameraImageDepthSet(TransformableSet):
         scene_id, frame_id = index.split('/')
         scene = dataset_info[scene_id]
         frame = scene['frame_info'][frame_id]
-        camera_ids = list(frame['camera_image_depth'].keys())
-        transformables = [CameraImageDepth.from_info(cam_id, data_root, dataset_info, index) for cam_id in camera_ids]
+        transformables = {cam_id: CameraImageDepth.from_info(cam_id, data_root, dataset_info, index) for cam_id in frame['camera_image_depth']}
         return CameraImageDepthSet(transformables)
 
 
@@ -1414,15 +1417,49 @@ class Transform:
 
 
 def random_transform_class_factory(cls_name, transform_func):
-    def __init__(self, *, prob=0.0, scope="frame", **kwargs):
+    """
+    pipeline = [
+        dict(
+            type='RandomTransformSequence',
+            transforms=[
+                dict(
+                    type='RandomBrightness',
+                    value_random_definition=dict(brightness=dict(type=float, range=[0.5, 1.5])),
+                    scope='frame',
+                    prob=0.5
+                ),
+                dict(
+                    type='RandomSaturation',
+                    value_random_definition={'type': 'uniform', 'range': [0.5, 1.5]},
+                    prob=0.5
+                )
+            ]
+        )
+    ]
+    """
+    def __init__(self, *, prob: float = 0.0, param_randomization_rules: dict = None, scope: str = "frame", **kwargs):
+        """Initialize a Transform object.
+
+        Parameters
+        ----------
+        prob : float, optional
+            the happening probability of this Transform, value range [0, 1], by default 0.0
+        param_randomization_rules : dict
+            definition of how the param should be randomized, e.g. {"param_name": {"type": "float", "range": [0, 1]}
+        scope : str, optional
+            the scope of the Transform, by default "frame"
+        """
         Transform.__init__(self, scope=scope)
         self.prob = prob
+        self.param_randomization_rules = param_randomization_rules
         self.kwargs = kwargs
 
-    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
-        random.seed(seeds[self.scope])
+    def __call__(self, *transformables, seeds=None, **kwargs):
+        if seeds:
+            random.seed(seeds[self.scope])
         if random.random() > self.prob:
             return list(transformables)
+        # TODO: implement the randomization for params
         return [None if i is None else getattr(i, transform_func)(**self.kwargs) for i in transformables]
 
     return type(cls_name, (Transform,), {"__init__": __init__, "__call__": __call__})
@@ -1472,29 +1509,28 @@ class RandomChooseOneTransform(Transform):
         self.transform_probs = transform_probs
         self.prob = prob
 
-    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
-        random.seed(seeds[self.scope])
+    def __call__(self, *transformables, seeds=None, **kwargs):
+        if seeds:
+            random.seed(seeds[self.scope])
         if random.random() <= self.prob:
             transform = random.choices(
                 population=self.transforms,
                 weights=self.transform_probs,
                 k=1
             )[0]
-            for transformable in transformables:
-                transform(*transformable, **kwargs)
+            transform(*transformables, **kwargs)
         return transformables
 
 
 
 class RandomTransformSequence(Transform):
     def __init__(self, transforms, *, scope='frame') -> None:
-        self.transforms = transforms
+        self.transforms = copy.deepcopy(transforms)
         self.scope = scope
     
-    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
-        for seed in seeds:
-            if seed is not None:
-                random.seed(seed)
+    def __call__(self, *transformables, seeds: dict = None, **kwargs):
+        if seeds:
+            random.seed(seeds[self.scope])
         random.shuffle(self.transforms)
         for transform in self.transforms:
             transform(*transformables, seeds=seeds, **kwargs)
@@ -1524,8 +1560,9 @@ class RandomImageISP(Transform):
             self.sequence.append({transform: eval(f"{transform}")})
         self.kwargs = kwargs
     
-    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
-        random.seed(seeds[self.scope])
+    def __call__(self, *transformables, seeds=None, **kwargs):
+        if seeds:
+            random.seed(seeds[self.scope])
         
         if self.random_sequence:
             random.shuffle(self.sequence)
@@ -1562,10 +1599,9 @@ class RandomImageOmit(Transform):
     pass
 
 
-
-class IntrinsicImage(Transform):
+class ApplyIntrinsic(Transform):
     
-    def __init__(self, resolutions, intrinsics='auto', scope="frame"): # TODO: combine resolutions and intrinsics (because they have the same keys)
+    def __init__(self, resolutions, intrinsics='auto', scope="frame"):
         '''
         resolutions: {<cam_id>: (W, H), ...}
         intrinsics: {<cam_id>: (cx, cy, fx, fy, ...), ...}
@@ -1590,16 +1626,17 @@ class IntrinsicImage(Transform):
     
     def __call__(self, *transformables, **kwargs):
         for transformable in transformables:
-            if isinstance(transformable, (CameraImage, CameraImageSegMask, CameraImageDepth)):
-                if transformable.data['cam_id'] in self.cam_ids:
-                    resolution = self.resolutions[transformable.data['cam_id']]
-                    intrinsic = self.intrinsics[transformable.data['cam_id']]
-                    transformable.apply_intrinsic(resolution, intrinsic)
+            if isinstance(transformable, (CameraImageSet, CameraImageSegMaskSet, CameraImageDepthSet)):
+                for cam_id, t in transformable.transformables.items():
+                    if cam_id in self.cam_ids:
+                        t.apply_intrinsic(self.resolution[cam_id], self.intrinsic[cam_id])
+            elif isinstance(transformable, (CameraImage, CameraImageSegMask, CameraImageDepth)):
+                t.apply_intrinsic(self.resolution[cam_id], self.intrinsic[cam_id])
         return transformables
 
 
 
-class ExtrinsicImage(Transform):
+class ApplyExtrinsic(Transform):
     
     def __init__(self, del_rotations, scope="frame"):
         '''
@@ -1664,28 +1701,30 @@ class FastRayLookUpTable(Transform):
         )
         self.cam_ids = list(camera_feature_configs.keys())
     
-    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
+    def __call__(self, *transformables, seeds=None, **kwargs):
+        seed = None if seeds is None else seeds[self.scope]
         camera_images = {}
         for transformable in transformables:
             if isinstance(transformable, CameraImage):
                 cam_id = transformable.data['cam_id']
                 if cam_id in self.cam_ids:
                     camera_images[cam_id] = transformable
-        LUT = self.lut_gen.generate(camera_images, seed=seeds[self.scope])
+        LUT = self.lut_gen.generate(camera_images, seed=seed)
         for cam_id in camera_images:
             camera_images[cam_id].data['fast_ray_LUT'] = LUT[cam_id]
         return transformables
 
 
 
-class RandomExtrinsicImage(Transform):
+class RandomApplyExtrinsic(Transform):
     def __init__(self, *, prob=0.5, angles=[1, 1, 1], scope="frame", **kwargs):
         super().__init__(scope=scope)
         self.prob = prob
         self.angles = angles
 
-    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
-        random.seed(seeds[self.scope])
+    def __call__(self, *transformables, seeds=None, **kwargs):
+        if seeds:
+            random.seed(seeds[self.scope])
         if random.random() > self.prob:
             return list(transformables)
         
@@ -1716,8 +1755,9 @@ class RandomRotationSpace(Transform):
         self.angles = angles
         self.prob_inverse_cameras_rotation = prob_inverse_cameras_rotation
 
-    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
-        random.seed(seeds[self.scope])
+    def __call__(self, *transformables, seeds=None, **kwargs):
+        if seeds:
+            random.seed(seeds[self.scope])
         if random.random() > self.prob:
             return list(transformables)
         
@@ -1760,8 +1800,9 @@ class RandomMirrorSpace(Transform):
         if 'Z' in self.flip_mode:
             self.flip_mat[2, 2] = -1
 
-    def __call__(self, *transformables, seeds={'group': None, 'batch': None, 'frame': None}, **kwargs):
-        random.seed(seeds[self.scope])
+    def __call__(self, *transformables, seeds=None, **kwargs):
+        if seeds:
+            random.seed(seeds[self.scope])
         if random.random() > self.prob:
             return list(transformables)
 
@@ -1794,9 +1835,9 @@ available_transforms = [
     RandomSolarize,
     RandomImEqualize,
     RandomImageISP, 
-    IntrinsicImage, 
-    ExtrinsicImage, 
-    RandomExtrinsicImage, 
+    ApplyIntrinsic, 
+    ApplyExtrinsic, 
+    RandomApplyExtrinsic, 
     RandomRotationSpace, 
     RandomMirrorSpace, 
     RandomIntrinsicParam, 

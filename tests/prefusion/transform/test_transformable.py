@@ -32,12 +32,12 @@ def test_transform_method():
 
 
 def test_transformableset_getattr():
-    ts = TransformableSet([Transformable([1, 2, 33]), Transformable([7, 8, -1])])
-    assert ts.transformables[0].data == [1, 2, 33]
-    assert ts.transformables[1].data == [7, 8, -1]
+    ts = TransformableSet({"front": Transformable([1, 2, 33]), "back": Transformable([7, 8, -1])})
+    assert ts.transformables["front"].data == [1, 2, 33]
+    assert ts.transformables["back"].data == [7, 8, -1]
     ts.adjust_saturation(saturation=0.5)
-    assert ts.transformables[0].data == [1, 2, 33]
-    assert ts.transformables[1].data == [7, 8, -1]
+    assert ts.transformables["front"].data == [1, 2, 33]
+    assert ts.transformables["back"].data == [7, 8, -1]
     assert ts.get_data() is ts.transformables
 
 
@@ -45,7 +45,7 @@ def test_transformableset_wrong_transformable_type():
     class T:
         pass
     with pytest.raises(TypeError):
-        _ = TransformableSet([T(), T()])
+        _ = TransformableSet({"t1": T(), "t2": T()})
 
 
 @pytest.fixture
@@ -146,16 +146,16 @@ def test_camera_image_from_info(dataset_info, img324, img325):
 def test_camera_image_set(dataset_info, img324, img325):
     im1 = CameraImage.from_info("front", Path("/"), dataset_info, "20230901_000000/1692759619664")
     im2 = CameraImage.from_info("back", Path("/"), dataset_info, "20230901_000000/1692759619664")
-    im_set = CameraImageSet([im1, im2])
+    im_set = CameraImageSet({"front": im1, "back": im2})
     im_set.adjust_brightness(brightness=0.5)
-    np.testing.assert_almost_equal(im_set.transformables[0].data['img'], (cv2.imread(img324) * 0.5).astype(np.uint8))
-    np.testing.assert_almost_equal(im_set.transformables[1].data['img'], (cv2.imread(img325) * 0.5).astype(np.uint8))
+    np.testing.assert_almost_equal(im_set.transformables["front"].data['img'], (cv2.imread(img324) * 0.5).astype(np.uint8))
+    np.testing.assert_almost_equal(im_set.transformables["back"].data['img'], (cv2.imread(img325) * 0.5).astype(np.uint8))
 
 def test_camera_image_set_2(dataset_info, img324, img325):
     im_set = CameraImageSet.from_info(Path("/"), dataset_info, "20230901_000000/1692759619664")
     im_set.adjust_brightness(brightness=0.5)
-    np.testing.assert_almost_equal(im_set.transformables[0].data['img'], (cv2.imread(img324) * 0.5).astype(np.uint8))
-    np.testing.assert_almost_equal(im_set.transformables[1].data['img'], (cv2.imread(img325) * 0.5).astype(np.uint8))
+    np.testing.assert_almost_equal(im_set.transformables["front"].data['img'], (cv2.imread(img324) * 0.5).astype(np.uint8))
+    np.testing.assert_almost_equal(im_set.transformables["back"].data['img'], (cv2.imread(img325) * 0.5).astype(np.uint8))
 
 
 def test_camera_image_seg_mask(dataset_info, seg324, seg325):
@@ -173,7 +173,7 @@ def test_camera_image_seg_mask_set(dataset_info):
         [0, 0, 1],
     ])
     seg_set.rotate_3d(rotmat)
-    np.testing.assert_almost_equal(seg_set.transformables[0].data['extrinsic'][1], np.array([1, 0, 1]))
+    np.testing.assert_almost_equal(seg_set.transformables["front"].data['extrinsic'][1], np.array([1, 0, 1]))
 
 
 def test_camera_image_depth(dataset_info, img324, img325):
@@ -193,4 +193,4 @@ def test_camera_image_depth_set(dataset_info):
         [0, 0, 1],
     ])
     seg_set.rotate_3d(rotmat)
-    np.testing.assert_almost_equal(seg_set.transformables[0].data['extrinsic'][1], np.array([1, 0, 1]))
+    np.testing.assert_almost_equal(seg_set.transformables["front"].data['extrinsic'][1], np.array([1, 0, 1]))
