@@ -13,10 +13,10 @@ from prefusion.dataset.transform import (
     TransformableSet, 
     CameraImageSet, 
     CameraImage, 
-    CameraImageSegMask,
-    CameraImageSegMaskSet,
-    CameraImageDepth,
-    CameraImageDepthSet,
+    CameraSegMask,
+    CameraSegMaskSet,
+    CameraDepth,
+    CameraDepthSet,
 )
 
 
@@ -32,13 +32,13 @@ def test_transform_method():
 
 
 def test_transformableset_getattr():
-    ts = TransformableSet({"front": Transformable([1, 2, 33]), "back": Transformable([7, 8, -1])})
+    trb1, trb2 = Transformable([1, 2, 33]), Transformable([7, 8, -1])
+    ts = TransformableSet({"front": trb1, "back": trb2})
     assert ts.transformables["front"].data == [1, 2, 33]
     assert ts.transformables["back"].data == [7, 8, -1]
     ts.adjust_saturation(saturation=0.5)
     assert ts.transformables["front"].data == [1, 2, 33]
     assert ts.transformables["back"].data == [7, 8, -1]
-    assert ts.get_data() is ts.transformables
 
 
 def test_transformableset_wrong_transformable_type():
@@ -159,14 +159,14 @@ def test_camera_image_set_2(dataset_info, img324, img325):
 
 
 def test_camera_image_seg_mask(dataset_info, seg324, seg325):
-    seg1 = CameraImageSegMask.from_info("front", Path("/"), dataset_info, "20230901_000000/1692759619664")
-    seg2 = CameraImageSegMask.from_info("back", Path("/"), dataset_info, "20230901_000000/1692759619664")
+    seg1 = CameraSegMask.from_info("front", Path("/"), dataset_info, "20230901_000000/1692759619664")
+    seg2 = CameraSegMask.from_info("back", Path("/"), dataset_info, "20230901_000000/1692759619664")
     np.testing.assert_almost_equal(seg1.data['img'], cv2.imread(seg324))
     np.testing.assert_almost_equal(seg2.data['img'], cv2.imread(seg325))
 
 
 def test_camera_image_seg_mask_set(dataset_info):
-    seg_set = CameraImageSegMaskSet.from_info(Path("/"), dataset_info, "20230901_000000/1692759619664")
+    seg_set = CameraSegMaskSet.from_info(Path("/"), dataset_info, "20230901_000000/1692759619664")
     rotmat = np.array([
         [0.5, 0.5, 0],
         [0.5, -0.5, 0],
@@ -177,16 +177,16 @@ def test_camera_image_seg_mask_set(dataset_info):
 
 
 def test_camera_image_depth(dataset_info, img324, img325):
-    seg1 = CameraImageDepth.from_info("front", Path("/"), dataset_info, "20230901_000000/1692759619664")
-    seg2 = CameraImageDepth.from_info("back", Path("/"), dataset_info, "20230901_000000/1692759619664")
-    np.testing.assert_almost_equal(seg1.data['dep_img'], cv2.imread(img324))
-    np.testing.assert_almost_equal(seg2.data['dep_img'], cv2.imread(img325))
-    assert seg1.data['depth_mode'] == 'd'
-    assert seg2.data['depth_mode'] == 'z'
+    depth1 = CameraDepth.from_info("front", Path("/"), dataset_info, "20230901_000000/1692759619664")
+    depth2 = CameraDepth.from_info("back", Path("/"), dataset_info, "20230901_000000/1692759619664")
+    np.testing.assert_almost_equal(depth1.data['img'], cv2.imread(img324))
+    np.testing.assert_almost_equal(depth2.data['img'], cv2.imread(img325))
+    assert depth1.data['depth_mode'] == 'd'
+    assert depth2.data['depth_mode'] == 'z'
 
 
 def test_camera_image_depth_set(dataset_info):
-    seg_set = CameraImageDepthSet.from_info(Path("/"), dataset_info, "20230901_000000/1692759619664")
+    seg_set = CameraDepthSet.from_info(Path("/"), dataset_info, "20230901_000000/1692759619664")
     rotmat = np.array([
         [0.5, 0.5, 0],
         [0.5, -0.5, 0],
@@ -194,3 +194,5 @@ def test_camera_image_depth_set(dataset_info):
     ])
     seg_set.rotate_3d(rotmat)
     np.testing.assert_almost_equal(seg_set.transformables["front"].data['extrinsic'][1], np.array([1, 0, 1]))
+
+

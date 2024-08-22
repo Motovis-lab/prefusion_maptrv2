@@ -251,8 +251,8 @@ train.txt
 ### 清单
 - Transformables
   - camera_images: CameraImageSet
-  - camera_segs: CameraImageSegMaskSet
-  - camera_depths: CameraImageDepthSet
+  - camera_segs: CameraSegMaskSet
+  - camera_depths: CameraDepthSet
   - lidar_points: LidarPoints
   - bbox3d: Bbox3D
   - bboxbev: BboxBev
@@ -269,11 +269,11 @@ train.txt
 - Transforms
   - RandomImageOmit
   - RandomImageISP
-  - ApplyIntrinsic
-  - ApplyExtrinsic
+  - RenderIntrinsic
+  - RenderExtrinsic
   - RandomIntrinsicParam
   - RandomExtrinsicParam
-  - RandomApplyExtrinsic
+  - RandomRenderExtrinsic
   - RandomMirrorSpace
   - RandomMirrorTime
   - RandomScaleSpace

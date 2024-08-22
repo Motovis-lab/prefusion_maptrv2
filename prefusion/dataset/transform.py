@@ -2,6 +2,7 @@ import random
 import copy
 import inspect
 import functools
+import abc
 from pathlib import Path
 
 import cv2
@@ -33,7 +34,9 @@ def transform_method(func):
 
 class Transformable:
     """
-    Base class for all transformables.
+    Base class for all transformables. 
+    It is not a abstract class, because it on one hand provides the full set of transform methods and provide default implementation on the other hand.
+    The only purpose of its direct subclasses CameraTransformable and SpatialTransformable is to ensure some transform methods must be implemented.
     """
 
     def __init__(self, data: dict):
@@ -42,7 +45,6 @@ class Transformable:
     def __repr__(self):
         return "type: {}\ndata: {}".format(self.__class__.__name__, self.data)
     
-
     @transform_method
     def at_transform(self, func_name, **kwargs):
         return self
@@ -89,7 +91,6 @@ class Transformable:
     
     @transform_method
     def gaussian_blur(self, **kwargs):
-        # use albumentations
         return self
     
     @transform_method
@@ -97,41 +98,87 @@ class Transformable:
         return self
     
     @transform_method
-    def intrinsic_jitter(self, **kwargs):
-        raise NotImplementedError
+    def set_intrinsic_param(self, **kwargs):
+        return self
     
     @transform_method
-    def apply_intrinsic(self, **kwargs):
-        raise NotImplementedError
+    def render_intrinsic(self, **kwargs):
+        return self
     
     @transform_method
-    def extrinsic_jitter(self, **kwargs):
-        raise NotImplementedError
+    def set_extrinsic_param(self, **kwargs):
+        return self
     
     @transform_method
-    def apply_extrinsic(self, **kwargs):
-        raise NotImplementedError
+    def render_extrinsic(self, **kwargs):
+        return self
     
     @transform_method
     def flip_3d(self, **kwargs):
-        raise NotImplementedError
-    
-    @transform_method
-    def scale_3d(self, **kwargs):
-        raise NotImplementedError
+        return self
     
     @transform_method
     def rotate_3d(self, **kwargs):
-        raise NotImplementedError
-    
+        return self
+
+    @transform_method
+    def scale_3d(self, **kwargs):
+        return self
 
     def to_tensor(self, **kwargs):
-        return self
+        raise NotImplementedError("Transformable must implement to_tensor method.")
+
+
+class CameraTransformable(Transformable, metaclass=abc.ABCMeta):
+    @transform_method
+    @abc.abstractmethod
+    def set_intrinsic_param(self, **kwargs):
+        pass
     
-    def get_data(self, **kwargs):
-        return self.data
+    @transform_method
+    @abc.abstractmethod
+    def render_intrinsic(self, **kwargs):
+        pass
+    
+    @transform_method
+    @abc.abstractmethod
+    def set_extrinsic_param(self, **kwargs):
+        pass
+    
+    @transform_method
+    @abc.abstractmethod
+    def render_extrinsic(self, **kwargs):
+        pass
+    
+    @transform_method
+    @abc.abstractmethod
+    def flip_3d(self, **kwargs):
+        pass
+    
+    @transform_method
+    @abc.abstractmethod
+    def rotate_3d(self, **kwargs):
+        pass
+
+    @abc.abstractmethod
+    def to_tensor(self, **kwargs):
+        pass
 
 
+class SpatialTransformable(Transformable, metaclass=abc.ABCMeta):
+    @transform_method
+    @abc.abstractmethod
+    def flip_3d(self, **kwargs):
+        pass
+    
+    @transform_method
+    @abc.abstractmethod
+    def rotate_3d(self, **kwargs):
+        pass
+
+    @abc.abstractmethod
+    def to_tensor(self, **kwargs):
+        pass
 
 ''' albumentations
 AdvancedBlur
@@ -215,14 +262,11 @@ class TransformableSet(Transformable):
         return method_or_attr
 
     def to_tensor(self, **kwargs):
-        return self
-
-    def get_data(self, **kwargs):
-        return self.transformables
+        return {tid: t.to_tensor() for tid, t in self.transformables.items()}
 
 
 
-class CameraImage(Transformable):
+class CameraImage(CameraTransformable):
     """
     - self.data = {
         'img': \<img_arr\>,
@@ -324,8 +368,7 @@ class CameraImage(Transformable):
         self.data['img'] = self.data['img'][..., order]
         return self
     
-
-    def intrinsic_jitter(self, percentile=0.5, **kwargs):
+    def set_intrinsic_param(self, percentile=0.5, **kwargs):
         # TODO: may need to move the random operation outside of the transform method.
         cx, cy, fx, fy, *distortion_params = self.data['intrinsic']
         scale = percentile * 0.01
@@ -335,9 +378,8 @@ class CameraImage(Transformable):
         fy_ = random.uniform(1 - scale, 1 + scale) * fy
         self.data['intrinsic'] = [cx_, cy_, fx_, fy_, *distortion_params]
         return self
-    
 
-    def extrinsic_jitter(self, angle=1, translation=0.05, **kwargs):
+    def set_extrinsic_param(self, angle=1, translation=0.05, **kwargs):
         # TODO: may need to move the random operation outside of the transform method.
         R, t = self.data['extrinsic']
         del_R = Rotation.from_euler(
@@ -356,9 +398,8 @@ class CameraImage(Transformable):
         t_ = t + del_t
         self.data['extrinsic'] = (R_, t_)
         return self
-    
 
-    def apply_intrinsic(self, resolution, intrinsic, **kwargs):
+    def render_intrinsic(self, resolution, intrinsic, **kwargs):
         assert len(intrinsic) <= len(self.data['intrinsic']), 'invalid intrinsic params'
         resolution_old = self.data['img'].shape[:2][::-1]
         camera_class = getattr(vc, self.data['cam_type'])
@@ -382,7 +423,7 @@ class CameraImage(Transformable):
         
         return self
     
-    def apply_extrinsic(self, delta_extrinsic, **kwargs):
+    def render_extrinsic(self, delta_extrinsic, **kwargs):
         resolution = self.data['img'].shape[:2][::-1]
         camera_class = getattr(vc, self.data['cam_type'])
         R, t = self.data['extrinsic']
@@ -502,7 +543,7 @@ class LidarPoints(Transformable):
 
 
 
-class CameraImageSegMask(Transformable):
+class CameraSegMask(CameraTransformable):
     """
     - self.data = {
         'img': <seg_arr>,
@@ -515,12 +556,11 @@ class CameraImageSegMask(Transformable):
 
     def __init__(self, data: dict):
         super().__init__(data)
-        assert self.data['cam_type'] in ['FisheyeCamera', 'PerspectiveCamera']
 
 
     @classmethod
     def from_info(cls, cam_id: str, data_root: Path, dataset_info: dict, index: str): # TODO: may need to refactor, due to interface oblique
-        """Create CameraImageSegMask object from dataset info dict.
+        """Create CameraSegMask object from dataset info dict.
 
         Parameters
         ----------
@@ -537,7 +577,7 @@ class CameraImageSegMask(Transformable):
         scene = dataset_info[scene_id]
         frame = scene['frame_info'][frame_id]
         calib = dataset_info[scene_id]['scene_info']['calibration']
-        return CameraImageSegMask(
+        return CameraSegMask(
             dict(
                 cam_id=cam_id,
                 cam_type=calib[cam_id]['camera_type'],
@@ -549,7 +589,7 @@ class CameraImageSegMask(Transformable):
         )
 
 
-    def intrinsic_jitter(self, percentile=0.5, **kwargs):
+    def set_intrinsic_param(self, percentile=0.5, **kwargs):
         cx, cy, fx, fy, *distortion_params = self.data['intrinsic']
         scale = percentile * 0.01
         cx_ = random.uniform(1 - scale, 1 + scale) * cx
@@ -560,7 +600,7 @@ class CameraImageSegMask(Transformable):
         return self
     
 
-    def extrinsic_jitter(self, angle=1, translation=0.05, **kwargs):
+    def set_extrinsic_param(self, angle=1, translation=0.05, **kwargs):
         R, t = self.data['extrinsic']
         del_R = Rotation.from_euler(
             'xyz', 
@@ -580,7 +620,7 @@ class CameraImageSegMask(Transformable):
         return self
     
 
-    def apply_intrinsic(self, resolution, intrinsic, **kwargs):
+    def render_intrinsic(self, resolution, intrinsic, **kwargs):
         assert len(intrinsic) <= len(self.data['intrinsic']), 'invalid intrinsic params'
         resolution_old = self.data['img'].shape[:2][::-1]
         camera_class = getattr(vc, self.data['cam_type'])
@@ -604,7 +644,7 @@ class CameraImageSegMask(Transformable):
         
         return self
     
-    def apply_extrinsic(self, delta_extrinsic, **kwargs):
+    def render_extrinsic(self, delta_extrinsic, **kwargs):
         resolution = self.data['img'].shape[:2][::-1]
         camera_class = getattr(vc, self.data['cam_type'])
         R, t = self.data['extrinsic']
@@ -656,12 +696,12 @@ class CameraImageSegMask(Transformable):
         return self
 
 
-class CameraImageSegMaskSet(TransformableSet):
-    transformable_cls = CameraImageSegMask
+class CameraSegMaskSet(TransformableSet):
+    transformable_cls = CameraSegMask
 
     @classmethod
     def from_info(cls, data_root: Path, dataset_info: dict, index: str): # TODO: may need to refactor, due to interface oblique
-        """Create CameraImageSegMaskSet object from dataset info dict.
+        """Create CameraSegMaskSet object from dataset info dict.
 
         Parameters
         ----------
@@ -675,14 +715,14 @@ class CameraImageSegMaskSet(TransformableSet):
         scene_id, frame_id = index.split('/')
         scene = dataset_info[scene_id]
         frame = scene['frame_info'][frame_id]
-        transformables = {cam_id: CameraImageSegMask.from_info(cam_id, data_root, dataset_info, index) for cam_id in frame['camera_image_seg']}
-        return CameraImageSegMaskSet(transformables)
+        transformables = {cam_id: CameraSegMask.from_info(cam_id, data_root, dataset_info, index) for cam_id in frame['camera_image_seg']}
+        return CameraSegMaskSet(transformables)
 
 
-class CameraImageDepth(Transformable):
+class CameraDepth(CameraTransformable):
     """
     - self.data = {
-        'dep_img': <depth_arr>,
+        'img': <depth_arr>,
         'ego_mask': <arr>,
         'cam_type': < 'FisheyeCamera' | 'PerspectiveCamera' >
         'extrinsic': (R, t),
@@ -697,7 +737,7 @@ class CameraImageDepth(Transformable):
 
     @classmethod
     def from_info(cls, cam_id: str, data_root: Path, dataset_info: dict, index: str): # TODO: may need to refactor, due to interface oblique
-        """Create CameraImageDepth object from dataset info dict.
+        """Create CameraDepth object from dataset info dict.
 
         Parameters
         ----------
@@ -716,12 +756,12 @@ class CameraImageDepth(Transformable):
         scene = dataset_info[scene_id]
         frame = scene['frame_info'][frame_id]
         calib = dataset_info[scene_id]['scene_info']['calibration']
-        return CameraImageDepth(
+        return CameraDepth(
             dict(
                 cam_id=cam_id,
                 cam_type=calib[cam_id]['camera_type'],
                 frame_id=frame_id,
-                dep_img=mmcv.imread(data_root / frame['camera_image_depth'][cam_id], flag='unchanged'),
+                img=mmcv.imread(data_root / frame['camera_image_depth'][cam_id], flag='unchanged'),
                 ego_mask=mmcv.imread( data_root / scene['scene_info']['camera_mask'][cam_id], flag='grayscale' ),
                 depth_mode=scene['scene_info']['depth_mode'][cam_id],
                 **calib[cam_id],
@@ -730,7 +770,7 @@ class CameraImageDepth(Transformable):
 
 
 
-    def intrinsic_jitter(self, percentile=0.5, **kwargs):
+    def set_intrinsic_param(self, percentile=0.5, **kwargs):
         cx, cy, fx, fy, *distortion_params = self.data['intrinsic']
         scale = percentile * 0.01
         cx_ = random.uniform(1 - scale, 1 + scale) * cx
@@ -741,7 +781,7 @@ class CameraImageDepth(Transformable):
         return self
     
 
-    def extrinsic_jitter(self, angle=1, translation=0.05, **kwargs):
+    def set_extrinsic_param(self, angle=1, translation=0.05, **kwargs):
         R, t = self.data['extrinsic']
         del_R = Rotation.from_euler(
             'xyz', 
@@ -761,9 +801,9 @@ class CameraImageDepth(Transformable):
         return self
     
 
-    def apply_intrinsic(self, resolution, intrinsic, **kwargs):
+    def render_intrinsic(self, resolution, intrinsic, **kwargs):
         assert len(intrinsic) <= len(self.data['intrinsic']), 'invalid intrinsic params'
-        resolution_old = self.data['dep_img'].shape[:2][::-1]
+        resolution_old = self.data['img'].shape[:2][::-1]
         camera_class = getattr(vc, self.data['cam_type'])
         camera_old = camera_class(
             resolution_old,
@@ -774,21 +814,21 @@ class CameraImageDepth(Transformable):
         if len(intrinsic) < len(self.data['intrinsic']):
             intrinsic_new = list(intrinsic) + list(self.data['intrinsic'][len(intrinsic):])
         else:
-            intrinsic_new = intrinsic
+            intrinsic_new = intrinsic   
         camera_new = camera_class(
             resolution,
             self.data['extrinsic'],
             intrinsic_new
         )
-        self.data['dep_img'], self.data['ego_mask'] = vc.render_image(
-            self.data['dep_img'], camera_old, camera_new, interpolation=cv2.INTER_NEAREST
+        self.data['img'], self.data['ego_mask'] = vc.render_image(
+            self.data['img'], camera_old, camera_new, interpolation=cv2.INTER_NEAREST
         )
         self.data['intrinsic'] = intrinsic_new
         
         return self
     
-    def apply_extrinsic(self, delta_extrinsic, **kwargs):
-        resolution = self.data['dep_img'].shape[:2][::-1]
+    def render_extrinsic(self, delta_extrinsic, **kwargs):
+        resolution = self.data['img'].shape[:2][::-1]
         camera_class = getattr(vc, self.data['cam_type'])
         R, t = self.data['extrinsic']
         del_R, del_t = delta_extrinsic
@@ -806,8 +846,8 @@ class CameraImageDepth(Transformable):
         )
         # TODO: get real points from depth then remap to image
         if self.data["depth_mode"] == 'd':
-            self.data['dep_img'], self.data['ego_mask'] = vc.render_image(
-                self.data['dep_img'], camera_old, camera_new, interpolation=cv2.INTER_NEAREST
+            self.data['img'], self.data['ego_mask'] = vc.render_image(
+                self.data['img'], camera_old, camera_new, interpolation=cv2.INTER_NEAREST
             )
         elif self.data["depth_mode"] == 'z':
             raise NotImplementedError
@@ -825,8 +865,8 @@ class CameraImageDepth(Transformable):
         # here translation is a row array
         t_new = self.data['extrinsic'][1] @ flip_mat.T
         self.data['extrinsic'] = (R_new, t_new)
-        self.data['intrinsic'][0] = self.data['dep_img'].shape[1] - 1 - self.data['intrinsic'][0]
-        self.data['dep_img'] = np.array(self.data['dep_img'][:, ::-1])
+        self.data['intrinsic'][0] = self.data['img'].shape[1] - 1 - self.data['intrinsic'][0]
+        self.data['img'] = np.array(self.data['img'][:, ::-1])
         self.data['ego_mask'] = np.array(self.data['ego_mask'][:, ::-1])
         
         return self
@@ -843,12 +883,12 @@ class CameraImageDepth(Transformable):
         return self
 
 
-class CameraImageDepthSet(TransformableSet):
-    transformable_cls = CameraImageDepth
+class CameraDepthSet(TransformableSet):
+    transformable_cls = CameraDepth
 
     @classmethod
     def from_info(cls, data_root: Path, dataset_info: dict, index: str): # TODO: may need to refactor, due to interface oblique
-        """Create CameraImageDepthSet object from dataset info dict.
+        """Create CameraDepthSet object from dataset info dict.
 
         Parameters
         ----------
@@ -862,11 +902,11 @@ class CameraImageDepthSet(TransformableSet):
         scene_id, frame_id = index.split('/')
         scene = dataset_info[scene_id]
         frame = scene['frame_info'][frame_id]
-        transformables = {cam_id: CameraImageDepth.from_info(cam_id, data_root, dataset_info, index) for cam_id in frame['camera_image_depth']}
-        return CameraImageDepthSet(transformables)
+        transformables = {cam_id: CameraDepth.from_info(cam_id, data_root, dataset_info, index) for cam_id in frame['camera_image_depth']}
+        return CameraDepthSet(transformables)
 
 
-class Bbox3D(Transformable):
+class Bbox3D(SpatialTransformable):
     """
     - self.data = {
         'elements:' [element, element, ...],
@@ -974,7 +1014,7 @@ class Square3D(Bbox3D):
 
 
 
-class Polyline3D(Transformable):
+class Polyline3D(SpatialTransformable):
     '''
     - self.data = {
         'elements:' [element, element, ...],
@@ -1249,7 +1289,7 @@ class ParkingSlot3D(Polyline3D):
 
 
 
-class Trajectory(Transformable):
+class Trajectory(SpatialTransformable):
     '''
     - self.data = {
         'elements': [element, element, ...],
@@ -1260,16 +1300,29 @@ class Trajectory(Transformable):
     def __init__(self, data: list):
         self.data = {'elements': data}
 
-
-
-class SegBev(Transformable):
+    def flip_3d(self, **kwargs):
+        return self
+    
+    def rotate_3d(self, **kwargs):
+        return self
     
     def to_tensor(self, **kwargs):
         return self
 
 
+class SegBev(SpatialTransformable):
+    def flip_3d(self, **kwargs):
+        return self
+    
+    def rotate_3d(self, **kwargs):
+        return self
+    
+    def to_tensor(self, **kwargs):
+        return self
+    
 
-class OccSdfBev(Transformable):
+
+class OccSdfBev(SpatialTransformable):
 
     '''
     self.data = {
@@ -1394,8 +1447,13 @@ class OccSdfBev(Transformable):
 
 
 
-class OccSdf3D(Transformable):
-
+class OccSdf3D(SpatialTransformable):
+    def flip_3d(self, **kwargs):
+        return self
+    
+    def rotate_3d(self, **kwargs):
+        return self
+    
     def to_tensor(self, **kwargs):
         return self
 
@@ -1488,8 +1546,8 @@ RandomAutoContrast = random_transform_class_factory("RandomAutoContrast", "auto_
 RandomSolarize = random_transform_class_factory("RandomSolarize", "solarize")
 RandomImEqualize = random_transform_class_factory("RandomImEqualize", "imequalize")
 
-RandomIntrinsicParam = random_transform_class_factory("RandomIntrinsicParam", "intrinsic_jitter")
-RandomExtrinsicParam = random_transform_class_factory("RandomExtrinsicParam", "extrinsic_jitter")
+RandomIntrinsicParam = random_transform_class_factory("RandomIntrinsicParam", "set_intrinsic_param")
+RandomExtrinsicParam = random_transform_class_factory("RandomExtrinsicParam", "set_extrinsic_param")
 ToTensor = deterministic_transform_class_factory("ToTensor", "to_tensor")
 
 
@@ -1599,7 +1657,7 @@ class RandomImageOmit(Transform):
     pass
 
 
-class ApplyIntrinsic(Transform):
+class RenderIntrinsic(Transform):
     
     def __init__(self, resolutions, intrinsics='auto', scope="frame"):
         '''
@@ -1626,17 +1684,17 @@ class ApplyIntrinsic(Transform):
     
     def __call__(self, *transformables, **kwargs):
         for transformable in transformables:
-            if isinstance(transformable, (CameraImageSet, CameraImageSegMaskSet, CameraImageDepthSet)):
+            if isinstance(transformable, (CameraImageSet, CameraSegMaskSet, CameraDepthSet)):
                 for cam_id, t in transformable.transformables.items():
                     if cam_id in self.cam_ids:
-                        t.apply_intrinsic(self.resolution[cam_id], self.intrinsic[cam_id])
-            elif isinstance(transformable, (CameraImage, CameraImageSegMask, CameraImageDepth)):
-                t.apply_intrinsic(self.resolution[cam_id], self.intrinsic[cam_id])
+                        t.render_intrinsic(self.resolution[cam_id], self.intrinsic[cam_id])
+            elif isinstance(transformable, (CameraImage, CameraSegMask, CameraDepth)):
+                t.render_intrinsic(self.resolution[cam_id], self.intrinsic[cam_id])
         return transformables
 
 
 
-class ApplyExtrinsic(Transform):
+class RenderExtrinsic(Transform):
     
     def __init__(self, del_rotations, scope="frame"):
         '''
@@ -1657,10 +1715,10 @@ class ApplyExtrinsic(Transform):
     
     def __call__(self, *transformables, **kwargs):
         for transformable in transformables:
-            if isinstance(transformable, (CameraImage, CameraImageSegMask, CameraImageDepth)):
+            if isinstance(transformable, (CameraImage, CameraSegMask, CameraDepth)):
                 if transformable.data['cam_id'] in self.cam_ids:
                     del_extrinsic = self.del_extrinsics[transformable.data['cam_id']]
-                    transformable.apply_extrinsic(del_extrinsic)
+                    transformable.render_extrinsic(del_extrinsic)
         return transformables
 
 
@@ -1716,7 +1774,7 @@ class FastRayLookUpTable(Transform):
 
 
 
-class RandomApplyExtrinsic(Transform):
+class RandomRenderExtrinsic(Transform):
     def __init__(self, *, prob=0.5, angles=[1, 1, 1], scope="frame", **kwargs):
         super().__init__(scope=scope)
         self.prob = prob
@@ -1737,9 +1795,9 @@ class RandomApplyExtrinsic(Transform):
         ).as_matrix()
 
         for transformable in transformables:
-            if isinstance(transformable, (CameraImage, CameraImageSegMask, CameraImageDepth)):
+            if isinstance(transformable, (CameraImage, CameraSegMask, CameraDepth)):
                 del_extrinsic = (del_R, np.array([0, 0, 0]))
-                transformable.apply_extrinsic(del_extrinsic)
+                transformable.render_extrinsic(del_extrinsic)
         return transformables
 
 
@@ -1778,7 +1836,7 @@ class RandomRotationSpace(Transform):
                 transformable.rotate_3d(del_R)
                 if inverse_cameras_rotation:
                     del_extrinsic = (del_R.T, np.array([0.0, 0, 0]))
-                    transformable.apply_extrinsic(del_extrinsic)
+                    transformable.render_extrinsic(del_extrinsic)
         
         return transformables
 
@@ -1835,9 +1893,9 @@ available_transforms = [
     RandomSolarize,
     RandomImEqualize,
     RandomImageISP, 
-    ApplyIntrinsic, 
-    ApplyExtrinsic, 
-    RandomApplyExtrinsic, 
+    RenderIntrinsic, 
+    RenderExtrinsic, 
+    RandomRenderExtrinsic, 
     RandomRotationSpace, 
     RandomMirrorSpace, 
     RandomIntrinsicParam, 
