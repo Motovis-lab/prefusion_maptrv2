@@ -33,12 +33,14 @@ def test_transform_method():
 
 def test_transformableset_getattr():
     trb1, trb2 = Transformable([1, 2, 33]), Transformable([7, 8, -1])
+    trb1.img = [1, 2, 33]
+    trb2.img = [7, 8, -1]
     ts = TransformableSet({"front": trb1, "back": trb2})
-    assert ts.transformables["front"].data == [1, 2, 33]
-    assert ts.transformables["back"].data == [7, 8, -1]
+    assert ts.transformables["front"].img == [1, 2, 33]
+    assert ts.transformables["back"].img == [7, 8, -1]
     ts.adjust_saturation(saturation=0.5)
-    assert ts.transformables["front"].data == [1, 2, 33]
-    assert ts.transformables["back"].data == [7, 8, -1]
+    assert ts.transformables["front"].img == [1, 2, 33]
+    assert ts.transformables["back"].img == [7, 8, -1]
 
 
 def test_transformableset_wrong_transformable_type():
@@ -114,8 +116,8 @@ def dataset_info(img324, img325, seg324, seg325, camera_ego_mask324, camera_ego_
             "scene_info": {
                 "camera_mask": { "front": camera_ego_mask324, "back": camera_ego_mask325, },
                 "calibration": {
-                    "front": { "extrinsic": (np.eye(3), np.ones(3)), "camera_type": "PerspectiveCamera", },
-                    "back": { "extrinsic": (np.eye(3), np.ones(3)), "camera_type": "FisheyeCamera", }
+                    "front": { "extrinsic": (np.eye(3), np.ones(3)), "intrinsic": np.array([1, 1, 10, 10]), "camera_type": "PerspectiveCamera", },
+                    "back": { "extrinsic": (np.eye(3), np.ones(3)), "intrinsic": np.array([2, 2, 20, 20]), "camera_type": "FisheyeCamera", }
                 },
                 "depth_mode": { "front": "d", "back": "z", },
                 "dictionary": { "camera_segs": ["lane", "arrow", "slot"], }
@@ -131,68 +133,76 @@ def dataset_info(img324, img325, seg324, seg325, camera_ego_mask324, camera_ego_
     }
 
 
-def test_camera_image_from_info(dataset_info, img324, img325):
-    im1 = CameraImage.from_info("front", Path("/"), dataset_info, "20230901_000000/1692759619664")
-    assert im1.data['cam_id'] == "front"
-    assert im1.data['cam_type'] == "PerspectiveCamera"
-    np.testing.assert_almost_equal(im1.data['img'], cv2.imread(img324))
+def get_image_related_data(dataset_info, cam_id, transformable_key):
+    scene_info = dataset_info['20230901_000000']['scene_info']
+    frame_info = dataset_info['20230901_000000']['frame_info']["1692759619664"]
+    calib = scene_info['calibration'][cam_id]
+    img = cv2.imread(str(frame_info[transformable_key][cam_id]))
+    ego_mask = cv2.imread(str(scene_info['camera_mask'][cam_id]))
+    cam_type, intrinsic, extrinsic = calib['camera_type'], calib['intrinsic'], calib['extrinsic']
+    return cam_type, img, ego_mask, extrinsic, intrinsic
+
+
+def test_camera_image_creation(dataset_info, img324, img325):
+    im1 = CameraImage("front", *get_image_related_data(dataset_info, "front", "camera_image"))
+    assert im1.cam_id == "front"
+    assert im1.cam_type == "PerspectiveCamera"
+    np.testing.assert_almost_equal(im1.img, cv2.imread(img324))
     
-    im2 = CameraImage.from_info("back", Path("/"), dataset_info, "20230901_000000/1692759619664")
-    assert im2.data['cam_id'] == "back"
-    assert im2.data['cam_type'] == "FisheyeCamera"
-    np.testing.assert_almost_equal(im2.data['img'], cv2.imread(img325))
+    im2 = CameraImage("back", *get_image_related_data(dataset_info, "back", "camera_image"))
+    assert im2.cam_id == "back"
+    assert im2.cam_type == "FisheyeCamera"
+    np.testing.assert_almost_equal(im2.img, cv2.imread(img325))
 
 
 def test_camera_image_set(dataset_info, img324, img325):
-    im1 = CameraImage.from_info("front", Path("/"), dataset_info, "20230901_000000/1692759619664")
-    im2 = CameraImage.from_info("back", Path("/"), dataset_info, "20230901_000000/1692759619664")
+    im1 = CameraImage("front", *get_image_related_data(dataset_info, "front", "camera_image"))
+    im2 = CameraImage("back", *get_image_related_data(dataset_info, "back", "camera_image"))
     im_set = CameraImageSet({"front": im1, "back": im2})
     im_set.adjust_brightness(brightness=0.5)
-    np.testing.assert_almost_equal(im_set.transformables["front"].data['img'], (cv2.imread(img324) * 0.5).astype(np.uint8))
-    np.testing.assert_almost_equal(im_set.transformables["back"].data['img'], (cv2.imread(img325) * 0.5).astype(np.uint8))
-
-def test_camera_image_set_2(dataset_info, img324, img325):
-    im_set = CameraImageSet.from_info(Path("/"), dataset_info, "20230901_000000/1692759619664")
-    im_set.adjust_brightness(brightness=0.5)
-    np.testing.assert_almost_equal(im_set.transformables["front"].data['img'], (cv2.imread(img324) * 0.5).astype(np.uint8))
-    np.testing.assert_almost_equal(im_set.transformables["back"].data['img'], (cv2.imread(img325) * 0.5).astype(np.uint8))
-
+    np.testing.assert_almost_equal(im_set.transformables["front"].img, (cv2.imread(img324) * 0.5).astype(np.uint8))
+    np.testing.assert_almost_equal(im_set.transformables["back"].img, (cv2.imread(img325) * 0.5).astype(np.uint8))
 
 def test_camera_image_seg_mask(dataset_info, seg324, seg325):
-    seg1 = CameraSegMask.from_info("front", Path("/"), dataset_info, "20230901_000000/1692759619664")
-    seg2 = CameraSegMask.from_info("back", Path("/"), dataset_info, "20230901_000000/1692759619664")
-    np.testing.assert_almost_equal(seg1.data['img'], cv2.imread(seg324))
-    np.testing.assert_almost_equal(seg2.data['img'], cv2.imread(seg325))
+    seg1 = CameraSegMask("front", *get_image_related_data(dataset_info, "front", "camera_image_seg"), {'seg': ['a', 'b']})
+    seg2 = CameraSegMask("back", *get_image_related_data(dataset_info, "back", "camera_image_seg"), {'seg': ['a', 'b']})
+    np.testing.assert_almost_equal(seg1.img, cv2.imread(seg324))
+    np.testing.assert_almost_equal(seg2.img, cv2.imread(seg325))
+    assert seg1.dictionary == seg2.dictionary == {'seg': ['a', 'b']}
 
 
 def test_camera_image_seg_mask_set(dataset_info):
-    seg_set = CameraSegMaskSet.from_info(Path("/"), dataset_info, "20230901_000000/1692759619664")
+    seg1 = CameraSegMask("front", *get_image_related_data(dataset_info, "front", "camera_image_seg"), {'seg': ['a', 'b']})
+    seg2 = CameraSegMask("back", *get_image_related_data(dataset_info, "back", "camera_image_seg"), {'seg': ['a', 'b']})
+    seg_set = CameraSegMaskSet({"front": seg1, "back": seg2})
     rotmat = np.array([
         [0.5, 0.5, 0],
         [0.5, -0.5, 0],
         [0, 0, 1],
     ])
     seg_set.rotate_3d(rotmat)
-    np.testing.assert_almost_equal(seg_set.transformables["front"].data['extrinsic'][1], np.array([1, 0, 1]))
+    np.testing.assert_almost_equal(seg_set.transformables["front"].extrinsic[1], np.array([1, 0, 1]))
 
 
 def test_camera_image_depth(dataset_info, img324, img325):
-    depth1 = CameraDepth.from_info("front", Path("/"), dataset_info, "20230901_000000/1692759619664")
-    depth2 = CameraDepth.from_info("back", Path("/"), dataset_info, "20230901_000000/1692759619664")
-    np.testing.assert_almost_equal(depth1.data['img'], cv2.imread(img324))
-    np.testing.assert_almost_equal(depth2.data['img'], cv2.imread(img325))
-    assert depth1.data['depth_mode'] == 'd'
-    assert depth2.data['depth_mode'] == 'z'
+    depth1 = CameraDepth("front", *get_image_related_data(dataset_info, "front", "camera_image_depth"), 'd')
+    depth2 = CameraDepth("back", *get_image_related_data(dataset_info, "back", "camera_image_depth"), 'z')
+    np.testing.assert_almost_equal(depth1.img, cv2.imread(img324))
+    np.testing.assert_almost_equal(depth2.img, cv2.imread(img325))
+    assert depth1.depth_mode == 'd'
+    assert depth2.depth_mode == 'z'
 
 
 def test_camera_image_depth_set(dataset_info):
-    seg_set = CameraDepthSet.from_info(Path("/"), dataset_info, "20230901_000000/1692759619664")
+    depth1 = CameraDepth("front", *get_image_related_data(dataset_info, "front", "camera_image_depth"), 'd')
+    depth2 = CameraDepth("back", *get_image_related_data(dataset_info, "back", "camera_image_depth"), 'z')
+    depth_set = CameraDepthSet({"front": depth1, "back": depth2})
     rotmat = np.array([
         [0.5, 0.5, 0],
         [0.5, -0.5, 0],
         [0, 0, 1],
     ])
-    seg_set.rotate_3d(rotmat)
-    np.testing.assert_almost_equal(seg_set.transformables["front"].data['extrinsic'][1], np.array([1, 0, 1]))
+    depth_set.rotate_3d(rotmat)
+    np.testing.assert_almost_equal(depth_set.transformables["front"].extrinsic[1], np.array([1, 0, 1]))
 
 
