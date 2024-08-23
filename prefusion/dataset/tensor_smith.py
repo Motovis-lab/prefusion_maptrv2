@@ -65,7 +65,7 @@ class PlanarPolyline3D(BaseTensorSmith):
                     # TODO: add ignore_mask according to ignore classes and attrs
             num_class_channels = len(transformable.dictionary[branch]['classes'])
             num_attr_channels = len(transformable.dictionary[branch]['attrs'])
-            branch_seg_im = np.zeros((1 + num_class_channels + num_attr_channels, H, W))
+            branch_seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y))
 
             line_ims = []
             dist_ims = []
@@ -84,7 +84,7 @@ class PlanarPolyline3D(BaseTensorSmith):
                     cv2.fillPoly(branch_seg_im[1 + class_ind], [polygon_int], 1)
                     cv2.fillPoly(branch_seg_im[1 + num_class_channels + attr_ind], [polygon_int], 1)
                     # line segment
-                    line_im = cv2.fillPoly(np.zeros((H, W)), [polygon_int], 1)
+                    line_im = cv2.fillPoly(np.zeros((X, Y)), [polygon_int], 1)
                     line_ims.append(line_im)
                     # line direction regressions
                     line_dir = line_bev[1] - line_bev[0]
@@ -165,7 +165,7 @@ class PlanarPolygon3DSmith(BaseTensorSmith):
                     # TODO: add ignore_mask according to ignore classes and attrs
             num_class_channels = len(transformable.dictionary[branch]['classes'])
             num_attr_channels = len(transformable.dictionary[branch]['attrs'])
-            branch_seg_im = np.zeros((2 + num_class_channels + num_attr_channels, H, W))
+            branch_seg_im = np.zeros((2 + num_class_channels + num_attr_channels, X, Y))
 
             line_ims = []
             dist_ims = []
@@ -186,7 +186,7 @@ class PlanarPolygon3DSmith(BaseTensorSmith):
                     # edge_seg_bev_im
                     cv2.fillPoly(branch_seg_im[0], [polygon_int], 1)
                     # line segment
-                    line_im = cv2.fillPoly(np.zeros((H, W)), [polygon_int], 1)
+                    line_im = cv2.fillPoly(np.zeros((X, Y)), [polygon_int], 1)
                     line_ims.append(line_im)
                     # line direction regressions
                     line_dir = line_bev[1] - line_bev[0]
