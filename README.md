@@ -271,8 +271,8 @@ train.txt
   - RandomImageISP
   - RenderIntrinsic
   - RenderExtrinsic
-  - RandomIntrinsicParam
-  - RandomExtrinsicParam
+  - RandomSetIntrinsicParam
+  - RandomSetExtrinsicParam
   - RandomRenderExtrinsic
   - RandomMirrorSpace
   - RandomMirrorTime
