@@ -228,51 +228,91 @@ class VoxelHead(BaseModule):
 
 
 
-# @MODELS.register_module()
-# class FastRayDataProcessor(BaseDataPreprocessor):
+@MODELS.register_module()
+class FastRayDataProcessor(BaseDataPreprocessor):
 
-#     def forward(self, frame_batch: list, training: bool = False) -> dict | list:
-#         """
-#         Parameters
-#         ----------
-#         frame_batch : list
-#             list of input_dicts
-#         training : bool, optional
-#             _description_, by default False
+    def forward(self, frame_batch: list, training: bool = False) -> dict | list:
+        """
+        Parameters
+        ----------
+        frame_batch : list
+            list of input_dicts
+        training : bool, optional
+            _description_, by default False
 
-#         Returns
-#         -------
-#         dict | list
-#             _description_
+        Returns
+        -------
+        dict | list
+            _description_
 
-#         Notes
-#         -----
-#         ```
-#         input_dict = {
-#             'scene_id': scene_id,
-#             'frame_id': frame_id,
-#             'prev_exists': True,
-#             'next_exists': True,
-#             'transformables': {}
-#         }
-#         batch_input_dict ={
-#             'scene_ids': [scene_id, scene_id, ...],
-#             'frame_ids': [frame_id, frame_id, ...],
-#             'prev_exists': [True, True, ...],
-#             'next_exists': [True, True, ...],
-#             'transformables': {
-#                 'lidar_points': [lidar_points, lidar_points, ...],
-#                 'camera_image_batches': {
-#                     cam_id: (N, 3, H, W),
-#                     cam_id: (N, 3, H, W)
-#                 }
-#             }
-#             'LUTS': [LUT, LUT, ...],
-#         }
-#         ```
-#         """
-#         for input_dict in frame_batch:
-#             pass
+        Notes
+        -----
+        ```
+        input_dict = {
+            'scene_id': scene_id,
+            'frame_id': frame_id,
+            'prev_exists': True,
+            'next_exists': True,
+            'transformables': {}
+            'LUT': {
+                'cam_id': {}
+            }
+        }
+        batch_input_dict ={
+            'scene_ids': [scene_id, scene_id, ...],
+            'frame_ids': [frame_id, frame_id, ...],
+            'prev_exists': [True, True, ...],
+            'next_exists': [True, True, ...],
+            'ego_poses': (N, 4, 4),
+            'lidar_occ': (N, Z, X, Y),
+            'camera_images': {
+                pv_front: (N * 1, 3, H, W),
+                pv_sides: (N * 5, 3, H, W),
+                fisheyes: (N * 4, 3, H, W),
+            },
+            'LUTS': [LUT, LUT, LUT, LUT]
+            'bev_polylines': (N, C, X, Y),
+        }
+        ```
+        """
+        batch_input_dict = dict(
+            scene_ids=[],
+            frame_ids=[],
+            prev_exists=[],
+            next_exists=[],
+            ego_poses=[],
+            camera_images=dict(
+                pv_front=[],
+                pv_sides=[],
+                fisheyes=[],
+            ),
+            LUTS=[],
+            lidar_points=[],
+            bev_polylines=[],
+        )
+        for input_dict in frame_batch:
+            batch_input_dict['scene_ids'].append(input_dict['scene_id'])
+            batch_input_dict['frame_ids'].append(input_dict['frame_id'])
+            batch_input_dict['prev_exists'].append(input_dict['prev_exists'])
+            batch_input_dict['next_exists'].append(input_dict['next_exists'])
+            
+            camera_image_set = input_dict['transformables']['camera_image_set']
+            batch_input_dict['LUTS'].append(camera_image_set.lut)
+
+            for cam_id in camera_image_set.transformables:
+                if cam_id in ['VCAMERA_PERSPECTIVE_FRONT']:
+                    batch_input_dict['camera_images']['pv_front'].append(camera_image_set.transformables[cam_id])
+                if cam_id in [
+                    'VCAMERA_PERSPECTIVE_FRONT_LEFT', 
+                    'VCAMERA_PERSPECTIVE_FRONT_RIGHT', 
+                    'VCAMERA_PERSPECTIVE_BACK_LEFT',
+                    'VCAMERA_PERSPECTIVE_BACK_RIGHT',
+                    'VCAMERA_PERSPECTIVE_BACK'
+                ]:
+                    batch_input_dict['camera_images']['pv_sides'].append(camera_image_set.transformables[cam_id])
+                if cam_id in ['VCAMERA_FISHEYE_FRONT', 'VCAMERA_FISHEYE_BACK', 'VCAMERA_FISHEYE_LEFT', 'VCAMERA_FISHEYE_RIGHT']:
+                    batch_input_dict['camera_images']['fisheyes'].append(camera_image_set.transformables[cam_id])
+                    
 
 
 @MODELS.register_module()
@@ -286,9 +326,9 @@ class FastRaySpatialTemporalFusion(BaseModel):
         'next_exists': [True, True, ...],
         'ego_poses': (N, 3, 4),
         'camera_images': {
-            pv_front: (N * 1, 3, H, W),
-            pv_sides: (N * 5, 3, H, W),
-            fisheyes: (N * 4, 3, H, W),
+            pv_front: (1, N, 3, H, W),
+            pv_sides: (5, N, 3, H, W),
+            fisheyes: (4, N, 3, H, W),
         },
         'lidar_points': [lidar_points, lidar_points, ...],
         'bev_polylines': (N, C, X, Y),
@@ -331,7 +371,7 @@ class FastRaySpatialTemporalFusion(BaseModel):
 
     def forward(self, batched_input_dict, mode='tensor'):
         if mode == 'loss':
-            camera_images = batched_input_dict['transformables']['camera_images']
+            camera_images = batched_input_dict['camera_images']
             feats_pv_front = self.backbone_pv_front(camera_images['pv_front'])
             feats_pv_sides = self.backbone_pv_sides(camera_images['pv_sides'])
             feats_fisheyes = self.backbone_fisheyes(camera_images['fisheyes'])
