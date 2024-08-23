@@ -20,8 +20,8 @@ from mmengine.registry import DATASETS, FUNCTIONS
 # 'seg_bev', 'occ_sdf_bev', 'occ_sdf_3d'
 from .transform import (
     CameraImage, CameraImageSet, LidarPoints, 
-    CameraImageSegMask, CameraImageSegMaskSet, 
-    CameraImageDepth, CameraImageDepthSet,
+    CameraSegMask, CameraSegMaskSet, 
+    CameraDepth, CameraDepthSet,
     Bbox3D, BboxBev, Cylinder3D, OrientedCylinder3D, Square3D, 
     Polyline3D, Polygon3D, ParkingSlot3D, Trajectory,
     SegBev, OccSdfBev, OccSdf3D
@@ -354,7 +354,22 @@ class GroupBatchDataset(Dataset):
 
 
     def load_camera_images(self, index: str) -> CameraImageSet:
-        return CameraImageSet.from_info(self.data_root, self.info, index)
+        scene_id, frame_id = index.split('/')
+        scene_info = self.info[scene_id]['scene_info']
+        frame_info = self.info[scene_id]['frame_info'][frame_id]
+        calib = self.info[scene_id]['scene_info']['calibration']
+        camera_images = {
+            cam_id: CameraImage(
+                cam_id=cam_id, 
+                cam_type=calib[cam_id]['camera_type'], 
+                img=mmcv.imread(self.data_root / frame_info['camera_image'][cam_id]),
+                ego_mask=mmcv.imread(self.data_root / scene_info['camera_mask'][cam_id], flag='grayscale'),
+                extrinsic=calib[cam_id]['extrinsic'],
+                intrinsic=calib[cam_id]['intrinsic'],
+            )
+            for cam_id in frame_info['camera_image']
+        }
+        return CameraImageSet(camera_images)
 
     def load_lidar_points(self, index: str):
         scene_id, frame_id = index.split('/')
@@ -364,12 +379,46 @@ class GroupBatchDataset(Dataset):
         raise NotImplementedError
 
 
-    def load_camera_segs(self, index: str) -> CameraImageSegMaskSet:
-        return CameraImageSegMaskSet.from_info(self.data_root, self.info, index, self.dictionary)
+    def load_camera_segs(self, index: str) -> CameraSegMaskSet:
+        scene_id, frame_id = index.split('/')
+        scene_info = self.info[scene_id]['scene_info']
+        frame_info = self.info[scene_id]['frame_info'][frame_id]
+        calib = self.info[scene_id]['scene_info']['calibration']
+
+        camera_segs = {
+            cam_id: CameraSegMask(
+                cam_id=cam_id, 
+                cam_type=calib[cam_id]['camera_type'], 
+                img=mmcv.imread(self.data_root / frame_info['camera_image_seg'][cam_id], flag='unchanged'),
+                ego_mask=mmcv.imread(self.data_root / scene_info['camera_mask'][cam_id], flag='grayscale'),
+                extrinsic=calib[cam_id]['extrinsic'],
+                intrinsic=calib[cam_id]['intrinsic'],
+                dictionary=self.dictionary,
+            )
+            for cam_id in frame_info['camera_image_seg']
+        }
+        return CameraSegMaskSet(camera_segs)
 
 
-    def load_camera_depths(self, index: str) -> CameraImageDepthSet:
-        return CameraImageDepthSet.from_info(self.data_root, self.info, index, depth_mode='d')
+    def load_camera_depths(self, index: str) -> CameraDepthSet:
+        scene_id, frame_id = index.split('/')
+        scene_info = self.info[scene_id]['scene_info']
+        frame_info = self.info[scene_id]['frame_info'][frame_id]
+        calib = self.info[scene_id]['scene_info']['calibration']
+
+        camera_depths = {
+            cam_id: CameraDepth(
+                cam_id=cam_id, 
+                cam_type=calib[cam_id]['camera_type'], 
+                img=mmcv.imread(self.data_root / frame_info['camera_image_depth'][cam_id], flag='unchanged'),
+                ego_mask=mmcv.imread(self.data_root / scene_info['camera_mask'][cam_id], flag='grayscale'),
+                extrinsic=calib[cam_id]['extrinsic'],
+                intrinsic=calib[cam_id]['intrinsic'],
+                depth_mode="d",
+            )
+            for cam_id in frame_info['camera_image_depth']
+        }
+        return CameraDepthSet(camera_depths)
 
 
     def load_bbox_3d(self, index):
