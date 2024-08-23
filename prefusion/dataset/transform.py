@@ -468,8 +468,8 @@ class LidarPoints(Transformable):
         intensity : np.ndarray
             of shape (N, 1)
         """
-        self.positions = positions
-        self.intensity = intensity
+        self.positions = positions.copy()
+        self.intensity = intensity.copy()
 
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
@@ -484,8 +484,6 @@ class LidarPoints(Transformable):
         # R_c' = R_e'c = R_e'e @ R_ec
         self.positions = self.positions @ rmat.T
         return self
-
-
 
 
 class CameraSegMask(CameraTransformable):
@@ -546,8 +544,7 @@ class CameraSegMask(CameraTransformable):
         fx_ = random.uniform(1 - scale, 1 + scale) * fx
         fy_ = random.uniform(1 - scale, 1 + scale) * fy
         self.intrinsic = [cx_, cy_, fx_, fy_, *distortion_params]
-        return self
-    
+        return self    
 
     def set_extrinsic_param(self, angle=1, translation=0.05, **kwargs):
         R, t = self.extrinsic
@@ -805,63 +802,58 @@ class CameraDepthSet(TransformableSet):
 
 
 class Bbox3D(SpatialTransformable):
-    """
-    - self.data = {
-        'elements:' [element, element, ...],
-        'tensor': <tensor>
-      }
-    - element = {
-        'class': 'class.vehicle.passenger_car',
-        'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
-                 'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
-                 'attr.vehicle.is_door_open': 'attr.vehicle.is_door_open.false'},
-        'size': [4.6486, 1.9505, 1.5845],
-        'rotation': array([[ 0.93915682, -0.32818596, -0.10138267],
-                           [ 0.32677338,  0.94460343, -0.03071667],
-                           [ 0.1058472 , -0.00428138,  0.99437319]]),
-        'translation': array([[-15.70570354], [ 11.88484971], [ -0.61029085]]), # VERTICAL
-        'track_id': '10035_0', # NOT USED
-        'velocity': array([[0.], [0.], [0.]])
-     }
-    """
-
-    def __init__(self, data: list, dictionary: dict):
-        '''
-        dictionary: branches of keys.
-        dictionary = {
-            'branch_0': {
-                'classes': ['car', 'bus', 'pedestrain', ...],
-                'attrs': []
+    def __init__(self, boxes: List[dict], dictionary: dict):
+        """
+        Parameters
+        ----------
+        boxes : List[dict]
+            a list of boxes. Each box is a dict having the following format:
+            boxes[0] = {
+                'class': 'class.vehicle.passenger_car',
+                'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
+                        'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
+                        'attr.vehicle.is_door_open': 'attr.vehicle.is_door_open.false'},
+                'size': [4.6486, 1.9505, 1.5845],
+                'rotation': array([[ 0.93915682, -0.32818596, -0.10138267],
+                                [ 0.32677338,  0.94460343, -0.03071667],
+                                [ 0.1058472 , -0.00428138,  0.99437319]]),
+                'translation': array([[-15.70570354], [ 11.88484971], [ -0.61029085]]), # NOTE: it is a column vector
+                'track_id': '10035_0', # NOT USED
+                'velocity': array([[0.], [0.], [0.]]) # NOTE: it is a column vector
             }
-            'branch_1': {
-                'classes': [],
-                'attrs': []
+        dictionary : dict
+            Example dictionary: {
+                'branch_0': {
+                    'classes': ['car', 'bus', 'pedestrain', ...],
+                    'attrs': []
+                }
+                'branch_1': {
+                    'classes': [],
+                    'attrs': []
+                }
+                ...
             }
-            ...
-        }
+        """
+        self.boxes = boxes.copy()
+        self.dictionary = dictionary.copy()
+        self.remove_boxes_not_defined_in_dictionary()
 
-        '''
-        self.dictionary = dictionary
-        # filter elements by dictionary
-        available_elements = []
-        for branch in dictionary:
-            available_elements.extend(dictionary[branch]['classes'])
-        self.data = {'elements': []}
-        for element in data:
-            if element['class'] in available_elements:
-                self.data['elements'].append(element)
-        
-    
+    def remove_boxes_not_defined_in_dictionary(self, **kwargs):
+        full_set_of_classes = {c for branch in self.dictionary.values() for c in branch['classes']}
+        for i in range(len(self.boxes) - 1, -1, -1):
+            if self.boxes[i]['class'] not in full_set_of_classes:
+                del self.boxes[i]
+
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
         # in the mirror world, assume that a object is left-right symmetrical
         flip_mat_self = np.eye(3)
         flip_mat_self[1, 1] = -1
-        for element in self.data['elements']:
-            element['rotation'] = flip_mat @ element['rotation'] @ flip_mat_self.T
+        for box in self.boxes:
+            box['rotation'] = flip_mat @ box['rotation'] @ flip_mat_self.T
             # here translation is a row array
-            element['translation'] = flip_mat @ element['translation']
-            element['velocity'] = flip_mat @ element['velocity']
+            box['translation'] = flip_mat @ box['translation']
+            box['velocity'] = flip_mat @ box['velocity']
         
         # TODO: flip classname for arrows
         
@@ -872,10 +864,10 @@ class Bbox3D(SpatialTransformable):
         # rmat = R_e'e = R_ee'.T
         # R_c = R_ec
         # R_c' = R_e'c = R_e'e @ R_ec
-        for element in self.data['elements']:
-            element['rotation'] = rmat @ element['rotation']
-            element['translation'] = rmat @ element['translation']
-            element['velocity'] = rmat @ element['velocity']
+        for box in self.boxes:
+            box['rotation'] = rmat @ box['rotation']
+            box['translation'] = rmat @ box['translation']
+            box['velocity'] = rmat @ box['velocity']
         return self
     
 
@@ -1174,7 +1166,6 @@ def random_transform_class_factory(cls_name, transform_func):
                 assert "choices" in rule, "choices should be used along with type: enum."
             else:
                 assert "range" in rule, "range should be used along with type: float or int."
-        
 
     def __call__(self, *transformables, seeds=None, **kwargs):
         if seeds:
@@ -1209,9 +1200,8 @@ RandomChannelShuffle = random_transform_class_factory("RandomChannelShuffle", "c
 RandomAutoContrast = random_transform_class_factory("RandomAutoContrast", "auto_contrast")
 RandomSolarize = random_transform_class_factory("RandomSolarize", "solarize")
 RandomImEqualize = random_transform_class_factory("RandomImEqualize", "imequalize")
-
-RandomIntrinsicParam = random_transform_class_factory("RandomIntrinsicParam", "set_intrinsic_param")
-RandomExtrinsicParam = random_transform_class_factory("RandomExtrinsicParam", "set_extrinsic_param")
+RandomSetIntrinsicParam = random_transform_class_factory("RandomSetIntrinsicParam", "set_intrinsic_param")
+RandomSetExtrinsicParam = random_transform_class_factory("RandomSetExtrinsicParam", "set_extrinsic_param")
 
 
 
@@ -1561,9 +1551,8 @@ available_transforms = [
     RandomRenderExtrinsic, 
     RandomRotationSpace, 
     RandomMirrorSpace, 
-    RandomIntrinsicParam, 
-    RandomExtrinsicParam, 
-    ToTensor
+    RandomSetIntrinsicParam, 
+    RandomSetExtrinsicParam, 
 ]
 
 for transform in available_transforms:

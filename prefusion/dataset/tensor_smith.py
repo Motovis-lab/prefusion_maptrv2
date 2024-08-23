@@ -13,7 +13,7 @@ from .utils import (
 
 class BaseTensorSmith:
     def to_tensor(self, transformable, *args, **kwargs):
-        pass
+        return transformable
 
 
 class PlanarSegBevSmith(BaseTensorSmith):
