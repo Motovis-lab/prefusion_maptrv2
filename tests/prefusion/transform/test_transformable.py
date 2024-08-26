@@ -20,6 +20,7 @@ from prefusion.dataset.transform import (
     LidarPoints,
     Bbox3D,
     Polyline3D,
+    ParkingSlot3D,
 )
 
 
@@ -261,66 +262,81 @@ def test_lidar_points_creation(dataset_info):
     np.testing.assert_almost_equal(lidar_points.positions, np.array([[0, 0, 0], [-1, 0, 1], [1, -1, 0], [-2, 3, 5]]))
 
 
-def test_bbox3d_creation():
-    bbox3d = Bbox3D(
-        [
-            {
-                "class": "class.vehicle.passenger_car",
-                "attr": {
-                    "attr.time_varying.object.state": "attr.time_varying.object.state.stationary",
-                    "attr.vehicle.is_trunk_open": "attr.vehicle.is_trunk_open.false",
-                    "attr.vehicle.is_door_open": "attr.vehicle.is_door_open.false",
-                },
-                "size": [4.6486, 1.9505, 1.5845],
-                "rotation": np.array(
-                    [
-                        [0.93915682, -0.32818596, -0.10138267],
-                        [0.32677338, 0.94460343, -0.03071667],
-                        [0.1058472, -0.00428138, 0.99437319],
-                    ]
-                ),
-                "translation": np.array([[-15.70570354], [11.88484971], [-0.61029085]]),  # VERTICAL
-                "track_id": "10035_0",  # NOT USED
-                "velocity": np.array([[0.0], [0.0], [0.0]]),
-            },
-            {
-                "class": "class.pedestrian.pedestrian",
-                "attr": {},
-                "size": [0.5909, 0.7893, 1.7243],
-                "rotation": np.array(
-                    [
-                        [9.99939319e-01, -1.10162954e-02, -1.04719755e-05],
-                        [1.10162950e-02, 9.99939318e-01, -3.83972435e-05],
-                        [1.08943354e-05, 3.82795512e-05, 9.99999999e-01],
-                    ]
-                ),
-                "translation": np.array([[33.2981], [19.3322], [1.2403]]),  # VERTICAL
-                "track_id": "18_0",  # NOT USED
-                "velocity": np.array([[-0.9613], [-0.6015], [-0.0098]]),
-            },
-            {
-                "class": "class.traffic_facility.cone",
-                "attr": {},
-                "size": [0.3909, 0.393, 0.7243],
-                "rotation": np.array(
-                    [
-                        [9.99939319e-01, -1.10162954e-02, -1.04719755e-05],
-                        [1.10162950e-02, 9.99939318e-01, -3.83972435e-05],
-                        [1.08943354e-05, 3.82795512e-05, 9.99999999e-01],
-                    ]
-                ),
-                "translation": np.array([[13.2981], [-9.3322], [1.2403]]),  # VERTICAL
-                "track_id": "80_0",  # NOT USED
-                "velocity": np.array([[0], [0], [0]]),
-            },
-        ],
-        {
-            "det": {
-                "classes": ["class.vehicle.passenger_car", "class.pedestrian.pedestrian"],
-                "attrs": [],
-            }
+@pytest.fixture
+def dictionary():
+    return {
+        "det": {
+            "classes": ["class.vehicle.passenger_car", "class.pedestrian.pedestrian"],
+            "attrs": [],
         },
-    )
+        "map": {
+            "classes": ["class.road_marker.lane_line"],
+            "attrs": [],
+        },
+        "arrow": {
+            "classes": ["class.parking.parking_slot"],
+            "attrs": [],
+        },
+    }
+
+
+@pytest.fixture
+def boxes_data():
+    return [
+        {
+            "class": "class.vehicle.passenger_car",
+            "attr": {
+                "attr.time_varying.object.state": "attr.time_varying.object.state.stationary",
+                "attr.vehicle.is_trunk_open": "attr.vehicle.is_trunk_open.false",
+                "attr.vehicle.is_door_open": "attr.vehicle.is_door_open.false",
+            },
+            "size": [4.6486, 1.9505, 1.5845],
+            "rotation": np.array(
+                [
+                    [0.93915682, -0.32818596, -0.10138267],
+                    [0.32677338, 0.94460343, -0.03071667],
+                    [0.1058472, -0.00428138, 0.99437319],
+                ]
+            ),
+            "translation": np.array([[-15.70570354], [11.88484971], [-0.61029085]]),  # VERTICAL
+            "track_id": "10035_0",  # NOT USED
+            "velocity": np.array([[0.0], [0.0], [0.0]]),
+        },
+        {
+            "class": "class.pedestrian.pedestrian",
+            "attr": {},
+            "size": [0.5909, 0.7893, 1.7243],
+            "rotation": np.array(
+                [
+                    [9.99939319e-01, -1.10162954e-02, -1.04719755e-05],
+                    [1.10162950e-02, 9.99939318e-01, -3.83972435e-05],
+                    [1.08943354e-05, 3.82795512e-05, 9.99999999e-01],
+                ]
+            ),
+            "translation": np.array([[33.2981], [19.3322], [1.2403]]),  # VERTICAL
+            "track_id": "18_0",  # NOT USED
+            "velocity": np.array([[-0.9613], [-0.6015], [-0.0098]]),
+        },
+        {
+            "class": "class.traffic_facility.cone",
+            "attr": {},
+            "size": [0.3909, 0.393, 0.7243],
+            "rotation": np.array(
+                [
+                    [9.99939319e-01, -1.10162954e-02, -1.04719755e-05],
+                    [1.10162950e-02, 9.99939318e-01, -3.83972435e-05],
+                    [1.08943354e-05, 3.82795512e-05, 9.99999999e-01],
+                ]
+            ),
+            "translation": np.array([[13.2981], [-9.3322], [1.2403]]),  # VERTICAL
+            "track_id": "80_0",  # NOT USED
+            "velocity": np.array([[0], [0], [0]]),
+        },
+    ]
+
+
+def test_bbox3d_creation(boxes_data, dictionary):
+    bbox3d = Bbox3D(boxes_data, dictionary)
     bbox3d.rotate_3d(np.array([[0.5, 0.5, 0], [-0.5, 0.5, 1], [0, 0, 1]]))
     assert [ele["class"] for ele in bbox3d.boxes] == ["class.vehicle.passenger_car", "class.pedestrian.pedestrian"]
     np.testing.assert_almost_equal(
@@ -328,62 +344,53 @@ def test_bbox3d_creation():
     )
 
 
-def test_polyline3d_creation():
-    pl = Polyline3D(
-        [
-            {
-                "class": "class.parking.parking_slot",
-                "attr": {
-                    "attr.parking.parking_slot.is_mechanical": "attr.parking.parking_slot.is_mechanical.false",
-                    "attr.parking.parking_slot.is_parkable": "attr.parking.parking_slot.is_parkable.false",
-                },
-                "points": np.array(
-                    [
-                        [-0.0301, -14.5241, -0.0384],
-                        [-2.5247, -15.1224, -0.0368],
-                        [-1.3101, -19.9821, -0.025],
-                        [1.1847, -19.3627, -0.0065],
-                    ]
-                ),
-            },
-            {
-                "class": "class.parking.parking_slot",
-                "attr": {
-                    "attr.parking.parking_slot.is_mechanical": "attr.parking.parking_slot.is_mechanical.false",
-                    "attr.parking.parking_slot.is_parkable": "attr.parking.parking_slot.is_parkable.true",
-                },
-                "points": np.array(
-                    [
-                        [2.4803, -13.9424, -0.0399],
-                        [-0.0293, -14.5341, -0.0384],
-                        [1.1938, -19.3656, -0.0065],
-                        [3.6745, -18.7675, 0.0118],
-                    ]
-                ),
-            },
-            {
-                "class": "class.road_marker.arrow_heading_triangle",
-                "attr": {},
-                "points": np.array(
-                    [[-5.849, -10.4515, -0.0431], [-7.1073, -10.515, -0.0516], [-5.9705, -9.99, -0.0424]]
-                ),
-            },
-        ],
+@pytest.fixture
+def polyline_data():
+    return [
         {
-            "map": {
-                "classes": ["class.road_marker.lane_line"],
-                "attrs": [],
+            "class": "class.parking.parking_slot",
+            "attr": {
+                "attr.parking.parking_slot.is_mechanical": "attr.parking.parking_slot.is_mechanical.false",
+                "attr.parking.parking_slot.is_parkable": "attr.parking.parking_slot.is_parkable.false",
             },
-            "arrow": {
-                "classes": ["class.parking.parking_slot"],
-                "attrs": [],
-            },
+            "points": np.array(
+                [
+                    [-0.0301, -14.5241, -0.0384],
+                    [-2.5247, -15.1224, -0.0368],
+                    [-1.3101, -19.9821, -0.025],
+                    [1.1847, -19.3627, -0.0065],
+                ]
+            ),
         },
-    )
+        {
+            "class": "class.parking.parking_slot",
+            "attr": {
+                "attr.parking.parking_slot.is_mechanical": "attr.parking.parking_slot.is_mechanical.false",
+                "attr.parking.parking_slot.is_parkable": "attr.parking.parking_slot.is_parkable.true",
+            },
+            "points": np.array(
+                [
+                    [2.4803, -13.9424, -0.0399],
+                    [-0.0293, -14.5341, -0.0384],
+                    [1.1938, -19.3656, -0.0065],
+                    [3.6745, -18.7675, 0.0118],
+                ]
+            ),
+        },
+        {
+            "class": "class.road_marker.arrow_heading_triangle",
+            "attr": {},
+            "points": np.array([[-5.849, -10.4515, -0.0431], [-7.1073, -10.515, -0.0516], [-5.9705, -9.99, -0.0424]]),
+        },
+    ]
+
+
+def test_polyline3d_creation(polyline_data, dictionary):
+    pl = Polyline3D(polyline_data, dictionary)
     pl.rotate_3d(np.array([[0.5, 0.5, 0], [-0.5, 0.5, 1], [0, 0, 1]]))
-    assert [ele["class"] for ele in pl.data["elements"]] == ["class.parking.parking_slot"] * 2
+    assert [ele["class"] for ele in pl.polylines] == ["class.parking.parking_slot"] * 2
     np.testing.assert_almost_equal(
-        pl.data["elements"][1]["points"],
+        pl.polylines[1]["points"],
         np.array(
             [
                 [-5.73105e00, -8.25125e00, -3.99000e-02],
@@ -393,3 +400,110 @@ def test_polyline3d_creation():
             ]
         ),
     )
+
+
+@pytest.fixture
+def vertical_parkslot():
+    return [
+        {
+            "class": "class.parking.parking_slot",
+            "attr": {
+                "attr.parking.parking_slot.is_mechanical": "attr.parking.parking_slot.is_mechanical.false",
+                "attr.parking.parking_slot.is_parkable": "attr.parking.parking_slot.is_parkable.false",
+            },
+            "points": np.array([
+                [1, 1, 0.01],
+                [2, 1, 0.02],
+                [2, 3, 0.03],
+                [1, 3, 0.04]
+            ]),
+        }
+    ]
+
+
+@pytest.fixture
+def horizontal_parkslot():
+    return [
+        {
+            "class": "class.parking.parking_slot",
+            "attr": {
+                "attr.parking.parking_slot.is_mechanical": "attr.parking.parking_slot.is_mechanical.false",
+                "attr.parking.parking_slot.is_parkable": "attr.parking.parking_slot.is_parkable.false",
+            },
+            "points": np.array([
+                [5, 3, 0.01],
+                [1, 3, 0.02],
+                [1, 1, 0.03],
+                [5, 1, 0.04]
+            ]),
+        }
+    ]
+
+
+def test_parkikng_slot_3d_creation(vertical_parkslot, horizontal_parkslot, dictionary):
+    parking_slots = ParkingSlot3D(vertical_parkslot + horizontal_parkslot, dictionary)
+    assert [slot["class"] for slot in parking_slots.polylines] == ["class.parking.parking_slot"] * 2
+
+
+
+def test_parking_slot_3d_flip_y_horizontal_slot(horizontal_parkslot, dictionary):
+    parking_slots = ParkingSlot3D(horizontal_parkslot, dictionary)
+    assert [ele["class"] for ele in parking_slots.polylines] == ["class.parking.parking_slot"]
+    parking_slots.flip_3d(np.array(
+        [[1, 0, 0], 
+         [0, -1, 0], 
+         [0, 0, 1]]
+        )
+    )
+    np.testing.assert_almost_equal(parking_slots.polylines[0]['points'], np.array([[1, -3, 0.02], [5, -3, 0.01], [5, -1, 0.04], [1, -1, 0.03]]))
+
+
+def test_parking_slot_3d_flip_x_horizontal_slot(horizontal_parkslot, dictionary):
+    parking_slots = ParkingSlot3D(horizontal_parkslot, dictionary)
+    assert [ele["class"] for ele in parking_slots.polylines] == ["class.parking.parking_slot"]
+    parking_slots.flip_3d(np.array(
+        [[-1, 0, 0], 
+         [0, 1, 0], 
+         [0, 0, 1]]
+        )
+    )
+    np.testing.assert_almost_equal(parking_slots.polylines[0]['points'], np.array([[-1, 3, 0.02], [-5, 3, 0.01], [-5, 1, 0.04], [-1, 1, 0.03]]))
+
+
+
+def test_parking_slot_3d_flip_y_vertical_slot(vertical_parkslot, dictionary):
+    parking_slots = ParkingSlot3D(vertical_parkslot, dictionary)
+    assert [ele["class"] for ele in parking_slots.polylines] == ["class.parking.parking_slot"]
+    parking_slots.flip_3d(np.array(
+        [[1, 0, 0], 
+         [0, -1, 0], 
+         [0, 0, 1]]
+        )
+    )
+    np.testing.assert_almost_equal(parking_slots.polylines[0]['points'], np.array([[2, -1, 0.02], [1, -1, 0.01], [1, -3, 0.04], [2, -3, 0.03]]))
+
+
+
+def test_parking_slot_3d_flip_x_vertical_slot(vertical_parkslot, dictionary):
+    parking_slots = ParkingSlot3D(vertical_parkslot, dictionary)
+    assert [ele["class"] for ele in parking_slots.polylines] == ["class.parking.parking_slot"]
+    parking_slots.flip_3d(np.array(
+        [[-1, 0, 0], 
+         [0, 1, 0], 
+         [0, 0, 1]]
+        )
+    )
+    np.testing.assert_almost_equal(parking_slots.polylines[0]['points'], np.array([[-2, 1, 0.02], [-1, 1, 0.01], [-1, 3, 0.04], [-2, 3, 0.03]]))
+
+
+def test_parking_slot_3d_flip_y_multiple_slots(vertical_parkslot, horizontal_parkslot, dictionary):
+    parking_slots = ParkingSlot3D(vertical_parkslot + horizontal_parkslot, dictionary)
+    assert [ele["class"] for ele in parking_slots.polylines] == ["class.parking.parking_slot"] * 2
+    parking_slots.flip_3d(np.array(
+        [[1, 0, 0], 
+         [0, -1, 0], 
+         [0, 0, 1]]
+        )
+    )
+    np.testing.assert_almost_equal(parking_slots.polylines[0]['points'], np.array([[2, -1, 0.02], [1, -1, 0.01], [1, -3, 0.04], [2, -3, 0.03]]))
+    np.testing.assert_almost_equal(parking_slots.polylines[1]['points'], np.array([[1, -3, 0.02], [5, -3, 0.01], [5, -1, 0.04], [1, -1, 0.03]]))

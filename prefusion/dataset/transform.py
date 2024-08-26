@@ -822,7 +822,7 @@ class Bbox3D(SpatialTransformable):
                 'velocity': array([[0.], [0.], [0.]]) # NOTE: it is a column vector
             }
         dictionary : dict
-            Example dictionary: {
+            dictionary = {
                 'branch_0': {
                     'classes': ['car', 'bus', 'pedestrain', ...],
                     'attrs': []
@@ -836,9 +836,9 @@ class Bbox3D(SpatialTransformable):
         """
         self.boxes = boxes.copy()
         self.dictionary = dictionary.copy()
-        self.remove_boxes_not_defined_in_dictionary()
+        self.remove_boxes_not_recognized_by_dictionary()
 
-    def remove_boxes_not_defined_in_dictionary(self, **kwargs):
+    def remove_boxes_not_recognized_by_dictionary(self, **kwargs):
         full_set_of_classes = {c for branch in self.dictionary.values() for c in branch['classes']}
         for i in range(len(self.boxes) - 1, -1, -1):
             if self.boxes[i]['class'] not in full_set_of_classes:
@@ -889,33 +889,46 @@ class Square3D(Bbox3D):
 
 
 class Polyline3D(SpatialTransformable):
-    '''
-    - self.data = {
-        'elements:' [element, element, ...],
-        'tensor': <tensor>
-      }
-    - element = {
-        'class': 'class.road_marker.lane_line',
-        'attr': <dict>,
-        'points': <N x 3 array>
-    }
-    '''
-    def __init__(self, data: list, dictionary: dict):
-        self.dictionary = dictionary
-        # filter elements by dictionary
-        available_elements = []
-        for branch in dictionary:
-            available_elements.extend(dictionary[branch]['classes'])
-        self.data = {'elements': []}
-        for element in data:
-            if element['class'] in available_elements:
-                self.data['elements'].append(element)
+    def __init__(self, polylines: List[dict], dictionary: dict):
+        """
+
+        Parameters
+        ----------
+        polylines : List[dict]
+            a list of polylines. Each polyline is a dict having the following format:
+            polylines[0] = {
+                'class': 'class.road_marker.lane_line',
+                'attr': <dict>,
+                'points': <N x 3 array>
+            }
+        dictionary : dict
+            dictionary = {
+                'branch_0': {
+                    'classes': ['car', 'bus', 'pedestrain', ...],
+                    'attrs': []
+                }
+                'branch_1': {
+                    'classes': [],
+                    'attrs': []
+                }
+                ...
+            }
+        """
+        self.polylines = polylines.copy()
+        self.dictionary = dictionary.copy()
+        self.remove_polylines_not_recognized_by_dictionary()
+
+    def remove_polylines_not_recognized_by_dictionary(self, **kwargs):
+        full_set_of_classes = {c for branch in self.dictionary.values() for c in branch['classes']}
+        for i in range(len(self.polylines) - 1, -1, -1):
+            if self.polylines[i]['class'] not in full_set_of_classes:
+                del self.polylines[i]
 
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
         # here points is a row array
-        for element in self.data['elements']:
-            element['points'] = element['points'] @ flip_mat.T
+        for pl in self.polylines:
+            pl['points'] = pl['points'] @ flip_mat.T
         
         return self
     
@@ -923,8 +936,8 @@ class Polyline3D(SpatialTransformable):
         # rmat = R_e'e = R_ee'.T
         # R_c = R_ec
         # R_c' = R_e'c = R_e'e @ R_ec
-        for element in self.data['elements']:
-            element['points'] = element['points'] @ rmat.T
+        for pl in self.polylines:
+            pl['points'] = pl['points'] @ rmat.T
         return self
 
 
@@ -933,30 +946,31 @@ class Polygon3D(Polyline3D):
 
 
 class ParkingSlot3D(Polyline3D):
-
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
-        # in the mirror world, assume that a object is left-right symmetrical
-        flip_mat_self = np.eye(3)
-        flip_mat_self[1, 1] = -1
-        # here points is a row array
-        for element in self.data['elements']:
-            element['points'] = flip_mat_self @ element['points'] @ flip_mat.T
         
+        # here points is a row array
+        for parkslot in self.polylines:
+            parkslot['points'] = parkslot['points'] @ flip_mat.T
+        
+            # in the mirror world, the assumed order of parking slot corners is break, 
+            # so we need to manually change the order
+            parkslot['points'] = parkslot['points'][[1, 0, 3, 2], :]
+
         return self
 
 
 
 class Trajectory(SpatialTransformable):
-    '''
-    - self.data = {
-        'elements': [element, element, ...],
-        'tensor': <tensor>
-    }
-    - element = [(R, t), (R, t), ...]
-    '''
-    def __init__(self, data: list):
-        self.data = {'elements': data}
+    def __init__(self, poses: List[Tuple[np.array, np.array]]):
+        """Trajectory
+
+        Parameters
+        ----------
+        poses : List[Tuple[np.array, np.array]]
+            Each pose is a tuple of (R, t), where R is of shape (3, 3) and t is of shape (3, 1)
+        """
+        self.poses = poses
 
     def flip_3d(self, **kwargs):
         raise NotImplementedError
