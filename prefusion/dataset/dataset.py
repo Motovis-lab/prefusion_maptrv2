@@ -22,8 +22,7 @@ from .transform import (
     CameraImage, CameraImageSet, LidarPoints, 
     CameraSegMask, CameraSegMaskSet, 
     CameraDepth, CameraDepthSet,
-    Bbox3D, BboxBev, Cylinder3D, OrientedCylinder3D, Square3D, 
-    Polyline3D, Polygon3D, ParkingSlot3D, Trajectory,
+    Bbox3D, Polyline3D, Polygon3D, ParkingSlot3D, Trajectory,
     SegBev, OccSdfBev, OccSdf3D
 )
 

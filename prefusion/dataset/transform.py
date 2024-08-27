@@ -1,10 +1,12 @@
-from typing import List, Tuple, Dict
 import random
 import copy
 import inspect
 import functools
 import abc
+import warnings
+
 from pathlib import Path
+from typing import List, Tuple, Dict, Callable, Union
 
 import cv2
 import mmcv
@@ -20,8 +22,7 @@ from .utils import (
     expand_line_2d, _sign, INF_DIST,
     vec_point2line_along_direction, 
     dist_point2line_along_direction,
-    get_cam_type,
-    VoxelLookUpTableGenerator
+    get_cam_type
 )
 
 
@@ -39,10 +40,9 @@ class Transformable:
     It is not a abstract class, because it on one hand provides the full set of transform methods and provide default implementation on the other hand.
     The only purpose of its direct subclasses CameraTransformable and SpatialTransformable is to ensure some transform methods must be implemented.
     """
-
     def __init__(self, *args, **kwargs):
         pass
-    
+
     @transform_method
     def at_transform(self, func_name, **kwargs):
         return self
@@ -123,8 +123,20 @@ class Transformable:
     def scale_3d(self, **kwargs):
         return self
 
-    def to_tensor(self, tensor_smith, **kwargs):
-        return tensor_smith.to_tensor(self)
+    def to_tensor(self):
+        if getattr(self, 'tensor'):
+            warnings.warn('self.tensor should only be valued by self.tensor_smith.', UserWarning)
+
+        if not getattr(self, 'tensor_smith') or not callable(self.tensor_smith):
+            warnings.warn('Please provide callable tensor_smith, self.tensor will be set to None.', UserWarning)
+            self.tensor = None
+        else:
+            self.tensor = self.tensor_smith(self)
+        
+        if self.tensor is None:
+            warnings.warn('self.tensor is None.', UserWarning)
+        
+        return self
         
 
 
@@ -253,8 +265,8 @@ class TransformableSet(Transformable):
             return functools.partial(self._apply_transform, name)
         return method_or_attr
 
-    def to_tensor(self, tensor_smith, **kwargs):
-        return {tid: t.to_tensor(tensor_smith) for tid, t in self.transformables.items()}
+    def to_tensor(self):
+        return {tid: t.to_tensor() for tid, t in self.transformables.items()}
 
 
 class CameraImage(CameraTransformable):
@@ -265,6 +277,7 @@ class CameraImage(CameraTransformable):
         ego_mask: np.ndarray, 
         extrinsic: Tuple[np.ndarray, np.ndarray], 
         intrinsic: np.ndarray,
+        tensor_smith: Callable = None
     ):
         """Image data modeled by specific camera model.
 
@@ -275,7 +288,7 @@ class CameraImage(CameraTransformable):
         cam_type : str
             camera type, choices: ['FisheyeCamera', 'PerspectiveCamera']
         img : np.ndarray
-            the of image (pixel data), of shape (H, W, C), presume color_channel:=RGB
+            the of image (pixel data), of shape (H, W, C), presume color_channel:=BGR
         ego_mask : np.ndarray
             the mask of ego car (pixel data), of shape (H, W)
         extrinsic : Tuple[np.ndarray, np.ndarray]
@@ -283,6 +296,8 @@ class CameraImage(CameraTransformable):
         intrinsic : np.ndarray
             if it's PerspectiveCamera, it contains 4 values: cx, cy, fx, fy
             if it's FisheyeCamera, it contains more values: cx, cy, fx, fy, *distortion_params
+        tensor_smith : Callable, optional, by default None
+            a function to get tensor
 
 
         - \<fast_ray_LUT\> = {
@@ -302,6 +317,7 @@ class CameraImage(CameraTransformable):
         self.ego_mask = ego_mask
         self.extrinsic = list(p.copy() for p in extrinsic)
         self.intrinsic = intrinsic.copy()
+        self.tensor_smith = tensor_smith
 
 
     # def at_transform(self, func_name, **kwargs):
@@ -457,8 +473,8 @@ class CameraImageSet(TransformableSet):
     transformable_cls = CameraImage
 
 
-class LidarPoints(Transformable):
-    def __init__(self, positions: np.ndarray, intensity: np.ndarray): 
+class LidarPoints(SpatialTransformable):
+    def __init__(self, positions: np.ndarray, intensity: np.ndarray, tensor_smith: Callable = None): 
         """Lidar points
 
         Parameters
@@ -467,9 +483,13 @@ class LidarPoints(Transformable):
             of shape (N, 3), usually in ego-system
         intensity : np.ndarray
             of shape (N, 1)
+        tensor_smith : Callable, optional, by default None
+            a function to get tensor
         """
+        super().__init__()
         self.positions = positions.copy()
         self.intensity = intensity.copy()
+        self.tensor_smith = tensor_smith
 
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
@@ -487,15 +507,6 @@ class LidarPoints(Transformable):
 
 
 class CameraSegMask(CameraTransformable):
-    """
-    - self.data = {
-        'img': <seg_arr>,
-        'ego_mask': <arr>,
-        'cam_type': < 'FisheyeCamera' | 'PerspectiveCamera' >
-        'extrinsic': (R, t),
-        'intrinsic': [cx, cy, fx, fy, *distortion_params]
-    }
-    """
 
     def __init__(self, 
         cam_id: str,
@@ -504,7 +515,8 @@ class CameraSegMask(CameraTransformable):
         ego_mask: np.ndarray, 
         extrinsic: Tuple[np.ndarray, np.ndarray], 
         intrinsic: np.ndarray,
-        dictionary: dict
+        dictionary: dict,
+        tensor_smith: Callable = None
     ):
         """Segmentation Mask data modeled by specific camera model.
 
@@ -515,7 +527,7 @@ class CameraSegMask(CameraTransformable):
         cam_type : str
             camera type, choices: ['FisheyeCamera', 'PerspectiveCamera']
         img : np.ndarray
-            the of segmentation mask image (pixel data), of shape (H, W, C), presume color_channel:=RGB
+            the of segmentation mask image (pixel data), of shape (H, W)
         ego_mask : np.ndarray
             the mask of ego car (pixel data), of shape (H, W)
         extrinsic : Tuple[np.ndarray, np.ndarray]
@@ -525,6 +537,8 @@ class CameraSegMask(CameraTransformable):
             if it's FisheyeCamera, it contains more values: cx, cy, fx, fy, *distortion_params
         dictionary: dict
             dictionary store class infomation of different channels
+        tensor_smith : Callable, optional, by default None
+            a function to get tensor
         """
         super().__init__()
         assert cam_type in ["FisheyeCamera", "PerspectiveCamera"]
@@ -535,6 +549,7 @@ class CameraSegMask(CameraTransformable):
         self.extrinsic = list(p.copy() for p in extrinsic)
         self.intrinsic = intrinsic.copy()
         self.dictionary = dictionary.copy()
+        self.tensor_smith = tensor_smith
 
     def set_intrinsic_param(self, percentile=0.5, **kwargs):
         cx, cy, fx, fy, *distortion_params = self.intrinsic
@@ -585,7 +600,9 @@ class CameraSegMask(CameraTransformable):
             self.extrinsic,
             intrinsic_new
         )
-        self.img, self.ego_mask = vc.render_image(self.img, camera_old, camera_new)
+        self.img, self.ego_mask = vc.render_image(
+            self.img, camera_old, camera_new, interpolation=cv2.INTER_NEAREST
+        )
         self.intrinsic = intrinsic_new
         
         return self
@@ -652,6 +669,7 @@ class CameraDepth(CameraTransformable):
         extrinsic: Tuple[np.ndarray, np.ndarray], 
         intrinsic: np.ndarray,
         depth_mode: str,
+        tensor_smith: Callable = None
     ):
         """Depth data modeled by specific camera model.
 
@@ -673,6 +691,8 @@ class CameraDepth(CameraTransformable):
         depth_mode: str
             the mode of depth, choices: ['z' or 'd']
             ('z': depth in z axis of camera coordinate, 'd': depth in distance of point to camera optical point)
+        tensor_smith : Callable, optional, by default None
+            a function to get tensor
         """
         super().__init__()
         assert cam_type in ["FisheyeCamera", "PerspectiveCamera"]
@@ -684,6 +704,7 @@ class CameraDepth(CameraTransformable):
         self.extrinsic = list(p.copy() for p in extrinsic)
         self.intrinsic = intrinsic.copy()
         self.depth_mode = depth_mode
+        self.tensor_smith = tensor_smith
 
 
     def set_intrinsic_param(self, percentile=0.5, **kwargs):
@@ -745,27 +766,27 @@ class CameraDepth(CameraTransformable):
     
     def render_extrinsic(self, delta_extrinsic, **kwargs):
         resolution = self.img.shape[:2][::-1]
-        camera_class = getattr(vc, self.cam_type)
         R, t = self.extrinsic
         del_R, del_t = delta_extrinsic
-        camera_old = camera_class(
-            resolution,
-            self.extrinsic,
-            self.intrinsic,
-            ego_mask=self.ego_mask
-        )
         R_new, t_new = del_R @ R, del_t + t
-        camera_new = camera_class(
-            resolution,
-            (R_new, t_new),
-            self.intrinsic
-        )
-        # TODO: get real points from depth then remap to image
         if self.depth_mode == 'd':
+            camera_class = getattr(vc, self.cam_type)
+            camera_old = camera_class(
+                resolution,
+                self.extrinsic,
+                self.intrinsic,
+                ego_mask=self.ego_mask
+            )
+            camera_new = camera_class(
+                resolution,
+                (R_new, t_new),
+                self.intrinsic
+            )
             self.img, self.ego_mask = vc.render_image(
                 self.img, camera_old, camera_new, interpolation=cv2.INTER_NEAREST
             )
         elif self.depth_mode == 'z':
+            # TODO: get real points from depth then remap to image
             raise NotImplementedError
         self.extrinsic = (R_new, t_new)
         
@@ -802,13 +823,13 @@ class CameraDepthSet(TransformableSet):
 
 
 class Bbox3D(SpatialTransformable):
-    def __init__(self, boxes: List[dict], dictionary: dict):
+    def __init__(self, elements: List[dict], dictionary: dict, flip_aware_class_pairs: List[tuple] = [], tensor_smith: Callable = None):
         """
         Parameters
         ----------
-        boxes : List[dict]
-            a list of boxes. Each box is a dict having the following format:
-            boxes[0] = {
+        elements : List[dict]
+            a list of boxes. Each element is a dict of box having the following format:
+            elements[0] = {
                 'class': 'class.vehicle.passenger_car',
                 'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
                         'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
@@ -833,29 +854,42 @@ class Bbox3D(SpatialTransformable):
                 }
                 ...
             }
+        flip_aware_class_pairs : List[tuple]
+            list of class pairs that are flip-aware
+            flip_aware_class_pairs = [('left_arrow', 'right_arrow')]
+        tensor_smith : Callable, optional, by default None
+            a function to get tensor
         """
-        self.boxes = boxes.copy()
+        super().__init__()
+        self.elements = elements.copy()
         self.dictionary = dictionary.copy()
-        self.remove_boxes_not_recognized_by_dictionary()
+        self.remove_elements_not_recognized_by_dictionary()
+        self.flip_aware_class_pairs = flip_aware_class_pairs
+        self.tensor_smith = tensor_smith
 
-    def remove_boxes_not_recognized_by_dictionary(self, **kwargs):
+    def remove_elements_not_recognized_by_dictionary(self, **kwargs):
         full_set_of_classes = {c for branch in self.dictionary.values() for c in branch['classes']}
-        for i in range(len(self.boxes) - 1, -1, -1):
-            if self.boxes[i]['class'] not in full_set_of_classes:
-                del self.boxes[i]
+        for i in range(len(self.elements) - 1, -1, -1):
+            if self.elements[i]['class'] not in full_set_of_classes:
+                del self.elements[i]
 
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
+        
         # in the mirror world, assume that a object is left-right symmetrical
         flip_mat_self = np.eye(3)
         flip_mat_self[1, 1] = -1
-        for box in self.boxes:
-            box['rotation'] = flip_mat @ box['rotation'] @ flip_mat_self.T
+        for ele in self.elements:
+            ele['rotation'] = flip_mat @ ele['rotation'] @ flip_mat_self.T
             # here translation is a row array
-            box['translation'] = flip_mat @ box['translation']
-            box['velocity'] = flip_mat @ box['velocity']
+            ele['translation'] = flip_mat @ ele['translation']
+            ele['velocity'] = flip_mat @ ele['velocity']
         
-        # TODO: flip classname for arrows
+        # flip classname for arrows
+        for pair in self.flip_aware_class_pairs:
+            for ele in self.elements:
+                if ele['class'] in pair:
+                    ele['class'] = pair[::-1][pair.index(ele['class'])]
         
         return self
     
@@ -864,39 +898,39 @@ class Bbox3D(SpatialTransformable):
         # rmat = R_e'e = R_ee'.T
         # R_c = R_ec
         # R_c' = R_e'c = R_e'e @ R_ec
-        for box in self.boxes:
-            box['rotation'] = rmat @ box['rotation']
-            box['translation'] = rmat @ box['translation']
-            box['velocity'] = rmat @ box['velocity']
+        for ele in self.elements:
+            ele['rotation'] = rmat @ ele['rotation']
+            ele['translation'] = rmat @ ele['translation']
+            ele['velocity'] = rmat @ ele['velocity']
         return self
     
 
 
-class BboxBev(Bbox3D):
-    pass
+# class BboxBev(Bbox3D):
+#     pass
 
 
-class Cylinder3D(Bbox3D):
-    pass
+# class Cylinder3D(Bbox3D):
+#     pass
 
 
-class OrientedCylinder3D(Bbox3D):
-    pass
+# class OrientedCylinder3D(Bbox3D):
+#     pass
 
 
-class Square3D(Bbox3D):
-    pass
+# class Square3D(Bbox3D):
+#     pass
 
 
 class Polyline3D(SpatialTransformable):
-    def __init__(self, polylines: List[dict], dictionary: dict):
+    def __init__(self, elements: List[dict], dictionary: dict, tensor_smith: Callable = None):
         """
 
         Parameters
         ----------
-        polylines : List[dict]
-            a list of polylines. Each polyline is a dict having the following format:
-            polylines[0] = {
+        elements : List[dict]
+            a list of polylines. Each element is a dict of polyline having the following format:
+            elements[0] = {
                 'class': 'class.road_marker.lane_line',
                 'attr': <dict>,
                 'points': <N x 3 array>
@@ -906,29 +940,32 @@ class Polyline3D(SpatialTransformable):
                 'branch_0': {
                     'classes': ['car', 'bus', 'pedestrain', ...],
                     'attrs': []
-                }
                 'branch_1': {
                     'classes': [],
                     'attrs': []
                 }
                 ...
             }
+        tensor_smith : Callable, optional, by default None
+            a function to get tensor
         """
-        self.polylines = polylines.copy()
+        super().__init__()
+        self.elements = elements.copy()
         self.dictionary = dictionary.copy()
-        self.remove_polylines_not_recognized_by_dictionary()
+        self.remove_elements_not_recognized_by_dictionary()
+        self.tensor_smith = tensor_smith
 
-    def remove_polylines_not_recognized_by_dictionary(self, **kwargs):
+    def remove_elements_not_recognized_by_dictionary(self, **kwargs):
         full_set_of_classes = {c for branch in self.dictionary.values() for c in branch['classes']}
-        for i in range(len(self.polylines) - 1, -1, -1):
-            if self.polylines[i]['class'] not in full_set_of_classes:
-                del self.polylines[i]
+        for i in range(len(self.elements) - 1, -1, -1):
+            if self.elements[i]['class'] not in full_set_of_classes:
+                del self.elements[i]
 
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
         # here points is a row array
-        for pl in self.polylines:
-            pl['points'] = pl['points'] @ flip_mat.T
+        for ele in self.elements:
+            ele['points'] = ele['points'] @ flip_mat.T
         
         return self
     
@@ -936,8 +973,8 @@ class Polyline3D(SpatialTransformable):
         # rmat = R_e'e = R_ee'.T
         # R_c = R_ec
         # R_c' = R_e'c = R_e'e @ R_ec
-        for pl in self.polylines:
-            pl['points'] = pl['points'] @ rmat.T
+        for ele in self.elements:
+            ele['points'] = ele['points'] @ rmat.T
         return self
 
 
@@ -950,7 +987,7 @@ class ParkingSlot3D(Polyline3D):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
         
         # here points is a row array
-        for parkslot in self.polylines:
+        for parkslot in self.elements:
             parkslot['points'] = parkslot['points'] @ flip_mat.T
         
             # in the mirror world, the assumed order of parking slot corners is break, 
@@ -962,15 +999,19 @@ class ParkingSlot3D(Polyline3D):
 
 
 class Trajectory(SpatialTransformable):
-    def __init__(self, poses: List[Tuple[np.array, np.array]]):
+    def __init__(self, trajectories: List[List[Tuple[np.array, np.array]]], tensor_smith: Callable = None):
         """Trajectory
 
         Parameters
         ----------
-        poses : List[Tuple[np.array, np.array]]
-            Each pose is a tuple of (R, t), where R is of shape (3, 3) and t is of shape (3, 1)
+        trajectories : List[List[Tuple[np.array, np.array]]]
+            Each trajectory is a list of poses, each pose is a tuple of (R, t), where R is of shape (3, 3) and t is of shape (3, 1)
+        tensor_smith : Callable, optional, by default None
+            a function to get tensor
         """
-        self.poses = poses
+        super().__init__()
+        self.trajectories = trajectories
+        self.tensor_smith = tensor_smith
 
     def flip_3d(self, **kwargs):
         raise NotImplementedError
@@ -1026,7 +1067,7 @@ class OccSdfBev(SpatialTransformable):
         xx = (vv - cx) / fx
         yy = (uu - cy) / fy
         zz = self.data['height'][0]
-        # coloum points
+        # column points
         return np.stack([xx, yy, zz], axis=0).reshape(3, -1)
     
 
@@ -1217,7 +1258,7 @@ RandomImEqualize = random_transform_class_factory("RandomImEqualize", "imequaliz
 RandomSetIntrinsicParam = random_transform_class_factory("RandomSetIntrinsicParam", "set_intrinsic_param")
 RandomSetExtrinsicParam = random_transform_class_factory("RandomSetExtrinsicParam", "set_extrinsic_param")
 
-
+ToTensor = deterministic_transform_class_factory("ToTensor", "to_tensor")
 
 #######################
 # Customed Transforms #

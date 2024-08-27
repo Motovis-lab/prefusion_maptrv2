@@ -338,9 +338,9 @@ def boxes_data():
 def test_bbox3d_creation(boxes_data, dictionary):
     bbox3d = Bbox3D(boxes_data, dictionary)
     bbox3d.rotate_3d(np.array([[0.5, 0.5, 0], [-0.5, 0.5, 1], [0, 0, 1]]))
-    assert [ele["class"] for ele in bbox3d.boxes] == ["class.vehicle.passenger_car", "class.pedestrian.pedestrian"]
+    assert [ele["class"] for ele in bbox3d.elements] == ["class.vehicle.passenger_car", "class.pedestrian.pedestrian"]
     np.testing.assert_almost_equal(
-        bbox3d.boxes[0]["translation"], np.array([[-1.91042692], [13.18498577], [-0.61029085]])
+        bbox3d.elements[0]["translation"], np.array([[-1.91042692], [13.18498577], [-0.61029085]])
     )
 
 
@@ -388,9 +388,9 @@ def polyline_data():
 def test_polyline3d_creation(polyline_data, dictionary):
     pl = Polyline3D(polyline_data, dictionary)
     pl.rotate_3d(np.array([[0.5, 0.5, 0], [-0.5, 0.5, 1], [0, 0, 1]]))
-    assert [ele["class"] for ele in pl.polylines] == ["class.parking.parking_slot"] * 2
+    assert [ele["class"] for ele in pl.elements] == ["class.parking.parking_slot"] * 2
     np.testing.assert_almost_equal(
-        pl.polylines[1]["points"],
+        pl.elements[1]["points"],
         np.array(
             [
                 [-5.73105e00, -8.25125e00, -3.99000e-02],
@@ -442,68 +442,68 @@ def horizontal_parkslot():
 
 def test_parkikng_slot_3d_creation(vertical_parkslot, horizontal_parkslot, dictionary):
     parking_slots = ParkingSlot3D(vertical_parkslot + horizontal_parkslot, dictionary)
-    assert [slot["class"] for slot in parking_slots.polylines] == ["class.parking.parking_slot"] * 2
+    assert [slot["class"] for slot in parking_slots.elements] == ["class.parking.parking_slot"] * 2
 
 
 
 def test_parking_slot_3d_flip_y_horizontal_slot(horizontal_parkslot, dictionary):
     parking_slots = ParkingSlot3D(horizontal_parkslot, dictionary)
-    assert [ele["class"] for ele in parking_slots.polylines] == ["class.parking.parking_slot"]
+    assert [ele["class"] for ele in parking_slots.elements] == ["class.parking.parking_slot"]
     parking_slots.flip_3d(np.array(
         [[1, 0, 0], 
          [0, -1, 0], 
          [0, 0, 1]]
         )
     )
-    np.testing.assert_almost_equal(parking_slots.polylines[0]['points'], np.array([[1, -3, 0.02], [5, -3, 0.01], [5, -1, 0.04], [1, -1, 0.03]]))
+    np.testing.assert_almost_equal(parking_slots.elements[0]['points'], np.array([[1, -3, 0.02], [5, -3, 0.01], [5, -1, 0.04], [1, -1, 0.03]]))
 
 
 def test_parking_slot_3d_flip_x_horizontal_slot(horizontal_parkslot, dictionary):
     parking_slots = ParkingSlot3D(horizontal_parkslot, dictionary)
-    assert [ele["class"] for ele in parking_slots.polylines] == ["class.parking.parking_slot"]
+    assert [ele["class"] for ele in parking_slots.elements] == ["class.parking.parking_slot"]
     parking_slots.flip_3d(np.array(
         [[-1, 0, 0], 
          [0, 1, 0], 
          [0, 0, 1]]
         )
     )
-    np.testing.assert_almost_equal(parking_slots.polylines[0]['points'], np.array([[-1, 3, 0.02], [-5, 3, 0.01], [-5, 1, 0.04], [-1, 1, 0.03]]))
+    np.testing.assert_almost_equal(parking_slots.elements[0]['points'], np.array([[-1, 3, 0.02], [-5, 3, 0.01], [-5, 1, 0.04], [-1, 1, 0.03]]))
 
 
 
 def test_parking_slot_3d_flip_y_vertical_slot(vertical_parkslot, dictionary):
     parking_slots = ParkingSlot3D(vertical_parkslot, dictionary)
-    assert [ele["class"] for ele in parking_slots.polylines] == ["class.parking.parking_slot"]
+    assert [ele["class"] for ele in parking_slots.elements] == ["class.parking.parking_slot"]
     parking_slots.flip_3d(np.array(
         [[1, 0, 0], 
          [0, -1, 0], 
          [0, 0, 1]]
         )
     )
-    np.testing.assert_almost_equal(parking_slots.polylines[0]['points'], np.array([[2, -1, 0.02], [1, -1, 0.01], [1, -3, 0.04], [2, -3, 0.03]]))
+    np.testing.assert_almost_equal(parking_slots.elements[0]['points'], np.array([[2, -1, 0.02], [1, -1, 0.01], [1, -3, 0.04], [2, -3, 0.03]]))
 
 
 
 def test_parking_slot_3d_flip_x_vertical_slot(vertical_parkslot, dictionary):
     parking_slots = ParkingSlot3D(vertical_parkslot, dictionary)
-    assert [ele["class"] for ele in parking_slots.polylines] == ["class.parking.parking_slot"]
+    assert [ele["class"] for ele in parking_slots.elements] == ["class.parking.parking_slot"]
     parking_slots.flip_3d(np.array(
         [[-1, 0, 0], 
          [0, 1, 0], 
          [0, 0, 1]]
         )
     )
-    np.testing.assert_almost_equal(parking_slots.polylines[0]['points'], np.array([[-2, 1, 0.02], [-1, 1, 0.01], [-1, 3, 0.04], [-2, 3, 0.03]]))
+    np.testing.assert_almost_equal(parking_slots.elements[0]['points'], np.array([[-2, 1, 0.02], [-1, 1, 0.01], [-1, 3, 0.04], [-2, 3, 0.03]]))
 
 
 def test_parking_slot_3d_flip_y_multiple_slots(vertical_parkslot, horizontal_parkslot, dictionary):
     parking_slots = ParkingSlot3D(vertical_parkslot + horizontal_parkslot, dictionary)
-    assert [ele["class"] for ele in parking_slots.polylines] == ["class.parking.parking_slot"] * 2
+    assert [ele["class"] for ele in parking_slots.elements] == ["class.parking.parking_slot"] * 2
     parking_slots.flip_3d(np.array(
         [[1, 0, 0], 
          [0, -1, 0], 
          [0, 0, 1]]
         )
     )
-    np.testing.assert_almost_equal(parking_slots.polylines[0]['points'], np.array([[2, -1, 0.02], [1, -1, 0.01], [1, -3, 0.04], [2, -3, 0.03]]))
-    np.testing.assert_almost_equal(parking_slots.polylines[1]['points'], np.array([[1, -3, 0.02], [5, -3, 0.01], [5, -1, 0.04], [1, -1, 0.03]]))
+    np.testing.assert_almost_equal(parking_slots.elements[0]['points'], np.array([[2, -1, 0.02], [1, -1, 0.01], [1, -3, 0.04], [2, -3, 0.03]]))
+    np.testing.assert_almost_equal(parking_slots.elements[1]['points'], np.array([[1, -3, 0.02], [5, -3, 0.01], [5, -1, 0.04], [1, -1, 0.03]]))
