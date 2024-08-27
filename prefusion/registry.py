@@ -15,6 +15,13 @@ TRANSFORMS = Registry(
     locations=['prefusion.dataset.transform']
 )
 
+
+TENSOR_SMITHS = Registry(
+    'tensor_smith',
+    locations=['prefusion.dataset.tensor_smith']
+)
+
+
 # an alternative way for data preprocessing
 MODEL_FEEDERS = Registry(
     'model_feeder',

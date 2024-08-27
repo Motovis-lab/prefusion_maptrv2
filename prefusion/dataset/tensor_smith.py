@@ -2,29 +2,91 @@ import cv2
 import torch
 import numpy as np
 
+from typing import List, Tuple, Dict, Union, Iterable
+
+from prefusion.registry import TENSOR_SMITHS
+
 from .utils import (
     expand_line_2d, _sign, INF_DIST,
     vec_point2line_along_direction, 
     dist_point2line_along_direction,
-    get_cam_type,
-    VoxelLookUpTableGenerator
+    get_cam_type
+)
+
+from .transform import (
+    CameraImage, CameraSegMask, CameraDepth,
+    LidarPoints, Polyline3D, ParkingSlot3D, 
+    Bbox3D, OccSdfBev, SegBev
 )
 
 
-class BaseTensorSmith:
-    def to_tensor(self, transformable, *args, **kwargs):
-        return transformable
+@TENSOR_SMITHS.register_module()
+class CameraImageTensor:
+    def __init__(self, 
+            means: Union[List[float, float, float], Tuple[float, float, float], float] = 128, 
+            stds: Union[List[float, float, float], Tuple[float, float, float], float] = 255
+        ):
+        if isinstance(means, Iterable):
+            means = np.array(means)[..., None, None]
+        if isinstance(stds, Iterable):
+            stds = np.array(stds)[..., None, None]
+        self.means = means
+        self.stds = stds
+
+    def __call__(self, transformable: CameraImage):
+        tensor_dict = dict(
+            img=torch.tensor((np.float32(transformable.img.transpose_(2, 0, 1)) - self.means) / self.stds),
+            ego_mask=torch.tensor(transformable.ego_mask),
+        )
+        return tensor_dict
 
 
-class PlanarSegBevSmith(BaseTensorSmith):
-    def to_tensor(self, transformable, bev_resolution, bev_range, **kwargs):
+
+@TENSOR_SMITHS.register_module()
+class CameraDepthTensor:
+    def __init__(self, channels):
+        pass
+
+    def __call__(self, transformable: CameraDepth):
+        tensor_dict = dict(
+            img=torch.tensor(transformable.img),
+            ego_mask=torch.tensor(transformable.ego_mask),
+        )
+        return tensor_dict
+
+
+
+@TENSOR_SMITHS.register_module()
+class CameraSegTensor:
+    def __init__(self, class_sequence, class_combines):
+        self.class_sequence = class_sequence
+
+    def __call__(self, transformable: CameraSegMask):
         pass
 
 
-class PlanarPolyline3D(BaseTensorSmith):
-    def to_tensor(self, transformable, voxel_shape, voxel_range, **kwargs):
+
+@TENSOR_SMITHS.register_module()
+class PlanarSegBev:
+    def __init__(self, voxel_shape, voxel_range):
+        self.voxel_shape = voxel_shape
+        self.voxel_range = voxel_range
+
+    def __call__(self, transformable: SegBev):
+        pass
+
+
+@TENSOR_SMITHS.register_module()
+class PlanarPolyline3D:
+    def __init__(self, voxel_shape, voxel_range):
+        self.voxel_shape = voxel_shape
+        self.voxel_range = voxel_range
+
+    def __call__(self, transformable: Polyline3D):
         # voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
         # voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        voxel_shape = tuple(self.voxel_shape)
+        voxel_range = tuple(self.voxel_range)
 
         Z, X, Y = voxel_shape
         
@@ -35,17 +97,6 @@ class PlanarPolyline3D(BaseTensorSmith):
 
         xx, yy = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
         points_grid = np.float32([xx, yy])
-
-        # to_tensor(self, bev_resolution, bev_range, **kwargs)
-        # W, H = bev_resolution
-        # # 'bev_range': [back, front, right, left, bottom, up], # in ego system
-        # fx = H / (bev_range[0] - bev_range[1])
-        # fy = W / (bev_range[2] - bev_range[3])
-        # cx = - bev_range[1] * fx - 0.5
-        # cy = - bev_range[3] * fy - 0.5
-
-        # xx, yy = np.meshgrid(np.arange(W), np.arange(H))
-        # points_grid = np.float32([xx, yy])
 
         tensor_data = {}
         for branch in transformable.dictionary:
@@ -131,11 +182,18 @@ class PlanarPolyline3D(BaseTensorSmith):
         return tensor_data
 
 
-class PlanarPolygon3DSmith(BaseTensorSmith):
 
-    def to_tensor(self, transformable, voxel_shape, voxel_range, **kwargs):
+@TENSOR_SMITHS.register_module()
+class PlanarPolygon3D:
+    def __init__(self, voxel_shape, voxel_range):
+        self.voxel_shape = voxel_shape
+        self.voxel_range = voxel_range
+
+    def __call__(self, transformable: Polyline3D):
         # voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
         # voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        voxel_shape = tuple(self.voxel_shape)
+        voxel_range = tuple(self.voxel_range)
 
         Z, X, Y = voxel_shape
         

@@ -255,12 +255,10 @@ class VoxelLookUpTableGenerator:
 
 def build_transforms(transforms: List) -> List: 
     from prefusion.dataset.transform import ToTensor
-    if any([isinstance(t, ToTensor) for t in transforms]) and not isinstance(transforms[-1], ToTensor):
-        raise ValueError("ToTensor should be placed at last.")
     built_transforms = []
     for transform in transforms:
         if isinstance(transform, dict):
             transform = TRANSFORMS.build(transform)
-            # built_transforms.append(TRANSFORMS.build(transform))
         built_transforms.append(transform)
+    build_transforms.append(ToTensor())
     return built_transforms
