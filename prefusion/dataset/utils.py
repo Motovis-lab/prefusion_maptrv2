@@ -259,6 +259,8 @@ def build_transforms(transforms: List) -> List:
     for transform in transforms:
         if isinstance(transform, dict):
             transform = TRANSFORMS.build(transform)
+        if isinstance(transform, ToTensor):
+            raise ValueError("ToTensor should not be set mannually.")
         built_transforms.append(transform)
     build_transforms.append(ToTensor())
     return built_transforms
