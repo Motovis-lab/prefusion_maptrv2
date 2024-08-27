@@ -168,9 +168,9 @@ class VoxelLookUpTableGenerator:
         Parameters
         ----------
         camera_images : dict
-            dict of Image transformables
-        seed : _type_, optional
-            seed for randomness of sampled valid_map, by default None
+            dict of CameraImage transformables
+        seed : int, optional, by default None
+            seed for randomness of sampled valid_map
 
         Returns
         -------
@@ -197,7 +197,7 @@ class VoxelLookUpTableGenerator:
             downscale = self.camera_feature_configs[key]['feature_downscale']
             resolution = np.array(image_data['img'].shape[:2][::-1]) // downscale
             intrinsics = np.array(image_data['intrinsic'])
-            intrinsics[:4] /= downscale
+            intrinsics[:4] = (intrinsics[:4] + [0.5, 0.5, 0, 0]) / downscale - [0.5, 0.5, 0, 0]
             camera_class = getattr(vc, image_data['cam_type'])
             camera = camera_class(
                 resolution,

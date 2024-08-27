@@ -125,7 +125,7 @@ class Transformable:
 
     def to_tensor(self):
         if getattr(self, 'tensor'):
-            warnings.warn('self.tensor should only be valued by self.tensor_smith.', UserWarning)
+            warnings.warn('self.tensor should only be assigned by self.tensor_smith.', UserWarning)
 
         if not getattr(self, 'tensor_smith') or not callable(self.tensor_smith):
             warnings.warn('Please provide callable tensor_smith, self.tensor will be set to None.', UserWarning)
@@ -267,6 +267,7 @@ class TransformableSet(Transformable):
 
     def to_tensor(self):
         return {tid: t.to_tensor() for tid, t in self.transformables.items()}
+
 
 
 class CameraImage(CameraTransformable):
@@ -468,42 +469,8 @@ class CameraImage(CameraTransformable):
         return self
 
 
-
 class CameraImageSet(TransformableSet):
     transformable_cls = CameraImage
-
-
-class LidarPoints(SpatialTransformable):
-    def __init__(self, positions: np.ndarray, intensity: np.ndarray, tensor_smith: Callable = None): 
-        """Lidar points
-
-        Parameters
-        ----------
-        positions : np.ndarray
-            of shape (N, 3), usually in ego-system
-        intensity : np.ndarray
-            of shape (N, 1)
-        tensor_smith : Callable, optional, by default None
-            a function to get tensor
-        """
-        super().__init__()
-        self.positions = positions.copy()
-        self.intensity = intensity.copy()
-        self.tensor_smith = tensor_smith
-
-    def flip_3d(self, flip_mat, **kwargs):
-        assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
-        # here points is a row array
-        self.positions = self.positions @ flip_mat.T
-        
-        return self
-    
-    def rotate_3d(self, rmat, **kwargs):
-        # rmat = R_e'e = R_ee'.T
-        # R_c = R_ec
-        # R_c' = R_e'c = R_e'e @ R_ec
-        self.positions = self.positions @ rmat.T
-        return self
 
 
 class CameraSegMask(CameraTransformable):
@@ -536,7 +503,7 @@ class CameraSegMask(CameraTransformable):
             if it's PerspectiveCamera, it contains 4 values: cx, cy, fx, fy
             if it's FisheyeCamera, it contains more values: cx, cy, fx, fy, *distortion_params
         dictionary: dict
-            dictionary store class infomation of different channels
+            dictionary store class infomation of different values
         tensor_smith : Callable, optional, by default None
             a function to get tensor
         """
@@ -817,9 +784,42 @@ class CameraDepth(CameraTransformable):
         return self
 
 
-
 class CameraDepthSet(TransformableSet):
     transformable_cls = CameraDepth
+
+
+class LidarPoints(SpatialTransformable):
+    def __init__(self, positions: np.ndarray, intensity: np.ndarray, tensor_smith: Callable = None): 
+        """Lidar points
+
+        Parameters
+        ----------
+        positions : np.ndarray
+            of shape (N, 3), usually in ego-system
+        intensity : np.ndarray
+            of shape (N, 1)
+        tensor_smith : Callable, optional, by default None
+            a function to get tensor
+        """
+        super().__init__()
+        self.positions = positions.copy()
+        self.intensity = intensity.copy()
+        self.tensor_smith = tensor_smith
+
+    def flip_3d(self, flip_mat, **kwargs):
+        assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
+        # here points is a row array
+        self.positions = self.positions @ flip_mat.T
+        
+        return self
+    
+    def rotate_3d(self, rmat, **kwargs):
+        # rmat = R_e'e = R_ee'.T
+        # R_c = R_ec
+        # R_c' = R_e'c = R_e'e @ R_ec
+        self.positions = self.positions @ rmat.T
+        return self
+
 
 
 class Bbox3D(SpatialTransformable):
@@ -923,19 +923,22 @@ class Bbox3D(SpatialTransformable):
 
 
 class Polyline3D(SpatialTransformable):
-    def __init__(self, elements: List[dict], dictionary: dict, tensor_smith: Callable = None):
+    def __init__(self, elements: List[dict], dictionary: dict, flip_aware_class_pairs: List[tuple] = [], tensor_smith: Callable = None):
         """
 
         Parameters
         ----------
         elements : List[dict]
             a list of polylines. Each element is a dict of polyline having the following format:
+            ```python
             elements[0] = {
                 'class': 'class.road_marker.lane_line',
                 'attr': <dict>,
                 'points': <N x 3 array>
             }
+            ```
         dictionary : dict
+            ```python
             dictionary = {
                 'branch_0': {
                     'classes': ['car', 'bus', 'pedestrain', ...],
@@ -946,6 +949,10 @@ class Polyline3D(SpatialTransformable):
                 }
                 ...
             }
+            ```
+        flip_aware_class_pairs : List[tuple], default []
+            list of class pairs that are flip-aware
+            ```flip_aware_class_pairs = [('left_arrow', 'right_arrow')]```
         tensor_smith : Callable, optional, by default None
             a function to get tensor
         """
@@ -953,6 +960,7 @@ class Polyline3D(SpatialTransformable):
         self.elements = elements.copy()
         self.dictionary = dictionary.copy()
         self.remove_elements_not_recognized_by_dictionary()
+        self.flip_aware_class_pairs = flip_aware_class_pairs
         self.tensor_smith = tensor_smith
 
     def remove_elements_not_recognized_by_dictionary(self, **kwargs):
@@ -966,6 +974,12 @@ class Polyline3D(SpatialTransformable):
         # here points is a row array
         for ele in self.elements:
             ele['points'] = ele['points'] @ flip_mat.T
+        
+        # flip classname for arrows
+        for pair in self.flip_aware_class_pairs:
+            for ele in self.elements:
+                if ele['class'] in pair:
+                    ele['class'] = pair[::-1][pair.index(ele['class'])]
         
         return self
     
@@ -1365,9 +1379,10 @@ class RandomImageOmit(Transform):
     pass
 
 
+
 class RenderIntrinsic(Transform):
     
-    def __init__(self, resolutions, intrinsics='auto', scope="frame"):
+    def __init__(self, resolutions, intrinsics='default', scope="frame"):
         '''
         resolutions: {<cam_id>: (W, H), ...}
         intrinsics: {<cam_id>: (cx, cy, fx, fy, ...), ...}
@@ -1375,42 +1390,62 @@ class RenderIntrinsic(Transform):
         super().__init__(scope=scope)
         self.cam_ids = list(resolutions.keys())
         self.resolutions = resolutions
-        if intrinsics == 'auto':
-            self.intrinsics = {}
+        if intrinsics == 'default':
+            intrinsics = {}
             for cam_id in self.cam_ids:
-                W, H = self.resolutions[cam_id]
-                cx = (W - 1) / 2
-                cy = (H - 1) / 2
-                if get_cam_type(cam_id) in ['FisheyeCamera']:
-                    fx = fy = W / 4
-                else:
-                    fx = fy = W / 2
-                intrinsic = [cx, cy, fx, fy]
-                self.intrinsics[cam_id] = intrinsic
+                intrinsics[cam_id] = 'default'
+        self.intrinsics = intrinsics
+
+    @staticmethod
+    def _get_default_intrinsic(resolution, cam_type):
+        W, H = resolution
+        cx = (W - 1) / 2
+        cy = (H - 1) / 2
+        if cam_type in ['FisheyeCamera']:
+            fx = fy = W / 4
         else:
-            self.intrinsics = intrinsics
+            fx = fy = W / 2
+        intrinsic = [cx, cy, fx, fy]
+        return intrinsic
     
     def __call__(self, *transformables, **kwargs):
         for transformable in transformables:
             if isinstance(transformable, (CameraImageSet, CameraSegMaskSet, CameraDepthSet)):
-                for cam_id, t in transformable.transformables.items():
+                for t in transformable.transformables.values():
+                    cam_id = t.cam_id
                     if cam_id in self.cam_ids:
-                        t.render_intrinsic(self.resolution[cam_id], self.intrinsic[cam_id])
+                        resolution = self.resolutions[cam_id]
+                        intrinsic = self.intrinsics[cam_id]
+                        if intrinsic == 'default':
+                            intrinsic = self._get_default_intrinsic(resolution, t.cam_type)
+                        t.render_intrinsic(resolution, intrinsic)
             elif isinstance(transformable, (CameraImage, CameraSegMask, CameraDepth)):
-                t.render_intrinsic(self.resolution[cam_id], self.intrinsic[cam_id])
+                cam_id = transformable.cam_id
+                if cam_id in self.cam_ids:
+                    resolution = self.resolutions[cam_id]
+                    intrinsic = self.intrinsics[cam_id]
+                    if intrinsic == 'default':
+                        intrinsic = self._get_default_intrinsic(resolution, transformable.cam_type)
+                    transformable.render_intrinsic(resolution, intrinsic)
         return transformables
 
 
 
 class RenderExtrinsic(Transform):
     
-    def __init__(self, del_rotations, scope="frame"):
-        '''
-        del_rotations: {
-            <cam_id>: [<ang>, <ang>, <ang>], # ego x-y-z euler angles
-            ...
-        }
-        '''
+    def __init__(self, del_rotations: dict, scope="frame"):
+        """_summary_
+
+        Parameters
+        ----------
+        del_rotations : dict
+            ```python
+            {<cam_id>: [<ang>, <ang>, <ang>], # ego x-y-z euler angles
+            ...}
+            ```
+        scope : str, optional
+            seed scope, by default "frame"
+        """
         super().__init__(scope=scope)
         self.cam_ids = list(del_rotations.keys())
         self.del_extrinsics = {}
@@ -1423,62 +1458,67 @@ class RenderExtrinsic(Transform):
     
     def __call__(self, *transformables, **kwargs):
         for transformable in transformables:
-            if isinstance(transformable, (CameraImage, CameraSegMask, CameraDepth)):
-                if transformable.data['cam_id'] in self.cam_ids:
-                    del_extrinsic = self.del_extrinsics[transformable.data['cam_id']]
-                    transformable.render_extrinsic(del_extrinsic)
-        return transformables
-
-
-
-class FastRayLookUpTable(Transform):
-    
-    def __init__(self, voxel_feature_config, camera_feature_configs, scope="frame"):
-        '''
-        voxel_feature_config = dict(
-            voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
-            voxel_range=([-0.5, 2.5], [36, -12], [12, -12]),
-            ego_distance_max=40,
-            ego_distance_step=2
-        )
-        general_camera_feature_config = dict(
-            ray_distance_num_channel=64,
-            ray_distance_start=0.25,
-            ray_distance_step=0.25,
-            feature_downscale=1,
-        )
-        camera_feature_configs = dict(
-            VCAMERA_FISHEYE_FRONT=general_camera_feature_config,
-            VCAMERA_PERSPECTIVE_FRONT_LEFT=general_camera_feature_config,
-            VCAMERA_PERSPECTIVE_BACK_LEFT=general_camera_feature_config,
-            VCAMERA_FISHEYE_LEFT=general_camera_feature_config,
-            VCAMERA_PERSPECTIVE_BACK=general_camera_feature_config,
-            VCAMERA_FISHEYE_BACK=general_camera_feature_config,
-            VCAMERA_PERSPECTIVE_FRONT_RIGHT=general_camera_feature_config,
-            VCAMERA_PERSPECTIVE_BACK_RIGHT=general_camera_feature_config,
-            VCAMERA_FISHEYE_RIGHT=general_camera_feature_config,
-            VCAMERA_PERSPECTIVE_FRONT=general_camera_feature_config
-        )
-        '''
-        super().__init__(scope=scope)
-        self.lut_gen = VoxelLookUpTableGenerator(
-            voxel_feature_config=voxel_feature_config,
-            camera_feature_configs=camera_feature_configs
-        )
-        self.cam_ids = list(camera_feature_configs.keys())
-    
-    def __call__(self, *transformables, seeds=None, **kwargs):
-        seed = None if seeds is None else seeds[self.scope]
-        camera_images = {}
-        for transformable in transformables:
-            if isinstance(transformable, CameraImage):
-                cam_id = transformable.data['cam_id']
+            if isinstance(transformable, (CameraImageSet, CameraSegMaskSet, CameraDepthSet)):
+                for t in transformable.transformables.values():
+                    cam_id = t.cam_id
+                    if cam_id in self.cam_ids:
+                        t.render_extrinsic(self.del_extrinsics[cam_id])
+            elif isinstance(transformable, (CameraImage, CameraSegMask, CameraDepth)):
+                cam_id = transformable.cam_id
                 if cam_id in self.cam_ids:
-                    camera_images[cam_id] = transformable
-        LUT = self.lut_gen.generate(camera_images, seed=seed)
-        for cam_id in camera_images:
-            camera_images[cam_id].data['fast_ray_LUT'] = LUT[cam_id]
+                    transformable.render_extrinsic(self.del_extrinsics[cam_id])
         return transformables
+
+
+
+# class FastRayLookUpTable(Transform):
+    
+#     def __init__(self, voxel_feature_config, camera_feature_configs, scope="frame"):
+#         '''
+#         voxel_feature_config = dict(
+#             voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
+#             voxel_range=([-0.5, 2.5], [36, -12], [12, -12]),
+#             ego_distance_max=40,
+#             ego_distance_step=2
+#         )
+#         general_camera_feature_config = dict(
+#             ray_distance_num_channel=64,
+#             ray_distance_start=0.25,
+#             ray_distance_step=0.25,
+#             feature_downscale=1,
+#         )
+#         camera_feature_configs = dict(
+#             VCAMERA_FISHEYE_FRONT=general_camera_feature_config,
+#             VCAMERA_PERSPECTIVE_FRONT_LEFT=general_camera_feature_config,
+#             VCAMERA_PERSPECTIVE_BACK_LEFT=general_camera_feature_config,
+#             VCAMERA_FISHEYE_LEFT=general_camera_feature_config,
+#             VCAMERA_PERSPECTIVE_BACK=general_camera_feature_config,
+#             VCAMERA_FISHEYE_BACK=general_camera_feature_config,
+#             VCAMERA_PERSPECTIVE_FRONT_RIGHT=general_camera_feature_config,
+#             VCAMERA_PERSPECTIVE_BACK_RIGHT=general_camera_feature_config,
+#             VCAMERA_FISHEYE_RIGHT=general_camera_feature_config,
+#             VCAMERA_PERSPECTIVE_FRONT=general_camera_feature_config
+#         )
+#         '''
+#         super().__init__(scope=scope)
+#         self.lut_gen = VoxelLookUpTableGenerator(
+#             voxel_feature_config=voxel_feature_config,
+#             camera_feature_configs=camera_feature_configs
+#         )
+#         self.cam_ids = list(camera_feature_configs.keys())
+    
+#     def __call__(self, *transformables, seeds=None, **kwargs):
+#         seed = None if seeds is None else seeds[self.scope]
+#         camera_images = {}
+#         for transformable in transformables:
+#             if isinstance(transformable, CameraImage):
+#                 cam_id = transformable.data['cam_id']
+#                 if cam_id in self.cam_ids:
+#                     camera_images[cam_id] = transformable
+#         LUT = self.lut_gen.generate(camera_images, seed=seed)
+#         for cam_id in camera_images:
+#             camera_images[cam_id].data['fast_ray_LUT'] = LUT[cam_id]
+#         return transformables
 
 
 
@@ -1501,11 +1541,15 @@ class RandomRenderExtrinsic(Transform):
              random.uniform(-self.angles[2], self.angles[2])],
             degrees=True
         ).as_matrix()
+        del_extrinsic = (del_R, np.array([0, 0, 0]))
 
         for transformable in transformables:
-            if isinstance(transformable, (CameraImage, CameraSegMask, CameraDepth)):
-                del_extrinsic = (del_R, np.array([0, 0, 0]))
+            if isinstance(transformable, (CameraImageSet, CameraSegMaskSet, CameraDepthSet)):
+                for t in transformable.transformables.values():
+                    t.render_extrinsic(del_extrinsic)
+            elif isinstance(transformable, (CameraImage, CameraSegMask, CameraDepth)):
                 transformable.render_extrinsic(del_extrinsic)
+
         return transformables
 
 
