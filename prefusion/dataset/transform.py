@@ -40,6 +40,8 @@ class Transformable:
     It is not a abstract class, because it on one hand provides the full set of transform methods and provide default implementation on the other hand.
     The only purpose of its direct subclasses CameraTransformable and SpatialTransformable is to ensure some transform methods must be implemented.
     """
+    def __init__(self, *args, **kwargs):
+        pass
 
     @transform_method
     def at_transform(self, func_name, **kwargs):
