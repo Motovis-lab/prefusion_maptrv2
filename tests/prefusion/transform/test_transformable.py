@@ -266,7 +266,7 @@ def test_lidar_points_creation(dataset_info):
 def dictionary():
     return {
         "det": {
-            "classes": ["class.vehicle.passenger_car", "class.pedestrian.pedestrian"],
+            "classes": ["class.vehicle.passenger_car", "class.pedestrian.pedestrian", "class.pedestrian.flipped_pedestrian"],
             "attrs": [],
         },
         "map": {
@@ -344,6 +344,19 @@ def test_bbox3d_creation(boxes_data, dictionary):
     )
 
 
+def test_bbox3d_flip_with_flip_aware_class_pairs(boxes_data, dictionary):
+    flip_aware_class_pairs = [('class.pedestrian.pedestrian', 'class.pedestrian.flipped_pedestrian')]
+    bbox3d = Bbox3D(boxes_data, dictionary, flip_aware_class_pairs=flip_aware_class_pairs)
+    flip_mat = np.eye(3)
+    flip_mat[1, 1] = -1
+    bbox3d.flip_3d(flip_mat)
+    assert [ele["class"] for ele in bbox3d.elements] == ["class.vehicle.passenger_car", "class.pedestrian.flipped_pedestrian"]
+    np.testing.assert_almost_equal(
+        bbox3d.elements[0]["translation"], np.array([[-15.70570354], [-11.88484971], [-0.61029085]])
+    )
+
+
+
 @pytest.fixture
 def polyline_data():
     return [
@@ -402,6 +415,26 @@ def test_polyline3d_creation(polyline_data, dictionary):
     )
 
 
+def test_polyline3d_flip_with_flip_aware_class_pairs(polyline_data, dictionary):
+    flip_aware_class_pairs = [('class.parking.parking_slot', 'class.parking.parking_slot.flipped')]
+    pl = Polyline3D(polyline_data, dictionary, flip_aware_class_pairs=flip_aware_class_pairs)
+    flip_mat = np.eye(3)
+    flip_mat[1, 1] = -1
+    pl.flip_3d(flip_mat)
+    assert [ele["class"] for ele in pl.elements] == ["class.parking.parking_slot.flipped", "class.parking.parking_slot.flipped"]
+    np.testing.assert_almost_equal(
+        pl.elements[0]["points"],
+        np.array(
+            [
+                [-0.0301, 14.5241, -0.0384],
+                [-2.5247, 15.1224, -0.0368],
+                [-1.3101, 19.9821, -0.025],
+                [1.1847, 19.3627, -0.0065],
+            ]
+        ),
+    )
+
+
 @pytest.fixture
 def vertical_parkslot():
     return [
@@ -440,7 +473,7 @@ def horizontal_parkslot():
     ]
 
 
-def test_parkikng_slot_3d_creation(vertical_parkslot, horizontal_parkslot, dictionary):
+def test_parking_slot_3d_creation(vertical_parkslot, horizontal_parkslot, dictionary):
     parking_slots = ParkingSlot3D(vertical_parkslot + horizontal_parkslot, dictionary)
     assert [slot["class"] for slot in parking_slots.elements] == ["class.parking.parking_slot"] * 2
 
