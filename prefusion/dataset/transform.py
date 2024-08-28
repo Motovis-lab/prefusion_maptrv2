@@ -6,7 +6,7 @@ import abc
 import warnings
 
 from pathlib import Path
-from typing import List, Tuple, Dict, Callable, Union
+from typing import List, Tuple, Dict, Callable, Union, Sequence
 
 import cv2
 import mmcv
@@ -366,36 +366,12 @@ class CameraImage(CameraTransformable):
         assert len(order) == self.img.shape[2]
         self.img = self.img[..., order]
         return self
-    
-    def set_intrinsic_param(self, percentile=0.5, **kwargs):
-        # TODO: may need to move the random operation outside of the transform method.
-        cx, cy, fx, fy, *distortion_params = self.intrinsic
-        scale = percentile * 0.01
-        cx_ = random.uniform(1 - scale, 1 + scale) * cx
-        cy_ = random.uniform(1 - scale, 1 + scale) * cy
-        fx_ = random.uniform(1 - scale, 1 + scale) * fx
-        fy_ = random.uniform(1 - scale, 1 + scale) * fy
-        self.intrinsic = [cx_, cy_, fx_, fy_, *distortion_params]
+    def set_intrinsic_param(self, intrinsic: Sequence, **kwargs):
+        self.intrinsic = intrinsic
         return self
 
-    def set_extrinsic_param(self, angle=1, translation=0.05, **kwargs):
-        # TODO: may need to move the random operation outside of the transform method.
-        R, t = self.extrinsic
-        del_R = Rotation.from_euler(
-            'xyz', 
-            [random.uniform(-angle, angle),
-             random.uniform(-angle, angle),
-             random.uniform(-angle, angle)],
-            degrees=True
-        )
-        del_t = np.array([
-            random.uniform(-translation, translation),
-            random.uniform(-translation, translation),
-            random.uniform(-translation, translation)
-        ])
-        R_ = del_R @ R
-        t_ = t + del_t
-        self.extrinsic = (R_, t_)
+    def set_extrinsic_param(self, extrinsic: Tuple[np.array, np.array], **kwargs):
+        self.extrinsic = extrinsic
         return self
 
     def render_intrinsic(self, resolution, intrinsic, **kwargs):
@@ -518,33 +494,12 @@ class CameraSegMask(CameraTransformable):
         self.dictionary = dictionary.copy()
         self.tensor_smith = tensor_smith
 
-    def set_intrinsic_param(self, percentile=0.5, **kwargs):
-        cx, cy, fx, fy, *distortion_params = self.intrinsic
-        scale = percentile * 0.01
-        cx_ = random.uniform(1 - scale, 1 + scale) * cx
-        cy_ = random.uniform(1 - scale, 1 + scale) * cy
-        fx_ = random.uniform(1 - scale, 1 + scale) * fx
-        fy_ = random.uniform(1 - scale, 1 + scale) * fy
-        self.intrinsic = [cx_, cy_, fx_, fy_, *distortion_params]
-        return self    
+    def set_intrinsic_param(self, intrinsic: Sequence, **kwargs):
+        self.intrinsic = intrinsic
+        return self   
 
-    def set_extrinsic_param(self, angle=1, translation=0.05, **kwargs):
-        R, t = self.extrinsic
-        del_R = Rotation.from_euler(
-            'xyz', 
-            [random.uniform(-angle, angle),
-             random.uniform(-angle, angle),
-             random.uniform(-angle, angle)],
-            degrees=True
-        )
-        del_t = np.array([
-            random.uniform(-translation, translation),
-            random.uniform(-translation, translation),
-            random.uniform(-translation, translation)
-        ])
-        R_ = del_R @ R
-        t_ = t + del_t
-        self.extrinsic = (R_, t_)
+    def set_extrinsic_param(self, extrinsic: Tuple[np.array, np.array], **kwargs):
+        self.extrinsic = extrinsic
         return self
     
 
@@ -674,34 +629,12 @@ class CameraDepth(CameraTransformable):
         self.tensor_smith = tensor_smith
 
 
-    def set_intrinsic_param(self, percentile=0.5, **kwargs):
-        cx, cy, fx, fy, *distortion_params = self.intrinsic
-        scale = percentile * 0.01
-        cx_ = random.uniform(1 - scale, 1 + scale) * cx
-        cy_ = random.uniform(1 - scale, 1 + scale) * cy
-        fx_ = random.uniform(1 - scale, 1 + scale) * fx
-        fy_ = random.uniform(1 - scale, 1 + scale) * fy
-        self.intrinsic = [cx_, cy_, fx_, fy_, *distortion_params]
+    def set_intrinsic_param(self, intrinsic: Sequence, **kwargs):
+        self.intrinsic = intrinsic
         return self
-    
 
-    def set_extrinsic_param(self, angle=1, translation=0.05, **kwargs):
-        R, t = self.extrinsic
-        del_R = Rotation.from_euler(
-            'xyz', 
-            [random.uniform(-angle, angle),
-             random.uniform(-angle, angle),
-             random.uniform(-angle, angle)],
-            degrees=True
-        )
-        del_t = np.array([
-            random.uniform(-translation, translation),
-            random.uniform(-translation, translation),
-            random.uniform(-translation, translation)
-        ])
-        R_ = del_R @ R
-        t_ = t + del_t
-        self.extrinsic = (R_, t_)
+    def set_extrinsic_param(self, extrinsic: Tuple[np.array, np.array], **kwargs):
+        self.extrinsic = extrinsic
         return self
     
 
@@ -1208,6 +1141,7 @@ def random_transform_class_factory(cls_name, transform_func):
         )
     ]
     """
+
     def __init__(self, *, prob: float = 0.0, param_randomization_rules: dict = None, scope: str = "frame", **kwargs):
         """Initialize a Transform object.
 
@@ -1226,25 +1160,48 @@ def random_transform_class_factory(cls_name, transform_func):
         self.param_randomization_rules = param_randomization_rules
         self.kwargs = kwargs
         self.validate_param_randomization_rules()
-    
+
     def validate_param_randomization_rules(self):
-        assert isinstance(self.param_randomization_rules, dict), f"param_randomization_rules should be a dict. But {self.param_randomization_rules} is given."
+        assert isinstance(
+            self.param_randomization_rules, dict
+        ), f"param_randomization_rules should be a dict. But {self.param_randomization_rules} is given."
+        valid_rule_types = [ "float", "int", "enum", ]
         for _, rule in self.param_randomization_rules.items():
-            assert rule["type"] in ["float", "int", "enum"], f"Only 'float', 'int' and 'enum' are valid types for a rule. But {rule['type']} is given."
+            assert rule["type"] in valid_rule_types, f"Only 'float', 'int' and 'enum' are valid types for a rule. But {rule['type']} is given."
             if rule["type"] == "enum":
                 assert "choices" in rule, "choices should be used along with type: enum."
             else:
                 assert "range" in rule, "range should be used along with type: float or int."
 
+    def random_pick_param(self, rule: dict, seed: int):
+        random.seed(seed)  # why set seed inside? we want the same random results no matter what order of params it is.
+        if rule["type"] == "float":
+            return random.uniform(*rule["range"])
+        elif rule["type"] == "int":
+            return random.randint(*rule["range"])
+        elif rule["type"] == "enum":
+            return random.choice(rule["choices"])
+        else:
+            raise NotImplementedError
+
     def __call__(self, *transformables, seeds=None, **kwargs):
-        if seeds:
-            random.seed(seeds[self.scope])
         if random.random() > self.prob:
             return list(transformables)
-        # TODO: implement the randomization for params
-        return [None if i is None else getattr(i, transform_func)(**self.kwargs) for i in transformables]
+        _seed = seeds[self.scope] if seeds else None
+        params = {param_name: self.random_pick_param(rule, _seed)
+                  for param_name, rule in self.param_randomization_rules.items()}
+        return [None if i is None else getattr(i, transform_func)(**params) for i in transformables]
 
-    return type(cls_name, (Transform,), {"__init__": __init__, "__call__": __call__})
+    return type(
+        cls_name,
+        (Transform,),
+        {
+            "__init__": __init__,
+            "__call__": __call__,
+            "validate_param_randomization_rules": validate_param_randomization_rules,
+            "random_pick_param": random_pick_param,
+        },
+    )
 
 
 def deterministic_transform_class_factory(cls_name, transform_func):
@@ -1269,15 +1226,96 @@ RandomChannelShuffle = random_transform_class_factory("RandomChannelShuffle", "c
 RandomAutoContrast = random_transform_class_factory("RandomAutoContrast", "auto_contrast")
 RandomSolarize = random_transform_class_factory("RandomSolarize", "solarize")
 RandomImEqualize = random_transform_class_factory("RandomImEqualize", "imequalize")
-RandomSetIntrinsicParam = random_transform_class_factory("RandomSetIntrinsicParam", "set_intrinsic_param")
-RandomSetExtrinsicParam = random_transform_class_factory("RandomSetExtrinsicParam", "set_extrinsic_param")
 
 ToTensor = deterministic_transform_class_factory("ToTensor", "to_tensor")
 
 #######################
 # Customed Transforms #
 #######################
+class RandomSetIntrinsicParam(Transform):
+    def __init__(self, *, prob: float = 0.0, jitter_ratio: float = 0.0, scope: str = "frame", **kwargs):
+        """This transform random jitters the intrinsic params of CameraTransformable.
+        (NOTE: only applicable to cx, cy, fx, fy).
 
+        Parameters
+        ----------
+        prob : float, optional
+            the happening probability of this Transform, value range [0, 1], by default 0.0
+        jitter_ratio : float, optional
+            the relative ratio of the jittering to each param in intrinsic, by default 0.0 (i.e. 0%)
+        scope : str, optional
+            the scope of the Transform, by default "frame"
+        """
+        Transform.__init__(self, scope=scope)
+        self.prob = prob
+        self.jitter_ratio = jitter_ratio
+        self.kwargs = kwargs
+
+    def __call__(self, *transformables, seeds=None, **kwargs):
+        if random.random() > self.prob:
+            return list(transformables)
+        _seed = seeds[self.scope] if seeds else None
+        random.seed(_seed) # why we set it outside? we want different param have different jittering magnitude.
+        def _get_random_value(base_value):
+            return random.uniform(1 - self.jitter_ratio, 1 + self.jitter_ratio) * base_value
+
+        for transformable in transformables:
+            if isinstance(transformable, CameraTransformable):
+                new_intrinsic = [_get_random_value(param) for param in transformable.intrinsic]
+                transformable.set_intrinsic_param(new_intrinsic)
+        return transformables
+
+
+class RandomSetExtrinsicParam(Transform):
+    def __init__(self, *, prob: float = 0.0, angle: float = 0.0, translation: float = 0.0, scope: str = "frame", **kwargs):
+        """This transform random jitters the rotation angle and translation of CameraTransformable's extrinsic params.
+
+        Parameters
+        ----------
+        prob : float, optional
+            the happening probability of this Transform, value range [0, 1], by default 0.0
+        angle : float, optional
+            the jittering angle (degrees) that applies to current extrinsic.Rotation, by default 0.0
+        translation : float, optional
+            the translation (m) that applies to current extrinsic.Translation, by default 0.0
+        scope : str, optional
+            the scope of the Transform, by default "frame"
+        """
+        Transform.__init__(self, scope=scope)
+        self.prob = prob
+        self.angle = angle
+        self.translation = translation
+        self.kwargs = kwargs
+
+    def __call__(self, *transformables, seeds=None, **kwargs):
+        if random.random() > self.prob:
+            return list(transformables)
+        seed = seeds[self.scope] if seeds else None
+        random.seed(seed)
+
+        def _get_random_value(deviation):
+            deviation_abs = abs(deviation)
+            return random.uniform(-deviation_abs, deviation_abs)
+
+        def _get_random_delta_rotation():
+            return Rotation.from_euler(
+                'xyz', 
+                [_get_random_value(self.angle) for _ in range(3)],
+                degrees=True
+            ).as_matrix()
+        
+        def _get_random_delta_translation():
+            return np.array([_get_random_value(self.translation) for _ in range(3)])
+
+        for transformable in transformables:
+            if isinstance(transformable, CameraTransformable):
+                delta_R = _get_random_delta_rotation()
+                delta_t = _get_random_delta_translation()
+                R, t = transformable.extrinsic
+                new_R = delta_R @ R
+                new_t = delta_t + t
+                transformable.set_extrinsic_param([new_R, new_t])
+        return transformables
 
 
 class RandomChooseOneTransform(Transform):

@@ -14,3 +14,4 @@ transformers>=4.32.0
 mmcv>=2.2.0
 mmengine>=0.10.4
 pytest
+pypcd-imp==0.1.5

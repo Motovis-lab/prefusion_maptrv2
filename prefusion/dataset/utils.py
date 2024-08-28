@@ -1,8 +1,10 @@
-from typing import List
+from typing import List, Union
+from pathlib import Path
 
 import cv2
 import numpy as np
 import virtual_camera as vc
+from pypcd_imp import pypcd
 
 from prefusion.registry import TRANSFORMS
 
@@ -262,5 +264,28 @@ def build_transforms(transforms: List) -> List:
         if isinstance(transform, ToTensor):
             raise ValueError("ToTensor should not be set mannually.")
         built_transforms.append(transform)
-    build_transforms.append(ToTensor())
+    built_transforms.append(ToTensor())
     return built_transforms
+
+
+def read_pcd(path: Union[str, Path], intensity: bool = True) -> np.ndarray:
+    """read pcd file
+    Parameters
+    ----------
+    path : Union[str, Path]
+        _description_
+    intensity : bool, optional
+        _description_, by default True
+    Returns
+    -------
+    np.ndarray
+        - if both intensity and colors are true, return (N, 7) array, i.e. [[x,y,z,intensity,r,g,b], ...]
+        - if intensity is true while colors is false, return (N, 4) array, i.e. [[x,y,z,intensity], ...]
+        - if colors is true while intensity is false, return (N, 6) array, i.e. [[x,y,z,r,g,b], ...]
+        - Please be noted: the returned color RGB values range from 0~255
+    """
+    pcd = pypcd.PointCloud.from_path(path)
+    npdata = np.stack([pcd.pc_data['x'], pcd.pc_data['y'], pcd.pc_data['z']], axis=1)
+    if intensity:
+        npdata = np.concatenate([npdata, pcd.pc_data['intensity'].reshape(-1, 1)], axis=1)
+    return npdata
