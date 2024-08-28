@@ -279,10 +279,8 @@ def read_pcd(path: Union[str, Path], intensity: bool = True) -> np.ndarray:
     Returns
     -------
     np.ndarray
-        - if both intensity and colors are true, return (N, 7) array, i.e. [[x,y,z,intensity,r,g,b], ...]
-        - if intensity is true while colors is false, return (N, 4) array, i.e. [[x,y,z,intensity], ...]
-        - if colors is true while intensity is false, return (N, 6) array, i.e. [[x,y,z,r,g,b], ...]
-        - Please be noted: the returned color RGB values range from 0~255
+        - if intensity is false, return (N, 3) array, i.e. [[x,y,z], ...]
+        - if intensity is true, return (N, 4) array, i.e. [[x,y,z,intensity], ...]
     """
     pcd = pypcd.PointCloud.from_path(path)
     npdata = np.stack([pcd.pc_data['x'], pcd.pc_data['y'], pcd.pc_data['z']], axis=1)

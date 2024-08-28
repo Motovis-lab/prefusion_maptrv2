@@ -1,4 +1,4 @@
-from typing import List, Tuple, Dict, Union, Iterable, TYPE_CHECKING
+from typing import List, Tuple, Dict, Union, Iterable
 
 import cv2
 import torch

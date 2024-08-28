@@ -1050,7 +1050,7 @@ class OccSdfBev(SpatialTransformable):
         cx, cy, fx, fy = self._bev_intrinsic
         vv_ = xx * fx + cx
         uu_ = yy * fy + cy
-        return uu_, vv_
+        return uu_.astype(np.float32), vv_.astype(np.float32)
 
 
     def flip_3d(self, flip_mat, **kwargs):
