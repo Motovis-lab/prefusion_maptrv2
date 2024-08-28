@@ -577,7 +577,7 @@ def test_occ_sdf_bev(occ_sdf_bev):
 def test_occ_sdf_bev_flip_x(occ_sdf_bev):
     flip_mat = np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]])
     occ_sdf_bev.flip_3d(flip_mat)
-    assert occ_sdf_bev.occ == np.array([
+    np.testing.assert_almost_equal(occ_sdf_bev.occ, np.array([
         [[0, 1, 1, 1],
          [0, 1, 0, 0],
          [0, 0, 0, 0]],
@@ -585,4 +585,14 @@ def test_occ_sdf_bev_flip_x(occ_sdf_bev):
         [[1, 1, 1, 1],
          [0, 0, 0, 0],
          [0, 0, 0, 1]],
-    ])
+    ]))
+    np.testing.assert_almost_equal(occ_sdf_bev.sdf, np.array([
+        [[0.1, 0.1, 0.1, 0.1],
+         [0.2, 0.1, 0.3, 0.4],
+         [1.1, 0.3, 0.9, 0.2]]
+    ]))
+    np.testing.assert_almost_equal(occ_sdf_bev.height, np.array([
+        [[ 0.2, 0.1, 0.1, 0.1],
+         [ 0.3, 0.2, 0.1, 0.0],
+         [0.4, 0.2, 0.0, -0.1]]
+    ]))
