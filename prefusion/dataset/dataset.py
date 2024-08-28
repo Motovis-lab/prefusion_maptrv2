@@ -121,7 +121,9 @@ class GroupBatchDataset(Dataset):
         self._assert_availability(transformable_keys)
         self.dictionary = dictionary
         self.transformable_keys = transformable_keys
+        self.tensor_smith = tensor_smith
         self.transforms = build_transforms(transforms)
+        self.model_feeder = model_feeder
 
         if indices_path is not None:
             indices = [line.strip() for line in open(indices_path, 'w')]
@@ -137,8 +139,7 @@ class GroupBatchDataset(Dataset):
         self.group_backtime_prob = group_backtime_prob
         
         self.seed_dataset = seed_dataset
-        self.model_feeder = model_feeder
-        self.tensor_smith = tensor_smith
+
         self.sample_groups()
 
     @classmethod
