@@ -191,19 +191,19 @@ class VoxelLookUpTableGenerator:
         density_maps = []
         for key in camera_images:
             keys.append(key)
-            image_data = camera_images[key].data
+            camera_image = camera_images[key]
             # gen camera points, in shape of (3, Z*X*Y)
-            R_ec, t_ec = image_data['extrinsic']
+            R_ec, t_ec = camera_image.extrinsic
             camera_points = R_ec.T @ (self.voxel_points - t_ec[..., None])
             # camera feature settings
             downscale = self.camera_feature_configs[key]['feature_downscale']
-            resolution = np.array(image_data['img'].shape[:2][::-1]) // downscale
-            intrinsics = np.array(image_data['intrinsic'])
+            resolution = np.array(camera_image.img.shape[:2][::-1]) // downscale
+            intrinsics = np.array(camera_image.intrinsic)
             intrinsics[:4] = (intrinsics[:4] + [0.5, 0.5, 0, 0]) / downscale - [0.5, 0.5, 0, 0]
-            camera_class = getattr(vc, image_data['cam_type'])
+            camera_class = getattr(vc, camera_image.cam_type)
             camera = camera_class(
                 resolution,
-                image_data['extrinsic'],
+                camera_image.extrinsic,
                 intrinsics,
             )
             uu_float, vv_float = camera.project_points_from_camera_to_image(camera_points) # in shape of Z*X*Y
@@ -220,7 +220,7 @@ class VoxelLookUpTableGenerator:
             dd[dd < ray_distance_num_channel] = ray_distance_num_channel - 1
             # get valid maps, Z*X*Y, 6*320*160
             valid_map = (uu >= 0) * (uu < resolution[0]) * (vv >= 0) * (vv < resolution[1]) * (camera_points[2] > 0)
-            uv_mask = cv2.resize(image_data['ego_mask'], resolution)
+            uv_mask = cv2.resize(camera_image.ego_mask, resolution)
             valid_map *= uv_mask[vv * valid_map, uu * valid_map].astype(bool)
             uu_float[~valid_map] = -1
             vv_float[~valid_map] = -1

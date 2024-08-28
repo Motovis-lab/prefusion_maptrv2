@@ -105,7 +105,7 @@ class PlanarPolyline3D(TensorSmith):
             polylines = []
             class_inds = []
             attr_inds = []
-            for element in transformable.data['elements']:
+            for element in transformable.elements:
                 if element['class'] in branch['classes']:
                     points = element['points']
                     polylines.append(np.array([
@@ -212,7 +212,7 @@ class PlanarPolygon3D(TensorSmith):
             polylines = []
             class_inds = []
             attr_inds = []
-            for element in transformable.data['elements']:
+            for element in transformable.elements:
                 if element['class'] in branch['classes']:
                     points = element['points']
                     polylines.append(np.array([
