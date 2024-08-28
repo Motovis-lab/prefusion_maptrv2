@@ -4,20 +4,19 @@ import inspect
 import functools
 import abc
 import warnings
-
 from pathlib import Path
-from typing import List, Tuple, Dict, Callable, Union, Sequence
+from typing import List, Tuple, Dict, Callable, Union, Sequence, TYPE_CHECKING
 
 import cv2
 import mmcv
 import torch
 import numpy as np
-
 import virtual_camera as vc
 # import albumentations as AT
-
 from scipy.spatial.transform import Rotation
 
+# from .tensor_smith import TensorSmith
+from prefusion.registry import TRANSFORMS
 from .utils import (
     expand_line_2d, _sign, INF_DIST,
     vec_point2line_along_direction, 
@@ -25,8 +24,8 @@ from .utils import (
     get_cam_type
 )
 
-
-from prefusion.registry import TRANSFORMS
+if TYPE_CHECKING:
+    from .tensor_smith import TensorSmith
 
 
 def transform_method(func):
@@ -278,7 +277,7 @@ class CameraImage(CameraTransformable):
         ego_mask: np.ndarray, 
         extrinsic: Tuple[np.ndarray, np.ndarray], 
         intrinsic: np.ndarray,
-        tensor_smith: Callable = None
+        tensor_smith: "TensorSmith" = None
     ):
         """Image data modeled by specific camera model.
 
@@ -297,8 +296,8 @@ class CameraImage(CameraTransformable):
         intrinsic : np.ndarray
             if it's PerspectiveCamera, it contains 4 values: cx, cy, fx, fy
             if it's FisheyeCamera, it contains more values: cx, cy, fx, fy, *distortion_params
-        tensor_smith : Callable, optional, by default None
-            a function to get tensor
+        tensor_smith : TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
 
 
         - \<fast_ray_LUT\> = {
@@ -370,7 +369,7 @@ class CameraImage(CameraTransformable):
         self.intrinsic = intrinsic
         return self
 
-    def set_extrinsic_param(self, extrinsic: Tuple[np.array, np.array], **kwargs):
+    def set_extrinsic_param(self, extrinsic: Tuple[np.ndarray, np.ndarray], **kwargs):
         self.extrinsic = extrinsic
         return self
 
@@ -459,7 +458,7 @@ class CameraSegMask(CameraTransformable):
         extrinsic: Tuple[np.ndarray, np.ndarray], 
         intrinsic: np.ndarray,
         dictionary: dict,
-        tensor_smith: Callable = None
+        tensor_smith: "TensorSmith" = None
     ):
         """Segmentation Mask data modeled by specific camera model.
 
@@ -480,8 +479,8 @@ class CameraSegMask(CameraTransformable):
             if it's FisheyeCamera, it contains more values: cx, cy, fx, fy, *distortion_params
         dictionary: dict
             dictionary store class infomation of different values
-        tensor_smith : Callable, optional, by default None
-            a function to get tensor
+        tensor_smith : TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__()
         assert cam_type in ["FisheyeCamera", "PerspectiveCamera"]
@@ -498,7 +497,7 @@ class CameraSegMask(CameraTransformable):
         self.intrinsic = intrinsic
         return self   
 
-    def set_extrinsic_param(self, extrinsic: Tuple[np.array, np.array], **kwargs):
+    def set_extrinsic_param(self, extrinsic: Tuple[np.ndarray, np.ndarray], **kwargs):
         self.extrinsic = extrinsic
         return self
     
@@ -591,7 +590,7 @@ class CameraDepth(CameraTransformable):
         extrinsic: Tuple[np.ndarray, np.ndarray], 
         intrinsic: np.ndarray,
         depth_mode: str,
-        tensor_smith: Callable = None
+        tensor_smith: "TensorSmith" = None
     ):
         """Depth data modeled by specific camera model.
 
@@ -613,8 +612,8 @@ class CameraDepth(CameraTransformable):
         depth_mode: str
             the mode of depth, choices: ['z' or 'd']
             ('z': depth in z axis of camera coordinate, 'd': depth in distance of point to camera optical point)
-        tensor_smith : Callable, optional, by default None
-            a function to get tensor
+        tensor_smith : TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__()
         assert cam_type in ["FisheyeCamera", "PerspectiveCamera"]
@@ -633,7 +632,7 @@ class CameraDepth(CameraTransformable):
         self.intrinsic = intrinsic
         return self
 
-    def set_extrinsic_param(self, extrinsic: Tuple[np.array, np.array], **kwargs):
+    def set_extrinsic_param(self, extrinsic: Tuple[np.ndarray, np.ndarray], **kwargs):
         self.extrinsic = extrinsic
         return self
     
@@ -722,7 +721,7 @@ class CameraDepthSet(TransformableSet):
 
 
 class LidarPoints(SpatialTransformable):
-    def __init__(self, positions: np.ndarray, intensity: np.ndarray, tensor_smith: Callable = None): 
+    def __init__(self, positions: np.ndarray, intensity: np.ndarray, tensor_smith: "TensorSmith" = None): 
         """Lidar points
 
         Parameters
@@ -731,8 +730,8 @@ class LidarPoints(SpatialTransformable):
             of shape (N, 3), usually in ego-system
         intensity : np.ndarray
             of shape (N, 1)
-        tensor_smith : Callable, optional, by default None
-            a function to get tensor
+        tensor_smith : TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__()
         self.positions = positions.copy()
@@ -756,7 +755,7 @@ class LidarPoints(SpatialTransformable):
 
 
 class Bbox3D(SpatialTransformable):
-    def __init__(self, elements: List[dict], dictionary: dict, flip_aware_class_pairs: List[tuple] = [], tensor_smith: Callable = None):
+    def __init__(self, elements: List[dict], dictionary: dict, flip_aware_class_pairs: List[tuple] = [], tensor_smith: "TensorSmith" = None):
         """
         Parameters
         ----------
@@ -790,8 +789,8 @@ class Bbox3D(SpatialTransformable):
         flip_aware_class_pairs : List[tuple]
             list of class pairs that are flip-aware
             flip_aware_class_pairs = [('left_arrow', 'right_arrow')]
-        tensor_smith : Callable, optional, by default None
-            a function to get tensor
+        tensor_smith : TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__()
         self.elements = elements.copy()
@@ -856,7 +855,7 @@ class Bbox3D(SpatialTransformable):
 
 
 class Polyline3D(SpatialTransformable):
-    def __init__(self, elements: List[dict], dictionary: dict, flip_aware_class_pairs: List[tuple] = [], tensor_smith: Callable = None):
+    def __init__(self, elements: List[dict], dictionary: dict, flip_aware_class_pairs: List[tuple] = [], tensor_smith: "TensorSmith" = None):
         """
 
         Parameters
@@ -886,8 +885,8 @@ class Polyline3D(SpatialTransformable):
         flip_aware_class_pairs : List[tuple], default []
             list of class pairs that are flip-aware
             ```flip_aware_class_pairs = [('left_arrow', 'right_arrow')]```
-        tensor_smith : Callable, optional, by default None
-            a function to get tensor
+        tensor_smith : TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__()
         self.elements = elements.copy()
@@ -946,15 +945,15 @@ class ParkingSlot3D(Polyline3D):
 
 
 class Trajectory(SpatialTransformable):
-    def __init__(self, trajectories: List[List[Tuple[np.array, np.array]]], tensor_smith: Callable = None):
+    def __init__(self, trajectories: List[List[Tuple[np.ndarray, np.ndarray]]], tensor_smith: "TensorSmith" = None):
         """Trajectory
 
         Parameters
         ----------
-        trajectories : List[List[Tuple[np.array, np.array]]]
+        trajectories : List[List[Tuple[np.ndarray, np.ndarray]]]
             Each trajectory is a list of poses, each pose is a tuple of (R, t), where R is of shape (3, 3) and t is of shape (3, 1)
-        tensor_smith : Callable, optional, by default None
-            a function to get tensor
+        tensor_smith : TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__()
         self.trajectories = trajectories
@@ -977,43 +976,71 @@ class SegBev(SpatialTransformable):
 
 
 class OccSdfBev(SpatialTransformable):
+    def __init__(
+        self,
+        src_view_range: dict,
+        occ: np.ndarray,
+        sdf: np.ndarray,
+        height: np.ndarray,
+        dictionary: dict,
+        mask: np.ndarray = None,
+        tensor_smith: "TensorSmith" = None
+    ):
+        """OccSdfBev is a transformable contains occ, sdf and ground height info in a BEV view (a 2D spatial view).
 
-    '''
-    self.data = {
-        'src_view_range': [back, front, right, left, bottom, up], # in ego system
-        'occ': <N x H x W>, # H <=> (xmin, xmax), W <=> (ymin, ymax)
-        'sdf': <1 x H x W>,
-        'height': <1 x H x W>,
-        'mask': <1 x H x W>,
-    }
-    
-    back, front, right, left, bottom, up  
-    ||    ||     ||     ||    ||      ||
-    xmin, xmax,  ymin,  ymax, zmin,   zmax
+        back, front, right, left, bottom, up  
+        ||    ||     ||     ||    ||      ||
+        xmin, xmax,  ymin,  ymax, zmin,   zmax
 
-    bev: backward-right-up (H, W, Z)
-    ego: x-y-z, forward-left-up
-    '''
-    def __init__(self, data: dict, dictionary: dict):
-        super().__init__(data)
+        bev: backward-right-up (H, W, Z)
+        ego: x-y-z, forward-left-up
+
+        Parameters
+        ----------
+        src_view_range : dict
+            view range of the bev view: [back, front, right, left, bottom, up], # in ego system
+        occ : np.ndarray
+            occ info, of shape (C, H, W), where C denote the nubmer of occ classes, H and W denote the height and width: 
+            H <=> (xmin, xmax), W <=> (ymin, ymax)
+        sdf : np.ndarray
+            sdf info, of shape (1, H, W)
+        height : np.ndarray
+            height of the ground, of shape (1, H, W)
+        dictionary : dict
+            the dictionary for the occ classes
+        mask : np.ndarray, optional
+            if provided, only positions with value 1 will be take into consideration, by default None
+            This feature is useful when we train on multiple different data source, where they have different BEV size/range.
+        tensor_smith : TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
+        """
+        super().__init__()
+        self.src_view_range = src_view_range
+        self.occ = occ
+        self.sdf = sdf
+        self.height = height
         self.dictionary = dictionary
-        if 'mask' not in self.data:
-            self.data['mask'] = np.ones(self.data['sdf'].shape, dtype=np.uint8)
-        self._bev_shape = self.data['occ'].shape[1:]
+        self.mask = mask if mask is not None else np.ones_like(self.sdf, dtype=np.uint8)
+        self.tensor_smith = tensor_smith
+        self._bev_shape = self.occ.shape[1:]
+        self._bev_intrinsic = self._calc_bev_intrinsic()
         self._ego_points = self._unproject_bev_to_ego()
 
+    def _calc_bev_intrinsic(self):
+        H, W = self._bev_shape
+        fx = H / (self.src_view_range[0] - self.src_view_range[1])
+        fy = W / (self.src_view_range[2] - self.src_view_range[3])
+        cx = - self.src_view_range[1] * fx - 0.5
+        cy = - self.src_view_range[3] * fy - 0.5
+        return [cx, cy, fx, fy]
 
     def _unproject_bev_to_ego(self):
         H, W = self._bev_shape
-        fx = H / (self.data['src_view_range'][0] - self.data['src_view_range'][1])
-        fy = W / (self.data['src_view_range'][2] - self.data['src_view_range'][3])
-        cx = - self.data['src_view_range'][1] * fx - 0.5
-        cy = - self.data['src_view_range'][3] * fy - 0.5
-        self._bev_intrinsic = [cx, cy, fx, fy]
+        cx, cy, fx, fy = self._bev_intrinsic
         uu, vv = np.meshgrid(np.arange(W), np.arange(H))
         xx = (vv - cx) / fx
         yy = (uu - cy) / fy
-        zz = self.data['height'][0]
+        zz = self.height[0]
         # column points
         return np.stack([xx, yy, zz], axis=0).reshape(3, -1)
     
@@ -1032,29 +1059,29 @@ class OccSdfBev(SpatialTransformable):
         # 3. project to bev
         # 4. remap
         assert flip_mat[2, 2] == 1, 'up-down flipping is unnecessary!'
-        flipped_points = flip_mat @ self._ego_coords
+        flipped_points = flip_mat @ self._ego_points
         uu_, vv_ = self._project_ego_to_bev(flipped_points)
         
-        self.data['occ'] = cv2.remap(
-            self.data['occ'], 
+        self.occ = cv2.remap(
+            self.occ, 
             uu_.reshape((1, *self._bev_shape)),
             vv_.reshape((1, *self._bev_shape)),
             interpolation=cv2.INTER_NEAREST
         )
-        self.data['sdf'] = cv2.remap(
-            self.data['sdf'], 
+        self.sdf = cv2.remap(
+            self.sdf, 
             uu_.reshape((1, *self._bev_shape)),
             vv_.reshape((1, *self._bev_shape)),
             interpolation=cv2.INTER_LINEAR
         )
-        self.data['height'] = cv2.remap(
-            self.data['height'], 
+        self.height = cv2.remap(
+            self.height, 
             uu_.reshape((1, *self._bev_shape)),
             vv_.reshape((1, *self._bev_shape)),
             interpolation=cv2.INTER_LINEAR
         )
-        self.data['mask'] = cv2.remap(
-            self.data['mask'], 
+        self.mask = cv2.remap(
+            self.mask, 
             uu_.reshape((1, *self._bev_shape)),
             vv_.reshape((1, *self._bev_shape)),
             interpolation=cv2.INTER_NEAREST
@@ -1066,29 +1093,29 @@ class OccSdfBev(SpatialTransformable):
         # 1. get ego coordinates from bev
         # 2. apply rotation
         # 3. project to bev
-        rotated_points = rmat @ self._ego_coords
+        rotated_points = rmat @ self._ego_points
         uu_, vv_ = self._project_ego_to_bev(rotated_points)
         
-        self.data['occ'] = cv2.remap(
-            self.data['occ'], 
+        self.occ = cv2.remap(
+            self.occ, 
             uu_.reshape((1, *self._bev_shape)),
             vv_.reshape((1, *self._bev_shape)),
             interpolation=cv2.INTER_NEAREST
         )
-        self.data['sdf'] = cv2.remap(
-            self.data['sdf'], 
+        self.sdf = cv2.remap(
+            self.sdf, 
             uu_.reshape((1, *self._bev_shape)),
             vv_.reshape((1, *self._bev_shape)),
             interpolation=cv2.INTER_LINEAR
         )
-        self.data['height'] = cv2.remap(
-            self.data['height'], 
+        self.height = cv2.remap(
+            self.height, 
             uu_.reshape((1, *self._bev_shape)),
             vv_.reshape((1, *self._bev_shape)),
             interpolation=cv2.INTER_LINEAR
         )
-        self.data['mask'] = cv2.remap(
-            self.data['mask'], 
+        self.mask = cv2.remap(
+            self.mask, 
             uu_.reshape((1, *self._bev_shape)),
             vv_.reshape((1, *self._bev_shape)),
             interpolation=cv2.INTER_NEAREST
@@ -1506,58 +1533,6 @@ class RenderExtrinsic(Transform):
                 if cam_id in self.cam_ids:
                     transformable.render_extrinsic(self.del_extrinsics[cam_id])
         return transformables
-
-
-
-# class FastRayLookUpTable(Transform):
-    
-#     def __init__(self, voxel_feature_config, camera_feature_configs, scope="frame"):
-#         '''
-#         voxel_feature_config = dict(
-#             voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
-#             voxel_range=([-0.5, 2.5], [36, -12], [12, -12]),
-#             ego_distance_max=40,
-#             ego_distance_step=2
-#         )
-#         general_camera_feature_config = dict(
-#             ray_distance_num_channel=64,
-#             ray_distance_start=0.25,
-#             ray_distance_step=0.25,
-#             feature_downscale=1,
-#         )
-#         camera_feature_configs = dict(
-#             VCAMERA_FISHEYE_FRONT=general_camera_feature_config,
-#             VCAMERA_PERSPECTIVE_FRONT_LEFT=general_camera_feature_config,
-#             VCAMERA_PERSPECTIVE_BACK_LEFT=general_camera_feature_config,
-#             VCAMERA_FISHEYE_LEFT=general_camera_feature_config,
-#             VCAMERA_PERSPECTIVE_BACK=general_camera_feature_config,
-#             VCAMERA_FISHEYE_BACK=general_camera_feature_config,
-#             VCAMERA_PERSPECTIVE_FRONT_RIGHT=general_camera_feature_config,
-#             VCAMERA_PERSPECTIVE_BACK_RIGHT=general_camera_feature_config,
-#             VCAMERA_FISHEYE_RIGHT=general_camera_feature_config,
-#             VCAMERA_PERSPECTIVE_FRONT=general_camera_feature_config
-#         )
-#         '''
-#         super().__init__(scope=scope)
-#         self.lut_gen = VoxelLookUpTableGenerator(
-#             voxel_feature_config=voxel_feature_config,
-#             camera_feature_configs=camera_feature_configs
-#         )
-#         self.cam_ids = list(camera_feature_configs.keys())
-    
-#     def __call__(self, *transformables, seeds=None, **kwargs):
-#         seed = None if seeds is None else seeds[self.scope]
-#         camera_images = {}
-#         for transformable in transformables:
-#             if isinstance(transformable, CameraImage):
-#                 cam_id = transformable.data['cam_id']
-#                 if cam_id in self.cam_ids:
-#                     camera_images[cam_id] = transformable
-#         LUT = self.lut_gen.generate(camera_images, seed=seed)
-#         for cam_id in camera_images:
-#             camera_images[cam_id].data['fast_ray_LUT'] = LUT[cam_id]
-#         return transformables
-
 
 
 class RandomRenderExtrinsic(Transform):

@@ -1,27 +1,29 @@
+from typing import List, Tuple, Dict, Union, Iterable, TYPE_CHECKING
+
 import cv2
 import torch
 import numpy as np
 
-from typing import List, Tuple, Dict, Union, Iterable
-
 from prefusion.registry import TENSOR_SMITHS
-
 from .utils import (
     expand_line_2d, _sign, INF_DIST,
     vec_point2line_along_direction, 
     dist_point2line_along_direction,
     get_cam_type
 )
-
 from .transform import (
     CameraImage, CameraSegMask, CameraDepth,
-    LidarPoints, Polyline3D, ParkingSlot3D, 
-    Bbox3D, OccSdfBev, SegBev
+    Polyline3D, SegBev
 )
 
 
+class TensorSmith:
+    def __call__(self, *args, **kwargs):
+        raise NotImplementedError
+
+
 @TENSOR_SMITHS.register_module()
-class CameraImageTensor:
+class CameraImageTensor(TensorSmith):
     def __init__(self, 
             means: Union[List[float, float, float], Tuple[float, float, float], float] = 128, 
             stds: Union[List[float, float, float], Tuple[float, float, float], float] = 255
@@ -43,7 +45,7 @@ class CameraImageTensor:
 
 
 @TENSOR_SMITHS.register_module()
-class CameraDepthTensor:
+class CameraDepthTensor(TensorSmith):
     def __init__(self, channels):
         pass
 
@@ -57,7 +59,7 @@ class CameraDepthTensor:
 
 
 @TENSOR_SMITHS.register_module()
-class CameraSegTensor:
+class CameraSegTensor(TensorSmith):
     def __init__(self, class_sequence, class_combines):
         self.class_sequence = class_sequence
 
@@ -67,7 +69,7 @@ class CameraSegTensor:
 
 
 @TENSOR_SMITHS.register_module()
-class PlanarSegBev:
+class PlanarSegBev(TensorSmith):
     def __init__(self, voxel_shape, voxel_range):
         self.voxel_shape = voxel_shape
         self.voxel_range = voxel_range
@@ -77,7 +79,7 @@ class PlanarSegBev:
 
 
 @TENSOR_SMITHS.register_module()
-class PlanarPolyline3D:
+class PlanarPolyline3D(TensorSmith):
     def __init__(self, voxel_shape, voxel_range):
         self.voxel_shape = voxel_shape
         self.voxel_range = voxel_range
@@ -184,7 +186,7 @@ class PlanarPolyline3D:
 
 
 @TENSOR_SMITHS.register_module()
-class PlanarPolygon3D:
+class PlanarPolygon3D(TensorSmith):
     def __init__(self, voxel_shape, voxel_range):
         self.voxel_shape = voxel_shape
         self.voxel_range = voxel_range
