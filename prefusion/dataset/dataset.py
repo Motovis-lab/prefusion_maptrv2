@@ -40,6 +40,7 @@ def collate_dict(batch):
     return batch[0]
 
 
+GroupBatch = List[List[Dict]]
 
 @DATASETS.register_module()
 class GroupBatchDataset(Dataset):
@@ -307,7 +308,7 @@ class GroupBatchDataset(Dataset):
             return int(np.ceil(len(self.groups) / self.batch_size))
 
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx) -> GroupBatch:
         
         if idx >= len(self):
             self.sample_groups()
@@ -352,7 +353,9 @@ class GroupBatchDataset(Dataset):
         for frame_batch in zip(*batch):
             group_batch.append(frame_batch)
         
-        return group_batch
+        model_food = self.model_feeder(group_batch)
+
+        return model_food
 
 
     def load_camera_images(self, index: str) -> CameraImageSet:
@@ -528,15 +531,15 @@ class GroupBatchDataset(Dataset):
         occ_path = frame['occ_sdf']['occ_bev']
         sdf_path = frame['occ_sdf']['sdf_bev']
         height_path = frame['occ_sdf']['height_bev']
-        data = {
-            'src_view_range': scene['meta_info']['space_range']['occ'], # ego system
-            'dst_view_range': scene['meta_info']['space_range']['occ'], # ego system
-            # 'occ': <N x H x W>, # H <=> (x_min, x_max), W <=> (y_min, y_max)
-            # 'sdf': <1 x H x W>,
-            # 'height': <1 x H x W>,
-            # 'mask': <1 x H x W>,
-        }
-        return OccSdfBev(data)
+        return OccSdfBev(
+            src_view_range=scene['meta_info']['space_range']['occ'], # ego system,
+            occ=mmcv.imread(occ_path),
+            sdf=mmcv.imread(sdf_path),
+            height=mmcv.imread(height_path),
+            dictionary=self.dictionary,
+            mask=None,
+            tensor_smith=self.tensor_smith["occ_sdf_bev"]
+        )
     
 
     def load_occ_sdf_3d(self, index):

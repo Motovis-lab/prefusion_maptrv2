@@ -21,6 +21,7 @@ from prefusion.dataset.transform import (
     Bbox3D,
     Polyline3D,
     ParkingSlot3D,
+    OccSdfBev,
 )
 
 
@@ -540,3 +541,58 @@ def test_parking_slot_3d_flip_y_multiple_slots(vertical_parkslot, horizontal_par
     )
     np.testing.assert_almost_equal(parking_slots.elements[0]['points'], np.array([[2, -1, 0.02], [1, -1, 0.01], [1, -3, 0.04], [2, -3, 0.03]]))
     np.testing.assert_almost_equal(parking_slots.elements[1]['points'], np.array([[1, -3, 0.02], [5, -3, 0.01], [5, -1, 0.04], [1, -1, 0.03]]))
+
+
+@pytest.fixture
+def occ_sdf_bev():
+    return OccSdfBev(
+        src_view_range=[-50, 50, -50, 50, -2, 2],
+        occ=np.array([
+            [[1, 1, 1, 0],
+             [0, 0, 1, 0],
+             [0, 0, 0, 0]],
+
+            [[1, 1, 1, 1],
+             [0, 0, 0, 0],
+             [1, 0, 0, 0]],
+        ]),
+        sdf=np.array([
+            [[0.1, 0.1, 0.1, 0.1],
+             [0.4, 0.3, 0.1, 0.2],
+             [0.2, 0.9, 0.3, 1.1]]
+        ]),
+        height=np.array([
+            [[ 0.1, 0.1, 0.1, 0.2],
+             [ 0.0, 0.1, 0.2, 0.3],
+             [-0.1, 0.0, 0.2, 0.4]]
+        ]),
+        dictionary={},
+    )
+
+def test_occ_sdf_bev(occ_sdf_bev):
+    np.testing.assert_almost_equal(occ_sdf_bev.mask, np.ones((1, 3, 4)))
+    assert occ_sdf_bev._bev_shape == (3, 4)
+
+
+def test_occ_sdf_bev_flip_y(occ_sdf_bev):
+    flip_mat = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
+    occ_sdf_bev.flip_3d(flip_mat)
+    np.testing.assert_almost_equal(occ_sdf_bev.occ, np.array([
+        [[0, 1, 1, 1],
+         [0, 1, 0, 0],
+         [0, 0, 0, 0]],
+
+        [[1, 1, 1, 1],
+         [0, 0, 0, 0],
+         [0, 0, 0, 1]],
+    ]))
+    np.testing.assert_almost_equal(occ_sdf_bev.sdf, np.array([
+        [[0.1, 0.1, 0.1, 0.1],
+         [0.2, 0.1, 0.3, 0.4],
+         [1.1, 0.3, 0.9, 0.2]]
+    ]))
+    np.testing.assert_almost_equal(occ_sdf_bev.height, np.array([
+        [[ 0.2, 0.1, 0.1, 0.1],
+         [ 0.3, 0.2, 0.1, 0.0],
+         [0.4, 0.2, 0.0, -0.1]]
+    ]))
