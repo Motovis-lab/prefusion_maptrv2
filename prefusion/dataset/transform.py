@@ -123,10 +123,10 @@ class Transformable:
         return self
 
     def to_tensor(self):
-        if getattr(self, 'tensor'):
+        if hasattr(self, 'tensor'):
             warnings.warn('self.tensor should only be assigned by self.tensor_smith.', UserWarning)
 
-        if not getattr(self, 'tensor_smith') or not callable(self.tensor_smith):
+        if not hasattr(self, 'tensor_smith') or not callable(self.tensor_smith):
             warnings.warn('Please provide callable tensor_smith, self.tensor will be set to None.', UserWarning)
             self.tensor = None
         else:
@@ -941,6 +941,38 @@ class ParkingSlot3D(Polyline3D):
             parkslot['points'] = parkslot['points'][[1, 0, 3, 2], :]
 
         return self
+
+
+class Pose(SpatialTransformable):
+    def __init__(self, timestamp: str, rotation: np.ndarray, translation: np.ndarray, tensor_smith: "TensorSmith" = None):
+        """The pose in 3D space of a given timestamp. 
+
+        Parameters
+        ----------
+        timestamp : str
+            corresponding timestamp of the pose
+        rotation : np.ndarray
+            rotation matrix, of shape (3, 3)
+        translation : np.ndarray
+            translation vector, of shape (1, 3)
+        tensor_smith : TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
+        """
+        super().__init__()
+        self.timestamp = timestamp
+        self.rotation = rotation
+        self.translation = translation
+        self.tensor_smith = tensor_smith
+
+    def flip_3d(self, **kwargs):
+        raise NotImplementedError
+    
+    def rotate_3d(self, **kwargs):
+        raise NotImplementedError
+
+
+class PoseSet(TransformableSet):
+    transformable_cls = Pose
 
 
 
