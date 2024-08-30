@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from prefusion.dataset.dataset import GroupBatchDataset, GroupSampler
+from prefusion.dataset.dataset import GroupBatchDataset, GroupSampler, IndexInfo
 from prefusion.dataset.model_feeder import BaseModelFeeder
 
 
@@ -42,26 +42,6 @@ class DummyTransform:
 class DummyImgTensorSmith:
     def __call__(self, transformable, **kwds: Any) -> Any:
         return {"img": transformable.img}
-
-
-def test_sample_train_groups():
-    dataset = GroupBatchDataset(
-        name="gbd",
-        data_root=Path("/Users/rlan/work/dataset/motovis/mv4d"),
-        info_path=Path("/Users/rlan/work/dataset/motovis/mv4d/mv4d_infos.pkl"),
-        transformable_keys=["camera_images"],
-        dictionary={},
-        tensor_smith={"camera_images": DummyImgTensorSmith()},
-        transforms=[DummyTransform(scope="group")],
-        model_feeder=BaseModelFeeder(),
-        phase="val",
-        frame_interval=2,
-        batch_size=2,
-        group_size=4,
-        group_by_scene=False,
-    )
-    gb = dataset[0]
-    b = 100
 
 
 @pytest.fixture
@@ -227,3 +207,93 @@ def test_group_sampler_sample_scene_groups(scene_frame_inds):
         [ "20231101_160337_subset/1698825818164", "20231101_160337_subset/1698825818264", "20231101_160337_subset/1698825818364", "20231101_160337_subset/1698825818464", "20231101_160337_subset/1698825818564", "20231101_160337_subset/1698825818664", "20231101_160337_subset/1698825818764", "20231101_160337_subset/1698825818864", ],
         [ "20230823_110018/1692759640764", "20230823_110018/1692759640864", "20230823_110018/1692759640964", "20230823_110018/1692759641064", "20230823_110018/1692759641164", "20230823_110018/1692759641264", "20230823_110018/1692759641364", "20230823_110018/1692759641464", "20230823_110018/1692759641564", "20230823_110018/1692759641664", "20230823_110018/1692759641764", ]
     ]
+
+
+def test_index_info_basic():
+    ii = IndexInfo('Scn', '127', prev=IndexInfo('Scn', '126'), next=IndexInfo.from_str('Scn/128'))
+    assert ii.as_dict() == {'scene_id': 'Scn', 'frame_id': '127', 'prev': {'scene_id': 'Scn', 'frame_id': '126'}, 'next': {'scene_id': 'Scn', 'frame_id': '128'}}
+    assert ii.prev.as_dict() == {'scene_id': 'Scn', 'frame_id': '126', 'prev': None, 'next': {'scene_id': 'Scn', 'frame_id': '127'}}
+    assert ii.next.as_dict() == {'scene_id': 'Scn', 'frame_id': '128', 'prev': {'scene_id': 'Scn', 'frame_id': '127'}, 'next': None}
+
+def test_index_info_modify():
+    ii = IndexInfo('Scn', '127', prev=IndexInfo('Scn', '126'), next=IndexInfo.from_str('Scn/128'))
+    assert ii.as_dict() == {'scene_id': 'Scn', 'frame_id': '127', 'prev': {'scene_id': 'Scn', 'frame_id': '126'}, 'next': {'scene_id': 'Scn', 'frame_id': '128'}}
+    ii.frame_id = '888'
+    assert ii.prev.as_dict() == {'scene_id': 'Scn', 'frame_id': '126', 'prev': None, 'next': {'scene_id': 'Scn', 'frame_id': '888'}}
+    assert ii.next.as_dict() == {'scene_id': 'Scn', 'frame_id': '128', 'prev': {'scene_id': 'Scn', 'frame_id': '888'}, 'next': None}
+
+
+def test_index_info_eq():
+    assert IndexInfo('Scn', '127') == IndexInfo('Scn', '127')
+    assert IndexInfo('Scn', '127') != IndexInfo('Scn', '333')
+    assert IndexInfo('Scn', '127', prev=IndexInfo('Scn', '126')) == IndexInfo('Scn', '127', prev=IndexInfo('Scn', '126'))
+    assert IndexInfo('Scn', '127', prev=IndexInfo('Scn', '126')) == IndexInfo('Scn', '126', next=IndexInfo('Scn', '127')).next
+    assert IndexInfo('Scn', '127', prev=IndexInfo('Scn', '126')) != IndexInfo('Scn', '126', next=IndexInfo('Scn', '127'))
+    assert IndexInfo('Scn', '127', next=IndexInfo('Scn', '128')) == IndexInfo('Scn', '127', next=IndexInfo('Scn', '128'))
+    assert IndexInfo('Scn', '127', next=IndexInfo('Scn', '128')) == IndexInfo('Scn', '128', prev=IndexInfo('Scn', '127')).prev
+    assert IndexInfo('Scn', '127', next=IndexInfo('Scn', '128')) != IndexInfo('Scn', '128', prev=IndexInfo('Scn', '127'))
+    assert IndexInfo('Scn', '127', prev=IndexInfo('Scn', '126'), next=IndexInfo('Scn', '128')) == IndexInfo('Scn', '127', prev=IndexInfo('Scn', '126'), next=IndexInfo('Scn', '128'))
+    assert IndexInfo('Scn', '127', prev=IndexInfo('Scn', '126'), next=IndexInfo('Scn', '128')) == IndexInfo('Scn', '128', prev=IndexInfo('Scn', '127', prev=IndexInfo('Scn', '126'))).prev
+    assert IndexInfo('Scn', '127', prev=IndexInfo('Scn', '126'), next=IndexInfo('Scn', '128')) != IndexInfo('Scn', '128', prev=IndexInfo('Scn', '127', prev=IndexInfo('Scn', '126')))
+
+def test_group_sampler_convert_groups_to_info():
+    groups = [
+        ['Scn/00', 'Scn/02', 'Scn/04', 'Scn/06'], 
+        ['Scn/01', 'Scn/03', 'Scn/05', 'Scn/07'], 
+        ['Scn/08', 'Scn/10', 'Scn/12', 'Scn/14'], 
+        ['Scn/09', 'Scn/11', 'Scn/13', 'Scn/15'],
+    ]
+    groups_as_index_info = GroupSampler._convert_groups_to_info(groups)
+    def ii(scene_frame_str, prev=None, next=None):
+        return IndexInfo.from_str(scene_frame_str, prev=prev, next=next)
+
+    assert groups_as_index_info == [
+        [ii('Scn/00', next=ii('Scn/02')), ii('Scn/02', prev=ii('Scn/00'), next=ii('Scn/04')), ii('Scn/04', prev=ii('Scn/02', next=ii('Scn/06'))), ii('Scn/06', prev=ii('Scn/04'))], 
+        [ii('Scn/01', next=ii('Scn/03')), ii('Scn/03', prev=ii('Scn/01'), next=ii('Scn/05')), ii('Scn/05', prev=ii('Scn/03', next=ii('Scn/07'))), ii('Scn/07', prev=ii('Scn/05'))], 
+        [ii('Scn/08', next=ii('Scn/10')), ii('Scn/10', prev=ii('Scn/08'), next=ii('Scn/12')), ii('Scn/12', prev=ii('Scn/10'), next=ii('Scn/14')), ii('Scn/14', prev=ii('Scn/12'))], 
+        [ii('Scn/09', next=ii('Scn/11')), ii('Scn/11', prev=ii('Scn/09'), next=ii('Scn/13')), ii('Scn/13', prev=ii('Scn/11'), next=ii('Scn/15')), ii('Scn/15', prev=ii('Scn/13'))],
+    ]
+
+
+def test_load_ego_poses():
+    dataset = GroupBatchDataset(
+        name="gbd",
+        data_root=Path("/Users/rlan/work/dataset/motovis/mv4d"),
+        info_path=Path("/Users/rlan/work/dataset/motovis/mv4d/mv4d_infos.pkl"),
+        transformable_keys=["camera_images"],
+        dictionary={},
+        tensor_smith={"camera_images": DummyImgTensorSmith()},
+        transforms=[DummyTransform(scope="group")],
+        model_feeder=BaseModelFeeder(),
+        phase="val",
+        frame_interval=2,
+        batch_size=2,
+        group_size=4,
+    )
+    index_info = IndexInfo("20231101_160337", "1698825817864", prev=IndexInfo("20231101_160337", "1698825817764"), next=IndexInfo("20231101_160337", "1698825817964"))
+    ego_pose_set = dataset.load_ego_poses('ego_poses', index_info, n_prev_frames=0, n_next_frames=0)
+    assert len(ego_pose_set.transformables) == 1
+    assert ego_pose_set.transformables['0'].timestamp == "1698825817864"
+
+    ego_pose_set = dataset.load_ego_poses('ego_poses', index_info, n_prev_frames=2, n_next_frames=1)
+    assert len(ego_pose_set.transformables) == 3
+    assert ego_pose_set.transformables['-1'].timestamp == "1698825817764"
+    assert ego_pose_set.transformables['0'].timestamp == "1698825817864"
+    assert ego_pose_set.transformables['+1'].timestamp == "1698825817964"
+
+    index_info2 = IndexInfo(
+        prev=IndexInfo("20231101_160337", "1698825817764", prev=IndexInfo("20231101_160337", "1698825817664")), 
+        scene_id="20231101_160337", 
+        frame_id="1698825817864", 
+        next=IndexInfo("20231101_160337", "1698825817964", next=IndexInfo("20231101_160337", "1698825818064"))
+    )
+    ego_pose_set = dataset.load_ego_poses('ego_poses', index_info2, n_prev_frames=0, n_next_frames=0)
+    assert len(ego_pose_set.transformables) == 1
+    assert ego_pose_set.transformables['0'].timestamp == "1698825817864"
+
+    ego_pose_set = dataset.load_ego_poses('ego_poses', index_info2, n_prev_frames=2, n_next_frames=1)
+    assert len(ego_pose_set.transformables) == 4
+    assert ego_pose_set.transformables['-2'].timestamp == "1698825817664"
+    assert ego_pose_set.transformables['-1'].timestamp == "1698825817764"
+    assert ego_pose_set.transformables['0'].timestamp == "1698825817864"
+    assert ego_pose_set.transformables['+1'].timestamp == "1698825817964"
