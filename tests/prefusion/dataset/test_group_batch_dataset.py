@@ -1,8 +1,11 @@
 from pathlib import Path
+from typing import Any
 
 import pytest
 
-from prefusion.dataset.dataset import GroupBatchDataset
+from prefusion.dataset.dataset import GroupBatchDataset, GroupSampler
+from prefusion.dataset.model_feeder import BaseModelFeeder
+
 
 @pytest.fixture
 def mock_info():
@@ -12,8 +15,9 @@ def mock_info():
         "20231023_222222": {"frame_info": {"1692759621364": [1]}},
     }
 
+
 def test_prepare_indices_with_no_indices_provided(mock_info):
-    indices = GroupBatchDataset._prepare_indices(mock_info)
+    indices = GroupBatchDataset._prepare_scene_frame_inds(mock_info)
     assert indices == {
         "20230901_000000": ["20230901_000000/1692759619664", "20230901_000000/1692759619764"],
         "20231023_222222": ["20231023_222222/1692759621364"],
@@ -21,32 +25,205 @@ def test_prepare_indices_with_no_indices_provided(mock_info):
 
 
 def test_prepare_indices_with_indices_provided(mock_info):
-    indices = GroupBatchDataset._prepare_indices(mock_info, ["20230901_000000/1692759619664"])
+    indices = GroupBatchDataset._prepare_scene_frame_inds(mock_info, ["20230901_000000/1692759619664"])
     assert indices == {
         "20230901_000000": ["20230901_000000/1692759619664"],
     }
 
 
 class DummyTransform:
-    def __init__(self, scope='frame') -> None: self.scope = scope
-    def __call__(self, *transformables, **kwargs): return transformables
+    def __init__(self, scope="frame") -> None:
+        self.scope = scope
+
+    def __call__(self, *transformables, **kwargs):
+        return transformables
+
+
+class DummyImgTensorSmith:
+    def __call__(self, transformable, **kwds: Any) -> Any:
+        return {"img": transformable.img}
 
 
 def test_sample_train_groups():
     dataset = GroupBatchDataset(
-        name='gbd',
-        data_root=Path('/Users/rlan/work/dataset/motovis/mv4d'),
-        info_path=Path('/Users/rlan/work/dataset/motovis/mv4d/mv4d_infos.pkl'),
-        transformable_keys=[
-            'camera_images'
-        ],
+        name="gbd",
+        data_root=Path("/Users/rlan/work/dataset/motovis/mv4d"),
+        info_path=Path("/Users/rlan/work/dataset/motovis/mv4d/mv4d_infos.pkl"),
+        transformable_keys=["camera_images"],
         dictionary={},
-        tensor_smith={},
-        transforms=[
-            DummyTransform(scope='group')
-        ],
-        model_feeder={},
-        phase='train',
-        batch_size=1,
-        group_size=2
+        tensor_smith={"camera_images": DummyImgTensorSmith()},
+        transforms=[DummyTransform(scope="group")],
+        model_feeder=BaseModelFeeder(),
+        phase="val",
+        frame_interval=2,
+        batch_size=2,
+        group_size=4,
+        group_by_scene=False,
     )
+    gb = dataset[0]
+    b = 100
+
+
+@pytest.fixture
+def scene_frame_inds():
+    return {
+        "20231101_160337": [
+            "20231101_160337/1698825817664", # 1, 1
+            "20231101_160337/1698825817764",
+            "20231101_160337/1698825817864", # 2, 1   and 2, 0
+            "20231101_160337/1698825817964",
+            "20231101_160337/1698825818064",
+            "20231101_160337/1698825818164",
+            "20231101_160337/1698825818264", # 0, 0
+            "20231101_160337/1698825818364",
+            "20231101_160337/1698825818464",
+            "20231101_160337/1698825818564",
+            "20231101_160337/1698825818664", # 1, 0
+            "20231101_160337/1698825818764",
+            "20231101_160337/1698825818864",
+            "20231101_160337/1698825818964", # 0, 1
+            "20231101_160337/1698825819064",
+            "20231101_160337/1698825819164",
+            "20231101_160337/1698825819264",
+        ],
+        "20231101_160337_subset": [
+            "20231101_160337_subset/1698825818164",
+            "20231101_160337_subset/1698825818264",
+            "20231101_160337_subset/1698825818364",
+            "20231101_160337_subset/1698825818464",
+            "20231101_160337_subset/1698825818564",
+            "20231101_160337_subset/1698825818664",
+            "20231101_160337_subset/1698825818764",
+            "20231101_160337_subset/1698825818864",
+        ],
+        "20230823_110018": [
+            "20230823_110018/1692759640764",
+            "20230823_110018/1692759640864",
+            "20230823_110018/1692759640964",
+            "20230823_110018/1692759641064",
+            "20230823_110018/1692759641164",
+            "20230823_110018/1692759641264",
+            "20230823_110018/1692759641364",
+            "20230823_110018/1692759641464",
+            "20230823_110018/1692759641564",
+            "20230823_110018/1692759641664",
+            "20230823_110018/1692759641764",
+        ]
+    }
+
+
+def test_group_sampler_sample_train_groups_1scene(scene_frame_inds):
+    _scene_frame_inds = {sid: values for sid, values in scene_frame_inds.items() if sid == "20231101_160337"}
+    gbs = GroupSampler(_scene_frame_inds, group_size=4, frame_interval=1, seed=42)
+    assert gbs.sample_train_groups() == [ 
+        [ "20231101_160337/1698825817764", "20231101_160337/1698825817864", "20231101_160337/1698825817964", "20231101_160337/1698825818064", ], 
+        [ "20231101_160337/1698825818564", "20231101_160337/1698825818664", "20231101_160337/1698825818764", "20231101_160337/1698825818864", ], 
+        [ "20231101_160337/1698825818964", "20231101_160337/1698825819064", "20231101_160337/1698825819164", "20231101_160337/1698825819264", ], 
+        [ "20231101_160337/1698825818164", "20231101_160337/1698825818264", "20231101_160337/1698825818364", "20231101_160337/1698825818464", ], 
+        [ "20231101_160337/1698825817664", "20231101_160337/1698825817764", "20231101_160337/1698825817864", "20231101_160337/1698825817964", ], 
+    ]
+
+def test_group_sampler_sample_train_groups_more_scenes(scene_frame_inds):
+    gbs = GroupSampler(scene_frame_inds, group_size=4, frame_interval=1, seed=42)
+    assert gbs.sample_train_groups() == [
+        [ "20230823_110018/1692759641064", "20230823_110018/1692759641164", "20230823_110018/1692759641264", "20230823_110018/1692759641364", ],
+        [ "20231101_160337_subset/1698825818564", "20231101_160337_subset/1698825818664", "20231101_160337_subset/1698825818764", "20231101_160337_subset/1698825818864", ],
+        [ "20230823_110018/1692759640764", "20230823_110018/1692759640864", "20230823_110018/1692759640964", "20230823_110018/1692759641064", ],
+        [ "20231101_160337/1698825817664", "20231101_160337/1698825817764", "20231101_160337/1698825817864", "20231101_160337/1698825817964", ],
+        [ "20231101_160337/1698825818964", "20231101_160337/1698825819064", "20231101_160337/1698825819164", "20231101_160337/1698825819264", ],
+        [ "20231101_160337_subset/1698825818264", "20231101_160337_subset/1698825818364", "20231101_160337_subset/1698825818464", "20231101_160337_subset/1698825818564", ],
+        [ "20231101_160337_subset/1698825818164", "20231101_160337_subset/1698825818264", "20231101_160337_subset/1698825818364", "20231101_160337_subset/1698825818464", ],
+        [ "20231101_160337/1698825817764", "20231101_160337/1698825817864", "20231101_160337/1698825817964", "20231101_160337/1698825818064", ],
+        [ "20231101_160337/1698825818164", "20231101_160337/1698825818264", "20231101_160337/1698825818364", "20231101_160337/1698825818464", ],
+        [ "20230823_110018/1692759641464", "20230823_110018/1692759641564", "20230823_110018/1692759641664", "20230823_110018/1692759641764", ],
+        [ "20231101_160337/1698825818564", "20231101_160337/1698825818664", "20231101_160337/1698825818764", "20231101_160337/1698825818864", ],
+    ]
+
+
+def test_group_sampler_sample_val_groups_1scene(scene_frame_inds):
+    _scene_frame_inds = {sid: values for sid, values in scene_frame_inds.items() if sid == "20231101_160337"}
+    gbs = GroupSampler(_scene_frame_inds, group_size=4, frame_interval=1, seed=42)
+    assert gbs.sample_val_groups() == [
+        [ "20231101_160337/1698825817664", "20231101_160337/1698825817764", "20231101_160337/1698825817864", "20231101_160337/1698825817964", ],
+        [ "20231101_160337/1698825818064", "20231101_160337/1698825818164", "20231101_160337/1698825818264", "20231101_160337/1698825818364", ],
+        [ "20231101_160337/1698825818464", "20231101_160337/1698825818564", "20231101_160337/1698825818664", "20231101_160337/1698825818764", ],
+        [ "20231101_160337/1698825818864", "20231101_160337/1698825818964", "20231101_160337/1698825819064", "20231101_160337/1698825819164", ],
+        [ "20231101_160337/1698825818964", "20231101_160337/1698825819064", "20231101_160337/1698825819164", "20231101_160337/1698825819264", ],
+    ]
+
+def test_group_sampler_sample_val_groups_frm_intvl1_simple():
+    _scene_frame_inds = {"Scn": [f"Scn/{i:02}" for i in range(17)]}
+    gbs = GroupSampler(_scene_frame_inds, group_size=4, frame_interval=1, seed=42)
+    assert gbs.sample_val_groups() == [
+        ['Scn/00', 'Scn/01', 'Scn/02', 'Scn/03'], 
+        ['Scn/04', 'Scn/05', 'Scn/06', 'Scn/07'], 
+        ['Scn/08', 'Scn/09', 'Scn/10', 'Scn/11'], 
+        ['Scn/12', 'Scn/13', 'Scn/14', 'Scn/15'],
+        ['Scn/13', 'Scn/14', 'Scn/15', 'Scn/16'],
+    ]
+
+def test_group_sampler_sample_val_groups_frm_intvl2_simple():
+    _scene_frame_inds = {"Scn": [f"Scn/{i:02}" for i in range(17)]}
+    gbs = GroupSampler(_scene_frame_inds, group_size=4, frame_interval=2, seed=42)
+    assert gbs.sample_val_groups() == [
+        ['Scn/00', 'Scn/02', 'Scn/04', 'Scn/06'], 
+        ['Scn/01', 'Scn/03', 'Scn/05', 'Scn/07'], 
+        ['Scn/08', 'Scn/10', 'Scn/12', 'Scn/14'], 
+        ['Scn/09', 'Scn/11', 'Scn/13', 'Scn/15'],
+    ]
+
+
+def test_group_sampler_sample_val_groups_frm_intvl2_grp_intvl_just_fit():
+    _scene_frame_inds = {"Scn": [f"Scn/{i:02}" for i in range(20)]}
+    gbs = GroupSampler(_scene_frame_inds, group_size=10, frame_interval=2, seed=42)
+    assert gbs.sample_val_groups() == [
+        ['Scn/00', 'Scn/02', 'Scn/04', 'Scn/06', 'Scn/08', 'Scn/10', 'Scn/12', 'Scn/14', 'Scn/16', 'Scn/20'], 
+        ['Scn/01', 'Scn/03', 'Scn/05', 'Scn/07', 'Scn/09', 'Scn/11', 'Scn/13', 'Scn/15', 'Scn/17', 'Scn/19'], 
+    ]
+
+
+def test_group_sampler_sample_val_groups_frm_intvl2_grp_intvl_too_large():
+    _scene_frame_inds = {"Scn": [f"Scn/{i:02}" for i in range(20)]}
+    gbs = GroupSampler(_scene_frame_inds, group_size=10, frame_interval=2, seed=42)
+    assert gbs.sample_val_groups() == [
+        ['Scn/00', 'Scn/02', 'Scn/04', 'Scn/06', 'Scn/08', 'Scn/10', 'Scn/12', 'Scn/14', 'Scn/16', 'Scn/20'], 
+        ['Scn/01', 'Scn/03', 'Scn/05', 'Scn/07', 'Scn/09', 'Scn/11', 'Scn/13', 'Scn/15', 'Scn/17', 'Scn/19'], 
+    ]
+
+
+def test_group_sampler_sample_val_groups_frm_intvl2(scene_frame_inds):
+    _scene_frame_inds = {sid: values for sid, values in scene_frame_inds.items() if sid == "20231101_160337"}
+    gbs = GroupSampler(_scene_frame_inds, group_size=4, frame_interval=2, seed=42)
+    assert gbs.sample_val_groups() == [
+        ['20231101_160337/1698825817664', '20231101_160337/1698825817864', '20231101_160337/1698825818064', '20231101_160337/1698825818264'], 
+        ['20231101_160337/1698825817764', '20231101_160337/1698825817964', '20231101_160337/1698825818164', '20231101_160337/1698825818364'], 
+        ['20231101_160337/1698825818464', '20231101_160337/1698825818664', '20231101_160337/1698825818864', '20231101_160337/1698825819064'], 
+        ['20231101_160337/1698825818564', '20231101_160337/1698825818764', '20231101_160337/1698825818964', '20231101_160337/1698825819164']
+    ]
+
+
+def test_group_sampler_sample_val_groups_frm_intvl2_grp_sz10(scene_frame_inds):
+    _scene_frame_inds = {sid: values for sid, values in scene_frame_inds.items() if sid == "20231101_160337"}
+    gbs = GroupSampler(_scene_frame_inds, group_size=10, frame_interval=2, seed=42)
+
+    # 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
+    # group_interval = 20
+    
+    # 0,0,2,4,6,8,10,12,14,16
+    # 1,1,1,3,5,7,9,11,13,15
+
+    assert gbs.sample_val_groups() == [
+        [ "20231101_160337/1698825817664", "20231101_160337/1698825817764", "20231101_160337/1698825817864", "20231101_160337/1698825817964", ],
+        [ "20231101_160337/1698825818064", "20231101_160337/1698825818164", "20231101_160337/1698825818264", "20231101_160337/1698825818364", ],
+        [ "20231101_160337/1698825818464", "20231101_160337/1698825818564", "20231101_160337/1698825818664", "20231101_160337/1698825818764", ],
+        [ "20231101_160337/1698825818864", "20231101_160337/1698825818964", "20231101_160337/1698825819064", "20231101_160337/1698825819164", ],
+        [ "20231101_160337/1698825818964", "20231101_160337/1698825819064", "20231101_160337/1698825819164", "20231101_160337/1698825819264", ],
+    ]
+
+def test_group_sampler_sample_scene_groups(scene_frame_inds):
+    gbs = GroupSampler(scene_frame_inds, group_size=4, frame_interval=1, seed=42)
+    assert gbs.sample_scene_groups() == [
+        [ "20231101_160337/1698825817664", "20231101_160337/1698825817764", "20231101_160337/1698825817864", "20231101_160337/1698825817964", "20231101_160337/1698825818064", "20231101_160337/1698825818164", "20231101_160337/1698825818264", "20231101_160337/1698825818364", "20231101_160337/1698825818464", "20231101_160337/1698825818564", "20231101_160337/1698825818664", "20231101_160337/1698825818764", "20231101_160337/1698825818864", "20231101_160337/1698825818964", "20231101_160337/1698825819064", "20231101_160337/1698825819164", "20231101_160337/1698825819264", ],
+        [ "20231101_160337_subset/1698825818164", "20231101_160337_subset/1698825818264", "20231101_160337_subset/1698825818364", "20231101_160337_subset/1698825818464", "20231101_160337_subset/1698825818564", "20231101_160337_subset/1698825818664", "20231101_160337_subset/1698825818764", "20231101_160337_subset/1698825818864", ],
+        [ "20230823_110018/1692759640764", "20230823_110018/1692759640864", "20230823_110018/1692759640964", "20230823_110018/1692759641064", "20230823_110018/1692759641164", "20230823_110018/1692759641264", "20230823_110018/1692759641364", "20230823_110018/1692759641464", "20230823_110018/1692759641564", "20230823_110018/1692759641664", "20230823_110018/1692759641764", ]
+    ]
