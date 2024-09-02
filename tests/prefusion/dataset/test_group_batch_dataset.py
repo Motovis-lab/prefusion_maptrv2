@@ -162,24 +162,19 @@ def test_generate_groups_static_method_4b():
 
 
 def test_generate_groups_static_method_5():
-    groups = generate_groups(16, 10, 2, start_ind=0)
+    groups = generate_groups(16, 10, 2, start_ind=0, pad_mode='both')
     answer = np.array(
-        [[0, 2, 4, 6, 8, 10, 12, 14],
-        [1, 3, 5, 7, 9, 11, 13, 15]]
+        [[ 0,  0,  2,  4,  6,  8, 10, 12, 14, 15],
+         [ 0,  1,  3,  5,  7,  9, 11, 13, 15, 15]]
     )
     np.testing.assert_almost_equal(groups, answer)
 
 
 def test_generate_groups_static_method_6():
-    groups = generate_groups(17, 20, 5, start_ind=0)
+    groups = generate_groups(17, 20, 2, start_ind=0, pad_mode='prev')
     answer = np.array(
-        [[ 0,  5, 10],
-        [ 1,  6, 11],
-        [ 2,  7, 12],
-        [ 3,  8, 13],
-        [ 4,  9, 14],
-        [ 5, 10, 15],
-        [ 6, 11, 16]]
+        [[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 5, 7,  9, 11, 13, 15],
+         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 4, 6, 8, 10, 12, 14, 16]]
     )
     np.testing.assert_almost_equal(groups, answer)
 

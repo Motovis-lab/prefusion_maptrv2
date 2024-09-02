@@ -61,7 +61,8 @@ def generate_groups(
     frame_interval: int, 
     start_ind: int = 0, 
     random_start_ind: bool = False, 
-    seed: int = None
+    pad_mode: str = 'prev',
+    seed: int = None,
 ) -> List[Tuple[int]]:
     """
     Generate groups of frames from a single scene.
@@ -78,6 +79,8 @@ def generate_groups(
         The starting index of the first group. Default is 0.
     random_start_ind : bool, optional
         If True, randomly select the starting index of the first group. Default is False.
+    pad_mode : str, optional, choices=['prev', 'post', 'both'], default='prev'
+        The padding mode for the last group. Default is 'prev'.
 
     Returns
     -------
@@ -96,19 +99,28 @@ def generate_groups(
         random.seed(seed)
 
     group_inds = np.arange(tot_num_frames)
-    # recompute group_size
-    max_group_size = min(tot_num_frames, group_size * frame_interval) // frame_interval
-    group_interval = max_group_size * frame_interval
+    # fill up group_inds if group_interval > group_size
+    group_interval = group_size * frame_interval
+    if group_interval > tot_num_frames:
+        out_of_bound = group_interval - tot_num_frames
+        if pad_mode in ['prev']:
+            group_inds = np.insert(group_inds, 0, [0, ] * out_of_bound)
+        elif pad_mode in ['post']:
+            group_inds = np.append(group_inds, [tot_num_frames - 1, ] * out_of_bound)
+        elif pad_mode in ['both']:
+            out_of_bound_prev = out_of_bound // 2
+            out_of_bound_post = out_of_bound - out_of_bound_prev
+            group_inds = np.insert(group_inds, 0, [0, ] * out_of_bound_prev)
+            group_inds = np.append(group_inds, [tot_num_frames - 1, ] * out_of_bound_post)
+
+    group_length = len(group_inds)
 
     if random_start_ind:
         start_ind = random.randint(0, group_interval - 1)
     assert start_ind >= 0 and start_ind < group_interval
     # get splits
     splits = group_inds[start_ind::group_interval]
-    # if the tail equals to tot_num_frames, remove it, since it will be added later
-    if splits[-1] == tot_num_frames:
-        splits = splits[:-1]
-        # insert a start_ind < 0
+    # insert a start_ind < 0
     if splits[0] > 0:
         splits = np.insert(splits, 0, splits[0] - group_interval)
     # append a tail, end_ind
@@ -119,10 +131,10 @@ def generate_groups(
         if start < 0:
             start = 0
             end = group_interval
-        if end >= tot_num_frames:
-            end = tot_num_frames
-            start = tot_num_frames - group_interval
-        ind_list = group_inds[start:end].reshape(max_group_size, frame_interval).T
+        if end >= group_length:
+            end = group_length
+            start = group_length - group_interval
+        ind_list = group_inds[start:end].reshape(group_size, frame_interval).T
         ind_lists.extend(ind_list.tolist())
     # sometimes the ind_list may be dumplicated, so add a unique operation
     return np.unique(ind_lists, axis=0)
