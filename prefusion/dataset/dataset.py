@@ -3,7 +3,7 @@
 import os
 import random
 from pathlib import Path
-from typing import List, Tuple, Dict, Union, TYPE_CHECKING
+from typing import List, Tuple, Dict, Union, TYPE_CHECKING, Sequence
 from collections import defaultdict
 
 import mmcv
@@ -176,10 +176,29 @@ class IndexInfo:
 
 
 class GroupSampler:
-    def __init__(self, scene_frame_inds: Dict[str, List[str]], group_size: int, frame_interval: int = 1, seed: int = None):
+    def __init__(self, scene_frame_inds: Dict[str, List[str]], group_size: int | Tuple[int], frame_interval: int | Tuple[int] = 1, seed: int = None):
+        """Sample groups
+
+        Parameters
+        ----------
+        scene_frame_inds : Dict[str, List[str]]
+            e.g. {
+              "20231101_160337": [ "20231101_160337/1698825817664", "20231101_160337/1698825817764"],
+              "20230823_110018": [ "20230823_110018/1692759640764", "20230823_110018/1692759640864"],
+              ...
+            }
+        group_size : int | Tuple[int]
+            if int, will always use this value as group_size;
+            if Tuple[int], during train phase, will random pick a value as the group_size for a given epoch.
+        frame_interval : int | Tuple[int], optional
+            if int, will always use this value as frame_interval;
+            if Tuple[int], during train phase, will random pick a value as the frame_interval for a given epoch.
+        seed : int, optional
+            random seed for randomization operations.
+        """
         self.scene_frame_inds = scene_frame_inds
-        self.group_size = group_size
-        self.frame_interval = frame_interval
+        self.group_size = [group_size] if isinstance(group_size, int) else group_size
+        self.frame_interval = [frame_interval] if isinstance(frame_interval, int) else frame_interval
         self.seed = seed
 
     def sample(self, phase: str, output_str_index: bool = False) -> List[List[IndexInfo]]:
@@ -207,12 +226,15 @@ class GroupSampler:
             index_info_groups.append(index_info_grp)
         return index_info_groups
 
-
     def sample_train_groups(self) -> List[List[str]]:
-        return self._generate_groups(random_start_ind=True, shuffle=True, seed=self.seed)
+        if self.seed:
+            random.seed(self.seed)
+        _group_size = random.choice(self.group_size)
+        _frame_interval = random.choice(self.frame_interval)
+        return self._generate_groups(_group_size, _frame_interval, random_start_ind=True, shuffle=True, seed=self.seed)
 
     def sample_val_groups(self) -> List[List[str]]:
-        return self._generate_groups(start_ind=0, random_start_ind=False, shuffle=False)
+        return self._generate_groups(self.group_size[0], self.frame_interval[0], start_ind=0, random_start_ind=False, shuffle=False)
 
     def sample_scene_groups(self) -> List[List[str]]:
         return list(self.scene_frame_inds.values())
@@ -223,10 +245,18 @@ class GroupSampler:
     def sample_groups_by_meta_info(self):
         raise NotImplementedError
     
-    def _generate_groups(self, start_ind: int = 0, random_start_ind: bool = False, shuffle: bool = False, seed: int = None) -> List[List[str]]:
+    def _generate_groups(
+        self, 
+        group_size: int, 
+        frame_interval: int, 
+        start_ind: int = 0, 
+        random_start_ind: bool = False, 
+        shuffle: bool = False, 
+        seed: int = None
+    ) -> List[List[str]]:
         all_groups = []
         for _, frame_ids in self.scene_frame_inds.items():
-            inds_list = generate_groups(len(frame_ids), self.group_size, self.frame_interval, start_ind=start_ind, random_start_ind=random_start_ind, seed=seed)
+            inds_list = generate_groups(len(frame_ids), group_size, frame_interval, start_ind=start_ind, random_start_ind=random_start_ind, seed=seed)
             groups = [[frame_ids[i] for i in inds] for inds in inds_list]
             all_groups.extend(groups)
         if shuffle:
@@ -276,8 +306,8 @@ class GroupBatchDataset(Dataset):
         indices_path: Union[str, Path] = None,
         batch_size: int = 1,
         drop_last: bool = False,
-        group_size: int = 3,
-        frame_interval: int = 1,  # TODO: redefine it by time, like seconds
+        group_size: int | Tuple[int] = 3,
+        frame_interval: int | Tuple[int] = 1,  # TODO: redefine it by time, like seconds
         group_backtime_prob: float = 0.0,
         seed_dataset: int = None,
     ):
@@ -339,24 +369,13 @@ class GroupBatchDataset(Dataset):
 
         self.batch_size = batch_size
         self.drop_last = drop_last
-        self.group_size = self._ensure_single_value(group_size)
-        self.frame_interval = self._ensure_single_value(frame_interval)
         self.group_backtime_prob = group_backtime_prob
 
         self.seed_dataset = seed_dataset
         self.model_feeder = model_feeder
         self.tensor_smith = tensor_smith
-        self.group_sampler = GroupSampler(self.scene_frame_inds, self.group_size, self.frame_interval, seed=seed_dataset)
+        self.group_sampler = GroupSampler(self.scene_frame_inds, group_size, frame_interval, seed=seed_dataset)
         self.groups = self.group_sampler.sample(self.phase, output_str_index=False)
-
-    @staticmethod
-    def _ensure_single_value(value_or_values: Union[int, list, tuple], seed: int = None) -> int:
-        if seed:
-            random.seed(seed)
-        if type(value_or_values) in [list, tuple]:
-            return random.choice(value_or_values)
-        return value_or_values
-
 
     @classmethod
     def _assert_availability(cls, keys: List[str]) -> None:
@@ -394,8 +413,8 @@ class GroupBatchDataset(Dataset):
                 f"    num_groups={len(self.groups)}, \n"
                 f"    phase={self.phase}, \n"
                 f"    batch_size={self.batch_size}, \n"
-                f"    group_size={self.group_size}, \n"
-                f"    frame_interval={self.frame_interval}, \n"
+                f"    group_size={self.group_sampler.group_size}, \n"
+                f"    frame_interval={self.group_sampler.frame_interval}, \n"
                 f"    group_backtime_prob={self.group_backtime_prob}\n)",
             ]
         )

@@ -339,8 +339,8 @@ def test_group_sampler_convert_groups_to_info():
 def test_load_ego_poses():
     dataset = GroupBatchDataset(
         name="gbd",
-        data_root=Path("/Users/rlan/work/dataset/motovis/mv4d"),
-        info_path=Path("/Users/rlan/work/dataset/motovis/mv4d/mv4d_infos.pkl"),
+        data_root=Path("tests/prefusion/dataset"),
+        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl"),
         transformable_keys=["camera_images"],
         dictionary={},
         tensor_smith={"camera_images": DummyImgTensorSmith()},
