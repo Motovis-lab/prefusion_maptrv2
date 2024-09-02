@@ -61,7 +61,7 @@ def generate_groups(
     frame_interval: int, 
     start_ind: int = 0, 
     random_start_ind: bool = False, 
-    pad_mode: str = 'prev',
+    pad_mode: str = 'both',
     seed: int = None,
 ) -> List[Tuple[int]]:
     """
