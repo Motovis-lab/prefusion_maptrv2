@@ -980,6 +980,38 @@ class ParkingSlot3D(Polyline3D):
         return self
 
 
+class Pose(SpatialTransformable):
+    def __init__(self, timestamp: str, rotation: np.ndarray, translation: np.ndarray, tensor_smith: "TensorSmith" = None):
+        """The pose in 3D space of a given timestamp. 
+
+        Parameters
+        ----------
+        timestamp : str
+            corresponding timestamp of the pose
+        rotation : np.ndarray
+            rotation matrix, of shape (3, 3)
+        translation : np.ndarray
+            translation vector, of shape (1, 3)
+        tensor_smith : TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
+        """
+        super().__init__()
+        self.timestamp = timestamp
+        self.rotation = rotation
+        self.translation = translation
+        self.tensor_smith = tensor_smith
+
+    def flip_3d(self, **kwargs):
+        raise NotImplementedError
+    
+    def rotate_3d(self, **kwargs):
+        raise NotImplementedError
+
+
+class PoseSet(TransformableSet):
+    transformable_cls = Pose
+
+
 
 class Trajectory(SpatialTransformable):
     def __init__(self, trajectories: List[List[Tuple[np.ndarray, np.ndarray]]], tensor_smith: "TensorSmith" = None):

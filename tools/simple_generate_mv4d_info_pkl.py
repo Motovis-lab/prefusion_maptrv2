@@ -8,6 +8,7 @@ from loguru import logger
 from easydict import EasyDict as edict
 from copious.io.fs import parent_ensured_path, read_yaml, read_json, write_pickle
 from copious.io.parallelism import maybe_multithreading
+from copious.cv.geometry import xyzq2mat
 
 
 def main(args):
@@ -68,16 +69,32 @@ def prepare_depth_mode(scene_root: Path) -> Dict:
     return {p.stem: "d" for p in (scene_root / "camera").iterdir()}
 
 
+def prepare_ego_poses(scene_root: Path) -> Dict[int, np.ndarray]:
+    trajectory = np.loadtxt(scene_root / "trajectory.txt")
+    poses = {}
+    for t, *xyzq in trajectory:
+        mat = xyzq2mat(*xyzq)
+        poses[int(t)] = (mat[:3, :3], mat[:3, 3])
+    return poses
+
+
 def prepare_all_frame_infos(scene_root: Path, num_workers: int = 0) -> Dict:
     common_ts = read_common_ts(scene_root)
+
+    # FIXME: Temprary code, need to remove
+    # common_ts = [ts for ts in common_ts if ts <= 1698825819264]
+    # FIXME: Temprary code, need to remove
+
     frame_infos = {}
     data_args = [(scene_root, ts) for ts in common_ts]
     res = maybe_multithreading(prepare_object_info, data_args, num_threads=num_workers, use_tqdm=True)
+    ego_poses = prepare_ego_poses(scene_root)
     for ts, (boxes, polylines) in zip(common_ts, res):
         frame_infos[str(ts)] = {  # convert to str to make it align with the design
             "camera_image": prepare_camera_image_paths(scene_root, ts),
             "3d_boxes": boxes,
             "3d_polylines": polylines,
+            "ego_pose": ego_poses[ts],
             "timestamp_window": [None],  # TODO: populate previous N frames info (window size is time_range)
         }
     return frame_infos
