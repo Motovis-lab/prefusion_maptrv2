@@ -4,6 +4,9 @@ import torch.nn as nn
 
 from functools import reduce
 
+from torch import Tensor
+from typing import Union, List, Dict, Optional
+
 from mmengine.registry import MODELS
 from mmengine.model import BaseDataPreprocessor, BaseModel, BaseModule
 
@@ -218,6 +221,15 @@ class VoxelHead(BaseModule):
         self.voxel_feature_config = voxel_feature_config
     
     def forward(curr_feats, prev_feats):
+        """_summary_
+
+        Parameters
+        ----------
+        curr_feats : _type_
+            _description_
+        prev_feats : _type_
+            _description_
+        """
         '''
         prev_feats: time-aligned history hidden features
         will output hidden features
