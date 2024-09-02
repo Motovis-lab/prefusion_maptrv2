@@ -56,7 +56,7 @@ GroupBatch = List[List[Dict]]
 
 
 def generate_groups(
-    tot_num_frames: int, 
+    total_num_frames: int, 
     group_size: int, 
     frame_interval: int, 
     start_ind: int = 0, 
@@ -69,7 +69,7 @@ def generate_groups(
 
     Parameters
     ----------
-    tot_num_frames : int
+    total_num_frames : int
         The total number of frames in the scene.
     group_size : int
         The number of frames in each group.
@@ -90,36 +90,36 @@ def generate_groups(
     Notes
     -----
     - `group_interval = group_size * frame_interval`
-    - `group_interval <= tot_num_frames` 
+    - `group_interval <= total_num_frames` 
     - `start_ind` should be assigned between `[0, group_interval - 1]`
     - When the `start_ind > 0`, we should insert a group including `[0, start_ind)`
-    - If the tail of the group, aka `end_ind`, is bigger than `tot_num_frames - 1`, we should append a group including `(end_ind, tot_num_frames]`
+    - If the tail of the group, aka `end_ind`, is bigger than `total_num_frames - 1`, we should append a group including `(end_ind, total_num_frames]`
     """
     if seed:
         random.seed(seed)
 
-    group_inds = np.arange(tot_num_frames)
-    # fill up group_inds if group_interval > group_size
+    total_frame_inds = np.arange(total_num_frames)
+    # fill up total_frame_inds if group_interval > group_size
     group_interval = group_size * frame_interval
-    if group_interval > tot_num_frames:
-        out_of_bound = group_interval - tot_num_frames
+    if group_interval > total_num_frames:
+        out_of_bound = group_interval - total_num_frames
         if pad_mode in ['prev']:
-            group_inds = np.insert(group_inds, 0, [0, ] * out_of_bound)
+            total_frame_inds = np.insert(total_frame_inds, 0, [0, ] * out_of_bound)
         elif pad_mode in ['post']:
-            group_inds = np.append(group_inds, [tot_num_frames - 1, ] * out_of_bound)
+            total_frame_inds = np.append(total_frame_inds, [total_num_frames - 1, ] * out_of_bound)
         elif pad_mode in ['both']:
             out_of_bound_prev = out_of_bound // 2
             out_of_bound_post = out_of_bound - out_of_bound_prev
-            group_inds = np.insert(group_inds, 0, [0, ] * out_of_bound_prev)
-            group_inds = np.append(group_inds, [tot_num_frames - 1, ] * out_of_bound_post)
+            total_frame_inds = np.insert(total_frame_inds, 0, [0, ] * out_of_bound_prev)
+            total_frame_inds = np.append(total_frame_inds, [total_num_frames - 1, ] * out_of_bound_post)
 
-    group_length = len(group_inds)
+    total_num_frames_padded = len(total_frame_inds)
 
     if random_start_ind:
         start_ind = random.randint(0, group_interval - 1)
     assert start_ind >= 0 and start_ind < group_interval
     # get splits
-    splits = group_inds[start_ind::group_interval]
+    splits = total_frame_inds[start_ind::group_interval]
     # insert a start_ind < 0
     if splits[0] > 0:
         splits = np.insert(splits, 0, splits[0] - group_interval)
@@ -131,12 +131,12 @@ def generate_groups(
         if start < 0:
             start = 0
             end = group_interval
-        if end >= group_length:
-            end = group_length
-            start = group_length - group_interval
-        ind_list = group_inds[start:end].reshape(group_size, frame_interval).T
+        if end >= total_num_frames_padded:
+            end = total_num_frames_padded
+            start = total_num_frames_padded - group_interval
+        ind_list = total_frame_inds[start:end].reshape(group_size, frame_interval).T
         ind_lists.extend(ind_list.tolist())
-    # sometimes the ind_list may be dumplicated, so add a unique operation
+    # sometimes the ind_list may be duplicated, so add a unique operation
     return np.unique(ind_lists, axis=0)
 
 
