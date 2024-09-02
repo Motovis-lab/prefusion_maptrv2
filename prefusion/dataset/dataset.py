@@ -56,76 +56,76 @@ GroupBatch = List[List[Dict]]
 
 
 def generate_groups(
-        tot_num_frames: int, 
-        group_size: int, 
-        frame_interval: int, 
-        start_ind: int = 0, 
-        random_start_ind: bool = False, 
-        seed: int = None
-    ) -> List[Tuple[int]]:
-        """
-        Generate groups of frames from a single scene.
+    tot_num_frames: int, 
+    group_size: int, 
+    frame_interval: int, 
+    start_ind: int = 0, 
+    random_start_ind: bool = False, 
+    seed: int = None
+) -> List[Tuple[int]]:
+    """
+    Generate groups of frames from a single scene.
 
-        Parameters
-        ----------
-        tot_num_frames : int
-            The total number of frames in the scene.
-        group_size : int
-            The number of frames in each group.
-        frame_interval : int
-            The interval between frames in each group.
-        start_ind : int, optional
-            The starting index of the first group. Default is 0.
-        random_start_ind : bool, optional
-            If True, randomly select the starting index of the first group. Default is False.
+    Parameters
+    ----------
+    tot_num_frames : int
+        The total number of frames in the scene.
+    group_size : int
+        The number of frames in each group.
+    frame_interval : int
+        The interval between frames in each group.
+    start_ind : int, optional
+        The starting index of the first group. Default is 0.
+    random_start_ind : bool, optional
+        If True, randomly select the starting index of the first group. Default is False.
 
-        Returns
-        -------
-        groups : list of tuples
-            A list of tuples, where each tuple represents a group of frames.
+    Returns
+    -------
+    groups : list of tuples
+        A list of tuples, where each tuple represents a group of frames.
 
-        Notes
-        -----
-        - `group_interval = group_size * frame_interval`
-        - `group_interval <= tot_num_frames` 
-        - `start_ind` should be assigned between `[0, group_interval - 1]`
-        - When the `start_ind > 0`, we should insert a group including `[0, start_ind)`
-        - If the tail of the group, aka `end_ind`, is bigger than `tot_num_frames - 1`, we should append a group including `(end_ind, tot_num_frames]`
-        """
-        if seed:
-            random.seed(seed)
+    Notes
+    -----
+    - `group_interval = group_size * frame_interval`
+    - `group_interval <= tot_num_frames` 
+    - `start_ind` should be assigned between `[0, group_interval - 1]`
+    - When the `start_ind > 0`, we should insert a group including `[0, start_ind)`
+    - If the tail of the group, aka `end_ind`, is bigger than `tot_num_frames - 1`, we should append a group including `(end_ind, tot_num_frames]`
+    """
+    if seed:
+        random.seed(seed)
 
-        group_inds = np.arange(tot_num_frames)
-        # recompute group_size
-        max_group_size = min(tot_num_frames, group_size * frame_interval) // frame_interval
-        group_interval = max_group_size * frame_interval
+    group_inds = np.arange(tot_num_frames)
+    # recompute group_size
+    max_group_size = min(tot_num_frames, group_size * frame_interval) // frame_interval
+    group_interval = max_group_size * frame_interval
 
-        if random_start_ind:
-            start_ind = random.randint(0, group_interval - 1)
-        assert start_ind >= 0 and start_ind < group_interval
-        # get splits
-        splits = group_inds[start_ind::group_interval]
-        # if the tail equals to tot_num_frames, remove it, since it will be added later
-        if splits[-1] == tot_num_frames:
-            splits = splits[:-1]
-            # insert a start_ind < 0
-        if splits[0] > 0:
-            splits = np.insert(splits, 0, splits[0] - group_interval)
-        # append a tail, end_ind
-        splits = np.append(splits, splits[-1] + group_interval)
+    if random_start_ind:
+        start_ind = random.randint(0, group_interval - 1)
+    assert start_ind >= 0 and start_ind < group_interval
+    # get splits
+    splits = group_inds[start_ind::group_interval]
+    # if the tail equals to tot_num_frames, remove it, since it will be added later
+    if splits[-1] == tot_num_frames:
+        splits = splits[:-1]
+        # insert a start_ind < 0
+    if splits[0] > 0:
+        splits = np.insert(splits, 0, splits[0] - group_interval)
+    # append a tail, end_ind
+    splits = np.append(splits, splits[-1] + group_interval)
 
-        ind_lists = []
-        for start, end in zip(splits[:-1], splits[1:]):
-            if start < 0:
-                start = 0
-                end = group_interval
-            if end >= tot_num_frames:
-                end = tot_num_frames
-                start = tot_num_frames - group_interval
-            ind_list = group_inds[start:end].reshape(max_group_size, frame_interval).T
-            ind_lists.extend(ind_list.tolist())
-        # sometimes the ind_list may be dumplicated, so add a unique operation
-        return np.unique(ind_lists, axis=0)
+    ind_lists = []
+    for start, end in zip(splits[:-1], splits[1:]):
+        if start < 0:
+            start = 0
+            end = group_interval
+        if end >= tot_num_frames:
+            end = tot_num_frames
+            start = tot_num_frames - group_interval
+        ind_list = group_inds[start:end].reshape(max_group_size, frame_interval).T
+        ind_lists.extend(ind_list.tolist())
+    # sometimes the ind_list may be dumplicated, so add a unique operation
+    return np.unique(ind_lists, axis=0)
 
 
 class IndexInfo:
