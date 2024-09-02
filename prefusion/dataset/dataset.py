@@ -194,7 +194,7 @@ class GroupSampler:
             if int, will always use this value as frame_interval;
             if Tuple[int], during train phase, will random pick a value as the frame_interval for a given epoch.
         seed : int, optional
-            random seed for randomization operations.
+            Random seed for randomization operations. It's usually for testing and debugging purpose.
         """
         self.scene_frame_inds = scene_frame_inds
         self.group_size = [group_size] if isinstance(group_size, int) else group_size
@@ -227,14 +227,12 @@ class GroupSampler:
         return index_info_groups
 
     def sample_train_groups(self) -> List[List[str]]:
-        if self.seed:
-            random.seed(self.seed)
+        if self.seed: random.seed(self.seed)
         _group_size = random.choice(self.group_size)
-        _frame_interval = random.choice(self.frame_interval)
-        return self._generate_groups(_group_size, _frame_interval, random_start_ind=True, shuffle=True, seed=self.seed)
+        return self._generate_groups(_group_size, random_start_ind=True, shuffle=True, seed=self.seed)
 
     def sample_val_groups(self) -> List[List[str]]:
-        return self._generate_groups(self.group_size[0], self.frame_interval[0], start_ind=0, random_start_ind=False, shuffle=False)
+        return self._generate_groups(self.group_size[0], frame_interval=self.frame_interval[0], start_ind=0, random_start_ind=False, shuffle=False)
 
     def sample_scene_groups(self) -> List[List[str]]:
         return list(self.scene_frame_inds.values())
@@ -248,7 +246,7 @@ class GroupSampler:
     def _generate_groups(
         self, 
         group_size: int, 
-        frame_interval: int, 
+        frame_interval: int = None, 
         start_ind: int = 0, 
         random_start_ind: bool = False, 
         shuffle: bool = False, 
@@ -256,10 +254,14 @@ class GroupSampler:
     ) -> List[List[str]]:
         all_groups = []
         for _, frame_ids in self.scene_frame_inds.items():
+            if not frame_interval:
+                if self.seed: random.seed(self.seed)
+                frame_interval = random.choice(self.frame_interval)
             inds_list = generate_groups(len(frame_ids), group_size, frame_interval, start_ind=start_ind, random_start_ind=random_start_ind, seed=seed)
             groups = [[frame_ids[i] for i in inds] for inds in inds_list]
             all_groups.extend(groups)
         if shuffle:
+            if self.seed: random.seed(self.seed)
             random.shuffle(all_groups)
         return all_groups
 
