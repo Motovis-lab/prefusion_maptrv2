@@ -194,11 +194,13 @@ class GroupSampler:
         Parameters
         ----------
         scene_frame_inds : Dict[str, List[str]]
-            e.g. {
+            e.g.  
+            ```
+            {
               "20231101_160337": [ "20231101_160337/1698825817664", "20231101_160337/1698825817764"],
               "20230823_110018": [ "20230823_110018/1692759640764", "20230823_110018/1692759640864"],
-              ...
             }
+            ```
         group_size : int | Tuple[int]
             if int, will always use this value as group_size;
             if Tuple[int], during train phase, will random pick a value as the group_size for a given epoch.
@@ -373,7 +375,9 @@ class GroupBatchDataset(Dataset):
         self._assert_availability(transformable_keys)
         self.dictionary = dictionary
         self.transformable_keys = transformable_keys
+        self.tensor_smith = tensor_smith
         self.transforms = build_transforms(transforms)
+        self.model_feeder = model_feeder
 
         if indices_path is not None:
             indices = [line.strip() for line in open(indices_path, "w")]

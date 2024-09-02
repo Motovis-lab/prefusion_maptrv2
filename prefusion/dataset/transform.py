@@ -123,18 +123,26 @@ class Transformable:
         return self
 
     def to_tensor(self):
-        if hasattr(self, 'tensor'):
-            warnings.warn('self.tensor should only be assigned by self.tensor_smith.', UserWarning)
+        """
+        Attributes
+        ----------
+        tensor : torch.Tensor or Dict[str, torch.Tensor], default None
+            A tensor that represents the input to the model. This attribute
+            does not necessarily need to be implemented here; it is merely a
+            suggestion, considering that in some cases, model inputs may
+            require multiple transformables to be combined into a tensor.
 
-        if not hasattr(self, 'tensor_smith') or not callable(self.tensor_smith):
-            warnings.warn('Please provide callable tensor_smith, self.tensor will be set to None.', UserWarning)
-            self.tensor = None
-        else:
+        Returns
+        -------
+        self
+            transformable itself.
+        """
+        if hasattr(self, 'tensor'):
+            raise RuntimeError('self.tensor cannot be assigned before self.to_tensor().')
+        
+        if hasattr(self, 'tensor_smith') and callable(self.tensor_smith):
             self.tensor = self.tensor_smith(self)
-        
-        if self.tensor is None:
-            warnings.warn('self.tensor is None.', UserWarning)
-        
+
         return self
         
 
@@ -929,6 +937,35 @@ class Polygon3D(Polyline3D):
 
 
 class ParkingSlot3D(Polyline3D):
+    def __init__(self, elements: List[dict], dictionary: dict, tensor_smith: "TensorSmith" = None):
+        """
+        Parameters
+        ----------
+        elements : List[dict]
+            a list of polylines. Each element is a dict of polyline having the following format:
+            ```python
+            elements[0] = {
+                'class': 'class.parking.parking_slot',
+                'attr': <dict>,
+                'points': <N x 3 array>
+            }
+            ```
+
+        dictionary : dict
+            ```python
+            dictionary = {
+                'attrs': []
+            }
+            ```
+
+        tensor_smith : TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
+        """
+        super().__init__()
+        self.elements = elements.copy()
+        self.dictionary = dictionary.copy()
+        self.tensor_smith = tensor_smith
+
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
         
