@@ -55,6 +55,79 @@ def collate_dict(batch):
 GroupBatch = List[List[Dict]]
 
 
+def generate_groups(
+    tot_num_frames: int, 
+    group_size: int, 
+    frame_interval: int, 
+    start_ind: int = 0, 
+    random_start_ind: bool = False, 
+    seed: int = None
+) -> List[Tuple[int]]:
+    """
+    Generate groups of frames from a single scene.
+
+    Parameters
+    ----------
+    tot_num_frames : int
+        The total number of frames in the scene.
+    group_size : int
+        The number of frames in each group.
+    frame_interval : int
+        The interval between frames in each group.
+    start_ind : int, optional
+        The starting index of the first group. Default is 0.
+    random_start_ind : bool, optional
+        If True, randomly select the starting index of the first group. Default is False.
+
+    Returns
+    -------
+    groups : list of tuples
+        A list of tuples, where each tuple represents a group of frames.
+
+    Notes
+    -----
+    - `group_interval = group_size * frame_interval`
+    - `group_interval <= tot_num_frames` 
+    - `start_ind` should be assigned between `[0, group_interval - 1]`
+    - When the `start_ind > 0`, we should insert a group including `[0, start_ind)`
+    - If the tail of the group, aka `end_ind`, is bigger than `tot_num_frames - 1`, we should append a group including `(end_ind, tot_num_frames]`
+    """
+    if seed:
+        random.seed(seed)
+
+    group_inds = np.arange(tot_num_frames)
+    # recompute group_size
+    max_group_size = min(tot_num_frames, group_size * frame_interval) // frame_interval
+    group_interval = max_group_size * frame_interval
+
+    if random_start_ind:
+        start_ind = random.randint(0, group_interval - 1)
+    assert start_ind >= 0 and start_ind < group_interval
+    # get splits
+    splits = group_inds[start_ind::group_interval]
+    # if the tail equals to tot_num_frames, remove it, since it will be added later
+    if splits[-1] == tot_num_frames:
+        splits = splits[:-1]
+        # insert a start_ind < 0
+    if splits[0] > 0:
+        splits = np.insert(splits, 0, splits[0] - group_interval)
+    # append a tail, end_ind
+    splits = np.append(splits, splits[-1] + group_interval)
+
+    ind_lists = []
+    for start, end in zip(splits[:-1], splits[1:]):
+        if start < 0:
+            start = 0
+            end = group_interval
+        if end >= tot_num_frames:
+            end = tot_num_frames
+            start = tot_num_frames - group_interval
+        ind_list = group_inds[start:end].reshape(max_group_size, frame_interval).T
+        ind_lists.extend(ind_list.tolist())
+    # sometimes the ind_list may be dumplicated, so add a unique operation
+    return np.unique(ind_lists, axis=0)
+
+
 class IndexInfo:
     def __init__(self, scene_id: str, frame_id: str, prev: "IndexInfo" = None, next: "IndexInfo" = None):
         self.scene_id = scene_id
@@ -135,13 +208,13 @@ class GroupSampler:
         return index_info_groups
 
 
-    def sample_train_groups(self) -> List[List[IndexInfo]]:
-        return self.generate_groups(random_first_end_ind=True, shuffle=True, seed=self.seed)
+    def sample_train_groups(self) -> List[List[str]]:
+        return self._generate_groups(random_start_ind=True, shuffle=True, seed=self.seed)
 
-    def sample_val_groups(self) -> List[List[IndexInfo]]:
-        return self.generate_groups(random_first_end_ind=False, shuffle=False)
+    def sample_val_groups(self) -> List[List[str]]:
+        return self._generate_groups(start_ind=0, random_start_ind=False, shuffle=False)
 
-    def sample_scene_groups(self):
+    def sample_scene_groups(self) -> List[List[str]]:
         return list(self.scene_frame_inds.values())
 
     def sample_groups_by_class_balance(self):
@@ -149,48 +222,16 @@ class GroupSampler:
 
     def sample_groups_by_meta_info(self):
         raise NotImplementedError
-
-    def generate_groups(self, random_first_end_ind: bool = False, shuffle: bool = True, seed: int = None) -> List[List[IndexInfo]]:
-        if seed:
-            random.seed(seed)
-        group_interval = self.group_size * self.frame_interval
-
-        groups = []
-        for scene_id in self.scene_frame_inds:
-            if random_first_end_ind:
-                first_end_ind = random.randint(self.frame_interval, group_interval)
-            else:
-                first_end_ind = group_interval
-            last_end_ind = len(self.scene_frame_inds[scene_id])
-
-            if first_end_ind > last_end_ind:
-                raise ValueError(
-                    "first_end_ind >= last_end_ind, due to too large group_size and frame_interval settings. "
-                    "May consider generate groups with a smaller group_size or repeat boundary indexes."
-                )
-
-            scene_ind_list = range(len(self.scene_frame_inds[scene_id]))
-            end_inds = []
-            for i in range(self.frame_interval): # frame_interval = 3  =>  0, 1, 2
-                end_inds.extend(scene_ind_list[first_end_ind + i :: group_interval])
-            end_inds = sorted(end_inds)
-            if end_inds[-1] < last_end_ind:
-                end_inds.append(last_end_ind)
-            for end_ind in end_inds:
-                if end_ind < group_interval:
-                    first_ind = 0
-                    last_ind = group_interval
-                else:
-                    first_ind = end_ind - group_interval
-                    last_ind = end_ind
-                ind_list = range(first_ind, last_ind)[::self.frame_interval]
-                group = [self.scene_frame_inds[scene_id][ind] for ind in ind_list]
-                groups.append(group)
-        
+    
+    def _generate_groups(self, start_ind: int = 0, random_start_ind: bool = False, shuffle: bool = False, seed: int = None) -> List[List[str]]:
+        all_groups = []
+        for _, frame_ids in self.scene_frame_inds.items():
+            inds_list = generate_groups(len(frame_ids), self.group_size, self.frame_interval, start_ind=start_ind, random_start_ind=random_start_ind, seed=seed)
+            groups = [[frame_ids[i] for i in inds] for inds in inds_list]
+            all_groups.extend(groups)
         if shuffle:
-            random.shuffle(groups)
-
-        return groups
+            random.shuffle(all_groups)
+        return all_groups
 
 
 @DATASETS.register_module()
