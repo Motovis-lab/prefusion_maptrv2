@@ -345,30 +345,35 @@ def test_load_ego_poses():
         batch_size=2,
         group_size=4,
     )
-    index_info = IndexInfo("20231101_160337", "1698825817864", prev=IndexInfo("20231101_160337", "1698825817764"), next=IndexInfo("20231101_160337", "1698825817964"))
-    ego_pose_set = dataset.load_ego_poses('ego_poses', index_info, n_prev_frames=0, n_next_frames=0)
-    assert len(ego_pose_set.transformables) == 1
-    assert ego_pose_set.transformables['0'].timestamp == "1698825817864"
 
-    ego_pose_set = dataset.load_ego_poses('ego_poses', index_info, n_prev_frames=2, n_next_frames=1)
+    index_info = IndexInfo("20231101_160337", "1698825817864", prev=IndexInfo("20231101_160337", "1698825817764"), next=IndexInfo("20231101_160337", "1698825817964"))
+    ego_pose_set = dataset.load_ego_poses('ego_poses', index_info)
     assert len(ego_pose_set.transformables) == 3
+    assert list(ego_pose_set.transformables.keys()) == ['-1', '0', '+1']
     assert ego_pose_set.transformables['-1'].timestamp == "1698825817764"
     assert ego_pose_set.transformables['0'].timestamp == "1698825817864"
     assert ego_pose_set.transformables['+1'].timestamp == "1698825817964"
 
-    index_info2 = IndexInfo(
+    index_info2 = IndexInfo("20231101_160337", "1698825817864", prev=IndexInfo("20231101_160337", "1698825817764", prev=IndexInfo("20231101_160337", "1698825817664")), next=IndexInfo("20231101_160337", "1698825817964"))
+    ego_pose_set = dataset.load_ego_poses('ego_poses', index_info2)
+    assert len(ego_pose_set.transformables) == 4
+    assert list(ego_pose_set.transformables.keys()) == ['-2', '-1', '0', '+1']
+    assert ego_pose_set.transformables['-2'].timestamp == "1698825817664"
+    assert ego_pose_set.transformables['-1'].timestamp == "1698825817764"
+    assert ego_pose_set.transformables['0'].timestamp == "1698825817864"
+    assert ego_pose_set.transformables['+1'].timestamp == "1698825817964"
+
+    index_info3 = IndexInfo(
         prev=IndexInfo("20231101_160337", "1698825817764", prev=IndexInfo("20231101_160337", "1698825817664")), 
         scene_id="20231101_160337", 
         frame_id="1698825817864", 
         next=IndexInfo("20231101_160337", "1698825817964", next=IndexInfo("20231101_160337", "1698825818064"))
     )
-    ego_pose_set = dataset.load_ego_poses('ego_poses', index_info2, n_prev_frames=0, n_next_frames=0)
-    assert len(ego_pose_set.transformables) == 1
-    assert ego_pose_set.transformables['0'].timestamp == "1698825817864"
-
-    ego_pose_set = dataset.load_ego_poses('ego_poses', index_info2, n_prev_frames=2, n_next_frames=1)
-    assert len(ego_pose_set.transformables) == 4
+    ego_pose_set = dataset.load_ego_poses('ego_poses', index_info3)
+    assert len(ego_pose_set.transformables) == 5
+    assert list(ego_pose_set.transformables.keys()) == ['-2', '-1', '0', '+1', '+2']
     assert ego_pose_set.transformables['-2'].timestamp == "1698825817664"
     assert ego_pose_set.transformables['-1'].timestamp == "1698825817764"
     assert ego_pose_set.transformables['0'].timestamp == "1698825817864"
     assert ego_pose_set.transformables['+1'].timestamp == "1698825817964"
+    assert ego_pose_set.transformables['+2'].timestamp == "1698825818064"
