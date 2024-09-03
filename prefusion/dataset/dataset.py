@@ -616,7 +616,7 @@ class GroupBatchDataset(Dataset):
             elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smith.get(transformable_key)
         )
 
-    def load_ego_poses(self, transformable_key: str, index_info: IndexInfo, n_prev_frames=0, n_next_frames=0) -> PoseSet:
+    def load_ego_poses(self, transformable_key: str, index_info: IndexInfo) -> PoseSet:
         scene = self.info[index_info.scene_id]['frame_info']
 
         def _create_pose(frame_id):
@@ -631,9 +631,7 @@ class GroupBatchDataset(Dataset):
 
         cnt = 0
         cur = index_info
-        while cnt < n_prev_frames:
-            if cur.prev is None:
-                break
+        while cur.prev is not None:
             poses[f'-{cnt+1}'] = _create_pose(cur.prev.frame_id)
             cur = cur.prev
             cnt += 1
@@ -642,14 +640,14 @@ class GroupBatchDataset(Dataset):
         poses['0'] = _create_pose(cur.frame_id)
 
         cnt = 0
-        while cnt < n_next_frames:
-            if cur.next is None:
-                break
+        while cur.next is not None:
             poses[f'+{cnt+1}'] = _create_pose(cur.next.frame_id)
             cur = cur.next
             cnt += 1
 
-        return PoseSet(transformables=poses)
+        sorted_poses = dict(sorted(poses.items(), key=lambda x: int(x[0])))
+
+        return PoseSet(transformables=sorted_poses)
 
 
     def load_trajectory(self, transformable_key: str, index_info: IndexInfo, time_window=2) -> Trajectory:
