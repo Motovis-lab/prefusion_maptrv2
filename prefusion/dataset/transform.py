@@ -936,7 +936,7 @@ class Polygon3D(Polyline3D):
     pass
 
 
-class ParkingSlot3D(Polyline3D):
+class ParkingSlot3D(SpatialTransformable):
     def __init__(self, elements: List[dict], dictionary: dict, tensor_smith: "TensorSmith" = None):
         """
         Parameters
@@ -987,6 +987,14 @@ class ParkingSlot3D(Polyline3D):
             # so we need to manually change the order
             parkslot['points'] = parkslot['points'][[1, 0, 3, 2], :]
 
+        return self
+    
+    def rotate_3d(self, rmat, **kwargs):
+        # rmat = R_e'e = R_ee'.T
+        # R_c = R_ec
+        # R_c' = R_e'c = R_e'e @ R_ec
+        for ele in self.elements:
+            ele['points'] = ele['points'] @ rmat.T
         return self
 
 
