@@ -11,6 +11,7 @@ from prefusion.dataset.transform import (
     CameraImage, CameraImageSet,
     RandomSetIntrinsicParam, RandomSetExtrinsicParam,
     RenderIntrinsic, RenderExtrinsic, RandomRenderExtrinsic,
+    RandomChooseKTransform, RandomBrightness, RandomSharpness, RandomImEqualize
 )
 
 class MockTextTransformable:
@@ -228,7 +229,7 @@ def test_random_set_intrinsic_param(cam_im):
     transform = RandomSetIntrinsicParam(prob=1.0, jitter_ratio=0.05, scope="group")
     assert transform.jitter_ratio == 0.05
     transform(cam_im, seeds={"frame": 42, "group": 1142})
-    assert cam_im.intrinsic == pytest.approx([9.566968, 19.425739, 0.49007237, 0.7770841])
+    assert cam_im.intrinsic == pytest.approx([9.566968, 19.13393662, 0.47834841, 0.76535746])
 
 
 def test_random_set_extrinsic_param(cam_im):
@@ -236,9 +237,112 @@ def test_random_set_extrinsic_param(cam_im):
     assert transform.angle == 10 and transform.translation == 4
     transform(cam_im, seeds={"frame": 42, "batch": 142, "group": 1142})
     np.testing.assert_almost_equal(cam_im.extrinsic[0], 
-        np.array([[ 0.99801237,  0.00632895,  0.06269974],
-       [-0.00451007,  0.99956608, -0.02910845],
-       [-0.06285676,  0.02876781,  0.99760786]])
+        np.array([[ 0.9991691, -0.0279823,  0.0296317],
+                  [ 0.0288128,  0.9991931, -0.0279823],
+                  [-0.0288248,  0.0288128,  0.9991691]])
     ) 
-    np.testing.assert_almost_equal(cam_im.extrinsic[1], np.array([[-0.111729545, -1.2373623, 2.66947292]]))
+    np.testing.assert_almost_equal(cam_im.extrinsic[1], np.array([[0.6607075, 0.6607075, 0.6607075]]))
 
+
+class MockNumberTransformable:
+    def __init__(self, number: float):
+        self.number = number
+
+    def add(self, *, a=0, **kwargs): 
+        self.number += a
+        return self
+    
+    def multiply(self, *, f=0, **kwargs):
+        self.number *= f
+        return self
+    
+    def abs(self, **kwargs):
+        self.number = abs(self.number)
+        return self
+
+class MockRandomAddTransform:
+    def __init__(self, prob=0.5, scope="frame"): 
+        self.prob = prob
+        self.scope = scope
+    def __call__(self, *transformables, seeds=None):
+        random.seed(seeds[self.scope])
+        for t in transformables:
+            t.add(a=random.randint(-10, 10))
+
+class MockAbsTransform:
+    def __init__(self, scope='frame'): self.scope = scope
+    def __call__(self, *transformables, **kwargs):
+        for t in transformables:
+            t.abs()
+
+class MockRandomMultiplyTransform:
+    def __init__(self, prob=0.5, scope="frame"): 
+        self.prob = prob
+        self.scope = scope
+    def __call__(self, *transformables, seeds=None):
+        random.seed(seeds[self.scope])
+        for t in transformables:
+            t.multiply(f=random.randint(-5, 5))
+
+def test_random_choose_one():
+    random_choose_k = RandomChooseKTransform(
+        transforms=[
+            MockRandomAddTransform(prob=1., scope='frame'),
+            MockRandomMultiplyTransform(prob=1., scope='group'),
+            MockAbsTransform(),
+        ],
+        prob=1.0,
+        K=1,
+    )
+    x = MockNumberTransformable(-2)
+    np.random.seed(42)
+    random_choose_k(x, seeds={'frame': 2, 'batch': 4, 'group': 8})
+    assert x.number == -11 # add(-2, -9)
+
+
+def test_random_choose_k_basic():
+    random_choose_k = RandomChooseKTransform(
+        transforms=[
+            MockRandomAddTransform(prob=1., scope='frame'),
+            MockRandomMultiplyTransform(prob=1., scope='batch'),
+            MockAbsTransform(),
+        ],
+        prob=1.0,
+        K=2,
+    )
+    x = MockNumberTransformable(-2)
+    np.random.seed(42)
+    random_choose_k(x, seeds={'frame': 2, 'batch': 4, 'group': 8})
+    assert x.number == 22  # multiply(add(-2, -9), -2) = 22 
+
+
+def test_random_isp_delegate_transform():
+    delegate_transform = RandomChooseKTransform(
+        transforms=[
+            RandomBrightness(prob=0.6, param_randomization_rules={"brightness": {"type": "float", "range": [0.5, 2.0]}}, scope='batch'),
+            RandomSharpness(prob=0.6, param_randomization_rules={"sharpness": {"type": "float", "range": [0.0, 2.0]}}, scope='batch'),
+            RandomImEqualize(prob=0.1),
+        ],
+        prob=1.0,
+        K=3,
+    )
+    np.random.seed(85)  # for np.random.choice(transforms): RandomSharpness -> RandomBrightness -> RandomImEqualize
+    random.seed(77)  # for random.random() <= probs: [0.32590, 0.240493, 0.82255]
+    im = CameraImage("front", "FisheyeCamera", np.arange(4 * 6 * 3, dtype=np.uint8).reshape(4, 6, 3), np.ones((4, 6, 3)), (np.eye(3), np.eye(3)), np.eye(3))
+    delegate_transform(im, seeds={'frame': 2, 'batch': 4, 'group': 8})
+    np.testing.assert_almost_equal(im.img, np.array(
+        [[[ 4,  5,  8, 11, 13, 15],
+          [15, 17, 20, 23, 25, 27],
+          [30, 33, 35, 38, 40, 42],
+          [42, 44, 46, 49, 52, 53]],
+
+         [[ 5,  6,  9, 11, 14, 16],
+          [16, 18, 21, 23, 26, 28],
+          [31, 34, 36, 39, 41, 43],
+          [43, 45, 47, 50, 52, 54]],
+
+         [[ 5,  7, 10, 12, 15, 17],
+          [17, 19, 22, 24, 27, 29],
+          [32, 35, 37, 40, 42, 44],
+          [44, 46, 48, 51, 53, 55]]]
+    ).transpose(1, 2, 0))

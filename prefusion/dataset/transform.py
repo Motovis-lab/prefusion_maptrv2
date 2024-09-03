@@ -1271,7 +1271,7 @@ def random_transform_class_factory(cls_name, transform_func):
         """
         Transform.__init__(self, scope=scope)
         self.prob = prob
-        self.param_randomization_rules = param_randomization_rules
+        self.param_randomization_rules = param_randomization_rules or {}
         self.kwargs = kwargs
         self.validate_param_randomization_rules()
 
@@ -1369,8 +1369,9 @@ class RandomSetIntrinsicParam(Transform):
         if random.random() > self.prob:
             return list(transformables)
         _seed = seeds[self.scope] if seeds else None
-        random.seed(_seed) # why we set it outside? we want different param have different jittering magnitude.
+
         def _get_random_value(base_value):
+            random.seed(_seed) # different CameraTransformable will have the same different jittering magnitude.
             return random.uniform(1 - self.jitter_ratio, 1 + self.jitter_ratio) * base_value
 
         for transformable in transformables:
@@ -1405,13 +1406,14 @@ class RandomSetExtrinsicParam(Transform):
         if random.random() > self.prob:
             return list(transformables)
         seed = seeds[self.scope] if seeds else None
-        random.seed(seed)
 
         def _get_random_value(deviation):
+            random.seed(seed) # different CameraTransformable will have the same different jittering magnitude.
             deviation_abs = abs(deviation)
             return random.uniform(-deviation_abs, deviation_abs)
 
         def _get_random_delta_rotation():
+            random.seed(seed) # different CameraTransformable will have the same different jittering magnitude.
             return Rotation.from_euler(
                 'xyz', 
                 [_get_random_value(self.angle) for _ in range(3)],
@@ -1432,94 +1434,53 @@ class RandomSetExtrinsicParam(Transform):
         return transformables
 
 
-class RandomChooseOneTransform(Transform):
-    def __init__(self, transforms, *, prob=0.5, transform_probs=None, scope="group"):
+class RandomChooseKTransform(Transform):
+    def __init__(self, transforms, *, prob=0.5, K=1, transform_probs=None, scope="frame"):
         super().__init__(scope=scope)
         self.transforms = transforms
         if transform_probs is not None:
             assert len(transforms) == len(transform_probs)
         self.transform_probs = transform_probs
         self.prob = prob
+        self.K = K
 
     def __call__(self, *transformables, seeds=None, **kwargs):
-        if seeds:
-            random.seed(seeds[self.scope])
         if random.random() <= self.prob:
-            transform = random.choices(
-                population=self.transforms,
-                weights=self.transform_probs,
-                k=1
-            )[0]
-            transform(*transformables, **kwargs)
+            transforms = np.random.choice(
+                self.transforms,
+                size=self.K,
+                replace=False,
+                p=self.transform_probs,
+            )
+            for transform in transforms:
+                transform(*transformables, **kwargs, seeds=seeds)
         return transformables
 
 
-
-class RandomTransformSequence(Transform):
-    def __init__(self, transforms, *, scope='frame') -> None:
-        self.transforms = copy.deepcopy(transforms)
-        self.scope = scope
-    
-    def __call__(self, *transformables, seeds: dict = None, **kwargs):
-        if seeds:
-            random.seed(seeds[self.scope])
-        random.shuffle(self.transforms)
-        for transform in self.transforms:
-            transform(*transformables, seeds=seeds, **kwargs)
-        return transformables
-
-
-# reimplement by passing transforms as arguments
 class RandomImageISP(Transform):
-    def __init__(self, *, 
-                 adjust_brightness={"prob": 0.5, "range": (0.5, 2.0)},
-                 adjust_saturation={"prob": 0.5, "range": (0.0, 2.0)},
-                 adjust_contrast={"prob": 0.5, "range": (0.5, 2.0)},
-                 adjust_hue={"prob": 0.5, "range": (-0.5, 0.5)},
-                 adjust_sharpness={"prob": 0.5, "range": (0.0, 2.0)},
-                 posterize={"prob": 0.5, "bits": (4, 8)},
-                 channel_shuffle={"prob": 0.5},
-                 auto_contrast={"prob": 0.2},
-                 solarize={"prob": 0.01},
-                 imequalize={"prob": 0.1},
-                 random_sequence=True,
-                 scope="frame",  **kwargs):
+    def __init__(self, prob=0.5, transform_probs=None, scope='frame'):
         super().__init__(scope=scope)
-        transforms = list(inspect.signature(self.__init__).parameters.keys())[:-3]
-        self.random_sequence = random_sequence
-        self.sequence = []
-        for transform in transforms:
-            self.sequence.append({transform: eval(f"{transform}")})
-        self.kwargs = kwargs
+        self.transforms=[
+            RandomBrightness(prob=0.5, param_randomization_rules={"brightness": {"type": "float", "range": [0.5, 2.0]}}),
+            RandomSaturation(prob=0.5, param_randomization_rules={"saturation": {"type": "float", "range": [0.0, 2.0]}}),
+            RandomContrast(prob=0.5, param_randomization_rules={"contrast": {"type": "float", "range": [0.5, 2.0]}}),
+            RandomHue(prob=0.5, param_randomization_rules={"hue": {"type": "float", "range": [-0.5, 0.5]}}),
+            RandomSharpness(prob=0.5, param_randomization_rules={"sharpness": {"type": "float", "range": [0.0, 2.0]}}),
+            RandomPosterize(prob=0.5, param_randomization_rules={"bits": {"type": "int", "range": [4, 8]}}),
+            RandomChannelShuffle(prob=0.5),
+            RandomAutoContrast(prob=0.2),
+            RandomSolarize(prob=0.01),
+            RandomImEqualize(prob=0.1),
+        ]
+        self.delegate_transform = RandomChooseKTransform(
+            transforms=self.transforms,
+            prob=prob,
+            K=len(self.transforms),
+            transform_probs=transform_probs,
+        )
     
     def __call__(self, *transformables, seeds=None, **kwargs):
-        if seeds:
-            random.seed(seeds[self.scope])
-        
-        if self.random_sequence:
-            random.shuffle(self.sequence)
-        
-        sequence = {}
-        for transform in self.sequence:
-            sequence.update(transform)
-        
-        for transformable in transformables:
-            if transformable is not None:
-                for transform_func in sequence:
-                    # print(transform_func)
-                    prob = sequence[transform_func]['prob']
-                    if random.random() < prob:
-                        if 'range' in sequence[transform_func]:
-                            random_value = random.uniform(*sequence[transform_func]['range'])
-                            getattr(transformable, transform_func)(random_value, **kwargs)
-                        elif 'bits' in sequence[transform_func]:
-                            random_value = random.randint(*sequence[transform_func]['bits'])
-                            getattr(transformable, transform_func)(random_value, **kwargs)
-                        else:
-                            getattr(transformable, transform_func)(**kwargs)
-        
-        return transformables
-
+        return self.delegate_transform(*transformables, seeds=seeds)
 
 
 class RandomImageTransformAT(Transform):
