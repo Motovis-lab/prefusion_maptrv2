@@ -375,8 +375,10 @@ class GroupBatchDataset(Dataset):
         self._assert_availability(transformable_keys)
         self.dictionary = dictionary
         self.transformable_keys = transformable_keys
+        # TODO: implement build_tensor_smith
         self.tensor_smith = tensor_smith
         self.transforms = build_transforms(transforms)
+        # TODO: implement build_model_feeder
         self.model_feeder = model_feeder
 
         if indices_path is not None:
@@ -390,8 +392,7 @@ class GroupBatchDataset(Dataset):
         self.group_backtime_prob = group_backtime_prob
 
         self.seed_dataset = seed_dataset
-        self.model_feeder = model_feeder
-        self.tensor_smith = tensor_smith
+
         self.group_sampler = GroupSampler(self.scene_frame_inds, group_size, frame_interval, seed=seed_dataset)
         self.groups = self.group_sampler.sample(self.phase, output_str_index=False)
 

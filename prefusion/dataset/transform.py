@@ -954,9 +954,11 @@ class ParkingSlot3D(Polyline3D):
         dictionary : dict
             ```python
             dictionary = {
-                'attrs': []
+                'branch': {
+                    'classes': ['class.parking.parking_slot'],
+                    'attrs': []
+                ...
             }
-            ```
 
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
@@ -965,6 +967,14 @@ class ParkingSlot3D(Polyline3D):
         self.elements = elements.copy()
         self.dictionary = dictionary.copy()
         self.tensor_smith = tensor_smith
+        self.remove_elements_not_recognized_by_dictionary()
+    
+    def remove_elements_not_recognized_by_dictionary(self, **kwargs):
+        full_set_of_classes = {c for branch in self.dictionary.values() for c in branch['classes']}
+        for i in range(len(self.elements) - 1, -1, -1):
+            if self.elements[i]['class'] not in full_set_of_classes:
+                del self.elements[i]
+    
 
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
