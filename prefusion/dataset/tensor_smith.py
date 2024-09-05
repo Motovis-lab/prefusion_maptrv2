@@ -21,6 +21,9 @@ class TensorSmith:
     def __call__(self, *args, **kwargs):
         raise NotImplementedError
 
+    def reverse(self, tensor_dict):
+        raise NotImplementedError
+
 
 @TENSOR_SMITHS.register_module()
 class CameraImageTensor(TensorSmith):
@@ -28,15 +31,6 @@ class CameraImageTensor(TensorSmith):
             means: Union[list[float, float, float], tuple[float, float, float], float] = 128, 
             stds: Union[list[float, float, float], tuple[float, float, float], float] = 255
         ):
-        """_summary_
-
-        Parameters
-        ----------
-        means : Union[list[float, float, float], tuple[float, float, float], float], optional
-            _description_, by default 128
-        stds : Union[list[float, float, float], tuple[float, float, float], float], optional
-            _description_, by default 255
-        """
         if isinstance(means, Iterable):
             means = np.array(means)[..., None, None]
         if isinstance(stds, Iterable):
