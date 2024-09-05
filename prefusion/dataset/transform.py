@@ -947,7 +947,7 @@ class ParkingSlot3D(SpatialTransformable):
             elements[0] = {
                 'class': 'class.parking.parking_slot',
                 'attr': <dict>,
-                'points': <N x 3 array>
+                'points': <4 x 3 array>
             }
             ```
 
