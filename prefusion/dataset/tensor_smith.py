@@ -1,8 +1,10 @@
-from typing import Tuple, Dict, Union, Iterable
-
 import cv2
 import torch
 import numpy as np
+
+
+from typing import Tuple, Dict, Union, Iterable
+from torch import Tensor
 
 from prefusion.registry import TENSOR_SMITHS
 from .utils import (
@@ -13,6 +15,7 @@ from .utils import (
 )
 from .transform import (
     CameraImage, CameraSegMask, CameraDepth,
+    Bbox3D,
     Polyline3D, SegBev, ParkingSlot3D
 )
 
@@ -71,6 +74,40 @@ class CameraSegTensor(TensorSmith):
 
 
 
+def get_bev_intrinsics(voxel_shape, voxel_range):
+    _, X, Y = voxel_shape    
+    fx = X / (voxel_range[1][1] - voxel_range[1][0])
+    fy = Y / (voxel_range[2][1] - voxel_range[2][0])
+    cx = - voxel_range[1][0] * fx - 0.5
+    cy = - voxel_range[2][0] * fy - 0.5
+
+    return fx, fy, cx, cy
+
+
+
+@TENSOR_SMITHS.register_module()
+class PlanarBbox3D(TensorSmith):
+    def __init__(self, voxel_shape, voxel_range):
+        self.voxel_shape = voxel_shape
+        self.voxel_range = voxel_range
+    
+    def __call__(self, transformable: Bbox3D):
+        raise NotImplementedError
+
+
+
+@TENSOR_SMITHS.register_module()
+class PlanarBboxBev(TensorSmith):
+    def __init__(self, voxel_shape, voxel_range):
+        self.voxel_shape = voxel_shape
+        self.voxel_range = voxel_range
+    
+    def __call__(self, transformable: Bbox3D):
+        raise NotImplementedError
+
+
+
+
 @TENSOR_SMITHS.register_module()
 class PlanarSegBev(TensorSmith):
     def __init__(self, voxel_shape, voxel_range):
@@ -93,12 +130,14 @@ class PlanarPolyline3D(TensorSmith):
         voxel_shape = tuple(self.voxel_shape)
         voxel_range = tuple(self.voxel_range)
 
+        fx, fy, cx, cy = get_bev_intrinsics(voxel_shape, voxel_range)
+
         Z, X, Y = voxel_shape
         
-        fx = X / (voxel_range[1][1] - voxel_range[1][0])
-        fy = Y / (voxel_range[2][1] - voxel_range[2][0])
-        cx = - voxel_range[1][0] * fx - 0.5
-        cy = - voxel_range[2][0] * fy - 0.5
+        # fx = X / (voxel_range[1][1] - voxel_range[1][0])
+        # fy = Y / (voxel_range[2][1] - voxel_range[2][0])
+        # cx = - voxel_range[1][0] * fx - 0.5
+        # cy = - voxel_range[2][0] * fy - 0.5
 
         xx, yy = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
         points_grid = np.float32([yy, xx])
@@ -209,12 +248,14 @@ class PlanarPolygon3D(TensorSmith):
         voxel_shape = tuple(self.voxel_shape)
         voxel_range = tuple(self.voxel_range)
 
+        fx, fy, cx, cy = get_bev_intrinsics(voxel_shape, voxel_range)
+
         Z, X, Y = voxel_shape
         
-        fx = X / (voxel_range[1][1] - voxel_range[1][0])
-        fy = Y / (voxel_range[2][1] - voxel_range[2][0])
-        cx = - voxel_range[1][0] * fx - 0.5
-        cy = - voxel_range[2][0] * fy - 0.5
+        # fx = X / (voxel_range[1][1] - voxel_range[1][0])
+        # fy = Y / (voxel_range[2][1] - voxel_range[2][0])
+        # cx = - voxel_range[1][0] * fx - 0.5
+        # cy = - voxel_range[2][0] * fy - 0.5
 
         xx, yy = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
         points_grid = np.float32([yy, xx])
@@ -309,11 +350,33 @@ class PlanarPolygon3D(TensorSmith):
 
 
 
+
+
+
+
+
 @TENSOR_SMITHS.register_module()
 class PlanarParkingSlot3D(TensorSmith):
     def __init__(self, voxel_shape, voxel_range):
-        self.voxel_shape = voxel_shape
-        self.voxel_range = voxel_range
+        """
+        Parameters
+        ----------
+        voxel_shape : tuple
+        voxel_range : Tuple[List]
+
+        Examples
+        --------
+        - voxel_shape=(6, 320, 160)
+        - voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        - Z, X, Y = voxel_shape
+
+        """
+        self.voxel_shape = tuple(voxel_shape)
+        self.voxel_range = tuple(voxel_range)
+        self.bev_intrinsics = get_bev_intrinsics(voxel_shape, voxel_range)
+        Z, X, Y = voxel_shape
+        xx, yy = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
+        self.points_grid_bev = np.float32([yy, xx])
     
     @staticmethod
     def _get_height_map(
@@ -327,22 +390,22 @@ class PlanarParkingSlot3D(TensorSmith):
         X, Y = points_grid_bev[0].shape
         # plane based on triangle_012
         a_012, b_012, c_012 = norm_vec_012 = np.cross(vec_01, vec_12)
-        d_012 = - (norm_vec_012 * slot_points_3d[1]).sum() / np.linalg.norm(norm_vec_012)
+        d_012 = - (norm_vec_012 * slot_points_3d[1]).sum()
         h_012 = - ((points_grid_bev[::-1] * [[[a_012]], [[b_012]]]).sum(axis=0) + d_012) / c_012
         mask_012 = cv2.fillPoly(np.zeros((X, Y)), [slot_points_3d[[0, 1, 2], :2][..., [1, 0]].astype(int)], 1)
         # plane based on triangle_230
         a_230, b_230, c_230 = norm_vec_230 = np.cross(vec_23, vec_30)
-        d_230 = - (norm_vec_230 * slot_points_3d[3]).sum() / np.linalg.norm(norm_vec_230)
+        d_230 = - (norm_vec_230 * slot_points_3d[3]).sum()
         h_230 = - ((points_grid_bev[::-1] * [[[a_230]], [[b_230]]]).sum(axis=0) + d_230) / c_230
         mask_230 = cv2.fillPoly(np.zeros((X, Y)), [slot_points_3d[[2, 3, 0], :2][..., [1, 0]].astype(int)], 1)
         # plane based on triangle_013
         a_013, b_013, c_013 = norm_vec_013 = np.cross(vec_01, vec_30)
-        d_013 = - (norm_vec_013 * slot_points_3d[0]).sum() / np.linalg.norm(norm_vec_013)
+        d_013 = - (norm_vec_013 * slot_points_3d[0]).sum()
         h_013 = - ((points_grid_bev[::-1] * [[[a_013]], [[b_013]]]).sum(axis=0) + d_013) / c_013
         mask_013 = cv2.fillPoly(np.zeros((X, Y)), [slot_points_3d[[0, 1, 3], :2][..., [1, 0]].astype(int)], 1)
         # plane based on triangle_123
         a_123, b_123, c_123 = norm_vec_123 = np.cross(vec_12, vec_23)
-        d_123 = - (norm_vec_123 * slot_points_3d[2]).sum() / np.linalg.norm(norm_vec_123)
+        d_123 = - (norm_vec_123 * slot_points_3d[2]).sum()
         h_123 = - ((points_grid_bev[::-1] * [[[a_123]], [[b_123]]]).sum(axis=0) + d_123) / c_123
         mask_123 = cv2.fillPoly(np.zeros((X, Y)), [slot_points_3d[[1, 2, 3], :2][..., [1, 0]].astype(int)], 1)
         # average on all four planes
@@ -351,21 +414,10 @@ class PlanarParkingSlot3D(TensorSmith):
         return height_map
  
 
-    def __call__(self, transformable: ParkingSlot3D):
-        # voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
-        # voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
-        voxel_shape = tuple(self.voxel_shape)
-        voxel_range = tuple(self.voxel_range)
-
-        Z, X, Y = voxel_shape
-        
-        fx = X / (voxel_range[1][1] - voxel_range[1][0])
-        fy = Y / (voxel_range[2][1] - voxel_range[2][0])
-        cx = - voxel_range[1][0] * fx - 0.5
-        cy = - voxel_range[2][0] * fy - 0.5
-
-        xx, yy = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
-        points_grid_bev = np.float32([yy, xx])
+    def __call__(self, transformable: ParkingSlot3D) -> dict:
+        Z, X, Y = self.voxel_shape
+        fx, fy, cx, cy = self.bev_intrinsics
+        points_grid_bev = self.points_grid_bev
 
         
         seg_im = np.zeros((4, X, Y), dtype=np.float32)
@@ -399,21 +451,21 @@ class PlanarParkingSlot3D(TensorSmith):
             # 0: full slot seg
             cv2.fillPoly(seg_im[0], [slot_points_bev_int], 1)
             # 1: slot line
-            linewidht = int(max(1, fx * 0.15))
+            linewidht = int(max(1, abs(fx * 0.15)))
             cv2.polylines(seg_im[1], [slot_points_bev_int], linewidht, 1)
             # 2: corners
-            radius = int(max(1, fx * 0.3))
+            radius = int(max(1, abs(fx * 0.3)))
             for corner in slot_points_bev_int:
-                cv2.circle(seg_im[2], corner, radius, 1)
+                cv2.circle(seg_im[2], corner, radius, 1, -1)
             # 3: entrance _seg
             if entrance_length > side_length:
-                cv2.circle(seg_im[3], slot_points_bev[[0, 3]].mean(0).astype(int), radius * 2, 1)
+                cv2.circle(seg_im[3], slot_points_bev[[0, 3]].mean(0).astype(int), radius * 2, 1, -1)
             else:
-                cv2.circle(seg_im[3], slot_points_bev[[0, 1]].mean(0).astype(int), radius * 2, 1)
+                cv2.circle(seg_im[3], slot_points_bev[[0, 1]].mean(0).astype(int), radius * 2, 1, -1)
             # add height map
             height_map[0] = self._get_height_map(slot_points_3d, points_grid_bev)
             for point_3d in slot_points_3d:
-                cv2.circle(height_map[0], point_3d[[1, 0]].astype(int), radius, point_3d[2])
+                cv2.circle(height_map[0], point_3d[[1, 0]].astype(int), radius, point_3d[2], -1)
             
             ## preparations for generating regressions
             # gen four regions, front, left, bottom, right
@@ -559,3 +611,263 @@ class PlanarParkingSlot3D(TensorSmith):
         }
         
         return tensor_data
+
+
+    @staticmethod
+    def _get_mean_point(slot_group_points, cen_score_group, seg_score_group):
+        selected_inds_points = slot_group_points[:, 2] > 0.75
+        if np.sum(selected_inds_points) < 1:
+            selected_inds_points = slot_group_points[:, 2] > 0.375
+            # seg_score_group *= 0.5
+            if np.sum(selected_inds_points) < 1:
+                selected_inds_points = slot_group_points[:, 2] > 0.125
+                # seg_score_group *= 0.5
+        selected_points = slot_group_points[selected_inds_points]
+        selected_cen_scores = cen_score_group[selected_inds_points]
+        selected_seg_scores = seg_score_group[selected_inds_points]
+        selected_conf = selected_cen_scores * selected_seg_scores * selected_points[:, 2]
+        mean_point = np.sum(
+            selected_points[:, :2] * selected_conf[:, None], axis=0
+        ) / np.sum(selected_conf)
+        mean_seg_conf = np.mean(selected_seg_scores * selected_points[:, 2])
+        return [mean_point[0], mean_point[1], mean_seg_conf]
+
+
+    def _group_nms(self, cen_scores, seg_scores, corner_points_bev, dist_thresh):
+        # prepare scores as positional weights
+        scores = cen_scores * seg_scores
+        # sort by score
+        ranked_ind = np.argsort(scores)[::-1]
+        points_0, points_1, points_2, points_3 = corner_points_bev
+        # assign slots to groups according to distance
+        kept_groups = []
+        kept_inds = []
+        for i in ranked_ind:
+            if i not in kept_inds:
+                quad_i = np.float32([
+                    points_0[:2, i],
+                    points_1[:2, i],
+                    points_2[:2, i],
+                    points_3[:2, i]
+                ])
+                mean_quad_i = quad_i.mean(0)
+                kept_inds.append(i)
+                grouped_inds = [i]
+                kept_groups.append(grouped_inds)
+                for j in ranked_ind[:]:
+                    if j not in kept_inds:
+                        quad_j = np.float32([
+                            points_0[:2, j],
+                            points_1[:2, j],
+                            points_2[:2, j],
+                            points_3[:2, j]
+                        ])
+                        mean_quad_j = quad_j.mean(0)
+                        dist_ij = np.linalg.norm(mean_quad_i - mean_quad_j)
+                        if dist_ij < dist_thresh: 
+                            kept_inds.append(j)
+                            grouped_inds.append(j)
+        # average slots in each group
+        mean_slots = []
+        for group in kept_groups:
+            # anchor the first slot, align other slots
+            ind_0 = group[0]
+            slot_0 = np.float32([
+                points_0[:, ind_0],
+                points_1[:, ind_0],
+                points_2[:, ind_0],
+                points_3[:, ind_0]
+            ])
+            slot_0_line_01 = slot_0[1, :2] - slot_0[0, :2]
+            slot_group = [slot_0]
+            for ind in group[1:]:
+                slot_line_01 = points_1[:2, ind] - points_0[:2, ind]
+                if np.sum(slot_line_01 * slot_0_line_01) < 0:
+                    slot = np.float32([
+                        points_2[:, ind],
+                        points_3[:, ind],
+                        points_0[:, ind],
+                        points_1[:, ind],
+                    ])
+                else:
+                    slot = np.float32([
+                        points_0[:, ind],
+                        points_1[:, ind],
+                        points_2[:, ind],
+                        points_3[:, ind]
+                    ])
+                slot_group.append(slot)
+            # get mean slot
+            slot_group = np.float32(slot_group)
+            cen_score_group = cen_scores[group]
+            seg_score_group = seg_scores[group]
+            mean_point_0 = self._get_mean_point(slot_group[:, 0], cen_score_group, seg_score_group)
+            mean_point_1 = self._get_mean_point(slot_group[:, 1], cen_score_group, seg_score_group)
+            mean_point_2 = self._get_mean_point(slot_group[:, 2], cen_score_group, seg_score_group)
+            mean_point_3 = self._get_mean_point(slot_group[:, 3], cen_score_group, seg_score_group)
+            mean_slot = np.float32([mean_point_0, mean_point_1, mean_point_2, mean_point_3])
+            # record slot
+            mean_slots.append(mean_slot)
+        
+        return mean_slots
+
+
+
+    def reverse(self, tensor_dict: Dict[str, Tensor], pre_conf=0.3, dist_thresh=1):
+        """One should rearange model outputs to tensor_dict format.
+
+        Parameters
+        ----------
+        tensor_dict : dict
+        pre_conf : float, optional, by default 0.3
+            filter valid points, by default 0.3
+        """
+        cen_pred = tensor_dict['cen'].detach().cpu().numpy()
+        seg_pred = tensor_dict['seg'].detach().cpu().numpy()
+        reg_pred = tensor_dict['reg'].detach().cpu().numpy()
+
+        # get valid_points
+        valid_points_map = cen_pred[0] > pre_conf
+        valid_points_bev = self.points_grid_bev[:, valid_points_map]
+        
+        ## pickup scores
+        cen_scores = cen_pred[0][valid_points_map]
+        seg_scores = seg_pred[0][valid_points_map]
+
+        ## pickup regressions
+        # 0, 1: min, max distance to short side along long side
+        dl_min = reg_pred[0][valid_points_map]
+        dl_max = reg_pred[1][valid_points_map]
+        # 2, 3: min, max distance to long side along short side
+        ds_min = reg_pred[2][valid_points_map]
+        ds_max = reg_pred[3][valid_points_map]
+        # 4, 5, 6: (|nl_x|, |nl_y|, nl_x * nl_y) normalized absolute long side direction
+        abs_nl_x = reg_pred[4][valid_points_map]
+        abs_nl_y = reg_pred[5][valid_points_map]
+        nl_xy = reg_pred[6][valid_points_map]
+        # 7, 8, 9: (|ns_x|, |ns_y|, ns_x * ns_y) normalized absolute short side direction
+        abs_ns_x = reg_pred[7][valid_points_map]
+        abs_ns_y = reg_pred[8][valid_points_map]
+        ns_xy = reg_pred[9][valid_points_map]
+        # 10, 11: direction to center short line along long side (cl_x, cl_y)
+        cl_x = reg_pred[10][valid_points_map]
+        cl_y = reg_pred[11][valid_points_map]
+        # 12, 13: direction to center long line along short side (cs_x, cs_y)
+        cs_x = reg_pred[12][valid_points_map]
+        cs_y = reg_pred[13][valid_points_map]
+        
+        ## get real side directions
+        # long side direction
+        nl_x = abs_nl_x
+        nl_y = _sign(nl_xy) * abs_nl_y
+        nl_sign = nl_x * cl_x + nl_y * cl_y
+        nl_x *= _sign(nl_sign)
+        nl_y *= _sign(nl_sign)
+        norm_vec_l = np.float32([nl_x, nl_y])
+        norm_vec_l /= np.linalg.norm(norm_vec_l, axis=0)
+        # short side direction
+        ns_x = abs_ns_x
+        ns_y = _sign(ns_xy) * abs_ns_y
+        ns_sign = ns_x * cs_x + ns_y * cs_y
+        ns_x *= _sign(ns_sign)
+        ns_y *= _sign(ns_sign)
+        norm_vec_s = np.float32([ns_x, ns_y])
+        norm_vec_s /= np.linalg.norm(norm_vec_s, axis=0)
+
+        ## get vectors to four sides, and then get four corner points
+        # min, max vec to long and short sides
+        vec_l_min = - dl_min * norm_vec_l
+        vec_l_max = dl_max * norm_vec_l
+        vec_s_min = - ds_min * norm_vec_s
+        vec_s_max = ds_max * norm_vec_s
+        # get the best slot corner for each point
+        vec_cross = np.cross(vec_l_min, vec_s_min, axis=0)
+        # add corner confidence
+        vec_l_min_conf = np.insert(vec_l_min, 2, 1, axis=0)
+        vec_l_max_conf = np.insert(vec_l_max, 2, 0.5, axis=0)
+        vec_s_min_conf = np.insert(vec_s_min, 2, 1, axis=0)
+        vec_s_max_conf = np.insert(vec_s_max, 2, 0.5, axis=0)
+        # get four vectors
+        vec2front = vec_l_min_conf # front as vec_l_min
+        vec2bottom = vec_l_max_conf
+        vec2left = np.where(vec_cross <= 0, vec_s_min_conf, vec_s_max_conf)
+        vec2right = np.where(vec_cross > 0, vec_s_min_conf, vec_s_max_conf)
+        # get four corners
+        points_0 = valid_points_bev + vec2front[:2] + vec2right[:2]
+        points_0 = np.insert(points_0, 2, vec2front[2] * vec2right[2], axis=0)
+        points_1 = valid_points_bev + vec2front[:2] + vec2left[:2]
+        points_1 = np.insert(points_1, 2, vec2front[2] * vec2left[2], axis=0)
+        points_2 = valid_points_bev + vec2bottom[:2] + vec2left[:2]
+        points_2 = np.insert(points_2, 2, vec2bottom[2] * vec2left[2], axis=0)
+        points_3 = valid_points_bev + vec2bottom[:2] + vec2right[:2]
+        points_3 = np.insert(points_3, 2, vec2bottom[2] * vec2right[2], axis=0)
+        corner_points_bev = [points_0, points_1, points_2, points_3]
+
+        ## groups_nms, get mean slot points_bev
+        mean_slots_bev_no_entrance = self._group_nms(
+            cen_scores, seg_scores, corner_points_bev, abs(self.bev_intrinsics[0] * dist_thresh)
+        )
+        # determine the entrance and calc 3D coordinates
+        _, H, W = self.voxel_shape
+        SEQ_CANDIDATES = [
+            [0, 1, 2, 3],
+            [1, 2, 3, 0],
+            [2, 3, 0, 1],
+            [3, 0, 1, 2]
+        ]
+        fx, fy, cx, cy = self.bev_intrinsics
+        mean_slots_3d = []
+        for mean_slot in mean_slots_bev_no_entrance:
+            # calc each line center, then calc entrance confidence
+            line_centers = [
+                mean_slot[[0, 1], :2].mean(0).astype(int),
+                mean_slot[[1, 2], :2].mean(0).astype(int),
+                mean_slot[[2, 3], :2].mean(0).astype(int),
+                mean_slot[[3, 0], :2].mean(0).astype(int)
+            ]
+            ent_line_count = []
+            for center in line_centers:
+                pos_w, pos_h = center
+                if np.any([pos_w < 0, pos_h < 0, pos_w >= W, pos_h >= H]):
+                    ent_line_count.append(0)
+                else:
+                    w0 = max(pos_w - 1, 0)
+                    w1 = min(pos_w + 2, W)
+                    h0 = max(pos_h - 1, 0)
+                    h1 = min(pos_h + 2, H)
+                    ent_line_count.append(seg_pred[3][h0:h1, w0:w1].mean())
+            ent_line_count = np.float32(ent_line_count)
+            ent_seq = SEQ_CANDIDATES[ent_line_count.argmax()]
+            mean_slot = mean_slot[ent_seq]
+            # calc height and get 3d points
+            heights = []
+            for point in mean_slot:
+                if np.any([point[0] < 0, point[1] < 0, point[0] >= W, point[1] >= H]):
+                    heights.append(None)
+                else:
+                    w0 = int(max(point[0] - 1, 0))
+                    w1 = int(min(point[0] + 2, W))
+                    h0 = int(max(point[1] - 1, 0))
+                    h1 = int(min(point[1] + 2, H))
+                    heights.append(reg_pred[14][h0:h1, w0:w1].mean())
+            valid_heights = [height for height in heights if height is not None]
+            if len(valid_heights) > 0:
+                mean_height = np.mean(valid_heights)
+                heights = [mean_height if height is None else height for height in heights]
+            else:
+                heights = [0, 0, 0, 0]
+            # get 3d points
+            mean_slot_3d = []
+            for point, height in zip(mean_slot, heights):
+                mean_slot_3d.append(
+                    [(point[1] - cx) / fx, 
+                     (point[0] - cy) / fy, 
+                     height, 
+                     point[2]]
+                )
+            mean_slots_3d.append(np.float32(mean_slot_3d))
+        
+        return mean_slots_3d
+            
+                
+
