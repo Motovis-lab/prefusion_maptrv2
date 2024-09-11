@@ -1,7 +1,7 @@
 import cv2
 import torch
+import numba
 import numpy as np
-
 
 from typing import Tuple, Dict, Union, Iterable
 from torch import Tensor
@@ -121,26 +121,51 @@ class PlanarSegBev(TensorSmith):
 @TENSOR_SMITHS.register_module()
 class PlanarPolyline3D(TensorSmith):
     def __init__(self, voxel_shape, voxel_range):
-        self.voxel_shape = voxel_shape
-        self.voxel_range = voxel_range
+        """
+        Parameters
+        ----------
+        voxel_shape : tuple
+        voxel_range : Tuple[List]
+
+        Examples
+        --------
+        - voxel_shape=(6, 320, 160)
+        - voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        - Z, X, Y = voxel_shape
+
+        """
+        self.voxel_shape = tuple(voxel_shape)
+        self.voxel_range = tuple(voxel_range)
+        self.bev_intrinsics = get_bev_intrinsics(voxel_shape, voxel_range)
+        Z, X, Y = voxel_shape
+        xx, yy = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
+        self.points_grid_bev = np.float32([yy, xx])
+        
 
     def __call__(self, transformable: Polyline3D):
-        # voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
-        # voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
-        voxel_shape = tuple(self.voxel_shape)
-        voxel_range = tuple(self.voxel_range)
+        """
+        Parameters
+        ----------
+        transformable : Polyline3D
 
-        fx, fy, cx, cy = get_bev_intrinsics(voxel_shape, voxel_range)
+        Returns
+        -------
+        tensor_dict : dict
 
-        Z, X, Y = voxel_shape
-        
-        # fx = X / (voxel_range[1][1] - voxel_range[1][0])
-        # fy = Y / (voxel_range[2][1] - voxel_range[2][0])
-        # cx = - voxel_range[1][0] * fx - 0.5
-        # cy = - voxel_range[2][0] * fy - 0.5
-
-        xx, yy = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
-        points_grid = np.float32([yy, xx])
+        Notes
+        -----
+        ```
+        seg_im  # 分割图
+        reg_im  # 回归图
+            0: dist_im  # 每个分割图上的点到最近线段的垂直距离
+            1,2: vert_vec_im  # 每个分割图上的点到最近线段的向量
+            3,4,5: abs_dir_im  # 每个分割图上的点所在线段的广义单位方向，|nx|, |ny|, nx * ny
+            6 height_im # 每个分割图上的点的高度分布图
+        ```
+        """
+        Z, X, Y = self.voxel_shape
+        fx, fy, cx, cy = self.bev_intrinsics
+        points_grid_bev = self.points_grid_bev
 
         tensor_data = {}
         for branch in transformable.dictionary:
@@ -186,7 +211,7 @@ class PlanarPolyline3D(TensorSmith):
                     line_length = np.linalg.norm(line_dir)
                     line_dir /= line_length
                     line_dir_vert = line_dir[::-1] * [1, -1]
-                    vec_map = vec_point2line_along_direction(points_grid, line_bev, line_dir_vert)
+                    vec_map = vec_point2line_along_direction(points_grid_bev, line_bev, line_dir_vert)
                     dist_im = line_im * np.linalg.norm(vec_map, axis=0) + (1 - line_im) * INF_DIST
                     vec_im = line_im * vec_map
                     abs_dir_im = line_im * np.float32([
@@ -200,7 +225,7 @@ class PlanarPolyline3D(TensorSmith):
                     # height map
                     h2s = (line_3d[1, 2] - line_3d[0, 2]) / max(1e-3, line_length)
                     height_im =  line_3d[0, 2] + h2s * line_im * np.linalg.norm(
-                        points_grid + vec_map - line_bev[0][..., None, None], axis=0
+                        points_grid_bev + vec_map - line_bev[0][..., None, None], axis=0
                     )
                     height_ims.append(height_im)
 
@@ -224,6 +249,187 @@ class PlanarPolyline3D(TensorSmith):
             }
         
         return tensor_data
+
+
+    @staticmethod
+    @numba.njit
+    def _group_points(dst_points, seg_scores, dist_thresh=0.1):
+        ranked_ind = np.argsort(seg_scores)[::-1]
+        kept_groups = []
+        kept_inds = []
+
+        for i in ranked_ind:
+            if i not in kept_inds:
+                point_i = dst_points[:, i]
+                kept_inds.append(i)
+                grouped_inds = [i]
+                kept_groups.append(grouped_inds)
+                for j in ranked_ind:
+                    if j not in kept_inds:
+                        point_j = dst_points[:, j]
+                        dist_ij = np.linalg.norm(point_i - point_j)
+                        if dist_ij <= dist_thresh:
+                            kept_inds.append(j)
+                            grouped_inds.append(j)
+
+        return kept_groups
+
+
+    @staticmethod
+    def _angle_hook_dist(oriented_point_1, oriented_point_2, angle=45, angle_weight=4):
+        point_1, abs_dir_1 = oriented_point_1
+        point_2, abs_dir_2 = oriented_point_2
+        vec_1 = np.float32([abs_dir_1[0], abs_dir_1[1] * abs_dir_1[2]])
+        vec_2 = np.float32([abs_dir_2[0], abs_dir_2[1] * abs_dir_2[2]])
+        cross_thresh = np.sin(np.abs(angle / 2) * np.pi / 180)
+        dist_12 = np.linalg.norm(point_2 - point_1)
+        cross_12 = np.abs(np.cross(vec_1, vec_2))
+        cross_weight = (angle_weight + 1) if cross_12 > cross_thresh else (angle_weight * cross_12 + 1)
+        return dist_12 * cross_weight
+
+    def link_line_points(self, fused_points, fused_vecs, max_adist=5):
+        points_ind = np.arange(fused_points.shape[1])
+        # get line segments
+        line_segments = []
+        kept_inds = []
+
+        for i in points_ind:
+            if i not in kept_inds:
+                kept_inds.append(i)
+                grouped_inds = [i]
+                line_segments.append(grouped_inds)
+                # go forward if direction is similar
+                point_i_forward = fused_points[:, i]
+                abs_vec_i_forward = fused_vecs[:, i]
+                oriented_point_i_forward = [point_i_forward, abs_vec_i_forward]
+                vec_i_forward = np.float32([abs_vec_i_forward[0], abs_vec_i_forward[1] * abs_vec_i_forward[2]])
+                adist_forward_max_ind = i
+                while True:
+                    adist_forward_max = max_adist
+                    for j in points_ind:
+                        if j not in kept_inds:
+                            point_j = fused_points[:, j]
+                            abs_vec_j = fused_vecs[:, j]
+                            oriented_point_j = [point_j, abs_vec_j]
+                            point_vec = point_j - point_i_forward
+                            ward = np.sum(point_vec * vec_i_forward)
+                            if ward > 0:
+                                adist_ij = self._angle_hook_dist(oriented_point_i_forward, oriented_point_j)
+                                if adist_ij < adist_forward_max:
+                                    adist_forward_max = adist_ij
+                                    adist_forward_max_ind = j
+                    if adist_forward_max >= max_adist:
+                        break
+                    grouped_inds.append(adist_forward_max_ind)
+                    kept_inds.append(adist_forward_max_ind)
+                    point_i_forward_old = point_i_forward
+                    point_i_forward = fused_points[:, adist_forward_max_ind]
+                    abs_vec_i_forward = fused_vecs[:, adist_forward_max_ind]
+                    oriented_point_i_forward = [point_i_forward, abs_vec_i_forward]
+                    vec_i_forward = np.float32([abs_vec_i_forward[0], abs_vec_i_forward[1] * abs_vec_i_forward[2]])
+                    if np.sum(vec_i_forward * (point_i_forward - point_i_forward_old)) <= 0:
+                        vec_i_forward *= -1
+                    
+                # go backward if direction is opposite
+                point_i_backward = fused_points[:, i]
+                abs_vec_i_backward = fused_vecs[:, i]
+                oriented_point_i_backward = [point_i_backward, abs_vec_i_backward]
+                vec_i_backward = np.float32([abs_vec_i_backward[0], abs_vec_i_backward[1] * abs_vec_i_backward[2]])
+                adist_backward_max_ind = i
+                while True:
+                    adist_backward_max = max_adist
+                    for j in points_ind:
+                        if j not in kept_inds:
+                            point_j = fused_points[:, j]
+                            abs_vec_j = fused_vecs[:, j]
+                            oriented_point_j = [point_j, abs_vec_j]
+                            point_vec = point_j - point_i_backward
+                            ward = np.sum(point_vec * vec_i_backward)
+                            if ward <= 0:
+                                adist_ij = self._angle_hook_dist(oriented_point_i_backward, oriented_point_j)
+                                if adist_ij < adist_backward_max:
+                                    adist_backward_max = adist_ij
+                                    adist_backward_max_ind = j
+                    if adist_backward_max >= max_adist:
+                        break
+                    grouped_inds.insert(0, adist_backward_max_ind)
+                    kept_inds.append(adist_backward_max_ind)
+                    point_i_backward_old = point_i_backward
+                    point_i_backward = fused_points[:, adist_backward_max_ind]
+                    abs_vec_i_backward = fused_vecs[:, adist_backward_max_ind]
+                    oriented_point_i_backward = [point_i_backward, abs_vec_i_backward]
+                    vec_i_backward = np.float32([abs_vec_i_backward[0], abs_vec_i_backward[1] * abs_vec_i_backward[2]])
+                    if np.sum(vec_i_backward * (point_i_backward - point_i_backward_old)) > 0:
+                        vec_i_backward *= -1
+        
+        return line_segments
+
+
+    def reverse(self, tensor_dict, pre_conf=0.5):
+        """
+        Parameters
+        ----------
+        tensor_dict : dict
+            _description_
+        pre_conf : float, optional, by default 0.5
+
+        Notes
+        -----
+        ```
+        seg_im  # 分割图
+        reg_im  # 回归图
+            0: dist_im  # 每个分割图上的点到最近线段的垂直距离
+            1,2: vert_vec_im  # 每个分割图上的点到最近线段的向量
+            3,4,5: abs_dir_im  # 每个分割图上的点所在线段的广义单位方向，|nx|, |ny|, nx * ny
+            6 height_im # 每个分割图上的点的高度分布图
+        ```
+        """
+        seg_pred = tensor_dict['seg'].detach().cpu().numpy()
+        reg_pred = tensor_dict['reg'].detach().cpu().numpy()
+
+        Z, X, Y = self.voxel_shape
+
+        ## pickup line points
+        valid_points_map = seg_pred[0] > pre_conf
+        # line point postions
+        valid_points_bev = self.points_grid_bev[:, valid_points_map]
+        # pickup scores
+        seg_scores = seg_pred[0][valid_points_map]
+        # pickup regressions
+        reg_values = reg_pred[:, valid_points_map]
+        # get vertical vectors of line points
+        vert_vecs = np.float32([reg_values[4], - reg_values[3] * _sign(reg_values[5])])
+        vert_vecs *= _sign(np.sum(vert_vecs * reg_values[1:3], axis=0))
+        # get precise points, vector of directions, and heights of line
+        dst_points = valid_points_bev + reg_values[0] * vert_vecs
+        dst_vecs =  reg_values[3:6]
+        dst_heights = reg_values[6]
+        
+        ## fuse points, group nms
+        # group points
+        kept_groups = self._group_points(dst_points, seg_scores)
+        # fuse points in one group
+        fused_points = []
+        fused_vecs = []
+        fused_heights = []
+        for g in kept_groups:
+            # TODO: weighted average points
+            mean_point = dst_points[:, g].mean(axis=-1)
+            mean_vec = dst_vecs[:, g].mean(axis=-1)
+            mean_height = dst_heights[g].mean(axis=-1)
+            fused_points.append(mean_point)
+            fused_vecs.append(mean_vec)
+            fused_heights.append(mean_height)
+        fused_points = np.float32(fused_points).T
+        fused_vecs = np.float32(fused_vecs).T
+        fused_heights = np.float32(fused_heights)
+        
+        ## link all points
+        line_segments = self._link_points(fused_points, fused_vecs)
+
+        
+
+
 
 
 
@@ -353,8 +559,6 @@ class PlanarPolygon3D(TensorSmith):
 
 
 
-
-
 @TENSOR_SMITHS.register_module()
 class PlanarParkingSlot3D(TensorSmith):
     def __init__(self, voxel_shape, voxel_range):
@@ -454,14 +658,14 @@ class PlanarParkingSlot3D(TensorSmith):
             linewidht = int(max(1, abs(fx * 0.15)))
             cv2.polylines(seg_im[1], [slot_points_bev_int], linewidht, 1)
             # 2: corners
-            radius = int(max(1, abs(fx * 0.3)))
+            radius = int(max(1, abs(fx * 0.5)))
             for corner in slot_points_bev_int:
                 cv2.circle(seg_im[2], corner, radius, 1, -1)
             # 3: entrance _seg
             if entrance_length > side_length:
-                cv2.circle(seg_im[3], slot_points_bev[[0, 3]].mean(0).astype(int), radius * 2, 1, -1)
+                cv2.circle(seg_im[3], slot_points_bev[[0, 3]].mean(0).astype(int), radius, 1, -1)
             else:
-                cv2.circle(seg_im[3], slot_points_bev[[0, 1]].mean(0).astype(int), radius * 2, 1, -1)
+                cv2.circle(seg_im[3], slot_points_bev[[0, 1]].mean(0).astype(int), radius, 1, -1)
             # add height map
             height_map[0] = self._get_height_map(slot_points_3d, points_grid_bev)
             for point_3d in slot_points_3d:
@@ -845,11 +1049,10 @@ class PlanarParkingSlot3D(TensorSmith):
                 if np.any([point[0] < 0, point[1] < 0, point[0] >= W, point[1] >= H]):
                     heights.append(None)
                 else:
-                    w0 = int(max(point[0] - 1, 0))
-                    w1 = int(min(point[0] + 2, W))
-                    h0 = int(max(point[1] - 1, 0))
-                    h1 = int(min(point[1] + 2, H))
-                    heights.append(reg_pred[14][h0:h1, w0:w1].mean())
+                    heights.append(reg_pred[14][
+                        min(max(round(point[1]), 0), H), 
+                        min(max(round(point[0]), 0), W)
+                    ].mean())
             valid_heights = [height for height in heights if height is not None]
             if len(valid_heights) > 0:
                 mean_height = np.mean(valid_heights)
