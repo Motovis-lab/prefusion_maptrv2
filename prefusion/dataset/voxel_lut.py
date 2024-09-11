@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 
+import virtual_camera as vc
+
 from typing import Dict
 from prefusion.dataset.transform import CameraImage
 
