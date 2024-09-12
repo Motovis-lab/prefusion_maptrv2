@@ -171,9 +171,10 @@ class PlanarPolyline3D(TensorSmith):
         for branch in transformable.dictionary:
             polylines = []
             class_inds = []
-            attr_inds = []
+            attr_lists = []
+            attr_available = 'attrs' in transformable.dictionary[branch]
             for element in transformable.elements:
-                if element['class'] in branch['classes']:
+                if element['class'] in transformable.dictionary[branch]['classes']:
                     points = element['points']
                     polylines.append(np.array([
                         points[..., 1] * fy + cy,
@@ -181,10 +182,19 @@ class PlanarPolyline3D(TensorSmith):
                         points[..., 2]
                     ]).T)
                     class_inds.append(transformable.dictionary[branch]['classes'].index(element['class']))
-                    attr_inds.append(transformable.dictionary[branch]['attrs'].index(element['attr']))
+                    attr_ind_list = []
+                    if 'attr' in element and attr_available:
+                        element_attrs = element['attr'].values()
+                        for attr in element_attrs:
+                            if attr in transformable.dictionary[branch]['attrs']:
+                                attr_ind_list.append(transformable.dictionary[branch]['attrs'].index(attr))
+                    attr_lists.append(attr_ind_list)
                     # TODO: add ignore_mask according to ignore classes and attrs
             num_class_channels = len(transformable.dictionary[branch]['classes'])
-            num_attr_channels = len(transformable.dictionary[branch]['attrs'])
+            if attr_available:
+                num_attr_channels = len(transformable.dictionary[branch]['attrs'])
+            else:
+                num_attr_channels = 0
             branch_seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y))
 
             line_ims = []
@@ -193,16 +203,19 @@ class PlanarPolyline3D(TensorSmith):
             dir_ims = []
             height_ims = []
 
-            for polyline, class_ind, attr_ind in zip(polylines, class_inds, attr_inds):
+            linewidth = int(max(0.51, abs(fx * 0.1)))
+
+            for polyline, class_ind, attr_list in zip(polylines, class_inds, attr_lists):
                 for line_3d in zip(polyline[:-1], polyline[1:]):
                     line_3d = np.float32(line_3d)
                     line_bev = line_3d[:, :2]
-                    polygon = expand_line_2d(line_bev, radius=0.5)
+                    polygon = expand_line_2d(line_bev, radius=linewidth)
                     polygon_int = np.round(polygon).astype(int)
                     # seg_bev_im
                     cv2.fillPoly(branch_seg_im[0], [polygon_int], 1)
                     cv2.fillPoly(branch_seg_im[1 + class_ind], [polygon_int], 1)
-                    cv2.fillPoly(branch_seg_im[1 + num_class_channels + attr_ind], [polygon_int], 1)
+                    for attr_ind in attr_list:
+                        cv2.fillPoly(branch_seg_im[1 + num_class_channels + attr_ind], [polygon_int], 1)
                     # line segment
                     line_im = cv2.fillPoly(np.zeros((X, Y)), [polygon_int], 1)
                     line_ims.append(line_im)
@@ -231,12 +244,18 @@ class PlanarPolyline3D(TensorSmith):
 
             index_im = np.argmin(np.array(dist_ims), axis=0)
             branch_vec_im = np.choose(index_im, vec_ims)
+
+            if False:
+                import matplotlib.pyplot as plt
+                plt.imshow(branch_vec_im[0])
+                plt.show()
+
             branch_dist_im = np.choose(index_im, dist_ims)
             branch_dir_im = np.choose(index_im, dir_ims)
             branch_height_im = np.choose(index_im, height_ims)
 
             branch_reg_im = np.concatenate([
-                branch_seg_im * branch_dist_im[None],
+                branch_seg_im[:1] * branch_dist_im[None],
                 branch_vec_im,
                 branch_dir_im,
                 branch_height_im[None]
@@ -244,8 +263,8 @@ class PlanarPolyline3D(TensorSmith):
             # TODO: add branch_ignore_seg_mask according to ignore classes and attrs
 
             tensor_data[branch] = {
-                'seg': torch.tensor(branch_seg_im),
-                'reg': torch.tensor(branch_reg_im)
+                'seg': torch.tensor(branch_seg_im, dtype=torch.float32),
+                'reg': torch.tensor(branch_reg_im, dtype=torch.float32)
             }
         
         return tensor_data
@@ -287,9 +306,9 @@ class PlanarPolyline3D(TensorSmith):
         cross_weight = (angle_weight + 1) if cross_12 > cross_thresh else (angle_weight * cross_12 + 1)
         return dist_12 * cross_weight
 
-    def link_line_points(self, fused_points, fused_vecs, max_adist=5):
+    def _link_line_points(self, fused_points, fused_vecs, max_adist=5):
         points_ind = np.arange(fused_points.shape[1])
-        # get line segments
+        # get groups of line segments
         line_segments = []
         kept_inds = []
 
@@ -370,7 +389,10 @@ class PlanarPolyline3D(TensorSmith):
         Parameters
         ----------
         tensor_dict : dict
-            _description_
+            ```dict(
+                branch_id = dict,
+                branch_id = dict
+            )```
         pre_conf : float, optional, by default 0.5
 
         Notes
@@ -384,50 +406,69 @@ class PlanarPolyline3D(TensorSmith):
             6 height_im # 每个分割图上的点的高度分布图
         ```
         """
-        seg_pred = tensor_dict['seg'].detach().cpu().numpy()
-        reg_pred = tensor_dict['reg'].detach().cpu().numpy()
+        polylines_3d = {}
+        for branch in tensor_dict:
+            seg_pred = tensor_dict[branch]['seg'].detach().cpu().numpy()
+            reg_pred = tensor_dict[branch]['reg'].detach().cpu().numpy()
 
-        Z, X, Y = self.voxel_shape
+            ## pickup line points
+            valid_points_map = seg_pred[0] > pre_conf
+            # line point postions
+            valid_points_bev = self.points_grid_bev[:, valid_points_map]
+            # pickup scores
+            seg_scores = seg_pred[0][valid_points_map]
+            seg_classes = seg_pred[:, valid_points_map]
+            # pickup regressions
+            reg_values = reg_pred[:, valid_points_map]
+            # get vertical vectors of line points
+            vert_vecs = np.float32([reg_values[4], - reg_values[3] * _sign(reg_values[5])])
+            vert_vecs *= _sign(np.sum(vert_vecs * reg_values[1:3], axis=0))
+            # get precise points, vector of directions, and heights of line
+            dst_points = valid_points_bev + reg_values[0] * vert_vecs
+            dst_vecs =  reg_values[3:6]
+            dst_heights = reg_values[6]
+            
+            ## fuse points, group nms
+            # group points
+            kept_groups = self._group_points(dst_points, seg_scores)
+            # fuse points in one group
+            fused_classes = []
+            fused_points = []
+            fused_vecs = []
+            fused_heights = []
+            for g in kept_groups:
+                weights = seg_scores[g]
+                total_weight = weights.sum()
+                mean_classes = (seg_classes[:, g] * weights[None]).sum(axis=-1) / total_weight
+                mean_point = (dst_points[:, g] * weights[None]).sum(axis=-1) / total_weight
+                mean_vec = (dst_vecs[:, g] * weights[None]).sum(axis=-1) / total_weight
+                mean_height = (dst_heights[g] * weights).sum(axis=-1) / total_weight
+                # mean_point = dst_points[:, g].mean(axis=-1)
+                # mean_vec = dst_vecs[:, g].mean(axis=-1)
+                # mean_height = dst_heights[g].mean(axis=-1)
+                fused_classes.append(mean_classes)
+                fused_points.append(mean_point)
+                fused_vecs.append(mean_vec)
+                fused_heights.append(mean_height)
+            fused_classes = np.float32(fused_classes).T
+            fused_points = np.float32(fused_points).T
+            fused_vecs = np.float32(fused_vecs).T
+            fused_heights = np.float32(fused_heights)
+            
+            ## link all points and get 3d polylines
+            line_segments = self._link_line_points(fused_points, fused_vecs)
+            fx, fy, cx, cy = self.bev_intrinsics
+            polylines_3d[branch] = []
 
-        ## pickup line points
-        valid_points_map = seg_pred[0] > pre_conf
-        # line point postions
-        valid_points_bev = self.points_grid_bev[:, valid_points_map]
-        # pickup scores
-        seg_scores = seg_pred[0][valid_points_map]
-        # pickup regressions
-        reg_values = reg_pred[:, valid_points_map]
-        # get vertical vectors of line points
-        vert_vecs = np.float32([reg_values[4], - reg_values[3] * _sign(reg_values[5])])
-        vert_vecs *= _sign(np.sum(vert_vecs * reg_values[1:3], axis=0))
-        # get precise points, vector of directions, and heights of line
-        dst_points = valid_points_bev + reg_values[0] * vert_vecs
-        dst_vecs =  reg_values[3:6]
-        dst_heights = reg_values[6]
-        
-        ## fuse points, group nms
-        # group points
-        kept_groups = self._group_points(dst_points, seg_scores)
-        # fuse points in one group
-        fused_points = []
-        fused_vecs = []
-        fused_heights = []
-        for g in kept_groups:
-            # TODO: weighted average points
-            mean_point = dst_points[:, g].mean(axis=-1)
-            mean_vec = dst_vecs[:, g].mean(axis=-1)
-            mean_height = dst_heights[g].mean(axis=-1)
-            fused_points.append(mean_point)
-            fused_vecs.append(mean_vec)
-            fused_heights.append(mean_height)
-        fused_points = np.float32(fused_points).T
-        fused_vecs = np.float32(fused_vecs).T
-        fused_heights = np.float32(fused_heights)
-        
-        ## link all points
-        line_segments = self._link_points(fused_points, fused_vecs)
-
-        
+            for g in line_segments:
+                polyline_3d = np.concatenate([
+                    np.stack([(fused_points[1, g] - cx) / fx,
+                              (fused_points[0, g] - cy) / fy,
+                              fused_heights[g]]),
+                    fused_classes[:, g],
+                ], axis=0)
+                polylines_3d[branch].append(polyline_3d)
+        return polylines_3d
 
 
 
@@ -655,8 +696,8 @@ class PlanarParkingSlot3D(TensorSmith):
             # 0: full slot seg
             cv2.fillPoly(seg_im[0], [slot_points_bev_int], 1)
             # 1: slot line
-            linewidht = int(max(1, abs(fx * 0.15)))
-            cv2.polylines(seg_im[1], [slot_points_bev_int], linewidht, 1)
+            linewidth = int(max(1, abs(fx * 0.15)))
+            cv2.polylines(seg_im[1], [slot_points_bev_int], linewidth, 1)
             # 2: corners
             radius = int(max(1, abs(fx * 0.5)))
             for corner in slot_points_bev_int:
