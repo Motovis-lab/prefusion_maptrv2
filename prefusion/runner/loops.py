@@ -4,6 +4,7 @@ from mmengine.runner import EpochBasedTrainLoop, ValLoop, TestLoop
 
 from prefusion.dataset.dataset import GroupBatchDataset
 
+__all__ = ['GroupBatchTrainLoop', 'GroupValLoop', 'GroupTestLoop']
 
 @LOOPS.register_module()
 class GroupBatchTrainLoop(EpochBasedTrainLoop):
@@ -59,8 +60,8 @@ class GroupValLoop(ValLoop):
     """
 
     def __init__(self, runner, dataloader, evaluator, fp16=False):
-        assert isinstance(dataloader.dataset, GroupBatchDataset)
         super().__init__(runner, dataloader, evaluator, fp16=fp16)
+        assert isinstance(self.dataloader.dataset, GroupBatchDataset)
 
     def run(self) -> dict:
         """Launch validation."""
@@ -93,8 +94,8 @@ class GroupTestLoop(TestLoop):
     """
 
     def __init__(self, runner, dataloader, evaluator, fp16=False):
-        assert isinstance(dataloader.dataset, GroupBatchDataset)
         super().__init__(runner, dataloader, evaluator, fp16=fp16)
+        assert isinstance(self.dataloader.dataset, GroupBatchDataset)
 
     def run(self) -> dict:
         """Launch test."""

@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from .transform import Transform
     from .model_feeder import BaseModelFeeder
 
+__all__ = ["GroupBatchDataset"]
 
 def get_frame_index(sequence, timestamp):
     for t in sequence:
@@ -310,7 +311,6 @@ class GroupBatchDataset(Dataset):
     def __init__(
         self,
         name,
-        *,
         data_root: Union[str, Path],
         info_path: Union[str, Path],
         transformable_keys: List[str],
@@ -423,6 +423,14 @@ class GroupBatchDataset(Dataset):
             available_indices[scene_id] = sorted(available_indices[scene_id])
 
         return available_indices
+    
+    @property
+    def group_size(self):
+        return self.group_sampler.group_size
+    
+    @property
+    def frame_interval(self):
+        return self.group_sampler.frame_interval
 
     def __repr__(self):
         return "".join(
