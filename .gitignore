@@ -164,6 +164,7 @@ refs
 data
 *.zip
 **/__pycache__
+work_dirs
 work_dir
 .vscode
 log

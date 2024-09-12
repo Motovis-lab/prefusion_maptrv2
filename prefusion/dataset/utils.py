@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Union, TYPE_CHECKING
 from pathlib import Path
 
 import cv2
@@ -7,6 +7,9 @@ import virtual_camera as vc
 from pypcd_imp import pypcd
 
 from prefusion.registry import TRANSFORMS
+
+if TYPE_CHECKING:
+    from .transform import Transform
 
 INF_DIST = 1e8
 
@@ -62,7 +65,7 @@ def get_cam_type(name):
     
 
 
-def build_transforms(transforms: List) -> List: 
+def build_transforms(transforms: List[Union[dict, "Transform"]]) -> List: 
     from prefusion.dataset.transform import ToTensor
     built_transforms = []
     for transform in transforms:

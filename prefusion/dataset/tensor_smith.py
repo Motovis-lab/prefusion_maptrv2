@@ -19,6 +19,10 @@ from .transform import (
     Polyline3D, SegBev, ParkingSlot3D
 )
 
+__all__ = [
+    "CameraImageTensor", "CameraDepthTensor", "CameraSegTensor", "PlanarBbox3D",
+    "PlanarBboxBev", "PlanarSegBev", "PlanarPolyline3D", "PlanarPolygon3D", "PlanarParkingSlot3D",
+]
 
 class TensorSmith:
     def __call__(self, *args, **kwargs):
@@ -625,9 +629,23 @@ class PlanarParkingSlot3D(TensorSmith):
     
     @staticmethod
     def _get_height_map(
-            slot_points_3d: np.ndarray[Tuple[4, 3]], 
-            points_grid_bev: np.ndarray[Tuple[2, int, int]]
+            slot_points_3d: np.ndarray[Tuple[int, int]], 
+            points_grid_bev: np.ndarray[Tuple[int, int, int]]
         ):
+        """_summary_
+
+        Parameters
+        ----------
+        slot_points_3d : np.ndarray[Tuple[int, int]]
+            of shape (4, 3)
+        points_grid_bev : np.ndarray[Tuple[2, int, int]]
+            of shape (2, _, _)
+
+        Returns
+        -------
+        _type_
+            _description_
+        """
         vec_01 = slot_points_3d[1] - slot_points_3d[0]
         vec_12 = slot_points_3d[2] - slot_points_3d[1]
         vec_23 = slot_points_3d[3] - slot_points_3d[2]
