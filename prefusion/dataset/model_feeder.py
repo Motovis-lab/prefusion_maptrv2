@@ -5,6 +5,8 @@ import numpy as np
 from prefusion.registry import MODEL_FEEDERS
 
 
+__all__ = ["BaseModelFeeder", "FastRayFastBEVFeeders"]
+
 
 @MODEL_FEEDERS.register_module()
 class BaseModelFeeder:

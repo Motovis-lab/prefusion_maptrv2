@@ -843,23 +843,6 @@ class Bbox3D(SpatialTransformable):
             ele['translation'] = rmat @ ele['translation']
             ele['velocity'] = rmat @ ele['velocity']
         return self
-    
-
-
-# class BboxBev(Bbox3D):
-#     pass
-
-
-# class Cylinder3D(Bbox3D):
-#     pass
-
-
-# class OrientedCylinder3D(Bbox3D):
-#     pass
-
-
-# class Square3D(Bbox3D):
-#     pass
 
 
 class Polyline3D(SpatialTransformable):
@@ -1492,7 +1475,6 @@ class RandomImageOmit(Transform):
     pass
 
 
-
 class RenderIntrinsic(Transform):
     
     def __init__(self, resolutions, intrinsics='default', scope="frame"):
@@ -1541,7 +1523,6 @@ class RenderIntrinsic(Transform):
                         intrinsic = self._get_default_intrinsic(resolution, transformable.cam_type)
                     transformable.render_intrinsic(resolution, intrinsic)
         return transformables
-
 
 
 class RenderExtrinsic(Transform):
@@ -1614,7 +1595,6 @@ class RandomRenderExtrinsic(Transform):
         return transformables
 
 
-
 class RandomRotationSpace(Transform):
     def __init__(self, *, prob=0.5, angles=[2, 2, 10], 
                  prob_inverse_cameras_rotation=0.5, scope="group", **kwargs):
@@ -1652,7 +1632,6 @@ class RandomRotationSpace(Transform):
                     transformable.render_extrinsic(del_extrinsic)
         
         return transformables
-
 
 
 class RandomMirrorSpace(Transform):
@@ -1717,3 +1696,11 @@ available_transforms = [
 
 for transform in available_transforms:
     TRANSFORMS.register_module(module=transform)
+
+
+__all__ = [t.__name__ for t in available_transforms] + [
+    "CameraImage", "CameraImageSet", "CameraSegMask", "CameraSegMaskSet",
+    "CameraDepth", "CameraDepthSet", "LidarPoints", "Bbox3D",
+    "Polyline3D", "Polygon3D", "ParkingSlot3D", "Pose",
+    "PoseSet", "Trajectory", "SegBev", "OccSdfBev", "OccSdf3D",
+]

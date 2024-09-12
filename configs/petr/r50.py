@@ -1,0 +1,106 @@
+experiment_name = "stream_petr_r50_demo"
+
+__base__ = '../default_runtime.py'
+
+# custom_imports = dict(
+#     imports=['models', 'datasets', 'hooks', 'runner', 'utils', 'evaluator', 'losses'],
+#     allow_failed_imports=False
+# )
+custom_imports = dict(
+    imports=['prefusion', 'contrib'],
+    allow_failed_imports=False
+)
+# custom_imports = dict(
+#     imports=['prefusion', 'contrib'],
+#     allow_failed_imports=False
+# )
+
+backend_args = None
+
+train_dataloader = dict(
+    num_workers=4,
+    persistent_workers=True,
+    sampler=dict(type='DefaultSampler'),
+    collate_fn=dict(type='collate_dict'),
+    dataset=dict(
+        type="GroupBatchDataset",
+        name='MvParkingTest',
+        data_root='/Users/rlan/work/dataset/motovis/mv4d',
+        info_path='/Users/rlan/work/dataset/motovis/mv4d/mv4d_infos.pkl',
+        dictionary={},
+        tensor_smith=dict(
+            camera_images=dict(
+                type="CameraImageTensor",
+                means=[123.675, 116.280, 103.530],
+                stds=[58.395, 57.120, 57.375],
+            ),
+            bbox_3d=dict(
+                type="PlanarBbox3D",
+                voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
+                voxel_range=([-0.5, 2.5], [36, -12], [12, -12]),
+            ),
+        ),
+        model_feeder=dict(type="BaseModelFeeder"),
+        transformable_keys=[
+            'camera_images', 'bbox_3d'
+        ],
+        transforms=[
+            dict(
+                type="RandomMirrorSpace",
+                prob=0.5,
+                scope='group'
+            ),
+            dict(
+                type="RandomImageISP",
+                prob=0.5,
+            ),
+        ],
+        phase='train',
+        batch_size=1,
+        group_size=2,
+    )
+)
+
+val_dataloader = train_dataloader
+test_dataloader = train_dataloader
+
+train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=24, val_interval=-1)  # -1 note don't eval
+val_cfg = dict(type='GroupValLoop')
+test_cfg = dict(type='GroupTestLoop')
+
+model = dict(type='ToyModel')
+
+val_evaluator = dict(type="Accuracy")
+test_evaluator = dict(type="Accuracy")
+
+
+env_cfg = dict(
+    cudnn_benchmark=False,
+    mp_cfg=dict(mp_start_method='fork', opencv_num_threads=0),
+    dist_cfg=dict(backend='nccl'),
+)
+
+lr = 0.006  # total lr per gpu lr is lr/n 
+
+optim_wrapper = dict(
+    type='OptimWrapper',
+    optimizer=dict(type='AdamW', lr=lr, weight_decay=0.01),
+    clip_grad=dict(max_norm=35, norm_type=2))
+
+param_scheduler = dict(type='MultiStepLR', milestones=[16, 20])
+
+default_hooks = dict(
+    timer=dict(type='IterTimerHook'),
+    logger=dict(type='LoggerHook', interval=50),
+    param_scheduler=dict(type='ParamSchedulerHook'),
+    checkpoint=dict(type='CheckpointHook', interval=1, save_best='precision', rule='greater'),
+    sampler_seed=dict(type='DistSamplerSeedHook')
+)
+
+visualizer = dict(type='Visualizer',
+                  vis_backends=[dict(type='LocalVisBackend'),
+                                dict(type='TensorboardVisBackend')])
+
+
+# load_from = "work_dirs/mv_4d_fastbev_t/20240903_023804/epoch_24.pth"
+resume=False
