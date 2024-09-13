@@ -14,16 +14,16 @@ from copious.cv.geometry import xyzq2mat
 def main(args):
     scene_ids = args.scene_ids or list([p.parent.name for p in args.mv4d_data_root.glob("*/4d_anno_infos")])
     logger.info(f"Total number of scenes: {len(scene_ids)}, scene_list: {scene_ids}")
-    infos = {sid: prepare_scene(args.mv4d_data_root / sid, num_workers=args.num_workers) for sid in scene_ids}
+    infos = {sid: prepare_scene(args, args.mv4d_data_root / sid, num_workers=args.num_workers) for sid in scene_ids}
     write_pickle(infos, args.save_path)
     logger.info(f"All the info has been saved to {args.save_path}")
 
 
-def prepare_scene(scene_root: Path, num_workers: int = 0) -> Dict:
+def prepare_scene(args, scene_root: Path, num_workers: int = 0) -> Dict:
     logger.info(f"Generating info pkl for scene {scene_root.name}")
     return {
         "scene_info": {
-            "calibration": prepare_calibration(scene_root),
+            "calibration": prepare_calibration(scene_root, args.calib_filename),
             "camera_mask": prepare_camera_mask(scene_root),
             "depth_mode": prepare_depth_mode(scene_root),
         },
@@ -36,12 +36,12 @@ def prepare_scene(scene_root: Path, num_workers: int = 0) -> Dict:
             "time_range": 2,
             "time_unit": 1e-3,
         },
-        "frame_info": prepare_all_frame_infos(scene_root, num_workers=num_workers),
+        "frame_info": prepare_all_frame_infos(args, scene_root, num_workers=num_workers),
     }
 
 
-def prepare_calibration(scene_root: Path) -> Dict:
-    raw_calib = edict(read_yaml(scene_root / "calibration_center.yml")["rig"])
+def prepare_calibration(scene_root: Path, calib_filename: str) -> Dict:
+    raw_calib = edict(read_yaml(scene_root / calib_filename)["rig"])
     calib = {}
     for sensor_id, sensor_info in raw_calib.items():
         calib[sensor_id] = {
@@ -78,7 +78,7 @@ def prepare_ego_poses(scene_root: Path) -> Dict[int, np.ndarray]:
     return poses
 
 
-def prepare_all_frame_infos(scene_root: Path, num_workers: int = 0) -> Dict:
+def prepare_all_frame_infos(args, scene_root: Path, num_workers: int = 0) -> Dict:
     common_ts = read_common_ts(scene_root)
 
     # FIXME: Temprary code, need to remove
@@ -91,7 +91,7 @@ def prepare_all_frame_infos(scene_root: Path, num_workers: int = 0) -> Dict:
     ego_poses = prepare_ego_poses(scene_root)
     for ts, (boxes, polylines) in zip(common_ts, res):
         frame_infos[str(ts)] = {  # convert to str to make it align with the design
-            "camera_image": prepare_camera_image_paths(scene_root, ts),
+            "camera_image": prepare_camera_image_paths(scene_root, ts, args.camera_root_name),
             "3d_boxes": boxes,
             "3d_polylines": polylines,
             "ego_pose": ego_poses[ts],
@@ -106,8 +106,8 @@ def read_common_ts(scene_root: Path) -> List[int]:
     return [int(i["lidar"]) for i in ts_info]
 
 
-def prepare_camera_image_paths(scene_root: Path, ts: int) -> Dict[str, str]:
-    return {p.parent.name: p for p in (scene_root / "camera").rglob(f"*{ts}*.jpg")}
+def prepare_camera_image_paths(scene_root: Path, ts: int, camera_root_name: str) -> Dict[str, str]:
+    return {p.parent.name: p for p in (scene_root / camera_root_name).rglob(f"*{ts}*.jpg")}
 
 
 def prepare_object_info(scene_root: Path, ts: int) -> Tuple[List[dict], List[dict]]:
@@ -148,4 +148,6 @@ if __name__ == "__main__":
     parser.add_argument("--scene-ids", nargs="*")
     parser.add_argument("--save-path", type=parent_ensured_path, required=True)
     parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--calib-filename", default="vcalib_center.yml")
+    parser.add_argument("--camera-root-name", default="vcamera")
     main(parser.parse_args())

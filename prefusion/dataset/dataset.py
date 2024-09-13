@@ -189,7 +189,7 @@ class IndexInfo:
 
 
 class GroupSampler:
-    def __init__(self, scene_frame_inds: Dict[str, List[str]], group_size: int | Tuple[int], frame_interval: int | Tuple[int] = 1, seed: int = None):
+    def __init__(self, scene_frame_inds: Dict[str, List[str]], possible_group_sizes: Union[int, Tuple[int]], possible_frame_intervals: Union[int, Tuple[int]] = 1, seed: int = None):
         """Sample groups
 
         Parameters
@@ -202,19 +202,24 @@ class GroupSampler:
               "20230823_110018": [ "20230823_110018/1692759640764", "20230823_110018/1692759640864"],
             }
             ```
-        group_size : int | Tuple[int]
+        possible_group_size : Union[int, Tuple[int]]
             if int, will always use this value as group_size;
             if Tuple[int], during train phase, will random pick a value as the group_size for a given epoch.
-        frame_interval : int | Tuple[int], optional
+        possible_frame_interval : Union[int, Tuple[int]], optional
             if int, will always use this value as frame_interval;
             if Tuple[int], during train phase, will random pick a value as the frame_interval for a given epoch.
         seed : int, optional
             Random seed for randomization operations. It's usually for testing and debugging purpose.
         """
         self.scene_frame_inds = scene_frame_inds
-        self.group_size = [group_size] if isinstance(group_size, int) else group_size
-        self.frame_interval = [frame_interval] if isinstance(frame_interval, int) else frame_interval
+        self.possible_group_sizes = [possible_group_sizes] if isinstance(possible_group_sizes, int) else possible_group_sizes
+        self.possible_frame_intervals = [possible_frame_intervals] if isinstance(possible_frame_intervals, int) else possible_frame_intervals
+        self._cur_train_group_size = self.possible_group_sizes[0]  # train group size of current epoch
         self.seed = seed
+
+    @property
+    def group_size(self) -> int:
+        return self._cur_train_group_size
 
     def sample(self, phase: str, output_str_index: bool = False) -> List[List[IndexInfo]]:
         assert phase.lower() in ["train", "val", "test", "test_scene_by_scene"]
@@ -243,11 +248,11 @@ class GroupSampler:
 
     def sample_train_groups(self) -> List[List[str]]:
         if self.seed: random.seed(self.seed)
-        _group_size = random.choice(self.group_size)
-        return self._generate_groups(_group_size, random_start_ind=True, shuffle=True, seed=self.seed)
+        self._cur_train_group_size = random.choice(self.possible_group_sizes)
+        return self._generate_groups(self._cur_train_group_size, random_start_ind=True, shuffle=True, seed=self.seed)
 
     def sample_val_groups(self) -> List[List[str]]:
-        return self._generate_groups(self.group_size[0], frame_interval=self.frame_interval[0], start_ind=0, random_start_ind=False, shuffle=False)
+        return self._generate_groups(self.possible_group_sizes[0], frame_interval=self.possible_frame_intervals[0], start_ind=0, random_start_ind=False, shuffle=False)
 
     def sample_scene_groups(self) -> List[List[str]]:
         return list(self.scene_frame_inds.values())
@@ -271,7 +276,7 @@ class GroupSampler:
         for _, frame_ids in self.scene_frame_inds.items():
             if not frame_interval:
                 if self.seed: random.seed(self.seed)
-                frame_interval = random.choice(self.frame_interval)
+                frame_interval = random.choice(self.possible_frame_intervals)
             inds_list = generate_groups(len(frame_ids), group_size, frame_interval, start_ind=start_ind, random_start_ind=random_start_ind, seed=seed)
             groups = [[frame_ids[i] for i in inds] for inds in inds_list]
             all_groups.extend(groups)
@@ -322,8 +327,8 @@ class GroupBatchDataset(Dataset):
         indices_path: Union[str, Path] = None,
         batch_size: int = 1,
         drop_last: bool = False,
-        group_size: int | Tuple[int] = 3,
-        frame_interval: int | Tuple[int] = 1,  # TODO: redefine it by time, like seconds
+        possible_group_sizes: Union[int, Tuple[int]] = 3,
+        possible_frame_intervals: Union[int, Tuple[int]] = 1,  # TODO: redefine it by time, like seconds
         group_backtime_prob: float = 0.0,
         seed_dataset: int = None,
     ):
@@ -348,11 +353,11 @@ class GroupBatchDataset(Dataset):
             }
         - transformable_keys (list): List of transformable keys. Keys should be in dictionary.
         - transforms (list): Transform classes for preprocessing transformables. Build by TRANSFORMS.
-        - phase (str): Specifies the phase ('train', 'val', or 'test') of the dataset; default is 'train'.
+        - phase (str): Specifies the phase ('train', 'val', 'test' or 'test_scene_by_scene') of the dataset; default is 'train'.
         - indices_path (str, optional): Specified file of indices to load; if None, all frames are automatically fetched from the info_path.
         - batch_size (int, optional): Batch size; defualt is 1.
-        - group_size (int or list, optional): Size of sequence group; can be a single integer or a list (e.g., [5, 10]); default is 3.
-        - frame_interval (int or list, optional): Interval between frames; default is 1.
+        - possible_group_sizes (int or list, optional): Size of sequence group; can be a single integer or a list (e.g., [5, 10]); default is 3.
+        - possible_frame_intervals (int or list, optional): Interval between frames; default is 1.
         - group_backtime_prob (float): Probability of grouping backtime frames.
         - seed_dataset (int): Random seed for dataset
 
@@ -366,7 +371,6 @@ class GroupBatchDataset(Dataset):
         """
         super().__init__()
         self.name = name
-        # self.group_sampler = group_sampler
         self.data_root = Path(data_root)
         assert phase.lower() in ["train", "val", "test", "test_scene_by_scene"]
         self.phase = phase.lower()
@@ -391,7 +395,7 @@ class GroupBatchDataset(Dataset):
 
         self.seed_dataset = seed_dataset
 
-        self.group_sampler = GroupSampler(self.scene_frame_inds, group_size, frame_interval, seed=seed_dataset)
+        self.group_sampler = GroupSampler(self.scene_frame_inds, possible_group_sizes, possible_frame_intervals, seed=seed_dataset)
         self.groups = self.group_sampler.sample(self.phase, output_str_index=False)
 
     @classmethod
@@ -425,10 +429,6 @@ class GroupBatchDataset(Dataset):
     @property
     def group_size(self):
         return self.group_sampler.group_size
-    
-    @property
-    def frame_interval(self):
-        return self.group_sampler.frame_interval
 
     def __repr__(self):
         return "".join(
@@ -438,8 +438,8 @@ class GroupBatchDataset(Dataset):
                 f"    num_groups={len(self.groups)}, \n"
                 f"    phase={self.phase}, \n"
                 f"    batch_size={self.batch_size}, \n"
-                f"    group_size={self.group_sampler.group_size}, \n"
-                f"    frame_interval={self.group_sampler.frame_interval}, \n"
+                f"    group_size={self.group_sampler.possible_group_sizes}, \n"
+                f"    frame_interval={self.group_sampler.possible_frame_intervals}, \n"
                 f"    group_backtime_prob={self.group_backtime_prob}\n)",
             ]
         )
@@ -455,6 +455,18 @@ class GroupBatchDataset(Dataset):
             return len(self.groups) // self.batch_size
         else:
             return int(np.ceil(len(self.groups) / self.batch_size))
+    
+
+    @staticmethod
+    def _batch_groups(group_batch_ind, groups, batch_size):
+        batched_groups = []
+        for batch_idx in range(batch_size):
+            group_idx = group_batch_ind * batch_size + batch_idx
+            if group_idx >= len(groups):
+                group_idx = max(0, 2 * (len(groups) - 1) - group_idx)
+            batched_groups.append(groups[group_idx])
+        return batched_groups
+
 
     def __getitem__(self, idx) -> GroupBatch:
 
@@ -462,12 +474,7 @@ class GroupBatchDataset(Dataset):
             self.groups = self.group_sampler.sample(self.phase, output_str_index=False)
             raise IndexError
 
-        batched_groups = []
-        for batch_idx in range(self.batch_size):
-            group_idx = idx * self.batch_size + batch_idx
-            if group_idx >= len(self.groups):
-                group_idx = random.randint(0, len(self.groups) - 1)
-            batched_groups.append(self.groups[group_idx])
+        batched_groups = self._batch_groups(idx, self.groups, self.batch_size)
 
         batch = []
         for group in batched_groups:
