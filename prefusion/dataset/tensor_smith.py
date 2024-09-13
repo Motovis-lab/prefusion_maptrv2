@@ -476,42 +476,38 @@ class PlanarPolyline3D(TensorSmith):
 class PlanarPolygon3D(TensorSmith):
     def __init__(self, voxel_shape: list, voxel_range: Tuple[list, list, list]):
         """
-
         Parameters
         ----------
-        voxel_shape : list
-            (6, 320, 160) Z, X, Y
-        voxel_range : tuple
-            ([-0.5, 2.5], [36, -12], [12, -12]) in Z, X, Y coordinate
+        voxel_shape : tuple
+        voxel_range : Tuple[List]
+
+        Examples
+        --------
+        - voxel_shape=(6, 320, 160)
+        - voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        - Z, X, Y = voxel_shape
+
         """
-        self.voxel_shape = voxel_shape
-        self.voxel_range = voxel_range
+        self.voxel_shape = tuple(voxel_shape)
+        self.voxel_range = tuple(voxel_range)
+        self.bev_intrinsics = get_bev_intrinsics(voxel_shape, voxel_range)
+        Z, X, Y = voxel_shape
+        xx, yy = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
+        self.points_grid_bev = np.float32([yy, xx])
 
     def __call__(self, transformable: Polyline3D):
-        # voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
-        # voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
-        voxel_shape = tuple(self.voxel_shape)
-        voxel_range = tuple(self.voxel_range)
-
-        fx, fy, cx, cy = get_bev_intrinsics(voxel_shape, voxel_range)
-
-        Z, X, Y = voxel_shape
-        
-        # fx = X / (voxel_range[1][1] - voxel_range[1][0])
-        # fy = Y / (voxel_range[2][1] - voxel_range[2][0])
-        # cx = - voxel_range[1][0] * fx - 0.5
-        # cy = - voxel_range[2][0] * fy - 0.5
-
-        xx, yy = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
-        points_grid = np.float32([yy, xx])
+        Z, X, Y = self.voxel_shape
+        fx, fy, cx, cy = self.bev_intrinsics
+        points_grid_bev = self.points_grid_bev
 
         tensor_data = {}
         for branch in transformable.dictionary:
             polylines = []
             class_inds = []
-            attr_inds = []
+            attr_lists = []
+            attr_available = 'attrs' in transformable.dictionary[branch]
             for element in transformable.elements:
-                if element['class'] in branch['classes']:
+                if element['class'] in transformable.dictionary[branch]['classes']:
                     points = element['points']
                     polylines.append(np.array([
                         points[..., 1] * fy + cy,
@@ -519,10 +515,19 @@ class PlanarPolygon3D(TensorSmith):
                         points[..., 2]
                     ]).T)
                     class_inds.append(transformable.dictionary[branch]['classes'].index(element['class']))
-                    attr_inds.append(transformable.dictionary[branch]['attrs'].index(element['attr']))
+                    attr_ind_list = []
+                    if 'attr' in element and attr_available:
+                        element_attrs = element['attr'].values()
+                        for attr in element_attrs:
+                            if attr in transformable.dictionary[branch]['attrs']:
+                                attr_ind_list.append(transformable.dictionary[branch]['attrs'].index(attr))
+                    attr_lists.append(attr_ind_list)
                     # TODO: add ignore_mask according to ignore classes and attrs
             num_class_channels = len(transformable.dictionary[branch]['classes'])
-            num_attr_channels = len(transformable.dictionary[branch]['attrs'])
+            if attr_available:
+                num_attr_channels = len(transformable.dictionary[branch]['attrs'])
+            else:
+                num_attr_channels = 0
             branch_seg_im = np.zeros((2 + num_class_channels + num_attr_channels, X, Y))
 
             line_ims = []
@@ -531,11 +536,12 @@ class PlanarPolygon3D(TensorSmith):
             dir_ims = []
             height_ims = []
 
-            for polyline, class_ind, attr_ind in zip(polylines, class_inds, attr_inds):
+            for polyline, class_ind, attr_list in zip(polylines, class_inds, attr_lists):
                 polyline_int = np.round(polyline).astype(int)
                 # seg_bev_im
                 cv2.fillPoly(branch_seg_im[2 + class_ind], [polyline_int], 1)
-                cv2.fillPoly(branch_seg_im[2 + num_class_channels + attr_ind], [polyline_int], 1)
+                for attr_ind in attr_list:
+                    cv2.fillPoly(branch_seg_im[2 + num_class_channels + attr_ind], [polyline_int], 1)
                 for line_3d in zip(polyline[:-1], polyline[1:]):
                     line_3d = np.float32(line_3d)
                     line_bev = line_3d[:, :2]
@@ -551,7 +557,7 @@ class PlanarPolygon3D(TensorSmith):
                     line_length = np.linalg.norm(line_dir)
                     line_dir /= line_length
                     line_dir_vert = line_dir[::-1] * [1, -1]
-                    vec_map = vec_point2line_along_direction(points_grid, line_bev, line_dir_vert)
+                    vec_map = vec_point2line_along_direction(points_grid_bev, line_bev, line_dir_vert)
                     dist_im = line_im * np.linalg.norm(vec_map, axis=0) + (1 - line_im) * INF_DIST
                     vec_im = line_im * vec_map
                     abs_dir_im = line_im * np.float32([
@@ -565,7 +571,7 @@ class PlanarPolygon3D(TensorSmith):
                     # height map
                     h2s = (line_3d[1, 2] - line_3d[0, 2]) / max(1e-3, line_length)
                     height_im =  line_3d[0, 2] + h2s * line_im * np.linalg.norm(
-                        points_grid + vec_map - line_bev[0][..., None, None], axis=0
+                        points_grid_bev + vec_map - line_bev[0][..., None, None], axis=0
                     )
                     height_ims.append(height_im)
 
@@ -584,8 +590,8 @@ class PlanarPolygon3D(TensorSmith):
             # TODO: add branch_ignore_seg_mask according to ignore classes and attrs
 
             tensor_data[branch] = {
-                'seg': torch.tensor(branch_seg_im),
-                'reg': torch.tensor(branch_reg_im)
+                'seg': torch.tensor(branch_seg_im, dtype=torch.float32),
+                'reg': torch.tensor(branch_reg_im, dtype=torch.float32)
             }
         
         return tensor_data
@@ -600,7 +606,7 @@ class PlanarPolygon3D(TensorSmith):
 
 @TENSOR_SMITHS.register_module()
 class PlanarParkingSlot3D(TensorSmith):
-    def __init__(self, voxel_shape, voxel_range):
+    def __init__(self, voxel_shape: tuple, voxel_range: Tuple[list]):
         """
         Parameters
         ----------
