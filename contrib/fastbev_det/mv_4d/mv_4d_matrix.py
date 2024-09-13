@@ -1,0 +1,409 @@
+__base__ = '../default_runtime.py'
+
+custom_imports = dict(
+    imports=['models', 'datasets', 'hooks', 'runner', 'utils', 'evaluator', 'losses'],
+    allow_failed_imports=False
+)
+
+backend_args = None
+
+class_names = [
+    
+]
+
+IMG_KEYS = [
+        'VCAMERA_FISHEYE_FRONT', 'VCAMERA_PERSPECTIVE_FRONT_LEFT', 'VCAMERA_PERSPECTIVE_BACK_LEFT', 'VCAMERA_FISHEYE_LEFT', 'VCAMERA_PERSPECTIVE_BACK', 'VCAMERA_FISHEYE_BACK', 
+        'VCAMERA_PERSPECTIVE_FRONT_RIGHT', 'VCAMERA_PERSPECTIVE_BACK_RIGHT', 'VCAMERA_FISHEYE_RIGHT', 'VCAMERA_PERSPECTIVE_FRONT'
+        ]
+data_root = "data/mv_4d_data/"
+
+W, H = 120, 240
+bev_front = 180 
+bev_left = 60
+voxel_size = [0.2, 0.2, 0.5]
+downsample_factor=8
+
+
+fish_img_size = [256, 160]
+perspective_img_size = [256, 192]
+front_perspective_img_size = [768, 384]
+batch_size = 4
+group_size = 3
+bev_range = [-12, 36, -12, 12, -10, 10]
+frame_start_end_ids = [1,0,2]  # group size is 3
+
+voxel_feature_config = dict(
+    voxel_shape=(6, H, W),  # Z, X, Y in ego system
+    voxel_range=([-0.5, 2.5], [36, -12], [12, -12]),
+    ego_distance_max=40,
+    ego_distance_step=2
+)
+
+general_camera_feature_config = dict(
+    ray_distance_num_channel=64,
+    ray_distance_start=0.25,
+    ray_distance_step=0.25,
+    feature_downscale=downsample_factor,
+)
+
+train_pipeline = [
+    dict(type='IntrinsicImage',
+        resolutions=dict(
+            VCAMERA_PERSPECTIVE_FRONT=front_perspective_img_size,
+            VCAMERA_PERSPECTIVE_FRONT_LEFT=perspective_img_size,
+            VCAMERA_PERSPECTIVE_BACK_LEFT=perspective_img_size,
+            VCAMERA_PERSPECTIVE_BACK=perspective_img_size,
+            VCAMERA_PERSPECTIVE_BACK_RIGHT=perspective_img_size,
+            VCAMERA_PERSPECTIVE_FRONT_RIGHT=perspective_img_size,
+            VCAMERA_FISHEYE_FRONT=fish_img_size,
+            VCAMERA_FISHEYE_LEFT=fish_img_size,
+            VCAMERA_FISHEYE_BACK=fish_img_size,
+            VCAMERA_FISHEYE_RIGHT=fish_img_size,
+        ),
+        scope='frame'
+    ),
+    dict(type='RandomExtrinsicImage',
+        prob=0.8, 
+        angles=[0,0,3],
+        scope='frame'),
+    dict(type='FastRayLookUpTable', 
+        voxel_feature_config=voxel_feature_config,
+        camera_feature_configs=dict(
+            VCAMERA_FISHEYE_FRONT=general_camera_feature_config,
+            VCAMERA_PERSPECTIVE_FRONT_LEFT=general_camera_feature_config,
+            VCAMERA_PERSPECTIVE_BACK_LEFT=general_camera_feature_config,
+            VCAMERA_FISHEYE_LEFT=general_camera_feature_config,
+            VCAMERA_PERSPECTIVE_BACK=general_camera_feature_config,
+            VCAMERA_FISHEYE_BACK=general_camera_feature_config,
+            VCAMERA_PERSPECTIVE_FRONT_RIGHT=general_camera_feature_config,
+            VCAMERA_PERSPECTIVE_BACK_RIGHT=general_camera_feature_config,
+            VCAMERA_FISHEYE_RIGHT=general_camera_feature_config,
+            VCAMERA_PERSPECTIVE_FRONT=general_camera_feature_config
+            )
+        ),
+    dict(type='ToTensor', bev_resolution=[H, W], bev_range=bev_range)
+]
+
+val_pipeline = [
+    dict(type='IntrinsicImage',
+        resolutions=dict(
+            VCAMERA_PERSPECTIVE_FRONT=front_perspective_img_size,
+            VCAMERA_PERSPECTIVE_FRONT_LEFT=perspective_img_size,
+            VCAMERA_PERSPECTIVE_BACK_LEFT=perspective_img_size,
+            VCAMERA_PERSPECTIVE_BACK=perspective_img_size,
+            VCAMERA_PERSPECTIVE_BACK_RIGHT=perspective_img_size,
+            VCAMERA_PERSPECTIVE_FRONT_RIGHT=perspective_img_size,
+            VCAMERA_FISHEYE_FRONT=fish_img_size,
+            VCAMERA_FISHEYE_LEFT=fish_img_size,
+            VCAMERA_FISHEYE_BACK=fish_img_size,
+            VCAMERA_FISHEYE_RIGHT=fish_img_size,
+        ),
+        scope='frame'
+    ),
+    dict(type='ToTensor', bev_resolution=[H, W], bev_range=bev_range)
+]
+
+CLASSES = ['class.vehicle.passenger_car', 'class.traffic_facility.box', 'class.traffic_facility.soft_barrier', 'class.traffic_facility.hard_barrier', \
+           'class.road_marker.arrow', 'class.traffic_facility.speed_bump', 'class.parking.wheel_stopper',\
+           'class.parking.indoor_column']
+
+bbox3d = dict(
+    branch_0=dict(classes=['class.vehicle.passenger_car', 'class.traffic_facility.box', 'class.traffic_facility.soft_barrier', 'class.traffic_facility.hard_barrier'], attrs=[['attr.vehicle.is_door_open', 'attr.vehicle.is_trunk_open'], [], [], []])
+)
+
+BboxBev = dict(
+    branch_0=dict(classes=['class.road_marker.arrow', 'class.traffic_facility.speed_bump', 'class.parking.wheel_stopper'], attrs=[[], [], []]),
+)
+
+Cylinder3D = dict(
+
+)
+
+Square3D = dict(
+    branch_0=dict(classes=['class.parking.indoor_column'], attrs=[['attr.parking.indoor_column.shape']])
+)
+
+collection_info_type = ['camera_images','camera_depths', 'bbox_3d', 'bbox_bev', 'square_3d']
+
+dictionary=dict(
+        bbox_3d=bbox3d,
+        bbox_bev=BboxBev,
+        square_3d=Square3D, 
+        # cylinder_3d=Cylinder3D
+        )
+
+train_dataloader = dict(
+    num_workers=4,
+    persistent_workers=True,
+    sampler=dict(type='DistributedGroupSampler'),
+    collate_fn=dict(type='collate_generator'),
+    dataset=dict(
+        type='GroupBatchDataset',
+        name="mv_4d",
+        data_root=data_root,
+        info_path=data_root + 'mv_4d_infos.pkl',
+        dictionary=dictionary,
+        transformable_keys=collection_info_type,
+        transforms=train_pipeline,
+        phase='train',
+        batch_size=batch_size, 
+        group_size=group_size,
+        ),
+    )
+
+val_dataloader = dict(
+    num_workers=4,
+    persistent_workers=True,
+    sampler=dict(type='DistributedGroupSampler'),
+    collate_fn=dict(type='collate_generator'),
+    dataset=dict(
+        type='GroupBatchDataset',
+        name="mv_4d",
+        data_root=data_root,
+        info_path=data_root + 'mv_4d_infos.pkl',
+        dictionary=dictionary, 
+        transformable_keys=collection_info_type,
+        transforms=train_pipeline,
+        phase='val',
+        batch_size=batch_size, 
+        group_size=group_size,
+        ),
+    )
+# test_dataloader = val_dataloader
+
+
+model_train_cfg = dict(
+    available_elements = ['heatmap', 'anno_boxes', 'gridzs', 'class_maps'],
+    to_mv_coord = [36, 12, 3],
+    point_cloud_range=[-51.2, -51.2, -5, 51.2, 51.2, 3],
+    grid_size=[512, 512, 1],
+    voxel_size=[0.2, 0.2, 8],
+    out_size_factor=4,
+    dense_reg=1,
+    gaussian_overlap=0.1,
+    max_objs=500,
+    min_radius=2,
+    code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.5, 0.5],
+    is_train_depth=True
+)
+
+model_test_cfg = dict(
+    post_center_limit_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
+    max_per_img=500,
+    max_pool_nms=False,
+    min_radius=[4, 12, 10, 1, 0.85, 0.175],
+    score_threshold=0.1,
+    out_size_factor=4,
+    voxel_size=[0.2, 0.2, 8],
+    nms_type='rotate',
+    pre_max_size=1000,
+    post_max_size=83,
+    nms_thr=0.2,
+)
+
+model = dict(
+    type='MatrixVT_Det',
+    data_preprocessor=dict(
+        type='MVDataPreprocess',
+        mean=[128, 128, 128],
+        std=[255, 255, 255],
+        IMG_KEYS=IMG_KEYS, 
+        label_type=collection_info_type,
+        predict_elements=['heatmap', 'anno_boxes', 'gridzs', 'class_maps'],
+        batch_size=batch_size,
+        group_size=group_size,
+        label_start_idx=2, # process labels info start index of collection_info_type
+        non_blocking=True
+    ),
+    backbone_conf_fish=dict(
+        type='MatrixVT_FISH',
+        x_bound=[5, -5, 0.2],  # BEV grids bounds and size (m)
+        y_bound=[5, -5, 0.2],  # BEV grids bounds and size (m)
+        z_bound=[3, -5, 8],  # BEV grids bounds and size (m)
+        d_bound_fish=[0.1, 5.1, 0.2],  # Categorical Depth bounds and division (m)
+        final_dim=[fish_img_size[1], fish_img_size[0]],  # img size for model input (pix)
+        output_channels=80,  # BEV feature channels
+        downsample_factor=downsample_factor,  # ds factor of the feature to be projected to BEV (e.g. 256x704 -> 16x44)  # noqa
+        img_backbone_conf=dict(
+            type='ResNet',
+            depth=50,
+            frozen_stages=0,
+            out_indices=[0, 1, 2, 3],
+            norm_eval=False,
+            init_cfg=dict(type='Pretrained',
+                            checkpoint='torchvision://resnet50'),
+            ),
+        img_neck_conf=dict(
+            type='SECONDFPN',
+            in_channels=[256, 512, 1024, 2048],
+            upsample_strides=[0.25, 0.5, 1, 2],
+            out_channels=[128, 128, 128, 128],
+            ),
+        depth_net_conf=dict(type='Fish_DepthNet', in_channels=512, mid_channels=512, context_channels=80, depth_channels=25),
+    ),
+    backbone_conf_pv=dict(
+        type='MatrixVT_PV',
+        x_bound=[36, -12, 0.2],  # BEV grids bounds and size (m)
+        y_bound=[12, -12, 0.2],  # BEV grids bounds and size (m)
+        z_bound=[3, -5, 8],  # BEV grids bounds and size (m)
+        d_bound_front=[0.1, 36.1, 0.2],  # Categorical Depth bounds and division (m)
+        d_bound_pv=[0.1, 12.1, 0.2],
+        final_dim_front=[front_perspective_img_size[1], front_perspective_img_size[0]],
+        final_dim_other=[perspective_img_size[1], perspective_img_size[0]],
+        output_channels=80,  # BEV feature channels
+        downsample_factor=downsample_factor,  # ds factor of the feature to be projected to BEV (e.g. 256x704 -> 16x44)  # noqa
+        img_backbone_conf=dict(
+            type='ResNet',
+            depth=50,
+            frozen_stages=0,
+            out_indices=[0, 1, 2, 3],
+            norm_eval=False,
+            init_cfg=dict(type='Pretrained',
+                            checkpoint='torchvision://resnet50'),
+            ),
+        img_neck_conf=dict(
+            type='SECONDFPN',
+            in_channels=[256, 512, 1024, 2048],
+            upsample_strides=[0.25, 0.5, 1, 2],
+            out_channels=[128, 128, 128, 128],
+            ),
+        depth_net_conf_front=dict(type='PV_DepthNet', in_channels=512, mid_channels=512, context_channels=80, depth_channels=180),
+        depth_net_conf_other=dict(type='PV_DepthNet', in_channels=512, mid_channels=512, context_channels=80, depth_channels=60),
+    ),
+    pv_bev_fusion = dict(type="PV_BEV_Fusion"),
+    # pv_bev_fusion = dict(type="PV_BEV_Fusion_PV_FRONT"),
+    mono_depth = dict(type='Mono_Depth', 
+                      fish_img_size=fish_img_size, 
+                      pv_img_size=perspective_img_size, 
+                      front_img_size=front_perspective_img_size, 
+                      downsample_factor=downsample_factor, 
+                      batch_size=batch_size, 
+                      avg_reprojection=True,
+                      disparity_smoothness=0.001,
+                      fish_unproject_cfg=dict(type='Fish_BackprojectDepth', 
+                                              batch_size=batch_size*4, 
+                                              height=fish_img_size[1], 
+                                              width=fish_img_size[0],
+                                              intrinsic=((fish_img_size[0]-1)/2, (fish_img_size[1]-1)/2, fish_img_size[0]/4, fish_img_size[0]/4, 0.1, 0,0,0)),
+                      fish_project3d_cfg=dict(type='Fish_Project3D', 
+                                              batch_size=batch_size*4, 
+                                              height=fish_img_size[1], 
+                                              width=fish_img_size[0],
+                                              intrinsic=((fish_img_size[0]-1)/2, (fish_img_size[1]-1)/2, fish_img_size[0]/4, fish_img_size[0]/4, 0.1, 0,0,0)),                      
+                      fish_mono_depth_net_cfg=dict(type='Mono_DepthReducer', img_channels=25, mid_channels=12),
+                      pv_mono_depth_net_cfg=dict(type='Mono_DepthReducer', img_channels=60, mid_channels=24),
+                      front_mono_depth_net_cfg=dict(type='Mono_DepthReducer', img_channels=180, mid_channels=64),
+                      ),
+    head_conf=dict(
+        type='BEVDepthHead',
+        bev_backbone_conf=dict(
+            type='ResNet',
+            in_channels=80,
+            depth=18,
+            num_stages=3,
+            strides=(1, 2, 2),
+            dilations=(1, 1, 1),
+            out_indices=[0, 1, 2],
+            norm_eval=False,
+            base_channels=160,
+        ),
+        bev_neck_conf=dict(type='SECONDFPN',
+            in_channels=[80, 160, 320, 640],
+            upsample_strides=[1, 2, 4, 8],
+            out_channels=[64, 64, 64, 64]),
+        tasks=[
+            dict(label_type='bbox_3d', num_class=5, class_names=['foreground', 'class.vehicle.passenger_car', 'class.traffic_facility.box', 'class.traffic_facility.soft_barrier', 'class.traffic_facility.hard_barrier']),
+            dict(label_type='bbox_bev', num_class=4, class_names=['foreground', 'class.road_marker.arrow', 'class.traffic_facility.speed_bump', 'class.parking.wheel_stopper']),
+            dict(label_type='square_3d', num_class=2, class_names=['foreground', 'class.parking.indoor_column']),
+            ],
+        common_heads=[
+            dict(heatmap=(1, 2), anno_boxes=(17, 2), gridzs=(1, 2)),
+            dict(heatmap=(1, 2), anno_boxes=(17, 2), gridzs=(1, 2)),
+            dict(heatmap=(1, 2), anno_boxes=(16, 2), gridzs=(1, 2)),
+        ],
+        bbox_coder=dict(
+            type='mmdet3d.CenterPointBBoxCoder',
+            post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
+            max_num=500,
+            score_threshold=0.1,
+            out_size_factor=4,
+            voxel_size=[0.2, 0.2, 8],
+            pc_range=[-51.2, -51.2, -5, 51.2, 51.2, 3],
+            code_size=9,
+            ),
+        separate_head=dict(type='mmdet3d.SeparateHead',
+                           init_bias=-2.19,
+                           final_kernel=3),
+        train_cfg=model_train_cfg,
+        test_cfg=model_test_cfg,
+        in_channels=256,
+        loss_cls=dict(
+            type='mmdet.GaussianFocalLoss', reduction='mean'),
+        loss_bbox=dict(
+            type='mmdet.L1Loss', reduction='mean', loss_weight=0.25),
+    ),
+    is_train_depth=True,
+    frame_start_end_ids=frame_start_end_ids
+)
+
+val_evaluator = dict(
+    type='mv_4d_Evaluator',
+    metrics = [
+        # dict(
+        #     type='mmdet3d.NuScenesMetric',
+        #     data_root=data_root,
+        #     ann_file=data_root + 'mv_4d_infos.pkl',
+        #     metric='bbox',
+        #     backend_args=backend_args),
+        dict(
+            type='Box3DMetric',
+            available_range=bev_range,
+            available_class=CLASSES,
+            jsonfile_prefix='./work_dirs/'
+            )
+    ],
+    frame_start_end_ids=frame_start_end_ids
+)
+
+# test_evaluator = val_evaluator
+
+train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=24, val_interval=25)
+val_cfg = dict(type='GroupValLoop')
+# test_cfg = dict(type='GroupTestLoop')
+
+env_cfg = dict(
+    cudnn_benchmark=False,
+    mp_cfg=dict(mp_start_method='fork', opencv_num_threads=0),
+    dist_cfg=dict(backend='nccl'),
+)
+find_unused_parameters = True
+
+runner_type = 'SerialRunner'
+
+lr = 0.002  # total lr per gpu lr is lr/n 
+optim_wrapper = dict(
+    type='OptimWrapper',
+    optimizer=dict(type='AdamW', lr=lr, weight_decay=0.01),
+    clip_grad=dict(max_norm=35, norm_type=2))
+param_scheduler = dict(type='MultiStepLR', milestones=[16, 20])
+
+auto_scale_lr = dict(enable=False, batch_size=32)
+
+default_hooks = dict(
+    timer=dict(type='IterTimerHook'),
+    logger=dict(type='LoggerHook', interval=10),
+    param_scheduler=dict(type='ParamSchedulerHook'),
+    checkpoint=dict(type='MV_CheckpointHook', interval=5))
+
+custom_hooks = [
+    dict(
+        type='MEGVIIEMAHook',
+        init_updates=10560,
+        priority='NORMAL',
+    ),
+    ]
+
+vis_backends = [dict(type='LocalVisBackend')]
+
+load_from = None # "/ssd/home/wuhan/prefusion/work_dirs/mv_4d_matrix/20240805_080742/epoch_24_ema.pth"
+resume=False
