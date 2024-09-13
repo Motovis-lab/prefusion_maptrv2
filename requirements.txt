@@ -5,6 +5,7 @@ scipy
 tqdm
 easydict==1.13
 nuscenes-devkit
+numba>=0.59.0
 opencv-python-headless
 virtual-camera>=0.0.4.3
 open3d>=0.18.0
