@@ -248,12 +248,6 @@ class PlanarPolyline3D(TensorSmith):
 
             index_im = np.argmin(np.array(dist_ims), axis=0)
             branch_vec_im = np.choose(index_im, vec_ims)
-
-            if False:
-                import matplotlib.pyplot as plt
-                plt.imshow(branch_vec_im[0])
-                plt.show()
-
             branch_dist_im = np.choose(index_im, dist_ims)
             branch_dir_im = np.choose(index_im, dir_ims)
             branch_height_im = np.choose(index_im, height_ims)
@@ -596,7 +590,7 @@ class PlanarPolygon3D(TensorSmith):
         
         return tensor_data
     
-    def inverse(self, tensor_data):
+    def reverse(self, tensor_data):
         pass
 
 
