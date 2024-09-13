@@ -9,7 +9,7 @@ from collections import deque
 
 
 @HOOKS.register_module()
-class MV_CheckpointHook(CheckpointHook):
+class ExperimentWiseCheckpointHook(CheckpointHook):
     def __init__(self, interval: int = -1, by_epoch: bool = True, save_optimizer: bool = True, save_param_scheduler: bool = True, out_dir: str | Path | None = None, max_keep_ckpts: int = -1, save_last: bool = True, save_best: str | List[str] | None = None, rule: str | List[str] | None = None, greater_keys: Sequence[str] | None = None, less_keys: Sequence[str] | None = None, file_client_args: dict | None = None, filename_tmpl: str | None = None, backend_args: dict | None = None, published_keys: str | List[str] | None = None, save_begin: int = 0, **kwargs) -> None:
         super().__init__(interval, by_epoch, save_optimizer, save_param_scheduler, out_dir, max_keep_ckpts, save_last, save_best, rule, greater_keys, less_keys, file_client_args, filename_tmpl, backend_args, published_keys, save_begin, **kwargs)
 

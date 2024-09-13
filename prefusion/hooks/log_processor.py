@@ -13,7 +13,7 @@ from mmengine.runner.log_processor import LogProcessor
 
 
 @LOG_PROCESSORS.register_module()
-class MV_LogProcessor(LogProcessor):
+class GroupAwareLogProcessor(LogProcessor):
     def __init__(self, window_size=10, by_epoch=True, custom_cfg: List[dict] | None = None, num_digits: int = 4, log_with_hierarchy: bool = False, mean_pattern=r'.*(loss|time|data_time|grad_norm).*'):
         super().__init__(window_size, by_epoch, custom_cfg, num_digits, log_with_hierarchy, mean_pattern)
 

@@ -9,7 +9,7 @@ DATA_BATCH = Optional[Union[dict, tuple, list]]
 
 
 @HOOKS.register_module()
-class MVIterTimerHook(IterTimerHook):
+class GroupIterTimerHook(IterTimerHook):
     def __init__(self):
         super().__init__()
 
