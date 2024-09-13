@@ -1,15 +1,18 @@
-from typing import List, Union, TYPE_CHECKING
+from typing import List, Union, Dict, TYPE_CHECKING
 from pathlib import Path
+import copy
 
 import cv2
 import numpy as np
 import virtual_camera as vc
 from pypcd_imp import pypcd
 
-from prefusion.registry import TRANSFORMS
+from prefusion.registry import TRANSFORMS, TENSOR_SMITHS, MODEL_FEEDERS
 
 if TYPE_CHECKING:
     from .transform import Transform
+    from .tensor_smith import TensorSmith
+    from .model_feeder import BaseModelFeeder
 
 INF_DIST = 1e8
 
@@ -65,7 +68,7 @@ def get_cam_type(name):
     
 
 
-def build_transforms(transforms: List[Union[dict, "Transform"]]) -> List: 
+def build_transforms(transforms: List[Union[dict, "Transform"]]) -> List["Transform"]: 
     from prefusion.dataset.transform import ToTensor
     built_transforms = []
     for transform in transforms:
@@ -77,6 +80,21 @@ def build_transforms(transforms: List[Union[dict, "Transform"]]) -> List:
     built_transforms.append(ToTensor())
     return built_transforms
 
+
+def build_tensor_smiths(tensor_smiths: Dict[str, Union[dict, "TensorSmith"]]) -> Dict[str, "TensorSmith"]: 
+    built_tensor_smiths = {}
+    for transformabel_key, tensor_smith in tensor_smiths.items():
+        tensor_smith = copy.deepcopy(tensor_smith)
+        if isinstance(tensor_smith, dict):
+            tensor_smith = TENSOR_SMITHS.build(tensor_smith)
+        built_tensor_smiths[transformabel_key] = tensor_smith
+    return built_tensor_smiths
+
+
+def build_model_feeder(model_feeder: Union["BaseModelFeeder", dict]) -> "BaseModelFeeder":
+    if isinstance(model_feeder, dict):
+        return MODEL_FEEDERS.build(model_feeder)
+    return model_feeder
 
 def read_pcd(path: Union[str, Path], intensity: bool = True) -> np.ndarray:
     """read pcd file

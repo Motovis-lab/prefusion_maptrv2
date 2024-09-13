@@ -11,7 +11,6 @@ from .utils import (
     expand_line_2d, _sign, INF_DIST,
     vec_point2line_along_direction, 
     dist_point2line_along_direction,
-    get_cam_type
 )
 from .transform import (
     CameraImage, CameraSegMask, CameraDepth,

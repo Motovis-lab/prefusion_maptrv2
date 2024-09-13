@@ -33,7 +33,7 @@ from .transform import (
     OccSdf3D,
 )
 
-from .utils import get_cam_type, build_transforms, read_pcd
+from .utils import build_transforms, build_tensor_smiths, build_model_feeder, read_pcd
 
 if TYPE_CHECKING:
     from .tensor_smith import TensorSmith
@@ -315,9 +315,9 @@ class GroupBatchDataset(Dataset):
         info_path: Union[str, Path],
         transformable_keys: List[str],
         dictionary: Dict[ str, Dict ],
-        tensor_smith: Dict[str, "TensorSmith"],
-        transforms: List["Transform"],
-        model_feeder: "BaseModelFeeder",
+        tensor_smiths: Dict[str, Union[dict, "TensorSmith"]],
+        transforms: List[Union[dict, "Transform"]],
+        model_feeder: Union["BaseModelFeeder", dict],
         phase: str = "train",
         indices_path: Union[str, Path] = None,
         batch_size: int = 1,
@@ -375,11 +375,9 @@ class GroupBatchDataset(Dataset):
         self._assert_availability(transformable_keys)
         self.dictionary = dictionary
         self.transformable_keys = transformable_keys
-        # TODO: implement build_tensor_smith
-        self.tensor_smith = tensor_smith
+        self.tensor_smiths = build_tensor_smiths(tensor_smiths)
         self.transforms = build_transforms(transforms)
-        # TODO: implement build_model_feeder
-        self.model_feeder = model_feeder
+        self.model_feeder = build_model_feeder(model_feeder)
 
         if indices_path is not None:
             indices = [line.strip() for line in open(indices_path, "w")]
@@ -518,7 +516,7 @@ class GroupBatchDataset(Dataset):
                 ego_mask=mmcv.imread(self.data_root / scene_info["camera_mask"][cam_id], flag="grayscale"),
                 extrinsic=calib[cam_id]["extrinsic"],
                 intrinsic=calib[cam_id]["intrinsic"],
-                tensor_smith=self.tensor_smith.get(transformable_key),
+                tensor_smith=self.tensor_smiths.get(transformable_key),
             )
             for cam_id in frame_info["camera_image"]
         }
@@ -528,7 +526,7 @@ class GroupBatchDataset(Dataset):
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         points = read_pcd(self.data_root / frame["lidar_points"]["lidar1"])
-        return LidarPoints(points[:, :3], points[:, 3], self.tensor_smith[transformable_key])
+        return LidarPoints(points[:, :3], points[:, 3], self.tensor_smiths[transformable_key])
 
     def load_camera_segs(self, transformable_key: str, index_info: IndexInfo) -> CameraSegMaskSet:
         scene_info = self.info[index_info.scene_id]["scene_info"]
@@ -544,7 +542,7 @@ class GroupBatchDataset(Dataset):
                 extrinsic=calib[cam_id]["extrinsic"],
                 intrinsic=calib[cam_id]["intrinsic"],
                 dictionary=self.dictionary.get(transformable_key),
-                tensor_smith=self.tensor_smith.get(transformable_key),
+                tensor_smith=self.tensor_smiths.get(transformable_key),
             )
             for cam_id in frame_info["camera_image_seg"]
         }
@@ -564,7 +562,7 @@ class GroupBatchDataset(Dataset):
                 extrinsic=calib[cam_id]["extrinsic"],
                 intrinsic=calib[cam_id]["intrinsic"],
                 depth_mode="d",
-                tensor_smith=self.tensor_smith.get(transformable_key),
+                tensor_smith=self.tensor_smiths.get(transformable_key),
             )
             for cam_id in frame_info["camera_image_depth"]
         }
@@ -574,38 +572,38 @@ class GroupBatchDataset(Dataset):
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         elements = frame["3d_boxes"]
-        return Bbox3D(elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smith.get(transformable_key))
+        return Bbox3D(elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smiths.get(transformable_key))
 
     def load_bbox_bev(self, transformable_key: str, index_info: IndexInfo) -> Bbox3D:
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         elements = frame["3d_boxes"]
-        return Bbox3D(elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smith.get(transformable_key))
+        return Bbox3D(elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smiths.get(transformable_key))
 
     def load_square_3d(self, transformable_key: str, index_info: IndexInfo) -> Bbox3D:
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         elements = frame["3d_boxes"]
-        return Bbox3D(elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smith.get(transformable_key))
+        return Bbox3D(elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smiths.get(transformable_key))
 
     def load_cylinder_3d(self, transformable_key: str, index_info: IndexInfo) -> Bbox3D:
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         elements = frame["3d_boxes"]
-        return Bbox3D(elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smith.get(transformable_key))
+        return Bbox3D(elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smiths.get(transformable_key))
 
     def load_oriented_cylinder_3d(self, transformable_key: str, index_info: IndexInfo) -> Bbox3D:
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         elements = frame["3d_boxes"]
-        return Bbox3D(elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smith.get(transformable_key))
+        return Bbox3D(elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smiths.get(transformable_key))
 
     def load_polyline_3d(self, transformable_key: str, index_info: IndexInfo) -> Polyline3D:
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         elements = frame["3d_polylines"]
         return Polyline3D(
-            elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smith.get(transformable_key)
+            elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smiths.get(transformable_key)
         )
 
     def load_polygon_3d(self, transformable_key: str, index_info: IndexInfo) -> Polygon3D:
@@ -613,7 +611,7 @@ class GroupBatchDataset(Dataset):
         frame = scene["frame_info"][index_info.frame_id]
         elements = frame["3d_polylines"]
         return Polygon3D(
-            elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smith.get(transformable_key)
+            elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smiths.get(transformable_key)
         )
 
     def load_parkingslot_3d(self, transformable_key: str, index_info: IndexInfo) -> ParkingSlot3D:
@@ -621,7 +619,7 @@ class GroupBatchDataset(Dataset):
         frame = scene["frame_info"][index_info.frame_id]
         elements = frame["3d_polylines"]
         return ParkingSlot3D(
-            elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smith.get(transformable_key)
+            elements, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smiths.get(transformable_key)
         )
 
     def load_ego_poses(self, transformable_key: str, index_info: IndexInfo) -> PoseSet:
@@ -632,7 +630,7 @@ class GroupBatchDataset(Dataset):
                 frame_id, 
                 scene[frame_id]["ego_pose"][0], 
                 scene[frame_id]["ego_pose"][1], 
-                tensor_smith=self.tensor_smith.get(transformable_key)
+                tensor_smith=self.tensor_smiths.get(transformable_key)
             )
 
         poses = {}
@@ -680,7 +678,7 @@ class GroupBatchDataset(Dataset):
 
         trajectories = [ego_trajectory]
         return Trajectory(
-            trajectories, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smith.get(transformable_key)
+            trajectories, self.dictionary.get(transformable_key), tensor_smith=self.tensor_smiths.get(transformable_key)
         )
 
     def load_seg_bev(self, transformable_key: str, index_info: IndexInfo) -> SegBev:
@@ -701,7 +699,7 @@ class GroupBatchDataset(Dataset):
             height=mmcv.imread(height_path),
             dictionary=self.dictionary.get(transformable_key),
             mask=None,
-            tensor_smith=self.tensor_smith.get(transformable_key),
+            tensor_smith=self.tensor_smiths.get(transformable_key),
         )
 
     def load_occ_sdf_3d(self, transformable_key: str, index_info: IndexInfo) -> OccSdf3D:
