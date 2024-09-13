@@ -92,6 +92,7 @@ def build_tensor_smiths(tensor_smiths: Dict[str, Union[dict, "TensorSmith"]]) ->
 
 
 def build_model_feeder(model_feeder: Union["BaseModelFeeder", dict]) -> "BaseModelFeeder":
+    model_feeder = copy.deepcopy(model_feeder)
     if isinstance(model_feeder, dict):
         return MODEL_FEEDERS.build(model_feeder)
     return model_feeder
