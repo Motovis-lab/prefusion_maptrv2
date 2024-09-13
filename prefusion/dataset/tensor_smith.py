@@ -46,7 +46,7 @@ class CameraImageTensor(TensorSmith):
 
     def __call__(self, transformable: CameraImage):
         tensor_dict = dict(
-            img=torch.tensor((np.float32(transformable.img.transpose_(2, 0, 1)) - self.means) / self.stds),
+            img=torch.tensor((np.float32(transformable.img.transpose(2, 0, 1)) - self.means) / self.stds),
             ego_mask=torch.tensor(transformable.ego_mask),
         )
         return tensor_dict
