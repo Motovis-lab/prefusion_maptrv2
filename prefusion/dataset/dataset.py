@@ -463,7 +463,7 @@ class GroupBatchDataset(Dataset):
         for batch_idx in range(batch_size):
             group_idx = group_batch_ind * batch_size + batch_idx
             if group_idx >= len(groups):
-                group_idx = max(0, 2 * len(groups) - 1 - group_idx)
+                group_idx = max(0, 2 * (len(groups) - 1) - group_idx)
             batched_groups.append(groups[group_idx])
         return batched_groups
 
