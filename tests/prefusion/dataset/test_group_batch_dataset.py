@@ -377,3 +377,13 @@ def test_load_ego_poses():
     assert ego_pose_set.transformables['0'].timestamp == "1698825817864"
     assert ego_pose_set.transformables['+1'].timestamp == "1698825817964"
     assert ego_pose_set.transformables['+2'].timestamp == "1698825818064"
+
+
+def test_batch_groups():
+    batched_groups = GroupBatchDataset._batch_groups(
+        group_batch_ind=1, 
+        groups=[1, 2, 3], 
+        batch_size=2
+    )
+    answer = [3, 3]
+    assert batched_groups == answer
