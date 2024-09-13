@@ -337,7 +337,7 @@ def test_load_ego_poses():
         info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl"),
         transformable_keys=["camera_images"],
         dictionary={},
-        tensor_smith={"camera_images": DummyImgTensorSmith()},
+        tensor_smiths={"camera_images": DummyImgTensorSmith()},
         transforms=[DummyTransform(scope="group")],
         model_feeder=BaseModelFeeder(),
         phase="val",

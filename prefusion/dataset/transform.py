@@ -17,12 +17,7 @@ from scipy.spatial.transform import Rotation
 
 # from .tensor_smith import TensorSmith
 from prefusion.registry import TRANSFORMS
-from .utils import (
-    expand_line_2d, _sign, INF_DIST,
-    vec_point2line_along_direction, 
-    dist_point2line_along_direction,
-    get_cam_type
-)
+
 
 if TYPE_CHECKING:
     from .tensor_smith import TensorSmith

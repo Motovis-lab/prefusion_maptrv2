@@ -11,7 +11,6 @@ TRANSFORMABLES = Registry(
 
 TRANSFORMS = Registry(
     'transform',
-    # parent=MMENGINE_TRANSFORMS,
     locations=['prefusion.dataset.transform']
 )
 
