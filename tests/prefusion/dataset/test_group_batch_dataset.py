@@ -181,7 +181,7 @@ def test_generate_groups_static_method_6():
 
 def test_group_sampler_sample_train_groups_1scene(scene_frame_inds):
     _scene_frame_inds = {sid: values for sid, values in scene_frame_inds.items() if sid == "20231101_160337"}
-    gbs = GroupSampler(_scene_frame_inds, group_size=4, frame_interval=1, seed=42)
+    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=4, possible_frame_intervals=1, seed=42)
     train_groups = gbs.sample_train_groups()
     assert train_groups == [ 
         ['20231101_160337/1698825818864', '20231101_160337/1698825818964', '20231101_160337/1698825819064', '20231101_160337/1698825819164'],
@@ -192,7 +192,7 @@ def test_group_sampler_sample_train_groups_1scene(scene_frame_inds):
     ]
 
 def test_group_sampler_sample_train_groups_more_scenes(scene_frame_inds):
-    gbs = GroupSampler(scene_frame_inds, group_size=4, frame_interval=1, seed=42)
+    gbs = GroupSampler(scene_frame_inds, possible_group_sizes=4, possible_frame_intervals=1, seed=42)
     train_groups = gbs.sample_train_groups()
     assert train_groups == [
         ['20230823_110018/1692759640764', '20230823_110018/1692759640864', '20230823_110018/1692759640964', '20230823_110018/1692759641064'],
@@ -210,7 +210,7 @@ def test_group_sampler_sample_train_groups_more_scenes(scene_frame_inds):
 
 def test_group_sampler_sample_val_groups_1scene(scene_frame_inds):
     _scene_frame_inds = {sid: values for sid, values in scene_frame_inds.items() if sid == "20231101_160337"}
-    gbs = GroupSampler(_scene_frame_inds, group_size=4, frame_interval=1, seed=42)
+    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=4, possible_frame_intervals=1, seed=42)
     assert gbs.sample_val_groups() == [
         [ "20231101_160337/1698825817664", "20231101_160337/1698825817764", "20231101_160337/1698825817864", "20231101_160337/1698825817964", ],
         [ "20231101_160337/1698825818064", "20231101_160337/1698825818164", "20231101_160337/1698825818264", "20231101_160337/1698825818364", ],
@@ -221,7 +221,7 @@ def test_group_sampler_sample_val_groups_1scene(scene_frame_inds):
 
 def test_group_sampler_sample_val_groups_frm_intvl1_simple():
     _scene_frame_inds = {"Scn": [f"Scn/{i:02}" for i in range(17)]}
-    gbs = GroupSampler(_scene_frame_inds, group_size=4, frame_interval=1, seed=42)
+    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=4, possible_frame_intervals=1, seed=42)
     assert gbs.sample_val_groups() == [
         ['Scn/00', 'Scn/01', 'Scn/02', 'Scn/03'], 
         ['Scn/04', 'Scn/05', 'Scn/06', 'Scn/07'], 
@@ -232,7 +232,7 @@ def test_group_sampler_sample_val_groups_frm_intvl1_simple():
 
 def test_group_sampler_sample_val_groups_frm_intvl2_simple():
     _scene_frame_inds = {"Scn": [f"Scn/{i:02}" for i in range(17)]}
-    gbs = GroupSampler(_scene_frame_inds, group_size=4, frame_interval=2, seed=42)
+    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=4, possible_frame_intervals=2, seed=42)
     val_groups = gbs.sample_val_groups()
     assert val_groups == [
         ['Scn/00', 'Scn/02', 'Scn/04', 'Scn/06'], 
@@ -245,7 +245,7 @@ def test_group_sampler_sample_val_groups_frm_intvl2_simple():
 
 def test_group_sampler_sample_val_groups_frm_intvl2_grp_intvl_just_fit():
     _scene_frame_inds = {"Scn": [f"Scn/{i:02}" for i in range(20)]}
-    gbs = GroupSampler(_scene_frame_inds, group_size=10, frame_interval=2, seed=42)
+    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=10, possible_frame_intervals=2, seed=42)
     assert gbs.sample_val_groups() == [
         ['Scn/00', 'Scn/02', 'Scn/04', 'Scn/06', 'Scn/08', 'Scn/10', 'Scn/12', 'Scn/14', 'Scn/16', 'Scn/18'], 
         ['Scn/01', 'Scn/03', 'Scn/05', 'Scn/07', 'Scn/09', 'Scn/11', 'Scn/13', 'Scn/15', 'Scn/17', 'Scn/19'], 
@@ -254,7 +254,7 @@ def test_group_sampler_sample_val_groups_frm_intvl2_grp_intvl_just_fit():
 
 def test_group_sampler_sample_val_groups_frm_intvl2(scene_frame_inds):
     _scene_frame_inds = {sid: values for sid, values in scene_frame_inds.items() if sid == "20231101_160337"}
-    gbs = GroupSampler(_scene_frame_inds, group_size=4, frame_interval=2, seed=42)
+    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=4, possible_frame_intervals=2, seed=42)
     val_groups = gbs.sample_val_groups()
     assert val_groups == [
         ['20231101_160337/1698825817664', '20231101_160337/1698825817864', '20231101_160337/1698825818064', '20231101_160337/1698825818264'],
@@ -267,7 +267,7 @@ def test_group_sampler_sample_val_groups_frm_intvl2(scene_frame_inds):
 
 def test_group_sampler_sample_val_groups_frm_intvl2_grp_sz10(scene_frame_inds):
     _scene_frame_inds = {sid: values for sid, values in scene_frame_inds.items() if sid == "20231101_160337"}
-    gbs = GroupSampler(_scene_frame_inds, group_size=10, frame_interval=2, seed=42)
+    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=10, possible_frame_intervals=2, seed=42)
 
     val_groups = gbs.sample_val_groups()
     assert val_groups == [
@@ -276,7 +276,7 @@ def test_group_sampler_sample_val_groups_frm_intvl2_grp_sz10(scene_frame_inds):
     ]
 
 def test_group_sampler_sample_scene_groups(scene_frame_inds):
-    gbs = GroupSampler(scene_frame_inds, group_size=4, frame_interval=1, seed=42)
+    gbs = GroupSampler(scene_frame_inds, possible_group_sizes=4, possible_frame_intervals=1, seed=42)
     assert gbs.sample_scene_groups() == [
         [ "20231101_160337/1698825817664", "20231101_160337/1698825817764", "20231101_160337/1698825817864", "20231101_160337/1698825817964", "20231101_160337/1698825818064", "20231101_160337/1698825818164", "20231101_160337/1698825818264", "20231101_160337/1698825818364", "20231101_160337/1698825818464", "20231101_160337/1698825818564", "20231101_160337/1698825818664", "20231101_160337/1698825818764", "20231101_160337/1698825818864", "20231101_160337/1698825818964", "20231101_160337/1698825819064", "20231101_160337/1698825819164", "20231101_160337/1698825819264", ],
         [ "20231101_160337_subset/1698825818164", "20231101_160337_subset/1698825818264", "20231101_160337_subset/1698825818364", "20231101_160337_subset/1698825818464", "20231101_160337_subset/1698825818564", "20231101_160337_subset/1698825818664", "20231101_160337_subset/1698825818764", "20231101_160337_subset/1698825818864", ],
@@ -341,9 +341,9 @@ def test_load_ego_poses():
         transforms=[DummyTransform(scope="group")],
         model_feeder=BaseModelFeeder(),
         phase="val",
-        frame_interval=2,
+        possible_frame_intervals=2,
         batch_size=2,
-        group_size=4,
+        possible_group_sizes=4,
     )
 
     index_info = IndexInfo("20231101_160337", "1698825817864", prev=IndexInfo("20231101_160337", "1698825817764"), next=IndexInfo("20231101_160337", "1698825817964"))
@@ -377,3 +377,23 @@ def test_load_ego_poses():
     assert ego_pose_set.transformables['0'].timestamp == "1698825817864"
     assert ego_pose_set.transformables['+1'].timestamp == "1698825817964"
     assert ego_pose_set.transformables['+2'].timestamp == "1698825818064"
+
+
+def test_cur_train_group_size():
+    _scene_frame_inds = {"Scn": [f"Scn/{i:02}" for i in range(17)]}
+    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=[2, 4, 8], possible_frame_intervals=1, seed=52)
+    assert gbs.sample_train_groups() == [
+        ['Scn/10', 'Scn/11', 'Scn/12', 'Scn/13'], 
+        ['Scn/02', 'Scn/03', 'Scn/04', 'Scn/05'], 
+        ['Scn/13', 'Scn/14', 'Scn/15', 'Scn/16'], 
+        ['Scn/00', 'Scn/01', 'Scn/02', 'Scn/03'], 
+        ['Scn/06', 'Scn/07', 'Scn/08', 'Scn/09'], 
+    ]
+    assert gbs.group_size == 4
+    gbs.seed = 42
+    assert gbs.sample_train_groups() == [
+        ['Scn/01', 'Scn/02', 'Scn/03', 'Scn/04', 'Scn/05', 'Scn/06', 'Scn/07', 'Scn/08'], 
+        ['Scn/00', 'Scn/01', 'Scn/02', 'Scn/03', 'Scn/04', 'Scn/05', 'Scn/06', 'Scn/07'], 
+        ['Scn/09', 'Scn/10', 'Scn/11', 'Scn/12', 'Scn/13', 'Scn/14', 'Scn/15', 'Scn/16'], 
+    ]
+    assert gbs.group_size == 8

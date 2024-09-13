@@ -57,7 +57,8 @@ train_dataloader = dict(
         ],
         phase='train',
         batch_size=1,
-        group_size=2,
+        possible_group_sizes=[3, 4, 5],
+        possible_frame_intervals=[1, 2]
     )
 )
 
