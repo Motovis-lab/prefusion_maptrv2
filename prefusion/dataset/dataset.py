@@ -353,7 +353,7 @@ class GroupBatchDataset(Dataset):
             }
         - transformable_keys (list): List of transformable keys. Keys should be in dictionary.
         - transforms (list): Transform classes for preprocessing transformables. Build by TRANSFORMS.
-        - phase (str): Specifies the phase ('train', 'val', or 'test') of the dataset; default is 'train'.
+        - phase (str): Specifies the phase ('train', 'val', 'test' or 'test_scene_by_scene') of the dataset; default is 'train'.
         - indices_path (str, optional): Specified file of indices to load; if None, all frames are automatically fetched from the info_path.
         - batch_size (int, optional): Batch size; defualt is 1.
         - possible_group_sizes (int or list, optional): Size of sequence group; can be a single integer or a list (e.g., [5, 10]); default is 3.
