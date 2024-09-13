@@ -91,8 +91,25 @@ def get_bev_intrinsics(voxel_shape, voxel_range):
 @TENSOR_SMITHS.register_module()
 class PlanarBbox3D(TensorSmith):
     def __init__(self, voxel_shape, voxel_range):
-        self.voxel_shape = voxel_shape
-        self.voxel_range = voxel_range
+        """
+        Parameters
+        ----------
+        voxel_shape : tuple
+        voxel_range : Tuple[List]
+
+        Examples
+        --------
+        - voxel_shape=(6, 320, 160)
+        - voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        - Z, X, Y = voxel_shape
+
+        """
+        self.voxel_shape = tuple(voxel_shape)
+        self.voxel_range = tuple(voxel_range)
+        self.bev_intrinsics = get_bev_intrinsics(voxel_shape, voxel_range)
+        Z, X, Y = voxel_shape
+        xx, yy = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
+        self.points_grid_bev = np.float32([yy, xx])
     
     def __call__(self, transformable: Bbox3D):
         raise NotImplementedError
@@ -106,6 +123,39 @@ class PlanarBboxBev(TensorSmith):
         self.voxel_range = voxel_range
     
     def __call__(self, transformable: Bbox3D):
+        """
+        Parameters
+        ----------
+        elements : List[dict]
+            a list of boxes. Each element is a dict of box having the following format
+            ```elements[0] = {
+                'class': 'class.vehicle.passenger_car',
+                'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
+                        'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
+                        'attr.vehicle.is_door_open': 'attr.vehicle.is_door_open.false'},
+                'size': [4.6486, 1.9505, 1.5845],
+                'rotation': array([[ 0.93915682, -0.32818596, -0.10138267],
+                                [ 0.32677338,  0.94460343, -0.03071667],
+                                [ 0.1058472 , -0.00428138,  0.99437319]]),
+                'translation': array([[-15.70570354], [ 11.88484971], [ -0.61029085]]), # NOTE: it is a column vector
+                'track_id': '10035_0', # NOT USED
+                'velocity': array([[0.], [0.], [0.]]) # NOTE: it is a column vector
+            }
+            ```
+        dictionary : dict
+            following format
+            ```dictionary = {
+                'branch_0': {'classes': ['car', 'bus', 'pedestrain', ...], 'attrs': []}
+                'branch_1': {'classes': [], 'attrs': []}
+                ...
+            }
+            ```
+        flip_aware_class_pairs : List[tuple]
+            list of class pairs that are flip-aware
+            flip_aware_class_pairs = [('left_arrow', 'right_arrow')]
+        tensor_smith : TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
+        """
         raise NotImplementedError
 
 
@@ -119,6 +169,7 @@ class PlanarSegBev(TensorSmith):
 
     def __call__(self, transformable: SegBev):
         raise NotImplementedError
+
 
 
 @TENSOR_SMITHS.register_module()
