@@ -455,6 +455,18 @@ class GroupBatchDataset(Dataset):
             return len(self.groups) // self.batch_size
         else:
             return int(np.ceil(len(self.groups) / self.batch_size))
+    
+
+    @staticmethod
+    def _batch_groups(group_batch_ind, groups, batch_size):
+        batched_groups = []
+        for batch_idx in range(batch_size):
+            group_idx = group_batch_ind * batch_size + batch_idx
+            if group_idx >= len(groups):
+                group_idx = max(0, 2 * (len(groups) - 1) - group_idx)
+            batched_groups.append(groups[group_idx])
+        return batched_groups
+
 
     def __getitem__(self, idx) -> GroupBatch:
 
@@ -462,12 +474,7 @@ class GroupBatchDataset(Dataset):
             self.groups = self.group_sampler.sample(self.phase, output_str_index=False)
             raise IndexError
 
-        batched_groups = []
-        for batch_idx in range(self.batch_size):
-            group_idx = idx * self.batch_size + batch_idx
-            if group_idx >= len(self.groups):
-                group_idx = random.randint(0, len(self.groups) - 1)
-            batched_groups.append(self.groups[group_idx])
+        batched_groups = self._batch_groups(idx, self.groups, self.batch_size)
 
         batch = []
         for group in batched_groups:

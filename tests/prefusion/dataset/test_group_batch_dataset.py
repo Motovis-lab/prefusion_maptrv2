@@ -397,3 +397,32 @@ def test_cur_train_group_size():
         ['Scn/09', 'Scn/10', 'Scn/11', 'Scn/12', 'Scn/13', 'Scn/14', 'Scn/15', 'Scn/16'], 
     ]
     assert gbs.group_size == 8
+
+
+def test_batch_groups_1():
+    batched_groups = GroupBatchDataset._batch_groups(
+        group_batch_ind=1, 
+        groups=[1, 2, 3], 
+        batch_size=2
+    )
+    answer = [3, 2]
+    assert batched_groups == answer
+
+
+def test_batch_groups_2():
+    batched_groups = GroupBatchDataset._batch_groups(
+        group_batch_ind=1, 
+        groups=[1, 2, 3, 4], 
+        batch_size=3
+    )
+    answer = [4, 3, 2]
+    assert batched_groups == answer
+
+def test_batch_groups_3():
+    batched_groups = GroupBatchDataset._batch_groups(
+        group_batch_ind=0, 
+        groups=[1, 2, 3, 4], 
+        batch_size=3
+    )
+    answer = [1, 2, 3]
+    assert batched_groups == answer
