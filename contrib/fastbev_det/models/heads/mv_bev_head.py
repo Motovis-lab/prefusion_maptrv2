@@ -1,7 +1,7 @@
 import numba
 import numpy as np
 import torch
-from mmengine.registry import MODELS
+from prefusion.registry import MODELS
 from mmdet3d.models.utils.gaussian import draw_heatmap_gaussian, gaussian_radius
 from mmdet3d.models.dense_heads.centerpoint_head import CenterHead, circle_nms
 from mmdet3d.models.utils import clip_sigmoid

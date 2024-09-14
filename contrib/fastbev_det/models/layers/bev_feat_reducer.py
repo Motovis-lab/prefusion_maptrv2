@@ -1,4 +1,4 @@
-from mmengine.registry import MODELS
+from prefusion.registry import MODELS
 from mmengine.model import BaseModule
 from torch import nn as nn
 from ..backbones.vovnet import OSA

@@ -1,4 +1,3 @@
-from mmengine.registry import METRICS
 import tempfile
 from os import path as osp
 from typing import Dict, List, Optional, Sequence, Tuple, Union, Any
@@ -18,7 +17,7 @@ from scipy.spatial.transform import Rotation
 from mmengine.structures import BaseDataElement
 from .utils import boxes_iou3d_numba as boxes_iou3d
 from collections import defaultdict
-import torch
+from prefusion.registry import METRICS
 
 
 @METRICS.register_module()

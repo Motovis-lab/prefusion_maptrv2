@@ -1,6 +1,6 @@
 import torch
 import torch.nn.functional as F
-from mmengine.registry import MODELS
+from prefusion.registry import MODELS
 from torch import nn
 
 

@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from mmengine.runner import autocast
 from mmengine.model import BaseModule
-from mmengine.registry import MODELS
+from prefusion.registry import MODELS
 
 @MODELS.register_module()
 class DepthReducer(BaseModule):

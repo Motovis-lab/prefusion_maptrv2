@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from mmengine.runner import autocast
 from mmengine.model import BaseModule
-from mmengine.registry import MODELS
+from prefusion.registry import MODELS
 import torch.nn.functional as F
 import numpy as np
 from time import sleep

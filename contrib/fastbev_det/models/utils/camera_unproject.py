@@ -3,7 +3,7 @@ import torch.nn as nn
 from mmengine.model import BaseModule
 from .utils import get_unproj_func
 import numpy as np
-from mmengine.registry import MODELS
+from prefusion.registry import MODELS
 
 @MODELS.register_module()
 class Fish_BackprojectDepth(BaseModule):

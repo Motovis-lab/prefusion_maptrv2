@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from mmengine.runner import autocast
 from mmengine.model import BaseModule
-from mmengine.registry import MODELS
+from prefusion.registry import MODELS
 from .base_lss_fpn import BaseLSSFPN
 from ..layers import HoriConv, DepthReducer
 from ..utils import get_unproj_func

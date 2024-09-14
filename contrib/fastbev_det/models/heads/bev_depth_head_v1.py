@@ -3,7 +3,7 @@ import numba
 import numpy as np
 import torch
 from mmdet3d.models import draw_heatmap_gaussian, gaussian_radius
-from mmengine.registry import MODELS
+from prefusion.registry import MODELS
 from mmdet3d.models.dense_heads.centerpoint_head import CenterHead, circle_nms
 from mmdet3d.models.utils import clip_sigmoid
 from mmdet.utils import reduce_mean
@@ -18,7 +18,7 @@ import matplotlib.cm as cm
 import numpy as np
 import copy
 from pyquaternion import Quaternion
-from prefusion.utils.utils import get_cam_corners, intrinsics_matrix, get_3d_lines, get_bev_lines, get_corners_with_angles, get_bev_lines_cylinder
+from contrib.fastbev_det.utils.utils import get_cam_corners, intrinsics_matrix, get_3d_lines, get_bev_lines, get_corners_with_angles, get_bev_lines_cylinder
 import cv2
 
 

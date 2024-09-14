@@ -3,7 +3,7 @@ import torch.nn.functional as F
 import torch
 import torch.nn as nn
 from copy import deepcopy
-from mmengine.registry import MODELS
+from prefusion.registry import MODELS
 from mmengine.model import BaseModel
 from ..utils.utils import transformation_from_parameters, intrinsics_matrix
 import math 

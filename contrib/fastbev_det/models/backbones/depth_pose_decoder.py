@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from collections import OrderedDict
-from mmengine.registry import MODELS
+from prefusion.registry import MODELS
 from mmengine.model import BaseModule
 
 @MODELS.register_module()

@@ -5,7 +5,7 @@ from mmcv.cnn import build_conv_layer, build_norm_layer, build_upsample_layer
 from mmengine.model import BaseModule
 from torch import nn as nn
 
-from mmengine.registry import MODELS
+from prefusion.registry import MODELS
 from ..backbones.vovnet import OSA
 
 @MODELS.register_module()

@@ -1,7 +1,7 @@
 __base__ = '../../configs/default_runtime.py'
-
+default_scope = "prefusion"
 custom_imports = dict(
-    imports=['models', 'datasets', 'hooks', 'runner', 'utils', 'evaluator', 'losses'],
+    imports=['prefusion', 'contrib'],
     allow_failed_imports=False
 )
 
@@ -144,20 +144,23 @@ dictionary=dict(
 train_dataloader = dict(
     num_workers=8,
     persistent_workers=True,
-    sampler=dict(type='DistributedGroupSampler'),
-    collate_fn=dict(type='collate_generator'),
+    sampler=dict(type='DefaultSampler'),
+    collate_fn=dict(type='collate_dict'),
     pin_memory=False,
     dataset=dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos.pkl',
+        info_path=data_root + 'mv_4d_infos_100.pkl',
         dictionary=dictionary,
+        tensor_smiths=None,
+        model_feeder=None,
         transformable_keys=collection_info_type,
         transforms=train_pipeline,
         phase='train',
         batch_size=batch_size, 
-        group_size=group_size,
+        possible_group_sizes=[3],
+        possible_frame_intervals=[1]
         ),
     )
 
@@ -327,21 +330,19 @@ model = dict(
     is_train_depth=True
 )
 
-val_evaluator = dict(
-    type='mv_4d_Evaluator',
-    metrics = [
-        dict(
-            type='Box3DMetric',  # only for det3d of head BEVDepthHeadV1
-            available_range=bev_range,
-            available_class=CLASSES,
-            available_branch=dictionary,
-            collect_device='cpu',
-            jsonfile_prefix='./work_dirs/',
-            )
-    ]
-)
+val_evaluator = [
+    dict(
+        type='Box3DMetric',  # only for det3d of head BEVDepthHeadV1
+        available_range=bev_range,
+        available_class=CLASSES,
+        available_branch=dictionary,
+        collect_device='cpu',
+        jsonfile_prefix='./work_dirs/',
+    )
+]
 
-train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=48, val_interval=5)  # -1 note don't eval
+
+train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=10, val_interval=1)  # -1 note don't eval
 val_cfg = dict(type='GroupValLoop')
 
 test_dataloader = val_dataloader
@@ -384,5 +385,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = "work_dirs/mv_4d_fastbev_t_v1/20240910_201450/epoch_45.pth"
+load_from = None
 resume=False

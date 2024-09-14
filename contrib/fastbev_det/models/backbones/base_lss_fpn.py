@@ -1,9 +1,9 @@
 # Copyright (c) Megvii Inc. All rights reserved.
 import torch
 import torch.nn.functional as F
-from mmengine.registry import MODELS
 from torch import nn
 from mmengine.runner import autocast
+from prefusion.registry import MODELS
 from .backbone import BasicBlock
 
 class _ASPPModule(nn.Module):
