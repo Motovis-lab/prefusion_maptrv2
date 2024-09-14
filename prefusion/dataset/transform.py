@@ -16,7 +16,7 @@ import virtual_camera as vc
 from scipy.spatial.transform import Rotation
 
 # from .tensor_smith import TensorSmith
-from prefusion.registry import TRANSFORMS
+from prefusion.registry import TRANSFORMS, TRANSFORMABLES
 
 
 if TYPE_CHECKING:

@@ -11,7 +11,7 @@ import mmengine
 import torch
 import numpy as np
 from torch.utils.data import Dataset
-from mmengine.registry import DATASETS, FUNCTIONS
+from prefusion.registry import DATASETS, FUNCTIONS
 
 from .transform import (
     CameraImage,
