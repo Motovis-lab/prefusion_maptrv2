@@ -320,7 +320,7 @@ class CameraImage(CameraTransformable):
         self.img = img
         self.ego_mask = ego_mask
         self.extrinsic = list(p.copy() for p in extrinsic)
-        self.intrinsic = intrinsic.copy() if isinstance(intrinsic, np.ndarray) else np.array(intrinsic)
+        self.intrinsic = np.array(intrinsic)
         self.tensor_smith = tensor_smith
 
 
@@ -493,7 +493,7 @@ class CameraSegMask(CameraTransformable):
         self.img = img
         self.ego_mask = ego_mask
         self.extrinsic = list(p.copy() for p in extrinsic)
-        self.intrinsic = intrinsic.copy() if isinstance(intrinsic, np.ndarray) else np.array(intrinsic)
+        self.intrinsic = np.array(intrinsic)
         self.dictionary = dictionary.copy()
         self.tensor_smith = tensor_smith
 
@@ -627,7 +627,7 @@ class CameraDepth(CameraTransformable):
         self.img = img
         self.ego_mask = ego_mask
         self.extrinsic = list(p.copy() for p in extrinsic)
-        self.intrinsic = intrinsic.copy() if isinstance(intrinsic, np.ndarray) else np.array(intrinsic)
+        self.intrinsic = np.array(intrinsic)
         self.depth_mode = depth_mode
         self.tensor_smith = tensor_smith
 
