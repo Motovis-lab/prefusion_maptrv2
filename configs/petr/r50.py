@@ -29,7 +29,7 @@ train_dataloader = dict(
         name='MvParkingTest',
         data_root='/Users/rlan/work/dataset/motovis/mv4d',
         info_path='/Users/rlan/work/dataset/motovis/mv4d/mv4d_infos.pkl',
-        dictionary={
+        dictionaries={
             "camera_images": {},
             "bbox_3d": {
                 "det": {
