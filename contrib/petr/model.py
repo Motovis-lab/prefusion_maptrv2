@@ -13,5 +13,5 @@ class ToyModel(BaseModel):
         self.backbone = nn.ModuleDict(dict(layer0=nn.Linear(1, 1), layer1=nn.Linear(1, 1)))
         self.head = nn.Sequential(OrderedDict(linear=nn.Linear(1, 1), bn=nn.BatchNorm1d(1)))
 
-    def forward(self, x):
+    def forward(self, x, mode='train'):
         return self.head(self.backbone.layer0(x))

@@ -2,6 +2,8 @@ experiment_name = "stream_petr_r50_demo"
 
 __base__ = '../default_runtime.py'
 
+default_scope = "prefusion"
+
 # custom_imports = dict(
 #     imports=['models', 'datasets', 'hooks', 'runner', 'utils', 'evaluator', 'losses'],
 #     allow_failed_imports=False
