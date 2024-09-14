@@ -1,5 +1,5 @@
 from mmengine.runner.runner import Runner
-from mmengine.registry import RUNNERS
+from prefusion.registry import RUNNERS
 from mmengine.dist import master_only
 import os.path as osp
 
