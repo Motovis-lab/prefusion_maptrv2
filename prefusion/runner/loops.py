@@ -1,5 +1,5 @@
 
-from mmengine.registry import LOOPS
+from prefusion.registry import LOOPS
 from mmengine.runner import EpochBasedTrainLoop, ValLoop, TestLoop
 import torch
 from prefusion.dataset.dataset import GroupBatchDataset

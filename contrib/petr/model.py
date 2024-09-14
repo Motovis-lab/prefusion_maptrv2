@@ -1,7 +1,7 @@
 from collections import OrderedDict
 import torch.nn as nn
 
-from mmengine.registry import MODELS
+from prefusion.registry import MODELS
 from mmengine.model import BaseModel
 
 __all__ = ["ToyModel"]
