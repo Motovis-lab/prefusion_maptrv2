@@ -280,7 +280,7 @@ class CameraImage(CameraTransformable):
         img: np.ndarray, 
         ego_mask: np.ndarray, 
         extrinsic: Tuple[np.ndarray, np.ndarray], 
-        intrinsic: np.ndarray,
+        intrinsic: Union[np.ndarray, list, tuple],
         tensor_smith: "TensorSmith" = None
     ):
         """Image data modeled by specific camera model.
@@ -297,7 +297,7 @@ class CameraImage(CameraTransformable):
             the mask of ego car (pixel data), of shape (H, W)
         extrinsic : Tuple[np.ndarray, np.ndarray]
             the extrinsic params of this camera, including (R, t), R is of shape (3, 3) and t is of shape(3,)
-        intrinsic : np.ndarray
+        intrinsic : Union[np.ndarray, list, tuple]
             if it's PerspectiveCamera, it contains 4 values: cx, cy, fx, fy
             if it's FisheyeCamera, it contains more values: cx, cy, fx, fy, *distortion_params
         tensor_smith : TensorSmith, optional
@@ -320,7 +320,7 @@ class CameraImage(CameraTransformable):
         self.img = img
         self.ego_mask = ego_mask
         self.extrinsic = list(p.copy() for p in extrinsic)
-        self.intrinsic = intrinsic.copy()
+        self.intrinsic = intrinsic.copy() if isinstance(intrinsic, np.ndarray) else np.array(intrinsic)
         self.tensor_smith = tensor_smith
 
 
@@ -460,7 +460,7 @@ class CameraSegMask(CameraTransformable):
         img: np.ndarray, 
         ego_mask: np.ndarray, 
         extrinsic: Tuple[np.ndarray, np.ndarray], 
-        intrinsic: np.ndarray,
+        intrinsic: Union[np.ndarray, list, tuple],
         dictionary: dict,
         tensor_smith: "TensorSmith" = None
     ):
@@ -478,7 +478,7 @@ class CameraSegMask(CameraTransformable):
             the mask of ego car (pixel data), of shape (H, W)
         extrinsic : Tuple[np.ndarray, np.ndarray]
             the extrinsic params of this camera, including (R, t), R is of shape (3, 3) and t is of shape(3,)
-        intrinsic : np.ndarray
+        intrinsic : Union[np.ndarray, list, tuple]
             if it's PerspectiveCamera, it contains 4 values: cx, cy, fx, fy
             if it's FisheyeCamera, it contains more values: cx, cy, fx, fy, *distortion_params
         dictionary: dict
@@ -493,7 +493,7 @@ class CameraSegMask(CameraTransformable):
         self.img = img
         self.ego_mask = ego_mask
         self.extrinsic = list(p.copy() for p in extrinsic)
-        self.intrinsic = intrinsic.copy()
+        self.intrinsic = intrinsic.copy() if isinstance(intrinsic, np.ndarray) else np.array(intrinsic)
         self.dictionary = dictionary.copy()
         self.tensor_smith = tensor_smith
 
@@ -592,7 +592,7 @@ class CameraDepth(CameraTransformable):
         img: np.ndarray, 
         ego_mask: np.ndarray, 
         extrinsic: Tuple[np.ndarray, np.ndarray], 
-        intrinsic: np.ndarray,
+        intrinsic: Union[np.ndarray, list, tuple],
         depth_mode: str,
         tensor_smith: "TensorSmith" = None
     ):
@@ -610,7 +610,7 @@ class CameraDepth(CameraTransformable):
             the mask of ego car (pixel data), of shape (H, W)
         extrinsic : Tuple[np.ndarray, np.ndarray]
             the extrinsic params of this camera, including (R, t), R is of shape (3, 3) and t is of shape(3,)
-        intrinsic : np.ndarray
+        intrinsic : Union[np.ndarray, list, tuple]
             if it's PerspectiveCamera, it contains 4 values: cx, cy, fx, fy
             if it's FisheyeCamera, it contains more values: cx, cy, fx, fy, *distortion_params
         depth_mode: str
@@ -627,7 +627,7 @@ class CameraDepth(CameraTransformable):
         self.img = img
         self.ego_mask = ego_mask
         self.extrinsic = list(p.copy() for p in extrinsic)
-        self.intrinsic = intrinsic.copy()
+        self.intrinsic = intrinsic.copy() if isinstance(intrinsic, np.ndarray) else np.array(intrinsic)
         self.depth_mode = depth_mode
         self.tensor_smith = tensor_smith
 

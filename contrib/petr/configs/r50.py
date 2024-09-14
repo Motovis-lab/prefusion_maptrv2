@@ -1,8 +1,6 @@
 experiment_name = "stream_petr_r50_demo"
 
-__base__ = '../default_runtime.py'
-
-default_scope = "prefusion"
+_base_ = '../../../configs/default_runtime.py'
 
 # custom_imports = dict(
 #     imports=['models', 'datasets', 'hooks', 'runner', 'utils', 'evaluator', 'losses'],
@@ -74,7 +72,27 @@ train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=24, val_interval=-1)  # 
 val_cfg = dict(type='GroupValLoop')
 test_cfg = dict(type='GroupTestLoop')
 
-model = dict(type='ToyModel')
+model = dict(
+    type='StreamPETR',
+    backbone=dict(
+        pretrained='torchvision://resnet50',
+        type='mmdet.ResNet',
+        depth=50,
+        num_stages=4,
+        out_indices=(2, 3),
+        frozen_stages=-1,
+        norm_cfg=dict(type='BN2d', requires_grad=False),
+        norm_eval=True,
+        with_cp=True,
+        style='pytorch'
+    ),
+    neck=dict(
+        type='mmdet3d.CPFPN',
+        in_channels=[1024, 2048],
+        out_channels=256,
+        num_outs=2
+    ),
+)
 
 val_evaluator = dict(type="Accuracy")
 test_evaluator = dict(type="Accuracy")

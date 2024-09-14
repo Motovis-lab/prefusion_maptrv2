@@ -136,7 +136,7 @@ def dataset_info(img324, img325, seg324, seg325, camera_ego_mask324, camera_ego_
                     },
                     "back": {
                         "extrinsic": (np.eye(3), np.ones(3)),
-                        "intrinsic": np.array([2, 2, 20, 20]),
+                        "intrinsic": (2, 2, 20, 20),
                         "camera_type": "FisheyeCamera",
                     },
                 },
