@@ -1,4 +1,4 @@
-from mmengine.registry import METRICS
+from prefusion.registry import METRICS
 from mmengine.evaluator import BaseMetric
 
 __all__ = ["Accuracy"]

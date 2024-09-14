@@ -14,9 +14,10 @@ import numpy as np
 import virtual_camera as vc
 # import albumentations as AT
 from scipy.spatial.transform import Rotation
+from copious.cv.geometry import Box3d as CopiousBox3d
 
 # from .tensor_smith import TensorSmith
-from prefusion.registry import TRANSFORMS
+from prefusion.registry import TRANSFORMS, TRANSFORMABLES
 
 
 if TYPE_CHECKING:
@@ -807,6 +808,33 @@ class Bbox3D(SpatialTransformable):
         for i in range(len(self.elements) - 1, -1, -1):
             if self.elements[i]['class'] not in full_set_of_classes:
                 del self.elements[i]
+    
+    def get_corners(self) -> np.ndarray:
+        """Convert Bboxed.elements to corners representation using copious
+
+        Returns
+        -------
+        np.ndarray
+            the output is of shape [len(self.elements), 8, 3] 
+            The order of corner points look as follows
+
+                (2) +---------+. (3)
+                    | ` .   fr|  ` .
+                    | (6) +---+-----+ (7)
+                    |     |   |   bk|
+                (1) +-----+---+. (0)|
+                    ` .   |     ` . |
+                    (5) ` +---------+ (4)
+        """
+        corners = []
+        for ele in self.elements:
+            copious_box3d = CopiousBox3d(
+                position=ele['translation'].flatten(), 
+                scale=np.array(ele['size']), 
+                rotation=Rotation.from_matrix(ele['rotation'])
+            )
+            corners.append(copious_box3d.corners)
+        return np.array(corners)
 
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'

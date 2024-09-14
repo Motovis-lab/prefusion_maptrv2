@@ -3,7 +3,8 @@ import numpy as np
 import torch
 from easydict import EasyDict as edict
 
-from prefusion.dataset.tensor_smith import get_bev_intrinsics, CameraImageTensor
+from prefusion.dataset.tensor_smith import get_bev_intrinsics, CameraImageTensor, PlanarBbox3D
+from prefusion.dataset.transform import Bbox3D, ToTensor
 
 def test_get_bev_intrinsics():
     voxel_shape=(6, 200, 160)
@@ -29,3 +30,43 @@ def test_camera_image_tensor():
         [[-3.33333333,  6.66666667, 16.66666667, 26.66666667],
          [36.66666667, 46.66666667, 56.66666667, 66.66666667]]
     ]), decimal=6)
+
+
+def test_planar_bbox_3d_tensor_smith():
+    return
+    bbox3d = Bbox3D(
+        elements=[
+            {
+                'class': 'class.vehicle.passenger_car',
+                'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
+                        'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
+                        'attr.vehicle.is_door_open': 'attr.vehicle.is_door_open.false'},
+                'size': [4.6486, 1.9505, 1.5845],
+                'rotation': np.array([[ 0.93915682, -0.32818596, -0.10138267],
+                                [ 0.32677338,  0.94460343, -0.03071667],
+                                [ 0.1058472 , -0.00428138,  0.99437319]]),
+                'translation': np.array([[-15.70570354], [ 11.88484971], [ -0.61029085]]), # NOTE: it is a column vector
+                'track_id': '10035_0',
+                'velocity': np.array([[0.], [0.], [0.]]) # NOTE: it is a column vector
+            }
+        ],
+        dictionary={"det": {
+            "classes": ['class.vehicle.passenger_car', 'people', 'bicycle']
+        }},
+        tensor_smith=PlanarBbox3D(
+            voxel_shape=(),
+            voxel_range=()
+        )
+    )
+    result_tensor = bbox3d.to_tensor()
+    answer_tensor = np.array(
+        [
+            [],
+            [],
+            [],
+        ]
+    )
+    np.testing.assert_almost_equal(
+        result_tensor,
+        answer_tensor,
+    )

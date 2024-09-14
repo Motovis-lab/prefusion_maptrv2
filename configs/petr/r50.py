@@ -2,6 +2,8 @@ experiment_name = "stream_petr_r50_demo"
 
 __base__ = '../default_runtime.py'
 
+default_scope = "prefusion"
+
 # custom_imports = dict(
 #     imports=['models', 'datasets', 'hooks', 'runner', 'utils', 'evaluator', 'losses'],
 #     allow_failed_imports=False
@@ -27,7 +29,7 @@ train_dataloader = dict(
         name='MvParkingTest',
         data_root='/Users/rlan/work/dataset/motovis/mv4d',
         info_path='/Users/rlan/work/dataset/motovis/mv4d/mv4d_infos.pkl',
-        dictionary={
+        dictionaries={
             "camera_images": {},
             "bbox_3d": {
                 "det": {
@@ -41,11 +43,7 @@ train_dataloader = dict(
                 means=[123.675, 116.280, 103.530],
                 stds=[58.395, 57.120, 57.375],
             ),
-            bbox_3d=dict(
-                type="PlanarBbox3D",
-                voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
-                voxel_range=([-0.5, 2.5], [36, -12], [12, -12]),
-            ),
+            bbox_3d=dict(type="Bbox3DCorners"),
         ),
         model_feeder=dict(type="BaseModelFeeder"),
         transformable_keys=[
