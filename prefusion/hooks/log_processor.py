@@ -8,7 +8,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 import torch
 
-from mmengine.registry import LOG_PROCESSORS
+from prefusion.registry import LOG_PROCESSORS
 from mmengine.runner.log_processor import LogProcessor
 
 

@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import List, Sequence
 from mmengine.hooks.checkpoint_hook import CheckpointHook
-from mmengine.registry import HOOKS
+from prefusion.registry import HOOKS
 import os.path as osp
 from mmengine.fileio import FileClient, get_file_backend
 from mmengine.dist import is_main_process, master_only

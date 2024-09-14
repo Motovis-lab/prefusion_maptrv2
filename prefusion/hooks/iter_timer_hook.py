@@ -1,7 +1,7 @@
 import time
 from typing import Optional, Sequence, Union
 
-from mmengine.registry import HOOKS
+from prefusion.registry import HOOKS
 from mmengine.hooks.hook import Hook
 from mmengine.hooks import IterTimerHook
 
