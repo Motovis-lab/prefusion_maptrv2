@@ -11,7 +11,7 @@ import mmengine
 import torch
 import numpy as np
 from torch.utils.data import Dataset
-from prefusion.registry import DATASETS, FUNCTIONS
+from prefusion.registry import DATASETS, MMENGINE_FUNCTIONS
 
 from .transform import (
     CameraImage,
@@ -48,7 +48,7 @@ def get_frame_index(sequence, timestamp):
             return t
 
 
-@FUNCTIONS.register_module()
+@MMENGINE_FUNCTIONS.register_module()
 def collate_dict(batch):
     return batch[0]
 
