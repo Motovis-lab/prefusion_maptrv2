@@ -1,10 +1,12 @@
 
-from mmengine.registry import LOOPS
+from prefusion.registry import LOOPS
 from mmengine.runner import EpochBasedTrainLoop, ValLoop, TestLoop
-
+import torch
 from prefusion.dataset.dataset import GroupBatchDataset
+from typing import Dict, List, Optional, Sequence, Tuple, Union
+from mmengine.runner.amp import autocast
 
-__all__ = ['GroupBatchTrainLoop', 'GroupValLoop', 'GroupTestLoop']
+__all__ = ['GroupBatchTrainLoop', 'GroupValLoop', 'GroupTestLoop', 'GroupInferLoop']
 
 @LOOPS.register_module()
 class GroupBatchTrainLoop(EpochBasedTrainLoop):
@@ -32,6 +34,26 @@ class GroupBatchTrainLoop(EpochBasedTrainLoop):
             f'but got {type(self.dataloader.dataset)}.'
         )
         self._max_iters = self._max_epochs * len(self.dataloader) * self.dataloader.dataset.group_size
+
+    def run(self) -> torch.nn.Module:
+        """Launch training."""
+        self.runner.call_hook('before_train')
+
+        while self._epoch < self._max_epochs and not self.stop_training:
+            self.run_epoch()
+
+            self._decide_current_val_interval()
+            if self.val_interval == -1:
+                continue
+            elif (self.runner.val_loop is not None
+                    and self._epoch >= self.val_begin
+                    and (self._epoch % self.val_interval == 0
+                         or self._epoch == self._max_epochs)):
+                self.runner.val_loop.run()
+
+        self.runner.call_hook('after_train')
+        return self.runner.model
+
 
     def run_epoch(self) -> None:
         """Iterate one epoch."""
@@ -74,10 +96,30 @@ class GroupValLoop(ValLoop):
                 self.run_iter(idx, frame_batch)
 
         # compute metrics
-        metrics = self.evaluator.evaluate(len(self.dataloader.dataset))
+        metrics = self.evaluator.evaluate(len(self.dataloader.dataset) * self.dataloader.dataset.group_size * self.dataloader.dataset.batch_size)
         self.runner.call_hook('after_val_epoch', metrics=metrics)
         self.runner.call_hook('after_val')
         return metrics
+    
+    @torch.no_grad()
+    def run_iter(self, idx, data_batch: Sequence[dict]):
+        """Iterate one mini-batch.
+
+        Args:
+            data_batch (Sequence[dict]): Batch of data
+                from dataloader.
+        """
+        self.runner.call_hook(
+            'before_val_iter', batch_idx=idx, data_batch=data_batch)
+        # outputs should be sequence of BaseDataElement
+        with autocast(enabled=self.fp16):
+            outputs = self.runner.model.val_step(data_batch)
+        self.evaluator.process(data_samples=outputs, data_batch=data_batch[0])
+        self.runner.call_hook(
+            'after_val_iter',
+            batch_idx=idx,
+            data_batch=data_batch,
+            outputs=outputs)
 
 
 @LOOPS.register_module()
@@ -108,7 +150,57 @@ class GroupTestLoop(TestLoop):
                 self.run_iter(idx, frame_batch)
 
         # compute metrics
-        metrics = self.evaluator.evaluate(len(self.dataloader.dataset))
+        metrics = self.evaluator.evaluate(len(self.dataloader.dataset) * self.dataloader.dataset.group_size * self.dataloader.dataset.batch_size)
         self.runner.call_hook('after_test_epoch', metrics=metrics)
         self.runner.call_hook('after_test')
         return metrics
+    
+    @torch.no_grad()
+    def run_iter(self, idx, data_batch: Sequence[dict]) -> None:
+        """Iterate one mini-batch.
+
+        Args:
+            data_batch (Sequence[dict]): Batch of data from dataloader.
+        """
+        self.runner.call_hook(
+            'before_test_iter', batch_idx=idx, data_batch=data_batch)
+        # predictions should be sequence of BaseDataElement
+        with autocast(enabled=self.fp16):
+            outputs = self.runner.model.test_step(data_batch)
+        self.evaluator.process(data_samples=outputs, data_batch=data_batch[0])
+        self.runner.call_hook(
+            'after_test_iter',
+            batch_idx=idx,
+            data_batch=data_batch,
+            outputs=outputs)
+        
+
+@LOOPS.register_module()
+class GroupInferLoop(ValLoop):
+
+    def run(self):
+        """Launch validation."""
+        self.runner.call_hook('before_val')
+        self.runner.call_hook('before_val_epoch')
+        self.runner.model.eval()
+        for group_idx, group_batch in enumerate(self.dataloader):
+            for frame_idx, frame_batch in enumerate(group_batch):
+                idx = group_idx * self.dataloader.dataset.group_size + frame_idx
+                self.run_iter(idx, [frame_batch])
+        
+        return None
+    
+    @torch.no_grad()
+    def run_iter(self, idx, data_batch: Sequence[dict]):
+        """Iterate one mini-batch.
+
+        Args:
+            data_batch (Sequence[dict]): Batch of data
+                from dataloader.
+        """
+        self.runner.call_hook(
+            'before_val_iter', batch_idx=idx, data_batch=data_batch)
+        # outputs should be sequence of BaseDataElement
+        with autocast(enabled=self.fp16):
+            outputs = self.runner.model.val_step(data_batch)
+
