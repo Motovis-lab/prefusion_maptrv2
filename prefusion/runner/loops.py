@@ -6,7 +6,7 @@ from prefusion.dataset.dataset import GroupBatchDataset
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 from mmengine.runner.amp import autocast
 
-__all__ = ['GroupBatchTrainLoop', 'GroupValLoop', 'GroupTestLoop']
+__all__ = ['GroupBatchTrainLoop', 'GroupValLoop', 'GroupTestLoop', 'GroupInferLoop']
 
 @LOOPS.register_module()
 class GroupBatchTrainLoop(EpochBasedTrainLoop):
