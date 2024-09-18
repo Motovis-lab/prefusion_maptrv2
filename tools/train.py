@@ -130,7 +130,8 @@ def main():
 
     # start training
     runner.logger.name = "prefusion"
-    runner.train()
+    runner.val()
+    # runner.train()
 
 
 if __name__ == '__main__':
