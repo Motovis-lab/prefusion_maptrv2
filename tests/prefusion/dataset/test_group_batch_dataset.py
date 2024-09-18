@@ -44,6 +44,9 @@ class DummyImgTensorSmith:
     def __call__(self, transformable, **kwds: Any) -> Any:
         return {"img": transformable.img}
 
+class DummyDepthTensorSmith:
+    def __call__(self, transformable, **kwds: Any) -> Any:
+        return {"depth": transformable.img}
 
 @pytest.fixture
 def scene_frame_inds():
@@ -379,6 +382,61 @@ def test_load_ego_poses():
     assert ego_pose_set.transformables['+2'].timestamp == "1698825818064"
 
 
+def test_load_camera_depth():
+    import mmengine
+    import mmcv
+    data = mmengine.load("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl")
+    IMG_KEYS = [
+        'camera1', 'camera11', 'camera12', 'camera13', 'camera15', 'camera2', 'camera3', 'camera4', 'camera5', 'camera6', 'camera7', 'camera8'
+        ]
+    from copious.io.fs import mktmpdir
+    tmpdir = mktmpdir()
+    camera_image_depth = {}
+    self_mask = {}
+    for camera_t in IMG_KEYS:
+        camera_image_depth.update({
+            camera_t : f"{camera_t}_depth.npz"
+        })
+        self_mask.update({
+            camera_t: f"{camera_t}_mask.png"
+        })
+        np.savez_compressed(str(tmpdir / f"{camera_t}_depth.npz"), depth=np.ones((5, 10)).astype(np.float16))
+        mmcv.imwrite(np.ones((5, 10)), str(tmpdir / f"{camera_t}_mask.png"))
+
+    data["20231101_160337"]["frame_info"]["1698825817864"].update({'camera_image_depth': camera_image_depth})
+    data["20231101_160337"]['scene_info']['camera_mask'] =  self_mask
+    
+    mmengine.dump(data, "tests/prefusion/dataset/mv4d-infos-for-test-depth.pkl")
+
+    dataset = GroupBatchDataset(
+        name="gbd",
+        data_root=Path(tmpdir),
+        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-depth.pkl"),
+        transformable_keys=["camera_depths"],
+        dictionaries={},
+        tensor_smiths={"camera_depths": DummyDepthTensorSmith()},
+        transforms=[DummyTransform(scope="group")],
+        model_feeder=BaseModelFeeder(),
+        phase="val",
+        possible_frame_intervals=2,
+        batch_size=2,
+        possible_group_sizes=4,
+    )
+
+    index_info = IndexInfo("20231101_160337", "1698825817864")
+    camera_depth = dataset.load_camera_depths('camera_depths', index_info)
+    assert len(camera_depth.transformables) == 12
+
+    depth_fish_front = np.load(Path(tmpdir) / Path("camera1_depth.npz"))['depth'][..., None].astype(np.float32)
+    assert np.all(camera_depth.transformables['camera1'].img == depth_fish_front)
+
+    depth_fish_front = np.load(Path(tmpdir) / Path("camera2_depth.npz"))['depth'][..., None].astype(np.float32)
+    assert np.all(camera_depth.transformables['camera2'].img == depth_fish_front)
+
+    depth_fish_front = np.load(Path(tmpdir) / Path("camera6_depth.npz"))['depth'][..., None].astype(np.float32)
+    assert np.all(camera_depth.transformables['camera6'].img == depth_fish_front)
+
+    
 def test_cur_train_group_size():
     _scene_frame_inds = {"Scn": [f"Scn/{i:02}" for i in range(17)]}
     gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=[2, 4, 8], possible_frame_intervals=1, seed=52)
