@@ -134,7 +134,7 @@ class GroupTestLoop(TestLoop):
         self.runner.call_hook('after_test_epoch', metrics=metrics)
         self.runner.call_hook('after_test')
         return metrics
-    
+        
 
 @LOOPS.register_module()
 class GroupInferLoop(ValLoop):
