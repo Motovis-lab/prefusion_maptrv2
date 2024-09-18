@@ -129,6 +129,7 @@ def main():
         runner = RUNNERS.build(cfg)
 
     # start training
+    runner.logger.name = "prefusion"
     runner.train()
 
 
