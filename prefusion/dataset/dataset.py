@@ -564,7 +564,7 @@ class GroupBatchDataset(Dataset):
             cam_id: CameraDepth(
                 cam_id=cam_id,
                 cam_type=calib[cam_id]["camera_type"],
-                img=mmcv.imread(self.data_root / frame_info["camera_image_depth"][cam_id], flag="unchanged"),
+                img=np.load(self.data_root / frame_info['camera_image_depth'][cam_id])['depth'][..., None].astype(np.float32),
                 ego_mask=mmcv.imread(self.data_root / scene_info["camera_mask"][cam_id], flag="grayscale"),
                 extrinsic=calib[cam_id]["extrinsic"],
                 intrinsic=calib[cam_id]["intrinsic"],

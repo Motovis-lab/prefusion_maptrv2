@@ -44,6 +44,9 @@ class DummyImgTensorSmith:
     def __call__(self, transformable, **kwds: Any) -> Any:
         return {"img": transformable.img}
 
+class DummyDepthTensorSmith:
+    def __call__(self, transformable, **kwds: Any) -> Any:
+        return {"depth": transformable.img}
 
 @pytest.fixture
 def scene_frame_inds():
@@ -379,6 +382,27 @@ def test_load_ego_poses():
     assert ego_pose_set.transformables['+2'].timestamp == "1698825818064"
 
 
+def test_load_camera_depth():
+    dataset = GroupBatchDataset(
+        name="gbd",
+        data_root=Path("data/mv_4d_data"),
+        info_path=Path("data/mv_4d_data/mv_4d_infos_fix_100.pkl"),
+        transformable_keys=["camera_depths"],
+        dictionary={},
+        tensor_smiths={"camera_depths": DummyDepthTensorSmith()},
+        transforms=[DummyTransform(scope="group")],
+        model_feeder=BaseModelFeeder(),
+        phase="val",
+        possible_frame_intervals=2,
+        batch_size=2,
+        possible_group_sizes=4,
+    )
+
+    index_info = IndexInfo("20230823_110018", "1692759619664")
+    camera_depth = dataset.load_camera_depths('camera_depths', index_info)
+    assert len(camera_depth.transformables) == 10
+
+    
 def test_cur_train_group_size():
     _scene_frame_inds = {"Scn": [f"Scn/{i:02}" for i in range(17)]}
     gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=[2, 4, 8], possible_frame_intervals=1, seed=52)
