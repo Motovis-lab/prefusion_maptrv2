@@ -19,6 +19,13 @@ pytest:
     - pip install --upgrade pip
     - pip install -r requirements.txt
     - echo $(pwd)
-    - python -m pytest tests --cache-clear
+    - python -m pytest tests --junitxml=report.xml --cov=./ --cov-report=xml
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
