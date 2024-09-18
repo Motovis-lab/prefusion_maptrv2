@@ -1,0 +1,49 @@
+import torch
+
+from prefusion.registry import MODEL_FEEDERS
+from prefusion.dataset import BaseModelFeeder
+from prefusion.dataset.transform import CameraImageSet, Bbox3D
+
+__all__ = ["StreamPETRModelFeeder"]
+
+
+@MODEL_FEEDERS.register_module()
+class StreamPETRModelFeeder(BaseModelFeeder):
+    """StreamPETRModelFeeder.
+
+    Args
+    ----
+    Any: Any parameter or keyword arguments.
+
+    """
+
+    def process(self, frame_batch: list) -> dict | list:
+        """
+        Process frame_batch, make it ready for model inputs
+
+        Parameters
+        ----------
+        frame_batch : list
+            list of input_dicts
+
+        Returns
+        -------
+        processed_frame_batch: dict | list
+        }
+        """
+        processed_frame_batch = []
+        for frame in frame_batch:
+            processed_frame = dict(index_info=frame['index_info'], **frame["transformables"])
+            processed_frame["meta_info"] = {}
+            for k, trnsfmb in processed_frame.items():
+                if isinstance(trnsfmb, CameraImageSet):
+                    _ids, trnsfmb = zip(*trnsfmb.transformables.items())
+                    trnsfmb = torch.vstack([(t.tensor['img'] * t.tensor['ego_mask']).unsqueeze(0) for t in trnsfmb])
+                    processed_frame[k] = trnsfmb
+                    processed_frame["meta_info"][k] = {"camera_ids": _ids}
+                    continue
+                if isinstance(trnsfmb, Bbox3D):
+                    processed_frame[k] = trnsfmb.tensor["bbox3d_corners"]
+                    processed_frame["meta_info"][k] = {"classes": trnsfmb.tensor["classes"]}
+            processed_frame_batch.append(processed_frame)
+        return processed_frame_batch

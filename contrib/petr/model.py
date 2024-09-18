@@ -1,10 +1,15 @@
+from typing import Union, List, Dict, Any, Optional
 from collections import OrderedDict
+
 import torch.nn as nn
+import torch
+from torch.utils.data.dataloader import default_collate
+from mmengine.model import BaseModel
+from mmengine.model.base_model.data_preprocessor import BaseDataPreprocessor
 
 from prefusion.registry import MODELS
-from mmengine.model import BaseModel
 
-__all__ = ["ToyModel"]
+__all__ = ["ToyModel", "StreamPETR"]
 
 @MODELS.register_module()
 class ToyModel(BaseModel):
@@ -17,25 +22,53 @@ class ToyModel(BaseModel):
         return self.head(self.backbone.layer0(x))
 
 
-
+@MODELS.register_module()
+class FrameBatchMerger(BaseDataPreprocessor):
+    def __init__(self, device='cuda', **kwargs):
+        super().__init__(**kwargs)
+        self._device = device
+    def forward(self, data: List[Dict[str, Any]], training: bool = False) -> Dict[str, List[Any]]:
+        merged = {}
+        for key in data[0].keys():
+            merged[key] = [self._cast_data(i[key]) for i in data]
+        return merged
+    
+    def _cast_data(self, data: Any):
+        if isinstance(data, torch.Tensor):
+            return data.to(dtype=torch.float32, device=self._device)
+        return data
+        # return self.cast_data(merged)  # type: ignore
 
 
 @MODELS.register_module()
 class StreamPETR(BaseModel):
-    def __init__(self, *, backbone=None, neck=None, 
-                #  box_head=None, 
-        **kwargs):
-        super().__init__()
-        assert not any(m is None for m in [backbone, neck])
-        self.backbone = MODELS.build(backbone)
-        self.neck = MODELS.build(neck)
+    def __init__(self, *, data_preprocessor=None, img_backbone=None, img_neck=None, **kwargs):
+        super().__init__(data_preprocessor=data_preprocessor)
+        assert not any(m is None for m in [img_backbone, img_neck])
+        self.img_backbone = MODELS.build(img_backbone)
+        self.img_neck = MODELS.build(img_neck)
         # self.box_head = MODELS.build(box_head)
     
-    def forward(self, model_food, mode='loss'):
+    def forward(self, *args, mode='loss', **kwargs):
         if mode=='loss':
-            return self.forward_train(model_food)
+            return self.forward_train(**kwargs)
         else:
-            return self.forward_test(model_food)
+            return self.forward_test(**kwargs)
     
-    def forward_train(self, model_food):
-        pass
+    def forward_train(self, *, index_info=None, camera_images=None, bbox_3d=None, meta_info=None):
+        B, (N, C, H, W) = len(camera_images), camera_images[0].shape
+        camera_images = torch.vstack([i.unsqueeze(0) for i in camera_images]).reshape(B * N, C, H, W)
+        img_feat = self.extract_img_feat(camera_images)
+        a = 10
+
+    def forward_test(self, *args, **kwargs):
+        return
+
+    def extract_img_feat(self, img: torch.Tensor):
+        """
+        Parameters
+        ----------
+        img : torch.Tensor
+            of shape (N, C, H, W), where N is the batch size, C is usually 3, H and W are image height and width.
+        """
+        return self.img_backbone(img)

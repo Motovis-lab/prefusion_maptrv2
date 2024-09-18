@@ -18,7 +18,7 @@ custom_imports = dict(
 backend_args = None
 
 train_dataloader = dict(
-    num_workers=4,
+    num_workers=1,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler'),
     collate_fn=dict(type='collate_dict'),
@@ -31,7 +31,7 @@ train_dataloader = dict(
             "camera_images": {},
             "bbox_3d": {
                 "det": {
-                    "classes": ['1', '2', '3']
+                    "classes": ['class.vehicle.passenger_car', 'class.traffic_facility.box', 'class.road_marker.arrow', 'class.parking.text_icon', 'class.cycle.motorcycle']
                 }
             },
         },
@@ -43,7 +43,7 @@ train_dataloader = dict(
             ),
             bbox_3d=dict(type="Bbox3DCorners"),
         ),
-        model_feeder=dict(type="BaseModelFeeder"),
+        model_feeder=dict(type="StreamPETRModelFeeder"),
         transformable_keys=[
             'camera_images', 'bbox_3d'
         ],
@@ -59,7 +59,7 @@ train_dataloader = dict(
             ),
         ],
         phase='train',
-        batch_size=1,
+        batch_size=2,
         possible_group_sizes=[3, 4, 5],
         possible_frame_intervals=[1, 2]
     )
@@ -74,7 +74,11 @@ test_cfg = dict(type='GroupTestLoop')
 
 model = dict(
     type='StreamPETR',
-    backbone=dict(
+    data_preprocessor=dict(
+        type="FrameBatchMerger",
+        device="mps",
+    ),
+    img_backbone=dict(
         pretrained='torchvision://resnet50',
         type='mmdet.ResNet',
         depth=50,
@@ -86,7 +90,7 @@ model = dict(
         with_cp=True,
         style='pytorch'
     ),
-    neck=dict(
+    img_neck=dict(
         type='mmdet3d.CPFPN',
         in_channels=[1024, 2048],
         out_channels=256,

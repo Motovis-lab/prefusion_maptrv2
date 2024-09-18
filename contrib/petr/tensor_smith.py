@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING
 
+import torch
+
 from prefusion.registry import TENSOR_SMITHS
 from prefusion.dataset.tensor_smith import TensorSmith
 
@@ -14,9 +16,9 @@ __all__ = ["Bbox3DCorners"]
 class Bbox3DCorners(TensorSmith):
     def __init__(self):
         pass
-    
+
     def __call__(self, transformable: "Bbox3D"):
         return {
             "classes": [ele['class'] for ele in transformable.elements],
-            "bbox3d_corners": transformable.corners
+            "bbox3d_corners": torch.tensor(transformable.corners)
         }
