@@ -114,7 +114,7 @@ class GroupValLoop(ValLoop):
         # outputs should be sequence of BaseDataElement
         with autocast(enabled=self.fp16):
             outputs = self.runner.model.val_step(data_batch)
-        self.evaluator.process(data_samples=outputs, data_batch=data_batch[0])
+        self.evaluator.process(data_samples=outputs, data_batch=data_batch)
         self.runner.call_hook(
             'after_val_iter',
             batch_idx=idx,
@@ -167,7 +167,7 @@ class GroupTestLoop(TestLoop):
         # predictions should be sequence of BaseDataElement
         with autocast(enabled=self.fp16):
             outputs = self.runner.model.test_step(data_batch)
-        self.evaluator.process(data_samples=outputs, data_batch=data_batch[0])
+        self.evaluator.process(data_samples=outputs, data_batch=data_batch)
         self.runner.call_hook(
             'after_test_iter',
             batch_idx=idx,
