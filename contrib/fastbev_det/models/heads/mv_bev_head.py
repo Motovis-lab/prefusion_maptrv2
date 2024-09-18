@@ -18,7 +18,7 @@ import matplotlib.cm as cm
 import numpy as np
 from pyquaternion import Quaternion
 from scipy.spatial.transform import Rotation
-from prefusion.utils.utils import get_cam_corners, intrinsics_matrix, get_3d_lines, get_bev_lines, get_corners_with_angles, get_bev_lines_cylinder
+from contrib.fastbev_det.utils.utils import get_cam_corners, intrinsics_matrix, get_3d_lines, get_bev_lines, get_corners_with_angles, get_bev_lines_cylinder
 import cv2
 import time
 

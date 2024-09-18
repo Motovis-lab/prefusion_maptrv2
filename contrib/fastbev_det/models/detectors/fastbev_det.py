@@ -31,11 +31,11 @@ class FastBEV_Det(BaseModel):
         self.head_conf = head_conf
         self.is_train_depth = is_train_depth
         self.downsample_factor = backbone_conf.get('downsample_factor', 16)
-        self.mono_depth_net = MODELS.build(mono_depth)
         self.each_camera_nums = self.backbone.each_camera_nums if hasattr(self.backbone, 'each_camera_nums') else None
-        self.mono_depth_net.each_camera_nums = self.each_camera_nums
         self.head.each_camera_nums = self.each_camera_nums
-        
+        if mono_depth is not None:
+            self.mono_depth_net = MODELS.build(mono_depth)
+            self.mono_depth_net.each_camera_nums = self.each_camera_nums
      
     def get_depth_loss(self, depth_labels, depth_preds, camera_type):
         depth_labels = self.get_downsampled_gt_depth(depth_labels, camera_type)

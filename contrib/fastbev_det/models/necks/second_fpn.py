@@ -8,6 +8,8 @@ from torch import nn as nn
 from prefusion.registry import MODELS
 from ..backbones.vovnet import OSA
 
+__all__ = ["SECONDFPN", "PV_BEV_Fusion", "PV_BEV_Fusion_PV_FRONT"]
+
 @MODELS.register_module()
 class SECONDFPN(BaseModule):
     """FPN used in SECOND/PointPillars/PartA2/MVXNet.
