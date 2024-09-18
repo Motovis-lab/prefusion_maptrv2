@@ -388,7 +388,7 @@ def test_load_camera_depth():
         data_root=Path("data/mv_4d_data"),
         info_path=Path("data/mv_4d_data/mv_4d_infos_fix_100.pkl"),
         transformable_keys=["camera_depths"],
-        dictionary={},
+        dictionaries={},
         tensor_smiths={"camera_depths": DummyDepthTensorSmith()},
         transforms=[DummyTransform(scope="group")],
         model_feeder=BaseModelFeeder(),
@@ -401,6 +401,15 @@ def test_load_camera_depth():
     index_info = IndexInfo("20230823_110018", "1692759619664")
     camera_depth = dataset.load_camera_depths('camera_depths', index_info)
     assert len(camera_depth.transformables) == 10
+
+    depth_fish_front = np.load(Path("/ssd4/home/wuhan/prefusion/data/mv_4d_data") / Path("20230823_110018/depth/VCAMERA_FISHEYE_FRONT/1692759619664.npz"))['depth'][..., None].astype(np.float32)
+    assert np.all(camera_depth.transformables['VCAMERA_FISHEYE_FRONT'].img == depth_fish_front)
+
+    depth_fish_front = np.load(Path("/ssd4/home/wuhan/prefusion/data/mv_4d_data") / Path("20230823_110018/depth/VCAMERA_PERSPECTIVE_FRONT/1692759619664.npz"))['depth'][..., None].astype(np.float32)
+    assert np.all(camera_depth.transformables['VCAMERA_PERSPECTIVE_FRONT'].img == depth_fish_front)
+
+    depth_fish_front = np.load(Path("/ssd4/home/wuhan/prefusion/data/mv_4d_data") / Path("20230823_110018/depth/VCAMERA_FISHEYE_BACK/1692759619664.npz"))['depth'][..., None].astype(np.float32)
+    assert np.all(camera_depth.transformables['VCAMERA_FISHEYE_BACK'].img == depth_fish_front)
 
     
 def test_cur_train_group_size():
