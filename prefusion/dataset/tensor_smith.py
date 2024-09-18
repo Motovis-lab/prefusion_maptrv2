@@ -21,6 +21,7 @@ from .transform import (
 __all__ = [
     "CameraImageTensor", "CameraDepthTensor", "CameraSegTensor", "PlanarBbox3D",
     "PlanarBboxBev", "PlanarSegBev", "PlanarPolyline3D", "PlanarPolygon3D", "PlanarParkingSlot3D",
+    "BypassTensorSmith"
 ]
 
 class TensorSmith:
@@ -29,6 +30,14 @@ class TensorSmith:
 
     def reverse(self, tensor_dict):
         raise NotImplementedError
+
+
+
+@TENSOR_SMITHS.register_module()
+class BypassTensorSmith(TensorSmith):
+    def __call__(self, transformable):
+        return transformable
+
 
 
 @TENSOR_SMITHS.register_module()
@@ -84,18 +93,69 @@ def get_bev_intrinsics(voxel_shape, voxel_range):
     cx = - voxel_range[1][0] * fx - 0.5
     cy = - voxel_range[2][0] * fy - 0.5
 
-    return fx, fy, cx, cy
+    return cx, cy, fx, fy
 
 
 
 @TENSOR_SMITHS.register_module()
 class PlanarBbox3D(TensorSmith):
     def __init__(self, voxel_shape, voxel_range):
-        self.voxel_shape = voxel_shape
-        self.voxel_range = voxel_range
+        """
+        Parameters
+        ----------
+        voxel_shape : tuple
+        voxel_range : Tuple[List]
+
+        Examples
+        --------
+        - voxel_shape=(6, 320, 160)
+        - voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        - Z, X, Y = voxel_shape
+
+        """
+        self.voxel_shape = tuple(voxel_shape)
+        self.voxel_range = tuple(voxel_range)
+        self.bev_intrinsics = get_bev_intrinsics(voxel_shape, voxel_range)
+        Z, X, Y = voxel_shape
+        xx, yy = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
+        self.points_grid_bev = np.float32([yy, xx])
+
     
     def __call__(self, transformable: Bbox3D):
-        raise NotImplementedError
+        Z, X, Y = self.voxel_shape
+        cx, cy, fx, fy = self.bev_intrinsics
+        points_grid_bev = self.points_grid_bev
+
+        tensor_data = {}
+        for branch in transformable.dictionary:
+            unit_xvecs = []
+            class_inds = []
+            attr_lists = []
+            attr_available = 'attrs' in transformable.dictionary[branch]
+            for element in transformable.elements:
+                if element['class'] in transformable.dictionary[branch]['classes']:
+                    #
+                    unit_xvec = element['rotation'][:, 0]
+                    unit_xvecs.append(np.array([
+                        unit_xvec[1] * fy + cy,
+                        unit_xvec[0] * fx + cx,
+                        unit_xvec[2]
+                    ]).T)
+                    class_inds.append(transformable.dictionary[branch]['classes'].index(element['class']))
+                    attr_ind_list = []
+                    if 'attr' in element and attr_available:
+                        element_attrs = element['attr'].values()
+                        for attr in element_attrs:
+                            if attr in transformable.dictionary[branch]['attrs']:
+                                attr_ind_list.append(transformable.dictionary[branch]['attrs'].index(attr))
+                    attr_lists.append(attr_ind_list)
+                    # TODO: add ignore_mask according to ignore classes and attrs
+            num_class_channels = len(transformable.dictionary[branch]['classes'])
+            if attr_available:
+                num_attr_channels = len(transformable.dictionary[branch]['attrs'])
+            else:
+                num_attr_channels = 0
+            branch_seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y))
 
 
 
@@ -106,6 +166,39 @@ class PlanarBboxBev(TensorSmith):
         self.voxel_range = voxel_range
     
     def __call__(self, transformable: Bbox3D):
+        """
+        Parameters
+        ----------
+        elements : List[dict]
+            a list of boxes. Each element is a dict of box having the following format
+            ```elements[0] = {
+                'class': 'class.vehicle.passenger_car',
+                'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
+                        'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
+                        'attr.vehicle.is_door_open': 'attr.vehicle.is_door_open.false'},
+                'size': [4.6486, 1.9505, 1.5845],
+                'rotation': array([[ 0.93915682, -0.32818596, -0.10138267],
+                                [ 0.32677338,  0.94460343, -0.03071667],
+                                [ 0.1058472 , -0.00428138,  0.99437319]]),
+                'translation': array([[-15.70570354], [ 11.88484971], [ -0.61029085]]), # NOTE: it is a column vector
+                'track_id': '10035_0', # NOT USED
+                'velocity': array([[0.], [0.], [0.]]) # NOTE: it is a column vector
+            }
+            ```
+        dictionary : dict
+            following format
+            ```dictionary = {
+                'branch_0': {'classes': ['car', 'bus', 'pedestrain', ...], 'attrs': []}
+                'branch_1': {'classes': [], 'attrs': []}
+                ...
+            }
+            ```
+        flip_aware_class_pairs : List[tuple]
+            list of class pairs that are flip-aware
+            flip_aware_class_pairs = [('left_arrow', 'right_arrow')]
+        tensor_smith : TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
+        """
         raise NotImplementedError
 
 
@@ -119,6 +212,7 @@ class PlanarSegBev(TensorSmith):
 
     def __call__(self, transformable: SegBev):
         raise NotImplementedError
+
 
 
 @TENSOR_SMITHS.register_module()
@@ -167,7 +261,7 @@ class PlanarPolyline3D(TensorSmith):
         ```
         """
         Z, X, Y = self.voxel_shape
-        fx, fy, cx, cy = self.bev_intrinsics
+        cx, cy, fx, fy = self.bev_intrinsics
         points_grid_bev = self.points_grid_bev
 
         tensor_data = {}
@@ -454,7 +548,7 @@ class PlanarPolyline3D(TensorSmith):
             
             ## link all points and get 3d polylines
             line_segments = self._link_line_points(fused_points, fused_vecs)
-            fx, fy, cx, cy = self.bev_intrinsics
+            cx, cy, fx, fy = self.bev_intrinsics
             polylines_3d[branch] = []
 
             for g in line_segments:
@@ -496,7 +590,7 @@ class PlanarPolygon3D(TensorSmith):
 
     def __call__(self, transformable: Polyline3D):
         Z, X, Y = self.voxel_shape
-        fx, fy, cx, cy = self.bev_intrinsics
+        cx, cy, fx, fy = self.bev_intrinsics
         points_grid_bev = self.points_grid_bev
 
         tensor_data = {}
@@ -678,7 +772,7 @@ class PlanarParkingSlot3D(TensorSmith):
 
     def __call__(self, transformable: ParkingSlot3D) -> dict:
         Z, X, Y = self.voxel_shape
-        fx, fy, cx, cy = self.bev_intrinsics
+        cx, cy, fx, fy = self.bev_intrinsics
         points_grid_bev = self.points_grid_bev
 
         
@@ -1066,8 +1160,9 @@ class PlanarParkingSlot3D(TensorSmith):
         corner_points_bev = [points_0, points_1, points_2, points_3]
 
         ## groups_nms, get mean slot points_bev
+        cx, cy, fx, fy = self.bev_intrinsics
         mean_slots_bev_no_entrance = self._group_nms(
-            cen_scores, seg_scores, corner_points_bev, abs(self.bev_intrinsics[0] * dist_thresh)
+            cen_scores, seg_scores, corner_points_bev, abs(fx * dist_thresh)
         )
         # determine the entrance and calc 3D coordinates
         _, H, W = self.voxel_shape
@@ -1077,7 +1172,6 @@ class PlanarParkingSlot3D(TensorSmith):
             [2, 3, 0, 1],
             [3, 0, 1, 2]
         ]
-        fx, fy, cx, cy = self.bev_intrinsics
         mean_slots_3d = []
         for mean_slot in mean_slots_bev_no_entrance:
             # calc each line center, then calc entrance confidence

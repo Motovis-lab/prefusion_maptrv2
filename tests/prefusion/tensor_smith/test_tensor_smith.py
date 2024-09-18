@@ -10,7 +10,7 @@ def test_get_bev_intrinsics():
     voxel_shape=(6, 200, 160)
     voxel_range=([-0.5, 2.5], [10, -10], [8, -8])
     bev_intrinsics = get_bev_intrinsics(voxel_shape, voxel_range)
-    assert bev_intrinsics == (-10, -10, 99.5, 79.5)
+    assert bev_intrinsics == (99.5, 79.5, -10, -10)
 
 
 def test_camera_image_tensor():
