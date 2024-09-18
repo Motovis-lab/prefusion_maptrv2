@@ -5,8 +5,8 @@ pytest:
   stage: test
   image: python:3.10
   script:
-    - pip install pytest
     - pip install -r requirements.txt
-    - pytest
+    - echo $(pwd)
+    - PYTHONPATH=$(pwd) python -m pytest tests --cache-clear
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
