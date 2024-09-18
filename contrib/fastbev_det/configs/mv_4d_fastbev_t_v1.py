@@ -344,7 +344,7 @@ val_evaluator = [
 ]
 
 
-train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=10, val_interval=1)  # -1 note don't eval
+train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=24, val_interval=5)  # -1 note don't eval
 val_cfg = dict(type='GroupValLoop')
 
 test_dataloader = val_dataloader
@@ -365,7 +365,7 @@ optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=lr, weight_decay=0.01),
     clip_grad=dict(max_norm=35, norm_type=2))
-param_scheduler = dict(type='MultiStepLR', milestones=[24, 36])
+param_scheduler = dict(type='MultiStepLR', milestones=[16, 20])
 
 auto_scale_lr = dict(enable=False, batch_size=32)
 
