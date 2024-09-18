@@ -18,7 +18,7 @@ import matplotlib.cm as cm
 import numpy as np
 import copy
 from pyquaternion import Quaternion
-from contrib.fastbev_det.utils.utils import get_cam_corners, intrinsics_matrix, get_3d_lines, get_bev_lines, get_corners_with_angles, get_bev_lines_cylinder
+from contrib.fastbev_det.utils import get_cam_corners, intrinsics_matrix, get_3d_lines, get_bev_lines, get_corners_with_angles, get_bev_lines_cylinder
 import cv2
 
 
@@ -200,7 +200,7 @@ class BEVDepthHeadV1(CenterHead):
             bboxes_3d = []
             labels_3d = []
             for task_name in self.tasks:
-                for box_id, boxes in enumerate(data['transformables'][task_name['label_type']].data['elements']):
+                for box_num_id, boxes in enumerate(data['transformables'][task_name['label_type']].elements):
                     labels_3d.append(self.all_classes.index(boxes['class']))
                     tmp_box = [*boxes['translation'].tolist(), *boxes['size'], Rotation.from_matrix(boxes['rotation']).as_euler("xyz", degrees=False).tolist()[-1], *boxes['velocity'].tolist()[:2]]
                     corners = get_corners_with_angles(np.array(tmp_box)[None], boxes['rotation'].T)[0][:4, :3]

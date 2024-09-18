@@ -154,21 +154,21 @@ class GroupDataPreprocess(DetDataPreprocessor):
         Returns:
             dict or List[dict]: Data in the same format as the model input.
         """
-        data = data[0]
+        # data = data[0]
         # for debug dataset output data
         # for i in range(len(data)):
         #     self.show_dataset_output(data[i])
         fish_data = self.cast_data(self.collect_fish_data(data))
         pv_data = self.cast_data(self.collect_pv_data(data))
         front_data = self.cast_data(self.collect_front_data(data))
-        targets = self.cast_data(self.collate_targets(data))
-        frame_ids = [x['frame_id'] for x in data]
+        # targets = self.cast_data(self.collate_targets(data))
+        frame_ids = [x['index_info'].frame_id for x in data]
         frame_exists = dict(
-            prev_exists = [x['prev_exists'] for x in data],
-            next_exists = [x['next_exists'] for x in data]
+            prev_exists = [x['index_info'].prev for x in data],
+            next_exists = [x['index_info'].next for x in data]
         )
 
-        return {'batch_data':{'fish_data': fish_data, 'front_data':front_data, 'pv_data':pv_data}, 'targets':targets, 'frame_ids':frame_ids, 'frame_exists':frame_exists, 'ori_data': data}
+        return {'batch_data':{'fish_data': fish_data, 'front_data':front_data, 'pv_data':pv_data}, 'frame_ids':frame_ids, 'frame_exists':frame_exists, 'ori_data': data}
 
 
     def preprocess_img(self, _batch_img: Tensor) -> Tensor:
@@ -244,19 +244,19 @@ class GroupDataPreprocess(DetDataPreprocessor):
             single_data = data[num]
             for cam_id in camera_types:
                 tmp_extrinsic = np.eye(4,4)
-                tmp_extrinsic[:3, :3] = single_data['transformables']['camera_images'][cam_id].data['extrinsic'][0]
-                tmp_extrinsic[:3, 3] = single_data['transformables']['camera_images'][cam_id].data['extrinsic'][1]
+                tmp_extrinsic[:3, :3] = single_data['transformables']['camera_images'].transformables[cam_id].extrinsic[0]
+                tmp_extrinsic[:3, 3] = single_data['transformables']['camera_images'].transformables[cam_id].extrinsic[1]
                 extrinsic.append(torch.from_numpy(tmp_extrinsic).to(torch.float32))
-                intrinsic.append(torch.from_numpy(np.array(single_data['transformables']['camera_images'][cam_id].data['intrinsic'])).to(torch.float32))
-                imgs.append(self.preprocess_img(torch.from_numpy(single_data['transformables']['camera_images'][cam_id].data['img'].transpose(2, 0, 1))))
-                uu.append(torch.from_numpy(single_data['transformables']['camera_images'][cam_id].data['fast_ray_LUT']['uu']))
-                vv.append(torch.from_numpy(single_data['transformables']['camera_images'][cam_id].data['fast_ray_LUT']['vv']))
-                dd.append(torch.from_numpy(single_data['transformables']['camera_images'][cam_id].data['fast_ray_LUT']['dd']))
-                valid_map.append(torch.from_numpy(single_data['transformables']['camera_images'][cam_id].data['fast_ray_LUT']['valid_map']))
-                valid_map_sampled.append(torch.from_numpy(single_data['transformables']['camera_images'][cam_id].data['fast_ray_LUT']['valid_map_sampled']))
-                norm_density_map.append(torch.from_numpy(single_data['transformables']['camera_images'][cam_id].data['fast_ray_LUT']['norm_density_map']))
-                ego_mask.append(torch.from_numpy(single_data['transformables']['camera_images'][cam_id].data['ego_mask']))
-                depth.append(torch.from_numpy(single_data['transformables']['camera_depths'][cam_id].data['dep_img']))
+                intrinsic.append(torch.from_numpy(np.array(single_data['transformables']['camera_images'].transformables[cam_id].intrinsic)).to(torch.float32))
+                imgs.append(self.preprocess_img(torch.from_numpy(single_data['transformables']['camera_images'].transformables[cam_id].img.transpose(2, 0, 1))))
+                uu.append(torch.from_numpy(single_data['transformables']['camera_images'].transformables[cam_id].fast_ray_LUT['uu']))
+                vv.append(torch.from_numpy(single_data['transformables']['camera_images'].transformables[cam_id].fast_ray_LUT['vv']))
+                dd.append(torch.from_numpy(single_data['transformables']['camera_images'].transformables[cam_id].fast_ray_LUT['dd']))
+                valid_map.append(torch.from_numpy(single_data['transformables']['camera_images'].transformables[cam_id].fast_ray_LUT['valid_map']))
+                valid_map_sampled.append(torch.from_numpy(single_data['transformables']['camera_images'].transformables[cam_id].fast_ray_LUT['valid_map_sampled']))
+                norm_density_map.append(torch.from_numpy(single_data['transformables']['camera_images'].transformables[cam_id].fast_ray_LUT['norm_density_map']))
+                ego_mask.append(torch.from_numpy(single_data['transformables']['camera_images'].transformables[cam_id].ego_mask))
+                depth.append(torch.from_numpy(single_data['transformables']['camera_depths'].transformables[cam_id].img))
                 
         result['imgs'] = torch.stack(imgs, dim=0)
         result['depth'] = torch.stack(depth, dim=0)
@@ -269,19 +269,20 @@ class GroupDataPreprocess(DetDataPreprocessor):
         result['valid_map_sampled'] = torch.stack(valid_map_sampled, dim=0)
         result['norm_density_map'] = torch.stack(norm_density_map, dim=0)
         result['ego_mask'] = torch.stack(ego_mask, dim=0)
-        for k in range(-1, 2):
-            for num in range(batch_num):
-                single_data = data[num]
-                for cam_id in camera_types:
-                    mono_imgs.append(self.preprocess_img(torch.from_numpy(single_data['transformables']['mono_input_data'][f"frame_{k}"][cam_id].data['img'].transpose(2, 0, 1))))
-                    tmp_extrinsic = np.eye(4,4)
-                    tmp_extrinsic[:3, :3] = single_data['transformables']['mono_input_data'][f"frame_{k}"][cam_id].data['extrinsic'][0]
-                    tmp_extrinsic[:3, 3] = single_data['transformables']['mono_input_data'][f"frame_{k}"][cam_id].data['extrinsic'][1]
-                    mono_extrinsic.append(torch.from_numpy(tmp_extrinsic).to(torch.float32))
-                    mono_intrinsic.append(torch.from_numpy(np.array(single_data['transformables']['mono_input_data'][f"frame_{k}"][cam_id].data['intrinsic'])).to(torch.float32))
-        result['mono_imgs'] = torch.stack(mono_imgs, dim=0)
-        result['mono_extrinsic'] = torch.stack(mono_extrinsic, dim=0)
-        result['mono_intrinsic'] = torch.stack(mono_intrinsic, dim=0)
+        if "mono_input_data" in self.label_type:
+            for k in range(-1, 2):
+                for num in range(batch_num):
+                    single_data = data[num]
+                    for cam_id in camera_types:
+                        mono_imgs.append(self.preprocess_img(torch.from_numpy(single_data['transformables']['mono_input_data'][f"frame_{k}"][cam_id].data['img'].transpose(2, 0, 1))))
+                        tmp_extrinsic = np.eye(4,4)
+                        tmp_extrinsic[:3, :3] = single_data['transformables']['mono_input_data'][f"frame_{k}"][cam_id].data['extrinsic'][0]
+                        tmp_extrinsic[:3, 3] = single_data['transformables']['mono_input_data'][f"frame_{k}"][cam_id].data['extrinsic'][1]
+                        mono_extrinsic.append(torch.from_numpy(tmp_extrinsic).to(torch.float32))
+                        mono_intrinsic.append(torch.from_numpy(np.array(single_data['transformables']['mono_input_data'][f"frame_{k}"][cam_id].data['intrinsic'])).to(torch.float32))
+            result['mono_imgs'] = torch.stack(mono_imgs, dim=0)
+            result['mono_extrinsic'] = torch.stack(mono_extrinsic, dim=0)
+            result['mono_intrinsic'] = torch.stack(mono_intrinsic, dim=0)
 
         return result 
 

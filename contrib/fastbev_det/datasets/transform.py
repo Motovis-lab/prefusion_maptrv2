@@ -239,17 +239,16 @@ class FastRayLookUpTable(Transform):
         self.cam_ids = list(camera_feature_configs.keys())
     
     def __call__(self, *transformables, seeds=[None, None, None], **kwargs):
-        scope_seed = None
-        for seed in seeds:
-            if self.scope in str(seed):
-                scope_seed = int('520' + seed.split('_')[1])
+        scope_seed = seeds.get(self.scope, None)
         camera_images = {}
-        for transformable in transformables:
+        data_transformabels = transformables[0].transformables
+        for key in data_transformabels:
+            transformable = data_transformabels[key]
             if isinstance(transformable, CameraImage):
-                cam_id = transformable.data['cam_id']
+                cam_id = transformable.cam_id
                 if cam_id in self.cam_ids:
                     camera_images[cam_id] = transformable
         LUT = self.lut_gen.generate(camera_images, seed=scope_seed)
         for cam_id in camera_images:
-            camera_images[cam_id].data['fast_ray_LUT'] = LUT[cam_id]
+            transformables[0].transformables[cam_id].fast_ray_LUT = LUT[cam_id]
         return transformables

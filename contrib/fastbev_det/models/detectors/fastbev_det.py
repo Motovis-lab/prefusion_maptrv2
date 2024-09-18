@@ -91,7 +91,7 @@ class FastBEV_Det(BaseModel):
 
         return gt_depths.float()
 
-    def forward(self, batch_data: dict, targets, frame_ids, frame_exists, ori_data, mode):
+    def forward(self, batch_data: dict, frame_ids, frame_exists, ori_data, mode):
         """Forward function for BEVDepth
 
         Args:

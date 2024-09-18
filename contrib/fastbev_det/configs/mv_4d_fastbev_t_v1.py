@@ -23,11 +23,11 @@ bev_left = 60
 voxel_size = [0.2, 0.2, 0.5]
 downsample_factor=8
 
-img_scale = 2
+img_scale = 1
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
 front_perspective_img_size = [768 * img_scale, 384 * img_scale]
-batch_size = 3
+batch_size = 4
 group_size = 3
 bev_range = [-12, 36, -12, 12, -0.5, 2.5]
 
@@ -360,7 +360,7 @@ find_unused_parameters = True
 
 runner_type = 'GroupRunner'
 
-lr = 0.006  # total lr per gpu lr is lr/n 
+lr = 0.002  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=lr, weight_decay=0.01),
@@ -387,5 +387,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = None
+load_from = "work_dirs/mv_4d_fastbev_t_v1/20240910_201450/epoch_45.pth"
 resume=False

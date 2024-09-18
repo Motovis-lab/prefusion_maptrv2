@@ -61,7 +61,7 @@ class Box3DMetric(BaseMetric):
             each result is frame results 
         """
         for ori_data, det in zip(data_batch, data_samples):
-            sample_idx = ori_data['frame_id']
+            sample_idx = ori_data['index_info'].frame_id
             result = dict()
             boxes, scores, labels = det
             annos = list()
@@ -80,7 +80,7 @@ class Box3DMetric(BaseMetric):
             gt_result = dict()
             gt_annos = list()
             for branch in self.available_branch:
-                for instance in ori_data['transformables'][branch].data['elements']:
+                for instance in ori_data['transformables'][branch].elements:
                     if instance['class'] in self.available_class:
                         if self.available[0]<instance['translation'].reshape(3)[0]<self.available[1] and self.available[2]<instance['translation'].reshape(3)[1]<self.available[3]:
                             name = instance['class']
