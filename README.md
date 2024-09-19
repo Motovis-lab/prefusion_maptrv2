@@ -296,7 +296,13 @@ train.txt
 ## 任务设计
 TODO
 
+## 环境安装
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
 ## TODO List
-- [ ] 利用 Gitlab 提供的 CI/CD功能来帮我们跑测试
+- [x] 利用 Gitlab 提供的 CI/CD功能来帮我们跑测试
 - [ ] 利用 Gitlab 提供的 docs 功能来帮我们部署文档
 
