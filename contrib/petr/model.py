@@ -9,17 +9,7 @@ from mmengine.model.base_model.data_preprocessor import BaseDataPreprocessor
 
 from prefusion.registry import MODELS
 
-__all__ = ["ToyModel", "StreamPETR"]
-
-@MODELS.register_module()
-class ToyModel(BaseModel):
-    def __init__(self):
-        super().__init__()
-        self.backbone = nn.ModuleDict(dict(layer0=nn.Linear(1, 1), layer1=nn.Linear(1, 1)))
-        self.head = nn.Sequential(OrderedDict(linear=nn.Linear(1, 1), bn=nn.BatchNorm1d(1)))
-
-    def forward(self, x, mode='loss'):
-        return self.head(self.backbone.layer0(x))
+__all__ = ["StreamPETR"]
 
 
 @MODELS.register_module()
