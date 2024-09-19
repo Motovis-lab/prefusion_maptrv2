@@ -42,23 +42,25 @@ class FrameBatchMerger(BaseDataPreprocessor):
 
 @MODELS.register_module()
 class StreamPETR(BaseModel):
-    def __init__(self, *, data_preprocessor=None, img_backbone=None, img_neck=None, **kwargs):
+    def __init__(self, *, data_preprocessor=None, img_backbone=None, img_neck=None, box_head=None, **kwargs):
         super().__init__(data_preprocessor=data_preprocessor)
         assert not any(m is None for m in [img_backbone, img_neck])
         self.img_backbone = MODELS.build(img_backbone)
-        self.img_neck = MODELS.build(img_neck)
         # self.box_head = MODELS.build(box_head)
+        self.img_neck = MODELS.build(img_neck) if img_neck else None
     
     def forward(self, *args, mode='loss', **kwargs):
         if mode=='loss':
-            return self.forward_train(**kwargs)
+            return self.forward_train(*args, **kwargs)
         else:
-            return self.forward_test(**kwargs)
+            return self.forward_test(*args, **kwargs)
     
     def forward_train(self, *, index_info=None, camera_images=None, bbox_3d=None, meta_info=None):
         B, (N, C, H, W) = len(camera_images), camera_images[0].shape
         camera_images = torch.vstack([i.unsqueeze(0) for i in camera_images]).reshape(B * N, C, H, W)
         img_feat = self.extract_img_feat(camera_images)
+        if self.img_neck is not None:
+            img_feat = self.img_neck(img_feat)
         a = 10
 
     def forward_test(self, *args, **kwargs):
