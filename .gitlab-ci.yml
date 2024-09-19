@@ -1,24 +1,9 @@
-image: docker:latest
-
-services:
-  - docker:dind
-
 stages:
-  - build
   - test
-
-before_script:
-  - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" $CI_REGISTRY
-
-build_image:
-  stage: build
-  script:
-    - docker build -t "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA" .
-    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
 
 pytest:
   stage: test
-  image: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  image: brianlan/prefusion:v1
   script:
     # - cp /etc/apt/sources.list /etc/apt/sources.list.bak
     # - echo "deb https://mirrors.aliyun.com/debian/ bullseye main non-free contrib" > /etc/apt/sources.list

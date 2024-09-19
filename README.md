@@ -310,7 +310,7 @@ mim install -r mim-requirements.txt
 ### Docker
 
 ```bash
-docker build -f docker/Dockerfile -t prefusion:v1 .
+docker build -t prefusion:v1 .
 ```
 
 ## TODO List
