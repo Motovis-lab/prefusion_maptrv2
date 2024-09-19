@@ -297,12 +297,23 @@ train.txt
 TODO
 
 ## 环境安装
+
+### pip
+
 ```bash
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install openmim
+mim install -r mim-requirements.txt
+```
+
+### Docker
+
+```bash
+docker build -f docker/Dockerfile -t prefusion:v1 .
 ```
 
 ## TODO List
+
 - [x] 利用 Gitlab 提供的 CI/CD功能来帮我们跑测试
 - [ ] 利用 Gitlab 提供的 docs 功能来帮我们部署文档
-
