@@ -29,7 +29,7 @@ from pathlib import Path as P
 from typing import List, Tuple, Union
 import torch
 from mmengine import Config
-from prefusion.models.utils.virtual_camera import render_image, PerspectiveCamera, FisheyeCamera, create_virtual_perspective_camera, \
+from contrib.fastbev_det.models.utils.virtual_camera import render_image, PerspectiveCamera, FisheyeCamera, create_virtual_perspective_camera, \
     pcd_lidar_point, read_pcd_lidar, load_point_cloud, render_image_with_src_camera_points
 from tqdm import tqdm
 import matplotlib.pyplot as plt
