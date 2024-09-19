@@ -1,5 +1,3 @@
- 
-import pdb
 from turtle import color
 import cv2
 import yaml
@@ -15,7 +13,6 @@ from scipy.spatial.transform import Rotation
 from pyquaternion import Quaternion
 from copy import deepcopy
 import cv2
-import ipdb
 
 #   [markdown]
 # ## **Coordinate Systems:**
