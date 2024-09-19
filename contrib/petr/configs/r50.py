@@ -96,6 +96,9 @@ model = dict(
         out_channels=256,
         num_outs=2
     ),
+    box_head=dict(
+        type='StreamPETRHead'
+    ),
 )
 
 val_evaluator = dict(type="Accuracy")
