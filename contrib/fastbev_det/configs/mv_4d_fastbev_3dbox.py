@@ -1,15 +1,11 @@
-__base__ = '../default_runtime.py'
-
+__base__ = '../../configs/default_runtime.py'
+default_scope = "prefusion"
 custom_imports = dict(
-    imports=['models', 'datasets', 'hooks', 'runner', 'utils', 'evaluator', 'losses'],
+    imports=['prefusion', 'contrib'],
     allow_failed_imports=False
 )
 
 backend_args = None
-
-class_names = [
-    
-]
 
 IMG_KEYS = [
         'VCAMERA_FISHEYE_FRONT', 'VCAMERA_PERSPECTIVE_FRONT_LEFT', 'VCAMERA_PERSPECTIVE_BACK_LEFT', 'VCAMERA_FISHEYE_LEFT', 'VCAMERA_PERSPECTIVE_BACK', 'VCAMERA_FISHEYE_BACK', 
@@ -23,11 +19,11 @@ bev_left = 60
 voxel_size = [0.2, 0.2, 0.5]
 downsample_factor=8
 
-img_scale = 2
+img_scale = 1
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
 front_perspective_img_size = [768 * img_scale, 384 * img_scale]
-batch_size = 3
+batch_size = 8
 group_size = 3
 bev_range = [-12, 36, -12, 12, -0.5, 2.5]
 
@@ -63,11 +59,11 @@ resolutions = {
 resolutions.update(base_resolutions)
 
 train_pipeline = [
-    dict(type='IntrinsicImage',
+    dict(type='RenderIntrinsic',
         resolutions=resolutions,
         scope='frame'
     ),
-    dict(type='RandomExtrinsicImage',
+    dict(type='RandomRenderExtrinsic',
         prob=0.8, 
         angles=[0,0,3],
         scope='frame'),
@@ -85,12 +81,11 @@ train_pipeline = [
             VCAMERA_FISHEYE_RIGHT=general_camera_feature_config,
             VCAMERA_PERSPECTIVE_FRONT=general_camera_feature_config
             )
-        ),
-    dict(type='ToTensor', bev_resolution=[H, W], bev_range=bev_range)
+        )
 ]
 
 val_pipeline = [
-    dict(type='IntrinsicImage',
+    dict(type='RenderIntrinsic',
         resolutions=resolutions,
         scope='frame'
     ),
@@ -108,8 +103,7 @@ val_pipeline = [
             VCAMERA_FISHEYE_RIGHT=general_camera_feature_config,
             VCAMERA_PERSPECTIVE_FRONT=general_camera_feature_config
             )
-        ),
-    dict(type='ToTensor', bev_resolution=[H, W], bev_range=bev_range)
+        )
 ]
 
 CLASSES = [
@@ -159,40 +153,46 @@ dictionary=dict(
 train_dataloader = dict(
     num_workers=8,
     persistent_workers=True,
-    sampler=dict(type='DistributedGroupSampler'),
-    collate_fn=dict(type='collate_generator'),
+    sampler=dict(type='DefaultSampler', shuffle=True),
+    collate_fn=dict(type='collate_dict'),
     pin_memory=False,
     dataset=dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos.pkl',
-        dictionary=dictionary,
+        info_path=data_root + 'mv_4d_infos_train.pkl',
+        dictionaries=dictionary,
+        tensor_smiths=dict(type="BypassTensorSmith"),
+        model_feeder=dict(type="BaseModelFeeder"),
         transformable_keys=collection_info_type,
         transforms=train_pipeline,
         phase='train',
         batch_size=batch_size, 
-        group_size=group_size,
+        possible_group_sizes=[3],
+        possible_frame_intervals=[1]
         ),
     )
 
 val_dataloader = dict(
     num_workers=4,
     persistent_workers=False,
-    sampler=dict(type='DistributedGroupSampler'),
-    collate_fn=dict(type='collate_generator'),
+    sampler=dict(type='DefaultSampler', shuffle=False),
+    collate_fn=dict(type='collate_dict'),
     pin_memory=False,
     dataset=dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_100.pkl',
-        dictionary=dictionary, 
+        info_path=data_root + 'mv_4d_infos_val.pkl',
+        dictionaries=dictionary,
+        tensor_smiths=dict(type="BypassTensorSmith"),
+        model_feeder=dict(type="BaseModelFeeder"),
         transformable_keys=collection_info_type,
         transforms=val_pipeline,
         phase='val',
         batch_size=batch_size, 
-        group_size=group_size,
+        possible_group_sizes=[3],
+        possible_frame_intervals=[1]
         ),
     )
 
@@ -236,7 +236,7 @@ model = dict(
         predict_elements=['heatmap', 'anno_boxes', 'gridzs', 'class_maps'],
         batch_size=batch_size,
         group_size=group_size,
-        label_start_idx=3, # process labels info start index of collection_info_type
+        label_start_idx=2, # process labels info start index of collection_info_type
     ),
     backbone_conf=dict(
         type='FastRay',
@@ -270,26 +270,26 @@ model = dict(
         # depth_reducer_conf=dict(type='DepthReducer', img_channels=80, mid_channels=80),
         # horiconv_conf=dict(type='HoriConv', in_channels=80, mid_channels=128, out_channels=80),
     ),
-    mono_depth = dict(type='Mono_Depth', 
-                      fish_img_size=fish_img_size, 
-                      pv_img_size=perspective_img_size, 
-                      front_img_size=front_perspective_img_size, 
-                      downsample_factor=downsample_factor, 
-                      batch_size=batch_size, 
-                      avg_reprojection=True,
-                      disparity_smoothness=0.001,
-                      fish_unproject_cfg=dict(type='Fish_BackprojectDepth', 
-                                              batch_size=batch_size, 
-                                              height=fish_img_size[1], 
-                                              width=fish_img_size[0],
-                                              intrinsic=((fish_img_size[0]-1)/2, (fish_img_size[1]-1)/2, fish_img_size[0]/4, fish_img_size[0]/4, 0.1, 0,0,0)),
-                      fish_project3d_cfg=dict(type='Fish_Project3D', 
-                                              batch_size=batch_size, 
-                                              height=fish_img_size[1], 
-                                              width=fish_img_size[0],
-                                              intrinsic=((fish_img_size[0]-1)/2, (fish_img_size[1]-1)/2, fish_img_size[0]/4, fish_img_size[0]/4, 0.1, 0,0,0)),                      
-                      mono_depth_net_cfg=dict(type='Mono_DepthReducer', img_channels=256, mid_channels=128)
-    ),
+    # mono_depth = dict(type='Mono_Depth', 
+    #                   fish_img_size=fish_img_size, 
+    #                   pv_img_size=perspective_img_size, 
+    #                   front_img_size=front_perspective_img_size, 
+    #                   downsample_factor=downsample_factor, 
+    #                   batch_size=batch_size, 
+    #                   avg_reprojection=True,
+    #                   disparity_smoothness=0.001,
+    #                   fish_unproject_cfg=dict(type='Fish_BackprojectDepth', 
+    #                                           batch_size=batch_size, 
+    #                                           height=fish_img_size[1], 
+    #                                           width=fish_img_size[0],
+    #                                           intrinsic=((fish_img_size[0]-1)/2, (fish_img_size[1]-1)/2, fish_img_size[0]/4, fish_img_size[0]/4, 0.1, 0,0,0)),
+    #                   fish_project3d_cfg=dict(type='Fish_Project3D', 
+    #                                           batch_size=batch_size, 
+    #                                           height=fish_img_size[1], 
+    #                                           width=fish_img_size[0],
+    #                                           intrinsic=((fish_img_size[0]-1)/2, (fish_img_size[1]-1)/2, fish_img_size[0]/4, fish_img_size[0]/4, 0.1, 0,0,0)),                      
+    #                   mono_depth_net_cfg=dict(type='Mono_DepthReducer', img_channels=256, mid_channels=128)
+    # ),
     head_conf=dict(
         type='BEVDepthHeadV1',
         bev_backbone_conf=dict(
@@ -342,21 +342,19 @@ model = dict(
     is_train_depth=True
 )
 
-val_evaluator = dict(
-    type='mv_4d_Evaluator',
-    metrics = [
-        dict(
-            type='Box3DMetric',  # only for det3d of head BEVDepthHeadV1
-            available_range=bev_range,
-            available_class=CLASSES,
-            available_branch=dictionary,
-            collect_device='cpu',
-            jsonfile_prefix='./work_dirs/',
-            )
-    ]
-)
+val_evaluator = [
+    dict(
+        type='Box3DMetric',  # only for det3d of head BEVDepthHeadV1
+        available_range=bev_range,
+        available_class=CLASSES,
+        available_branch=dictionary,
+        collect_device='cpu',
+        jsonfile_prefix='./work_dirs/',
+    )
+]
 
-train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=48, val_interval=5)  # -1 note don't eval
+
+train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=10, val_interval=2)  # -1 note don't eval
 val_cfg = dict(type='GroupValLoop')
 
 test_dataloader = val_dataloader
@@ -370,23 +368,23 @@ env_cfg = dict(
 )
 find_unused_parameters = True
 
-runner_type = 'SerialRunner'
+runner_type = 'GroupRunner'
 
-lr = 0.006  # total lr per gpu lr is lr/n 
+lr = 0.004  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=lr, weight_decay=0.01),
     clip_grad=dict(max_norm=35, norm_type=2))
-param_scheduler = dict(type='MultiStepLR', milestones=[24, 36])
+param_scheduler = dict(type='MultiStepLR', milestones=[16, 20])
 
 auto_scale_lr = dict(enable=False, batch_size=32)
 
-log_processor = dict(type='MV_LogProcessor')
+log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(
-    timer=dict(type='MVIterTimerHook'),
+    timer=dict(type='GroupIterTimerHook'),
     logger=dict(type='LoggerHook', interval=5),
     param_scheduler=dict(type='ParamSchedulerHook'),
-    checkpoint=dict(type='MV_CheckpointHook', interval=5))
+    checkpoint=dict(type='ExperimentWiseCheckpointHook', interval=5))
 
 custom_hooks = [
     dict(
@@ -399,5 +397,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = "work_dirs/mv_4d_fastbev_t_v1/20240910_201450/epoch_45.pth"
+load_from = "work_dirs/mv_4d_fastbev_t_v1/epoch_45.pth"
 resume=False
