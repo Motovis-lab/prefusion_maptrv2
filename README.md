@@ -1,3 +1,8 @@
+
+[![pipeline status](https://gitlab.com/auto-ai-ragtag/prefusion/badges/main/pipeline.svg)](https://gitlab.com/auto-ai-ragtag/prefusion/-/commits/main)
+
+[![coverage report](https://gitlab.com/auto-ai-ragtag/prefusion/badges/main/coverage.svg)](https://gitlab.com/auto-ai-ragtag/prefusion/-/commits/main)
+
 # 前融合PreFusion
 
 
