@@ -141,7 +141,7 @@ Square3D = dict(
     branch_0=dict(classes=['class.pedestiran.pedestiran'], attrs=[[]])
 )
 
-collection_info_type = ['camera_images','camera_depths', 'mono_input_data', 'bbox_3d', 'bbox_bev', 'square_3d']
+collection_info_type = ['camera_images','camera_depths', 'bbox_3d', 'bbox_bev', 'square_3d']
 
 dictionary=dict(
         bbox_3d=Bbox3d,
@@ -228,7 +228,7 @@ model_test_cfg = dict(
 model = dict(
     type='FastBEV_Det',
     data_preprocessor=dict(
-        type='MVDataPreprocess',
+        type='GroupDataPreprocess',
         mean=[128, 128, 128],
         std=[255, 255, 255],
         IMG_KEYS=IMG_KEYS, 
