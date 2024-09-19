@@ -7,7 +7,7 @@ from functools import reduce
 from torch import Tensor
 from typing import Union, List, Dict, Optional
 
-from mmengine.registry import MODELS
+from prefusion.registry import MODELS
 from mmengine.model import BaseDataPreprocessor, BaseModel, BaseModule
 
 
