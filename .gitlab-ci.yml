@@ -18,6 +18,8 @@ pytest:
     - apt-get install libgl1-mesa-dev -y
     - pip install --upgrade pip
     - pip install -r requirements.txt
+    - pip install openmim
+    - mim install -r mim-requirements.txt
     - echo $(pwd)
     - python -m pytest tests --junitxml=report.xml --cov=./ --cov-report=xml
   artifacts:
