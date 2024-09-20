@@ -20,13 +20,7 @@ from mmdet.structures.bbox.bbox_overlaps import bbox_overlaps
 from mmdet3d.models.utils import clip_sigmoid
 
 from prefusion.registry import MODELS
-from contrib.petr.misc import draw_heatmap_gaussian, apply_center_offset, apply_ltrb
-
-
-def bias_init_with_prob(prior_prob):
-    """initialize conv/fc bias value according to giving probablity."""
-    bias_init = float(-np.log((1 - prior_prob) / prior_prob))
-    return bias_init
+from contrib.petr.misc import draw_heatmap_gaussian, apply_center_offset, apply_ltrb, bias_init_with_prob
 
 
 @MODELS.register_module()
@@ -157,9 +151,21 @@ class FocalHead(AnchorFreeHead):
         nn.init.constant_(self.cls.bias, bias_init)
         nn.init.constant_(self.centerness.bias, bias_init)
 
-    def forward(self, location, **data):
-        src = data["img_feats"]
-        bs, n, c, h, w = src.shape
+    def forward(self, location: torch.Tensor, img_feats: torch.Tensor):
+        """
+        Parameters
+        ----------
+        location : torch.Tensor
+            of shape 
+        img_feats : torch.Tensor
+            of shape (B, N, C, H, W)
+
+        Returns
+        -------
+        _type_
+            _description_
+        """
+        bs, n, c, h, w = img_feats.shape
         num_tokens = n * h * w
 
         # focal sampling
@@ -174,7 +180,7 @@ class FocalHead(AnchorFreeHead):
             sample_ratio = self.infer_ratio
             num_sample_tokens = int(num_tokens * sample_ratio)
 
-        x = src.flatten(0, 1)
+        x = img_feats.flatten(0, 1)
         cls_feat = self.shared_cls(x)
         cls = self.cls(cls_feat)
         centerness = self.centerness(cls_feat)
@@ -184,7 +190,7 @@ class FocalHead(AnchorFreeHead):
         pred_centers2d = None
 
         reg_feat = self.shared_reg(x)
-        ltrb = self.ltrb(reg_feat).permute(0, 2, 3, 1).contiguous()
+        ltrb = self.ltrb(reg_feat).permute(0, 2, 3, 1).contiguous()  # ltrb: Left, Top, Right, Bottom
         ltrb = ltrb.sigmoid()
         centers2d_offset = self.center2d(reg_feat).permute(0, 2, 3, 1).contiguous()
 

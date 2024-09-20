@@ -5,7 +5,6 @@ import torch.nn as nn
 import torch
 from mmengine.model import BaseModel
 from mmengine.model.base_model.data_preprocessor import BaseDataPreprocessor
-from mmdet.models.dense_heads import AnchorFreeHead
 
 from prefusion.registry import MODELS
 from contrib.petr.misc import locations
@@ -86,10 +85,11 @@ class StreamPETR(BaseModel):
         if self.img_neck is not None:
             img_feats = self.img_neck(img_feats)
         img_feats = img_feats[self.position_level]
-
-        location = self.prepare_location(img_feats, B, N, im_size)
-        outs_roi = self.roi_head(location, )
-        
+        img_feats = img_feats.reshape(B, N, *img_feats.shape[1:])
+        location = self.prepare_location(img_feats, im_size)
+        outs_roi = self.roi_head(location, img_feats)
+        topk_indexes = outs_roi['topk_indexes']
+        self.box_head()
 
     def forward_test(self, *args, **kwargs):
         return
@@ -103,13 +103,8 @@ class StreamPETR(BaseModel):
         """
         return self.img_backbone(img)
 
-    def prepare_location(self, img_feats, batch_size, num_cameras, img_size):
-        pad_w, pad_h = img_size
-        location = locations(img_feats, self.stride, pad_h, pad_w)[None].repeat(batch_size * num_cameras, 1, 1, 1)
+    def prepare_location(self, img_feats, im_size):
+        pad_w, pad_h = im_size
+        batch_size, num_cameras = img_feats.shape[:2]
+        location = locations(img_feats.flatten(0, 1), self.stride, pad_h, pad_w)[None].repeat(batch_size * num_cameras, 1, 1, 1)
         return location
-
-
-@MODELS.register_module()
-class StreamPETRHead(AnchorFreeHead):
-    def __init__(self):
-        pass
