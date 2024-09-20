@@ -6,7 +6,7 @@ _base_ = "../../../configs/default_runtime.py"
 #     imports=['models', 'datasets', 'hooks', 'runner', 'utils', 'evaluator', 'losses'],
 #     allow_failed_imports=False
 # )
-custom_imports = dict(imports=["prefusion", "contrib"], allow_failed_imports=False)
+custom_imports = dict(imports=["prefusion", "contrib.petr"], allow_failed_imports=False)
 # custom_imports = dict(
 #     imports=['prefusion', 'contrib'],
 #     allow_failed_imports=False
@@ -89,6 +89,23 @@ model = dict(
     roi_head=dict(
         type="FocalHead",
         num_classes=len(det_classes),
+        loss_cls2d=dict(
+            type='mmdet.QualityFocalLoss',
+            use_sigmoid=True,
+            beta=2.0,
+            loss_weight=2.0),
+        loss_centerness=dict(type='mmdet.GaussianFocalLoss', reduction='mean', loss_weight=1.0),
+        loss_bbox2d=dict(type='mmdet.L1Loss', loss_weight=5.0),
+        loss_iou2d=dict(type='mmdet.GIoULoss', loss_weight=2.0),
+        loss_centers2d=dict(type='mmdet.L1Loss', loss_weight=10.0),
+        train_cfg=dict(
+            assigner2d=dict(
+                type='mmdet.HungarianAssigner2D',
+                cls_cost=dict(type='mmdet.FocalLossCost', weight=2.),
+                reg_cost=dict(type='mmdet.BBoxL1Cost', weight=5.0, box_format='xywh'),
+                iou_cost=dict(type='mmdet.IoUCost', iou_mode='giou', weight=2.0),
+                centers2d_cost=dict(type='mmdet.BBox3DL1Cost', weight=10.0))
+        ),
     ),
     box_head=dict(type="StreamPETRHead"),
 )
