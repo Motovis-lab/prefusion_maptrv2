@@ -25,6 +25,8 @@ from contrib.petr.misc import normalize_bbox, bias_init_with_prob, MLN, topk_gat
 from prefusion.registry import MODELS
 
 
+__all__ = [ "StreamPETRHead" ]
+
 @MODELS.register_module()
 class StreamPETRHead(AnchorFreeHead):
     """Implements the DETR transformer head.

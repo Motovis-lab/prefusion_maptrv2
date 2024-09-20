@@ -9,7 +9,7 @@ from mmengine.model.base_model.data_preprocessor import BaseDataPreprocessor
 from prefusion.registry import MODELS
 from contrib.petr.misc import locations
 
-__all__ = ["StreamPETR", "StreamPETRHead"]
+__all__ = ["StreamPETR"]
 
 
 @MODELS.register_module()

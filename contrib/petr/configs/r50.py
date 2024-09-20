@@ -30,8 +30,8 @@ train_dataloader = dict(
     dataset=dict(
         type="GroupBatchDataset",
         name="MvParkingTest",
-        data_root="/Users/rlan/work/dataset/motovis/mv4d",
-        info_path="/Users/rlan/work/dataset/motovis/mv4d/mv4d_infos.pkl",
+        data_root="/data/datasets/mv4d",
+        info_path="/data/datasets/mv4d/mv4d_infos.pkl",
         dictionaries={
             "camera_images": {},
             "bbox_3d": {"det": {"classes": det_classes}},
@@ -71,7 +71,7 @@ model = dict(
     type="StreamPETR",
     data_preprocessor=dict(
         type="FrameBatchMerger",
-        device="mps",
+        device="cuda",
     ),
     img_backbone=dict(
         pretrained="torchvision://resnet50",
