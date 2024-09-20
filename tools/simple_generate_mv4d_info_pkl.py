@@ -62,7 +62,7 @@ def prepare_calibration(scene_root: Path, calib_filename: str) -> Dict:
 
 def prepare_camera_mask(scene_root: Path) -> Dict:
     camera_mask_dir = scene_root / "self_mask" / "camera"
-    return {cam_path.stem: cam_path for cam_path in camera_mask_dir.iterdir()}
+    return {cam_path.stem: cam_path.relative_to(scene_root.parent) for cam_path in camera_mask_dir.iterdir()}
 
 
 def prepare_depth_mode(scene_root: Path) -> Dict:
@@ -107,7 +107,7 @@ def read_common_ts(scene_root: Path) -> List[int]:
 
 
 def prepare_camera_image_paths(scene_root: Path, ts: int, camera_root_name: str) -> Dict[str, str]:
-    return {p.parent.name: p for p in (scene_root / camera_root_name).rglob(f"*{ts}*.jpg")}
+    return {p.parent.name: p.relative_to(scene_root.parent) for p in (scene_root / camera_root_name).rglob(f"*{ts}*.jpg")}
 
 
 def prepare_object_info(scene_root: Path, ts: int) -> Tuple[List[dict], List[dict]]:
