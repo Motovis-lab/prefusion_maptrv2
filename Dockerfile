@@ -21,7 +21,7 @@ ENV PATH=/opt/conda/bin:$PATH
 ENV CUDA_HOME=/usr/local/cuda
 
 # install requirements
-# RUN pip config set global.index-url https://mirrors.bfsu.edu.cn/pypi/web/simple
+RUN pip config set global.index-url https://mirrors.bfsu.edu.cn/pypi/web/simple
 COPY requirements.txt /requirements.txt
 COPY mim-requirements.txt /mim-requirements.txt
 RUN pip install --no-cache-dir --upgrade pip
@@ -31,6 +31,13 @@ RUN pip install --no-cache-dir openmim
 RUN mim install --no-cache-dir -r /mim-requirements.txt
 
 # RUN mv /etc/apt/sources.list.bak /etc/apt/sources.list
+
+# install libgllib2.0
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+   && apt-get install -y libglib2.0-0 libxext6  \
+   && apt-get clean \
+   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
