@@ -9,7 +9,7 @@ from .base_lss_fpn import BaseLSSFPN
 from ..layers import HoriConv, DepthReducer
 from ..utils import get_unproj_func
 import numpy as np
-import ipdb
+# import ipdb
 from ..utils import FisheyeCamera, PerspectiveCamera, fish_unproject_points_from_image_to_camera, pv_unproject_points_from_image_to_camera
 
 
@@ -944,7 +944,7 @@ if __name__ == '__main__':
     model = MatrixVT_FISH(**backbone_conf)
     # for inference and deployment where intrin & extrin mats are static
     # model.static_mat = model.get_proj_mat(mats_dict)
-    ipdb.set_trace()
+    # ipdb.set_trace()
     bev_feature, depth = model(
         torch.rand((2, 1, 6, 3, 256, 704)), {
             'sensor2ego_mats': torch.rand((2, 1, 6, 4, 4)),

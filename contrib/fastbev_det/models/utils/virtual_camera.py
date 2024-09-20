@@ -1,5 +1,3 @@
- 
-import pdb
 import cv2
 import yaml
 import numpy as np
@@ -14,7 +12,6 @@ from scipy.spatial.transform import Rotation
 from pyquaternion import Quaternion
 from copy import deepcopy
 import cv2
-import ipdb
 
 #   [markdown]
 # ## **Coordinate Systems:**
