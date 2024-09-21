@@ -9,6 +9,7 @@
 # ------------------------------------------------------------------------
 #  Modified by Shihao Wang
 # ------------------------------------------------------------------------
+from typing import List
 import torch
 import torch.nn as nn
 from mmcv.cnn import Linear
@@ -19,6 +20,7 @@ from mmdet.models.layers.transformer.utils import inverse_sigmoid
 from mmdet3d.models.task_modules.builder import build_bbox_coder
 from mmdet.models.dense_heads.anchor_free_head import AnchorFreeHead
 from mmdet.models.layers.normed_predictor import NormedLinear
+from mmdet.utils import InstanceList, OptInstanceList
 
 from contrib.petr.positional_encoding import pos2posemb3d, pos2posemb1d, nerf_positional_encoding
 from contrib.petr.misc import normalize_bbox, bias_init_with_prob, MLN, topk_gather, transform_reference_points, memory_refresh, SELayer_Linear
@@ -154,7 +156,7 @@ class StreamPETRHead(AnchorFreeHead):
 
             self.assigner = build_assigner(assigner)
             # DETR sampling=False, so use PseudoSampler
-            sampler_cfg = dict(type='PseudoSampler')
+            sampler_cfg = dict(type='mmdet3d.PseudoSampler')
             self.sampler = build_sampler(sampler_cfg, context=self)
 
         self.num_query = num_query
@@ -188,11 +190,18 @@ class StreamPETRHead(AnchorFreeHead):
                                        dict(type='ReLU', inplace=True))
         self.num_pred = 6
         self.normedlinear = normedlinear
-        super(StreamPETRHead, self).__init__(num_classes, in_channels, init_cfg = init_cfg)
+        super(StreamPETRHead, self).__init__(
+            num_classes, 
+            in_channels, 
+            loss_cls=dict(type="mmdet.FocalLoss", use_sigmoid=True, gamma=2.0, alpha=0.25, loss_weight=1.0) if loss_cls is not None else loss_cls,
+            loss_bbox=dict(type='mmdet.IoULoss', loss_weight=1.0) if loss_bbox is not None else loss_bbox,
+            bbox_coder=dict(type='mmdet.DistancePointBBoxCoder') if bbox_coder is not None else bbox_coder,
+            init_cfg=init_cfg,
+        )
 
-        self.loss_cls = MODELS.build_loss(loss_cls)
-        self.loss_bbox = MODELS.build_loss(loss_bbox)
-        self.loss_iou = MODELS.build_loss(loss_iou)
+        self.loss_cls = MODELS.build(loss_cls)
+        self.loss_bbox = MODELS.build(loss_bbox)
+        self.loss_iou = MODELS.build(loss_iou)
 
         if self.loss_cls.use_sigmoid:
             self.cls_out_channels = num_classes
@@ -207,7 +216,7 @@ class StreamPETRHead(AnchorFreeHead):
         self.match_costs = nn.Parameter(torch.tensor(
             self.match_costs), requires_grad=False)
 
-        self.bbox_coder = build_bbox_coder(bbox_coder)
+        self.bbox_coder = MODELS.build(bbox_coder)
 
         self.pc_range = nn.Parameter(torch.tensor(
             self.bbox_coder.pc_range), requires_grad=False)
@@ -564,7 +573,7 @@ class StreamPETRHead(AnchorFreeHead):
                                           unexpected_keys, error_msgs)
 
 
-    def forward(self, memory_center, img_metas, topk_indexes=None,  **data):
+    def forward(self, img_feats, memory_center, img_metas, topk_indexes=None,  **data):
         """Forward function.
         Args:
             mlvl_feats (tuple[Tensor]): Features from the upstream
@@ -581,7 +590,7 @@ class StreamPETRHead(AnchorFreeHead):
         # zero init the memory bank
         self.pre_update_memory(data)
 
-        x = data['img_feats']
+        x = img_feats
         B, N, C, H, W = x.shape
         num_tokens = N * H * W
         memory = x.permute(0, 1, 3, 4, 2).reshape(B, num_tokens, C)
@@ -1012,6 +1021,37 @@ class StreamPETRHead(AnchorFreeHead):
                 num_dec_layer += 1
 
         return loss_dict
+
+
+    def loss_by_feat(
+            self,
+            cls_scores: List[torch.Tensor],
+            bbox_preds: List[torch.Tensor],
+            batch_gt_instances: InstanceList,
+            batch_img_metas: List[dict],
+            batch_gt_instances_ignore: OptInstanceList = None) -> dict:
+        """Calculate the loss based on the features extracted by the detection
+        head.
+
+        Args:
+            cls_scores (list[Tensor]): Box scores for each scale level,
+                each is a 4D-tensor, the channel number is
+                num_points * num_classes.
+            bbox_preds (list[Tensor]): Box energies / deltas for each scale
+                level, each is a 4D-tensor, the channel number is
+                num_points * 4.
+            batch_gt_instances (list[:obj:`InstanceData`]): Batch of
+                gt_instance.  It usually includes ``bboxes`` and ``labels``
+                attributes.
+            batch_img_metas (list[dict]): Meta information of each image, e.g.,
+                image size, scaling factor, etc.
+            batch_gt_instances_ignore (list[:obj:`InstanceData`], Optional):
+                Batch of gt_instances_ignore. It includes ``bboxes`` attribute
+                data that is ignored during training and testing.
+                Defaults to None.
+        """
+
+        return 0
 
 
     def get_bboxes(self, preds_dicts, img_metas, rescale=False):

@@ -45,7 +45,7 @@ train_dataloader = dict(
             bbox_3d=dict(type="Bbox3DCorners"),
         ),
         model_feeder=dict(type="StreamPETRModelFeeder"),
-        transformable_keys=["camera_images", "bbox_3d"],
+        transformable_keys=["camera_images", "bbox_3d", "ego_poses"],
         transforms=[
             dict(type="RandomMirrorSpace", prob=0.5, scope="group"),
             dict(
@@ -125,6 +125,14 @@ model = dict(
         with_position=True,
         position_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
         code_weights = [2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+        train_cfg=dict(
+            assigner=dict(
+                type='mmdet.HungarianAssigner3D',
+                cls_cost=dict(type='mmdet.ClassificationCost', weight=1.),
+                reg_cost=dict(type='mmdet.BBoxL1Cost', weight=5.0),
+                iou_cost=dict(type='mmdet.IoUCost', iou_mode='giou', weight=2.0)
+            ),
+        ),
         transformer=dict(
             type='PETRTemporalTransformer',
             decoder=dict(

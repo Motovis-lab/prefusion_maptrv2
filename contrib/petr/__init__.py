@@ -5,6 +5,7 @@ from .cp_fpn import CPFPN
 from .model_feeder import *
 from .focal_head import FocalHead
 from .hungarian_assigner_2d import HungarianAssigner2D
+from .hungarian_assigner_3d import HungarianAssigner3D
 from .match_cost import BBox3DL1Cost
 from .petr_transformer import *
 from .streampetr_head import StreamPETRHead

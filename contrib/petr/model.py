@@ -3,6 +3,7 @@ from collections import OrderedDict
 
 import torch.nn as nn
 import torch
+import numpy as np
 from mmengine.model import BaseModel
 from mmengine.model.base_model.data_preprocessor import BaseDataPreprocessor
 
@@ -65,7 +66,7 @@ class StreamPETR(BaseModel):
         super().__init__(data_preprocessor=data_preprocessor)
         assert not any(m is None for m in [img_backbone, img_neck])
         self.img_backbone = MODELS.build(img_backbone)
-        # self.box_head = MODELS.build(box_head)
+        self.box_head = MODELS.build(box_head)
         self.roi_head = MODELS.build(roi_head)
         self.img_neck = MODELS.build(img_neck) if img_neck else None
         self.stride = stride
@@ -77,7 +78,7 @@ class StreamPETR(BaseModel):
         else:
             return self.forward_test(*args, **kwargs)
 
-    def forward_train(self, *, index_info=None, camera_images=None, bbox_3d=None, meta_info=None):
+    def forward_train(self, *, index_info=None, camera_images=None, bbox_3d=None, ego_poses=None, meta_info=None):
         B, (N, C, H, W) = len(camera_images), camera_images[0].shape
         camera_images = torch.vstack([i.unsqueeze(0) for i in camera_images]).reshape(B * N, C, H, W)
         im_size = camera_images.shape[-2:][::-1]
@@ -89,7 +90,22 @@ class StreamPETR(BaseModel):
         location = self.prepare_location(img_feats, im_size)
         outs_roi = self.roi_head(location, img_feats)
         topk_indexes = outs_roi['topk_indexes']
-        self.box_head()
+        _device = img_feats.device
+        
+        data = {
+            "timestamp": [ii.frame_id for ii in index_info],
+            "prev_exists": torch.tensor([ii.prev is None for ii in index_info], device=_device, dtype=torch.float32),
+            "ego_pose_inv": torch.tensor(np.array([p.transformables['0'].trans_mat for p in ego_poses]), device=_device, dtype=torch.float32),
+            "intrinsics": torch.tensor(np.array([m["camera_images"]["intrinsic"] for m in meta_info]), device=_device, dtype=torch.float32),
+            "lidar2img": torch.tensor(np.array([m["camera_images"]["extrinsic_inv"] for m in meta_info]), device=_device, dtype=torch.float32)
+        }
+
+        img_metas = []
+        for m in meta_info:
+            img_metas.append({
+                "pad_shape": [(im_size[1], im_size[0], 3)] * N,
+            })
+        self.box_head(img_feats, location, img_metas, topk_indexes=topk_indexes, **data)
 
     def forward_test(self, *args, **kwargs):
         return
