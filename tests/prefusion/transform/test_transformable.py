@@ -22,6 +22,7 @@ from prefusion.dataset.transform import (
     Polyline3D,
     ParkingSlot3D,
     OccSdfBev,
+    Pose,
 )
 
 
@@ -633,3 +634,36 @@ def test_occ_sdf_bev_flip_y(occ_sdf_bev):
          [ 0.3, 0.2, 0.1, 0.0],
          [0.4, 0.2, 0.0, -0.1]]
     ]))
+
+
+def test_pose_flip_3d_flip_x():
+    flip_mat=np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    
+    p0 = Pose(1, np.eye(3), np.array([[1, -1, 0]]))
+    p0.flip_3d(flip_mat=flip_mat)
+    np.testing.assert_almost_equal(p0.rotation, np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]]))
+    np.testing.assert_almost_equal(p0.translation.flatten().tolist(), [-1, -1, 0])
+
+    p1 = Pose(2, np.array([[0.8660254, 0.5, 0], [-0.5, 0.8660254, 0], [0, 0, 1]]), np.array([[3, -2, 0]]))
+    p1.flip_3d(flip_mat=flip_mat)
+
+
+def test_pose_flip_3d_flip_y():
+    flip_mat = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
+
+    p0 = Pose(1, np.eye(3), np.array([[1, -1, 0]]))
+    p0.flip_3d(flip_mat=flip_mat)
+    np.testing.assert_almost_equal(p0.rotation, np.eye(3))
+    np.testing.assert_almost_equal(p0.translation.flatten().tolist(), [1, 1, 0])
+
+    p1 = Pose(2, np.array([[0.8660254, 0.5, 0], [-0.5, 0.8660254, 0], [0, 0, 1]]), np.array([[3, -2, 0]]))
+    p1.flip_3d(flip_mat=flip_mat)
+    np.testing.assert_almost_equal(p1.rotation, np.array([[0.8660254, -0.5, 0], [0.5, 0.8660254, 0], [0, 0, 1]]))
+    np.testing.assert_almost_equal(p1.translation.flatten().tolist(), [3, 2, 0])
+
+
+def test_pose_trans_mat():
+    p0 = Pose(1, np.eye(3), np.array([[1, -1, 0]]))
+    np.testing.assert_almost_equal(p0.trans_mat, np.array([[1, 0, 0, 1], [0, 1, 0, -1], [0, 0, 1, 0], [0, 0, 0, 1]]))
+    p1 = Pose(2, np.array([[0.8660254, 0.5, 0], [-0.5, 0.8660254, 0], [0, 0, 1]]), np.array([[3, -2, 0]]))
+    np.testing.assert_almost_equal(p1.trans_mat, np.array([[0.8660254, 0.5, 0, 3], [-0.5, 0.8660254, 0, -2], [0, 0, 1, 0], [0, 0, 0, 1]]))

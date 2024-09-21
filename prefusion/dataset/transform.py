@@ -1025,11 +1025,26 @@ class Pose(SpatialTransformable):
         self.translation = translation
         self.tensor_smith = tensor_smith
 
-    def flip_3d(self, **kwargs):
-        raise NotImplementedError
+    def flip_3d(self, flip_mat, **kwargs):
+        assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
+        
+        # in the mirror world, assume that a object is left-right symmetrical
+        flip_mat_self = np.eye(3)
+        flip_mat_self[1, 1] = -1
+        self.rotation = flip_mat @ self.rotation @ flip_mat_self.T
+        self.translation = flip_mat @ self.translation
+        
+        return self
     
     def rotate_3d(self, **kwargs):
         raise NotImplementedError
+    
+    @property
+    def trans_mat(self) -> np.array:
+        _trans_mat = np.eye(4)
+        _trans_mat[:3, :3] = self.rotation
+        _trans_mat[:3, 3] = self.translation
+        return _trans_mat
 
 
 class PoseSet(TransformableSet):
