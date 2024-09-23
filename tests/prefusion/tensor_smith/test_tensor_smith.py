@@ -32,41 +32,63 @@ def test_camera_image_tensor():
     ]), decimal=6)
 
 
-def test_planar_bbox_3d_tensor_smith():
-    return
-    bbox3d = Bbox3D(
+
+def test_planar_bbox_3d_get_roll_angle():
+    a = [1, 1, 0]
+    b = [-1, 1, 1]
+    result = np.array(PlanarBbox3D._get_roll_angle(a, b))
+    answer = np.array((0.8164965669539823, 0.5773502593086969))
+    np.testing.assert_almost_equal(result, answer, decimal=6)
+
+
+
+def test_planar_bbox_3d_generation():
+    pbox3d = PlanarBbox3D(
+        voxel_shape=(6, 160, 80),
+        voxel_range=([-0.5, 2.5], [24, -8], [8, -8])
+    )
+    box3d = Bbox3D(
         elements=[
             {
-                'class': 'class.vehicle.passenger_car',
-                'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
-                        'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
-                        'attr.vehicle.is_door_open': 'attr.vehicle.is_door_open.false'},
-                'size': [4.6486, 1.9505, 1.5845],
-                'rotation': np.array([[ 0.93915682, -0.32818596, -0.10138267],
-                                [ 0.32677338,  0.94460343, -0.03071667],
-                                [ 0.1058472 , -0.00428138,  0.99437319]]),
-                'translation': np.array([[-15.70570354], [ 11.88484971], [ -0.61029085]]), # NOTE: it is a column vector
-                'track_id': '10035_0',
-                'velocity': np.array([[0.], [0.], [0.]]) # NOTE: it is a column vector
-            }
+                'class': 'bus',
+                'attr': {},
+                'size': [10, 2.5, 3.0],
+                'rotation': np.float32([
+                    [1, 0, 0],
+                    [0, 1, 0],
+                    [0, 0, 1]
+                ]),
+                'translation': np.float32([
+                    [8], [4], [0]
+                ]),
+                'velocity': np.float32([
+                    [2], [0], [0]
+                ]),
+            },
+            {
+                'class': 'car',
+                'attr': {},
+                'size': [5, 2, 1.6],
+                'rotation': np.float32([
+                    [ 0.8, 0.6, 0],
+                    [-0.6, 0.8, 0],
+                    [ 0  , 0  , 1]
+                ]),
+                'translation': np.float32([
+                    [3], [-5], [0]
+                ]),
+                'velocity': np.float32([
+                    [3], [-1], [0]
+                ]),
+            },
         ],
-        dictionary={"det": {
-            "classes": ['class.vehicle.passenger_car', 'people', 'bicycle']
-        }},
-        tensor_smith=PlanarBbox3D(
-            voxel_shape=(),
-            voxel_range=()
-        )
+        dictionary={
+            'branch_0': {
+                'classes': ['car', 'bus']
+            }
+        },
+        tensor_smith=pbox3d
     )
-    result_tensor = bbox3d.to_tensor()
-    answer_tensor = np.array(
-        [
-            [],
-            [],
-            [],
-        ]
-    )
-    np.testing.assert_almost_equal(
-        result_tensor,
-        answer_tensor,
-    )
+    box3d.to_tensor()
+    tensor_dict = box3d.tensor
+    assert tensor_dict['branch_0']['seg'][0].max() == 1
