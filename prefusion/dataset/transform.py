@@ -430,7 +430,7 @@ class CameraImage(CameraTransformable):
         flip_mat_self = np.eye(3)
         flip_mat_self[1, 1] = -1
         R_new = flip_mat @ self.extrinsic[0] @ flip_mat_self.T
-        # here translation is a column array
+        # here translation is a row array
         t_new = self.extrinsic[1] @ flip_mat.T
         self.extrinsic = (R_new, t_new)
         self.intrinsic[0] = self.img.shape[1] - 1 - self.intrinsic[0]
@@ -563,7 +563,7 @@ class CameraSegMask(CameraTransformable):
         flip_mat_self = np.eye(3)
         flip_mat_self[1, 1] = -1
         R_new = flip_mat @ self.extrinsic[0] @ flip_mat_self.T
-        # here translation is a column array
+        # here translation is a row array
         t_new = self.extrinsic[1] @ flip_mat.T
         self.extrinsic = (R_new, t_new)
         self.intrinsic[0] = self.img.shape[1] - 1 - self.intrinsic[0]
@@ -702,7 +702,7 @@ class CameraDepth(CameraTransformable):
         flip_mat_self = np.eye(3)
         flip_mat_self[1, 1] = -1
         R_new = flip_mat @ self.extrinsic[0] @ flip_mat_self.T
-        # here translation is a column array
+        # here translation is a row array
         t_new = self.extrinsic[1] @ flip_mat.T
         self.extrinsic = (R_new, t_new)
         self.intrinsic[0] = self.img.shape[1] - 1 - self.intrinsic[0]
@@ -744,7 +744,7 @@ class LidarPoints(SpatialTransformable):
 
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
-        # here points is a column array
+        # here points is a row array
         self.positions = self.positions @ flip_mat.T
         
         return self
@@ -1033,7 +1033,7 @@ class Pose(SpatialTransformable):
         flip_mat_self = np.eye(3)
         flip_mat_self[1, 1] = -1  # apply了flip_map之后，坐标系变为了左手坐标系。用flip_mat_self将其重新转回右手坐标系
         self.rotation = flip_mat @ self.rotation @ flip_mat_self.T
-        self.translation = flip_mat @ self.translation
+        self.translation = flip_mat @ self.translation  # self.translation is a column vector
 
         return self
     
