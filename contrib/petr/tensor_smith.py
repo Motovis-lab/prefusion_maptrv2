@@ -18,5 +18,5 @@ class Bbox3DCorners(TensorSmith):
     def __call__(self, transformable: "Bbox3D"):
         return {
             "classes": [ele['class'] for ele in transformable.elements],
-            "bbox3d_corners": transformable.get_corners()
+            "bbox3d_corners": transformable.corners
         }

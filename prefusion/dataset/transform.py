@@ -430,7 +430,7 @@ class CameraImage(CameraTransformable):
         flip_mat_self = np.eye(3)
         flip_mat_self[1, 1] = -1
         R_new = flip_mat @ self.extrinsic[0] @ flip_mat_self.T
-        # here translation is a row array
+        # here translation is a column array
         t_new = self.extrinsic[1] @ flip_mat.T
         self.extrinsic = (R_new, t_new)
         self.intrinsic[0] = self.img.shape[1] - 1 - self.intrinsic[0]
@@ -563,7 +563,7 @@ class CameraSegMask(CameraTransformable):
         flip_mat_self = np.eye(3)
         flip_mat_self[1, 1] = -1
         R_new = flip_mat @ self.extrinsic[0] @ flip_mat_self.T
-        # here translation is a row array
+        # here translation is a column array
         t_new = self.extrinsic[1] @ flip_mat.T
         self.extrinsic = (R_new, t_new)
         self.intrinsic[0] = self.img.shape[1] - 1 - self.intrinsic[0]
@@ -702,7 +702,7 @@ class CameraDepth(CameraTransformable):
         flip_mat_self = np.eye(3)
         flip_mat_self[1, 1] = -1
         R_new = flip_mat @ self.extrinsic[0] @ flip_mat_self.T
-        # here translation is a row array
+        # here translation is a column array
         t_new = self.extrinsic[1] @ flip_mat.T
         self.extrinsic = (R_new, t_new)
         self.intrinsic[0] = self.img.shape[1] - 1 - self.intrinsic[0]
@@ -744,7 +744,7 @@ class LidarPoints(SpatialTransformable):
 
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
-        # here points is a row array
+        # here points is a column array
         self.positions = self.positions @ flip_mat.T
         
         return self
@@ -809,7 +809,8 @@ class Bbox3D(SpatialTransformable):
             if self.elements[i]['class'] not in full_set_of_classes:
                 del self.elements[i]
     
-    def get_corners(self) -> np.ndarray:
+    @property
+    def corners(self) -> np.ndarray:
         """Convert Bboxed.elements to corners representation using copious
 
         Returns
@@ -844,7 +845,7 @@ class Bbox3D(SpatialTransformable):
         flip_mat_self[1, 1] = -1
         for ele in self.elements:
             ele['rotation'] = flip_mat @ ele['rotation'] @ flip_mat_self.T
-            # here translation is a row array
+            # here translation is a column array
             ele['translation'] = flip_mat @ ele['translation']
             ele['velocity'] = flip_mat @ ele['velocity']
         
@@ -1022,7 +1023,7 @@ class Pose(SpatialTransformable):
         super().__init__()
         self.timestamp = timestamp
         self.rotation = rotation
-        self.translation = translation
+        self.translation = translation.flatten()[:, None] # unify it to column vector
         self.tensor_smith = tensor_smith
 
     def flip_3d(self, flip_mat, **kwargs):
@@ -1030,10 +1031,10 @@ class Pose(SpatialTransformable):
         
         # in the mirror world, assume that a object is left-right symmetrical
         flip_mat_self = np.eye(3)
-        flip_mat_self[1, 1] = -1
+        flip_mat_self[1, 1] = -1  # apply了flip_map之后，坐标系变为了左手坐标系。用flip_mat_self将其重新转回右手坐标系
         self.rotation = flip_mat @ self.rotation @ flip_mat_self.T
         self.translation = flip_mat @ self.translation
-        
+
         return self
     
     def rotate_3d(self, **kwargs):
@@ -1043,7 +1044,7 @@ class Pose(SpatialTransformable):
     def trans_mat(self) -> np.array:
         _trans_mat = np.eye(4)
         _trans_mat[:3, :3] = self.rotation
-        _trans_mat[:3, 3] = self.translation
+        _trans_mat[:3, 3] = self.translation.flatten()
         return _trans_mat
 
 

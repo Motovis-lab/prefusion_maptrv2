@@ -369,8 +369,7 @@ def test_bbox3d_creation(boxes_data, dictionary):
 
 def test_bbox3d_get_corners(boxes_data2, dictionary):
     bbox3d = Bbox3D(boxes_data2, dictionary)
-    corners = bbox3d.get_corners()
-    np.testing.assert_almost_equal(corners, np.array([[
+    np.testing.assert_almost_equal(bbox3d.corners, np.array([[
         [2.87867966, 3.29289322, -0.05],
         [4.29289322, 1.87867966, -0.05],
         [4.29289322, 1.87867966, 1.45],
@@ -636,34 +635,60 @@ def test_occ_sdf_bev_flip_y(occ_sdf_bev):
     ]))
 
 
-def test_pose_flip_3d_flip_x():
-    flip_mat=np.array([[-1, 0, 0], [0, 1, 0], [0, 0, 1]])
-    
-    p0 = Pose(1, np.eye(3), np.array([[1, -1, 0]]))
-    p0.flip_3d(flip_mat=flip_mat)
-    np.testing.assert_almost_equal(p0.rotation, np.array([[-1, 0, 0], [0, -1, 0], [0, 0, 1]]))
-    np.testing.assert_almost_equal(p0.translation.flatten().tolist(), [-1, -1, 0])
-
-    p1 = Pose(2, np.array([[0.8660254, 0.5, 0], [-0.5, 0.8660254, 0], [0, 0, 1]]), np.array([[3, -2, 0]]))
-    p1.flip_3d(flip_mat=flip_mat)
+@pytest.fixture()
+def pose0():
+    return Pose(1, np.eye(3), np.array([[1, -1, -1.9]]))
 
 
-def test_pose_flip_3d_flip_y():
-    flip_mat = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
+@pytest.fixture()
+def pose1():
+    return Pose(2, np.array(
+        [[0.8660254,       0.5, 0], 
+         [     -0.5, 0.8660254, 0], 
+         [        0,         0, 1]]), 
+        
+        np.array([[3, -2, 2.1]])
+    )
 
-    p0 = Pose(1, np.eye(3), np.array([[1, -1, 0]]))
-    p0.flip_3d(flip_mat=flip_mat)
-    np.testing.assert_almost_equal(p0.rotation, np.eye(3))
-    np.testing.assert_almost_equal(p0.translation.flatten().tolist(), [1, 1, 0])
+def test_pose_flip_3d_flip_x(pose0, pose1):
+    flip_mat=np.array([
+        [-1, 0, 0], 
+        [ 0, 1, 0], 
+        [ 0, 0, 1]])
 
-    p1 = Pose(2, np.array([[0.8660254, 0.5, 0], [-0.5, 0.8660254, 0], [0, 0, 1]]), np.array([[3, -2, 0]]))
-    p1.flip_3d(flip_mat=flip_mat)
-    np.testing.assert_almost_equal(p1.rotation, np.array([[0.8660254, -0.5, 0], [0.5, 0.8660254, 0], [0, 0, 1]]))
-    np.testing.assert_almost_equal(p1.translation.flatten().tolist(), [3, 2, 0])
+    pose0.flip_3d(flip_mat=flip_mat)
+    np.testing.assert_almost_equal(pose0.rotation, np.array([
+        [-1, 0, 0], 
+        [ 0, -1, 0], 
+        [ 0, 0, 1]]))
+    np.testing.assert_almost_equal(pose0.translation.flatten().tolist(), [-1, -1, -1.9])
+
+    pose1.flip_3d(flip_mat=flip_mat)
+    np.testing.assert_almost_equal(pose1.rotation, np.array([
+        [-0.8660254,        0.5, 0], 
+        [      -0.5, -0.8660254, 0], 
+        [         0,          0, 1]]))
+    np.testing.assert_almost_equal(pose1.translation.flatten().tolist(), [-3, -2, 2.1])
 
 
-def test_pose_trans_mat():
-    p0 = Pose(1, np.eye(3), np.array([[1, -1, 0]]))
-    np.testing.assert_almost_equal(p0.trans_mat, np.array([[1, 0, 0, 1], [0, 1, 0, -1], [0, 0, 1, 0], [0, 0, 0, 1]]))
-    p1 = Pose(2, np.array([[0.8660254, 0.5, 0], [-0.5, 0.8660254, 0], [0, 0, 1]]), np.array([[3, -2, 0]]))
-    np.testing.assert_almost_equal(p1.trans_mat, np.array([[0.8660254, 0.5, 0, 3], [-0.5, 0.8660254, 0, -2], [0, 0, 1, 0], [0, 0, 0, 1]]))
+def test_pose_flip_3d_flip_y(pose0, pose1):
+    flip_mat = np.array([
+        [1, 0, 0], 
+        [0, -1, 0], 
+        [0, 0, 1]])
+
+    pose0.flip_3d(flip_mat=flip_mat)
+    np.testing.assert_almost_equal(pose0.rotation, np.eye(3))
+    np.testing.assert_almost_equal(pose0.translation.flatten().tolist(), [1, 1, -1.9])
+
+    pose1.flip_3d(flip_mat=flip_mat)
+    np.testing.assert_almost_equal(pose1.rotation, np.array(
+        [[0.8660254,      -0.5, 0], 
+         [      0.5, 0.8660254, 0], 
+         [        0,         0, 1]]))
+    np.testing.assert_almost_equal(pose1.translation.flatten().tolist(), [3, 2, 2.1])
+
+
+def test_pose_trans_mat(pose0, pose1):
+    np.testing.assert_almost_equal(pose0.trans_mat, np.array([[1, 0, 0, 1], [0, 1, 0, -1], [0, 0, 1, -1.9], [0, 0, 0, 1]]))
+    np.testing.assert_almost_equal(pose1.trans_mat, np.array([[0.8660254, 0.5, 0, 3], [-0.5, 0.8660254, 0, -2], [0, 0, 1, 2.1], [0, 0, 0, 1]]))
