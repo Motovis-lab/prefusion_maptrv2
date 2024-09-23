@@ -20,7 +20,7 @@ import copy
 from pyquaternion import Quaternion
 from contrib.fastbev_det.utils import get_cam_corners, intrinsics_matrix, get_3d_lines, get_bev_lines, get_corners_with_angles, get_bev_lines_cylinder
 import cv2
-
+from virtual_camera import FisheyeCamera
 
 @numba.jit(nopython=True)
 def size_aware_circle_nms(dets, thresh_scale, post_max_size=83):
@@ -686,6 +686,31 @@ class BEVDepthHeadV1(CenterHead):
             predictions_dicts.append(predictions_dict)
         return predictions_dicts
     
+    def get_corners_ego2cam(self, corners, translation, rotation, mv4d=False):
+        cam_corners = corners.copy()
+        cam_corners -= np.array(translation)
+        cam_corners = cam_corners @ Quaternion(rotation).inverse.rotation_matrix.T
+        
+        return cam_corners
+
+    def interpolate_points(self, points):
+        edges = [
+        (0, 1), (1, 2), (2, 3), (3, 0),  # 底面
+        (4, 5), (5, 6), (6, 7), (7, 4),  # 顶面
+        (0, 4), (1, 5), (2, 6), (3, 7)   # 连接底面和顶面的边
+        ]
+        new_points = []
+        for edge in edges:
+            p1, p2 = points[edge[0]], points[edge[1]]
+            distance = np.linalg.norm(p2 - p1)
+            num_points = int(distance / 0.1) + 1
+            new_points.append(self.interpolate(p1, p2, num_points))
+
+        return new_points
+
+    def interpolate(self, p1, p2, num):
+        return np.linspace(p1, p2, num=num, endpoint=True)
+
     def show_results(self, all_pred, data, frame_ids, **kwargs):
         """Visualize the results to an image.
 
@@ -762,41 +787,60 @@ class BEVDepthHeadV1(CenterHead):
 
                     # Draw images
                     plt.imshow(img)
-                    if 'fish' in key_camera:
-                        continue
+                    
                     # Draw 3D gt
-                    for corners in gt_corners:
-                        cam_corners = get_cam_corners(
-                            corners,
-                            extrinsics[idx][:3, 3].cpu().numpy(),
-                            Quaternion(matrix=extrinsics[idx][:3, :3].cpu().numpy(), atol=1e-06),
-                            intrinsics_matrix(intrinsics[idx][:4].cpu().numpy()))
-                        lines = get_3d_lines(cam_corners)
-                        for line in lines:
-                            plt.plot(line[0],
-                                    line[1],
+                    if "fish" in key_camera:
+                        for corners in gt_corners:
+                            cam_corners = self.get_corners_ego2cam(
+                                corners,
+                                extrinsics[idx][:3, 3].cpu().numpy(),
+                                Quaternion(matrix=extrinsics[idx][:3, :3].cpu().numpy(), atol=1e-06),
+                            )
+                            # 12条线段
+                            inter_cam_corners = self.interpolate_points(cam_corners)
+                            for inter_cam_corner in inter_cam_corners:
+                                img_corners = FisheyeCamera(resolution=img.shape[:2][::-1], extrinsic=[extrinsics[idx][:3, :3].cpu().numpy(), extrinsics[idx][:3, 3].cpu().numpy()], 
+                                                            intrinsic=intrinsics[idx].cpu().numpy(), fov=225).project_points_from_camera_to_image(inter_cam_corner.T)
+                                img_corners = np.stack([img_corners[0], img_corners[1]], axis=1)
+                                mask = np.logical_or(img_corners[:, 0] <= 0, img_corners[:, 1] <= 0)
+                                img_corners = img_corners[~mask, :]
+                                plt.plot(img_corners[:, 0],
+                                        img_corners[:, 1],
+                                        c=cm.get_cmap('tab10')(4)
+                                        )
+                    else:
+                        for corners in gt_corners:
+                            cam_corners = get_cam_corners(
+                                corners,
+                                extrinsics[idx][:3, 3].cpu().numpy(),
+                                Quaternion(matrix=extrinsics[idx][:3, :3].cpu().numpy(), atol=1e-06),
+                                intrinsics_matrix(intrinsics[idx][:4].cpu().numpy()))
+                            lines = get_3d_lines(cam_corners)
+                            for line in lines:
+                                plt.plot(line[0],
+                                        line[1],
+                                        c=cm.get_cmap('tab10')(4)
+                                        )
+                        for corners in gt_cylinders:
+                            cam_corners = get_cam_corners(
+                                corners,
+                                extrinsics[idx][:3, 3].cpu().numpy(),
+                                Quaternion(matrix=extrinsics[idx][:3, :3].cpu().numpy(), atol=1e-06),
+                                intrinsics_matrix(intrinsics[idx][:4].cpu().numpy()))
+                            
+                            bottom_cam_corner = cam_corners[:100, :]
+                            up_cam_corner = cam_corners[100:, :]
+
+                            plt.plot(bottom_cam_corner[:, 0],
+                                    bottom_cam_corner[:, 1],
                                     c=cm.get_cmap('tab10')(4)
                                     )
-                    for corners in gt_cylinders:
-                        cam_corners = get_cam_corners(
-                            corners,
-                            extrinsics[idx][:3, 3].cpu().numpy(),
-                            Quaternion(matrix=extrinsics[idx][:3, :3].cpu().numpy(), atol=1e-06),
-                            intrinsics_matrix(intrinsics[idx][:4].cpu().numpy()))
-                        
-                        bottom_cam_corner = cam_corners[:100, :]
-                        up_cam_corner = cam_corners[100:, :]
-
-                        plt.plot(bottom_cam_corner[:, 0],
-                                bottom_cam_corner[:, 1],
-                                c=cm.get_cmap('tab10')(4)
-                                )
-                        plt.plot(up_cam_corner[:, 0],
-                                up_cam_corner[:, 1],
-                                c=cm.get_cmap('tab10')(4)
-                                )
-                        for i in range(0, 100, 10):
-                            plt.plot([bottom_cam_corner[i, 0], up_cam_corner[i, 0]], [bottom_cam_corner[i, 1], up_cam_corner[i, 1]], 'g-')
+                            plt.plot(up_cam_corner[:, 0],
+                                    up_cam_corner[:, 1],
+                                    c=cm.get_cmap('tab10')(4)
+                                    )
+                            for i in range(0, 100, 10):
+                                plt.plot([bottom_cam_corner[i, 0], up_cam_corner[i, 0]], [bottom_cam_corner[i, 1], up_cam_corner[i, 1]], 'g-')
                     # for box in info['box_2d'][k]['box']:
                     #     x1, y1, x2, y2 = box
                     #     w = x2 - x1
