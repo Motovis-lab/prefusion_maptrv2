@@ -93,9 +93,10 @@ class StreamPETR(BaseModel):
         _device = img_feats.device
         
         data = {
-            "timestamp": [ii.frame_id for ii in index_info],
+            "timestamp": torch.tensor([int(ii.frame_id) for ii in index_info], device=_device, dtype=torch.float64),
             "prev_exists": torch.tensor([ii.prev is None for ii in index_info], device=_device, dtype=torch.float32),
-            "ego_pose_inv": torch.tensor(np.array([p.transformables['0'].trans_mat for p in ego_poses]), device=_device, dtype=torch.float32),
+            "ego_pose": torch.tensor(np.array([p.transformables['0'].trans_mat for p in ego_poses]), device=_device, dtype=torch.float32),
+            "ego_pose_inv": torch.tensor(np.array([np.linalg.inv(p.transformables['0'].trans_mat) for p in ego_poses]), device=_device, dtype=torch.float32),
             "intrinsics": torch.tensor(np.array([m["camera_images"]["intrinsic"] for m in meta_info]), device=_device, dtype=torch.float32),
             "lidar2img": torch.tensor(np.array([m["camera_images"]["extrinsic_inv"] for m in meta_info]), device=_device, dtype=torch.float32)
         }
@@ -105,7 +106,18 @@ class StreamPETR(BaseModel):
             img_metas.append({
                 "pad_shape": [(im_size[1], im_size[0], 3)] * N,
             })
-        self.box_head(img_feats, location, img_metas, topk_indexes=topk_indexes, **data)
+        gt_labels = [m['bbox_3d']['classes'] for m in meta_info]
+        outs = self.box_head(img_feats, location, img_metas, bbox_3d, gt_labels, topk_indexes=topk_indexes, **data)
+
+        loss_inputs = [bbox_3d, gt_labels, outs]
+        losses = self.box_head.loss(*loss_inputs)
+
+        # if self.with_img_roi_head:
+        #     loss2d_inputs = [gt_bboxes, gt_labels, centers2d, depths, outs_roi, img_metas]
+        #     losses2d = self.img_roi_head.loss(*loss2d_inputs)
+        #     losses.update(losses2d)
+
+        return losses
 
     def forward_test(self, *args, **kwargs):
         return

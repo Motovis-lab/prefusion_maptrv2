@@ -22,6 +22,9 @@ det_classes = [
     "class.cycle.motorcycle",
 ]
 
+voxel_size = [0.2, 0.2, 8]
+point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+
 train_dataloader = dict(
     num_workers=1,
     persistent_workers=True,
@@ -30,8 +33,8 @@ train_dataloader = dict(
     dataset=dict(
         type="GroupBatchDataset",
         name="MvParkingTest",
-        data_root="/data/datasets/mv4d",
-        info_path="/data/datasets/mv4d/mv4d_infos.pkl",
+        data_root="/ssd2/datasets/mv4d",
+        info_path="/ssd2/datasets/mv4d/mv4d_infos.pkl",
         dictionaries={
             "camera_images": {},
             "bbox_3d": {"det": {"classes": det_classes}},
@@ -42,7 +45,7 @@ train_dataloader = dict(
                 means=[123.675, 116.280, 103.530],
                 stds=[58.395, 57.120, 57.375],
             ),
-            bbox_3d=dict(type="Bbox3DCorners"),
+            bbox_3d=dict(type="Bbox3D_XYZ_LWH_Yaw_VxVy", classes=det_classes),
         ),
         model_feeder=dict(type="StreamPETRModelFeeder"),
         transformable_keys=["camera_images", "bbox_3d", "ego_poses"],
@@ -125,14 +128,6 @@ model = dict(
         with_position=True,
         position_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
         code_weights = [2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
-        train_cfg=dict(
-            assigner=dict(
-                type='mmdet.HungarianAssigner3D',
-                cls_cost=dict(type='mmdet.ClassificationCost', weight=1.),
-                reg_cost=dict(type='mmdet.BBoxL1Cost', weight=5.0),
-                iou_cost=dict(type='mmdet.IoUCost', iou_mode='giou', weight=2.0)
-            ),
-        ),
         transformer=dict(
             type='PETRTemporalTransformer',
             decoder=dict(
@@ -164,7 +159,7 @@ model = dict(
             post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
             pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
             max_num=300,
-            voxel_size=[0.2, 0.2, 8],
+            voxel_size=voxel_size,
             num_classes=10), 
         loss_cls=dict(
             type='mmdet.FocalLoss',
@@ -173,7 +168,21 @@ model = dict(
             alpha=0.25,
             loss_weight=2.0),
         loss_bbox=dict(type='mmdet.L1Loss', loss_weight=0.25),
-        loss_iou=dict(type='mmdet.GIoULoss', loss_weight=0.0),),
+        loss_iou=dict(type='mmdet.GIoULoss', loss_weight=0.0),
+        train_cfg=dict(
+            grid_size=[512, 512, 1],
+            voxel_size=voxel_size,
+            point_cloud_range=point_cloud_range,
+            out_size_factor=4,
+            assigner=dict(
+                type="mmdet.HungarianAssigner3D",
+                cls_cost=dict(type="mmdet.FocalLossCost", weight=2.0),
+                reg_cost=dict(type="mmdet.BBox3DL1Cost", weight=0.25),
+                iou_cost=dict( type="mmdet.IoUCost", weight=0.0 ),  # Fake cost. This is just to make it compatible with DETR head.
+                pc_range=point_cloud_range,
+            ),
+        ),
+    ),
 )
 
 val_evaluator = dict(type="Accuracy")

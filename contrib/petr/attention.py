@@ -56,6 +56,8 @@ class FlashAttention(nn.Module):
             kv: The tensor containing the key, and value. (B, S, 2, H, D) 
             key_padding_mask: a bool tensor of shape (B, S)
         """
+        q = q.to(dtype=torch.float16)
+        kv = kv.to(dtype=torch.float16)
         assert q.dtype in [torch.float16, torch.bfloat16] and kv.dtype in [torch.float16, torch.bfloat16]
         assert q.is_cuda and kv.is_cuda
         assert q.shape[0] == kv.shape[0] and q.shape[-2] == kv.shape[-2] and q.shape[-1] == kv.shape[-1]
@@ -91,7 +93,7 @@ class FlashAttention(nn.Module):
             )
             output = rearrange(output_unpad, '(b s) ... -> b s ...', b=batch_size)
 
-        return output, None
+        return output.to(dtype=torch.float32), None
 
 
 class FlashMHA(nn.Module):

@@ -387,10 +387,10 @@ class StreamPETRHead(AnchorFreeHead):
         BN, H, W, _ = memory_centers.shape
         B = data['intrinsics'].size(0)
 
-        intrinsic = torch.stack([data['intrinsics'][..., 0, 0], data['intrinsics'][..., 1, 1]], dim=-1)
-        intrinsic = torch.abs(intrinsic) / 1e3
-        intrinsic = intrinsic.repeat(1, H*W, 1).view(B, -1, 2)
-        LEN = intrinsic.size(1)
+        focal = torch.stack([data['intrinsics'][..., 0, 0], data['intrinsics'][..., 1, 1]], dim=-1)
+        focal = torch.abs(focal) / 1e3
+        focal = focal.repeat(1, H*W, 1).view(B, -1, 2)
+        LEN = focal.size(1)
 
         num_sample_tokens = topk_indexes.size(1) if topk_indexes is not None else LEN
 
@@ -409,8 +409,7 @@ class StreamPETRHead(AnchorFreeHead):
 
         coords = coords.unsqueeze(-1)
 
-        _device = data['lidar2img'].device
-        img2lidars = torch.inverse(data['lidar2img'].cpu()).to(device=_device)
+        img2lidars = data['lidar2img'].inverse() # if error, change it to: torch.inverse(data['lidar2img'].cpu()).to(device=data['lidar2img'].device)
         img2lidars = img2lidars.view(BN, 1, 1, 4, 4).repeat(1, H*W, D, 1, 1).view(B, LEN, D, 4, 4)
         img2lidars = topk_gather(img2lidars, topk_indexes)
 
@@ -420,10 +419,10 @@ class StreamPETRHead(AnchorFreeHead):
 
         pos_embed  = inverse_sigmoid(coords3d)
         coords_position_embeding = self.position_encoder(pos_embed)
-        intrinsic = topk_gather(intrinsic, topk_indexes)
+        focal = topk_gather(focal, topk_indexes)
 
         # for spatial alignment in focal petr
-        cone = torch.cat([intrinsic, coords3d[..., -3:], coords3d[..., -90:-87]], dim=-1)
+        cone = torch.cat([focal, coords3d[..., -3:], coords3d[..., -90:-87]], dim=-1)
 
         return coords_position_embeding, cone
 
@@ -458,25 +457,23 @@ class StreamPETRHead(AnchorFreeHead):
 
         return tgt, query_pos, reference_points, temp_memory, temp_pos, rec_ego_pose
 
-    def prepare_for_dn(self, batch_size, reference_points, img_metas):
+    def prepare_for_dn(self, batch_size, reference_points, gt_bboxes_3d, gt_labels):
         if self.training and self.with_dn:
-            targets = [torch.cat((img_meta['gt_bboxes_3d']._data.gravity_center, img_meta['gt_bboxes_3d']._data.tensor[:, 3:]),dim=1) for img_meta in img_metas ]
-            labels = [img_meta['gt_labels_3d']._data for img_meta in img_metas ]
-            known = [(torch.ones_like(t)).cuda() for t in labels]
+            known = [(torch.ones_like(t)).cuda() for t in gt_labels]
             know_idx = known
             unmask_bbox = unmask_label = torch.cat(known)
             #gt_num
-            known_num = [t.size(0) for t in targets]
+            known_num = [t.size(0) for t in gt_bboxes_3d]
 
-            labels = torch.cat([t for t in labels])
-            boxes = torch.cat([t for t in targets])
-            batch_idx = torch.cat([torch.full((t.size(0), ), i) for i, t in enumerate(targets)])
+            gt_labels = torch.cat([t for t in gt_labels])
+            boxes = torch.cat([t for t in gt_bboxes_3d])
+            batch_idx = torch.cat([torch.full((t.size(0), ), i) for i, t in enumerate(gt_bboxes_3d)])
 
             known_indice = torch.nonzero(unmask_label + unmask_bbox)
             known_indice = known_indice.view(-1)
             # add noise
             known_indice = known_indice.repeat(self.scalar, 1).view(-1)
-            known_labels = labels.repeat(self.scalar, 1).view(-1).long().to(reference_points.device)
+            known_labels = gt_labels.repeat(self.scalar, 1).view(-1).long().to(reference_points.device)
             known_bid = batch_idx.repeat(self.scalar, 1).view(-1)
             known_bboxs = boxes.repeat(self.scalar, 1).to(reference_points.device)
             known_bbox_center = known_bboxs[:, :3].clone()
@@ -573,19 +570,28 @@ class StreamPETRHead(AnchorFreeHead):
                                           unexpected_keys, error_msgs)
 
 
-    def forward(self, img_feats, memory_center, img_metas, topk_indexes=None,  **data):
-        """Forward function.
-        Args:
-            mlvl_feats (tuple[Tensor]): Features from the upstream
-                network, each is a 5D-tensor with shape
-                (B, N, C, H, W).
-        Returns:
-            all_cls_scores (Tensor): Outputs from the classification head, \
-                shape [nb_dec, bs, num_query, cls_out_channels]. Note \
-                cls_out_channels should includes background.
-            all_bbox_preds (Tensor): Sigmoid outputs from the regression \
-                head with normalized coordinate format (cx, cy, w, l, cz, h, theta, vx, vy). \
-                Shape [nb_dec, bs, num_query, 9].
+    def forward(self, img_feats, memory_center, img_metas, gt_bboxes_3d, gt_labels, topk_indexes=None, **data):
+        """_summary_
+
+        Parameters
+        ----------
+        img_feats : _type_
+            (B, N, C, H, W).
+        memory_center : _type_
+            _description_
+        img_metas : _type_
+            _description_
+        gt_bboxes_3d : _type_
+            _description_
+        gt_labels : _type_
+            _description_
+        topk_indexes : _type_, optional
+            _description_, by default None
+            
+        Returns
+        -------
+        _type_
+            _description_
         """
         # zero init the memory bank
         self.pre_update_memory(data)
@@ -601,11 +607,11 @@ class StreamPETRHead(AnchorFreeHead):
         memory = self.memory_embed(memory)
 
         # spatial_alignment in focal petr
-        memory = self.spatial_alignment(memory, cone)
+        memory = self.spatial_alignment(memory, cone) # MLN
         pos_embed = self.featurized_pe(pos_embed, memory)
 
         reference_points = self.reference_points.weight
-        reference_points, attn_mask, mask_dict = self.prepare_for_dn(B, reference_points, img_metas)
+        reference_points, attn_mask, mask_dict = self.prepare_for_dn(B, reference_points, gt_bboxes_3d, gt_labels)
         query_pos = self.query_embedding(pos2posemb3d(reference_points))
         tgt = torch.zeros_like(query_pos)
 
@@ -954,10 +960,11 @@ class StreamPETRHead(AnchorFreeHead):
         all_bbox_preds = preds_dicts['all_bbox_preds']
 
         num_dec_layers = len(all_cls_scores)
-        device = gt_labels_list[0].device
-        gt_bboxes_list = [torch.cat(
-            (gt_bboxes.gravity_center, gt_bboxes.tensor[:, 3:]),
-            dim=1).to(device) for gt_bboxes in gt_bboxes_list]
+        
+        # device = gt_labels_list[0].device
+        # gt_bboxes_list = [torch.cat(
+        #     (gt_bboxes.gravity_center, gt_bboxes.tensor[:, 3:]),
+        #     dim=1).to(device) for gt_bboxes in gt_bboxes_list]
 
         all_gt_bboxes_list = [gt_bboxes_list for _ in range(num_dec_layers)]
         all_gt_labels_list = [gt_labels_list for _ in range(num_dec_layers)]
