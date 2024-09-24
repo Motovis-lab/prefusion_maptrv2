@@ -19,7 +19,7 @@ from mmdet.models.dense_heads.anchor_free_head import AnchorFreeHead
 from mmdet.structures.bbox.bbox_overlaps import bbox_overlaps
 from mmdet3d.models.utils import clip_sigmoid
 
-from prefusion.registry import MODELS
+from prefusion.registry import MODELS, DATA_SAMPLERS
 from contrib.petr.misc import draw_heatmap_gaussian, apply_center_offset, apply_ltrb, bias_init_with_prob
 
 
@@ -96,8 +96,8 @@ class FocalHead(AnchorFreeHead):
 
             self.assigner2d = build_assigner(assigner2d)
             # DETR sampling=False, so use PseudoSampler
-            sampler_cfg = dict(type="mmdet3d.PseudoSampler")
-            self.sampler = build_sampler(sampler_cfg, context=self)
+            sampler_cfg = dict(type="PseudoSampler")
+            self.sampler = DATA_SAMPLERS.build(sampler_cfg)
 
         self.num_classes = num_classes
         self.in_channels = in_channels

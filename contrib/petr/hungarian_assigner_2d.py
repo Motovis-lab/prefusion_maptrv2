@@ -9,6 +9,8 @@ from mmdet.models.task_modules import build_match_cost
 from mmdet.models.task_modules.assigners import AssignResult, BaseAssigner
 from mmdet.structures.bbox.transforms import bbox_cxcywh_to_xyxy
 
+from prefusion.registry import MODELS
+
 try:
     from scipy.optimize import linear_sum_assignment
 except ImportError:
@@ -49,7 +51,7 @@ class HungarianAssigner2D(BaseAssigner):
                  reg_cost=None,
                  iou_cost=None,
                  centers2d_cost=None):
-        self.cls_cost = build_match_cost(cls_cost)
+        self.cls_cost = MODELS.build(cls_cost)
         self.reg_cost = build_match_cost(reg_cost)
         self.iou_cost = build_match_cost(iou_cost)
         self.centers2d_cost = build_match_cost(centers2d_cost)

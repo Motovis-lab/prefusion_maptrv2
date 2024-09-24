@@ -27,7 +27,10 @@ class FrameBatchMerger(BaseDataPreprocessor):
 
     def _cast_data(self, data: Any):
         if isinstance(data, torch.Tensor):
-            return data.to(dtype=torch.float32, device=self._device)
+            _dtype = torch.float32 if "float" in str(data.dtype) else data.dtype
+            return data.to(dtype=_dtype, device=self._device)
+        if isinstance(data, dict):
+            return {k: self._cast_data(data[k]) for k in data}
         return data
         # return self.cast_data(merged)  # type: ignore
 

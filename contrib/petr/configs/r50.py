@@ -104,7 +104,7 @@ model = dict(
         train_cfg=dict(
             assigner2d=dict(
                 type='mmdet.HungarianAssigner2D',
-                cls_cost=dict(type='mmdet.FocalLossCost', weight=2.),
+                cls_cost=dict(type='FocalLossCost', weight=2.),
                 reg_cost=dict(type='mmdet.BBoxL1Cost', weight=5.0, box_format='xywh'),
                 iou_cost=dict(type='mmdet.IoUCost', iou_mode='giou', weight=2.0),
                 centers2d_cost=dict(type='mmdet.BBox3DL1Cost', weight=10.0))
@@ -176,7 +176,7 @@ model = dict(
             out_size_factor=4,
             assigner=dict(
                 type="mmdet.HungarianAssigner3D",
-                cls_cost=dict(type="mmdet.FocalLossCost", weight=2.0),
+                cls_cost=dict(type="FocalLossCost", weight=2.0),
                 reg_cost=dict(type="mmdet.BBox3DL1Cost", weight=0.25),
                 iou_cost=dict( type="mmdet.IoUCost", weight=0.0 ),  # Fake cost. This is just to make it compatible with DETR head.
                 pc_range=point_cloud_range,

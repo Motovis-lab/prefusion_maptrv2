@@ -24,7 +24,7 @@ from mmdet.utils import InstanceList, OptInstanceList
 
 from contrib.petr.positional_encoding import pos2posemb3d, pos2posemb1d, nerf_positional_encoding
 from contrib.petr.misc import normalize_bbox, bias_init_with_prob, MLN, topk_gather, transform_reference_points, memory_refresh, SELayer_Linear
-from prefusion.registry import MODELS
+from prefusion.registry import MODELS, DATA_SAMPLERS
 
 
 __all__ = [ "StreamPETRHead" ]
@@ -156,8 +156,8 @@ class StreamPETRHead(AnchorFreeHead):
 
             self.assigner = build_assigner(assigner)
             # DETR sampling=False, so use PseudoSampler
-            sampler_cfg = dict(type='mmdet3d.PseudoSampler')
-            self.sampler = build_sampler(sampler_cfg, context=self)
+            sampler_cfg = dict(type='PseudoSampler')
+            self.sampler = DATA_SAMPLERS.build(sampler_cfg)
 
         self.num_query = num_query
         self.num_classes = num_classes
@@ -842,7 +842,7 @@ class StreamPETRHead(AnchorFreeHead):
 
         cls_avg_factor = max(cls_avg_factor, 1)
         loss_cls = self.loss_cls(
-            cls_scores, labels, label_weights, avg_factor=cls_avg_factor)
+            cls_scores.cpu(), labels.cpu(), label_weights.cpu(), avg_factor=cls_avg_factor).cuda()  # due to mmcv:2.1.0 error: sigmoid_focal_loss_forward_impl: implementation for device cuda:0 not found
 
         # Compute the average number of gt boxes accross all gpus, for
         # normalization purposes
@@ -898,7 +898,7 @@ class StreamPETRHead(AnchorFreeHead):
         label_weights = torch.ones_like(known_labels)
         cls_avg_factor = max(cls_avg_factor, 1)
         loss_cls = self.loss_cls(
-            cls_scores, known_labels.long(), label_weights, avg_factor=cls_avg_factor)
+            cls_scores.cpu(), known_labels.long().cpu(), label_weights.cpu(), avg_factor=cls_avg_factor).cuda() # due to mmcv:2.1.0 error: sigmoid_focal_loss_forward_impl: implementation for device cuda:0 not found
 
         # Compute the average number of gt boxes accross all gpus, for
         # normalization purposes

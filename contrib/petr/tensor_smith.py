@@ -33,7 +33,7 @@ class Bbox3D_XYZ_LWH_Yaw_VxVy(TensorSmith):
 
     def __call__(self, transformable: "Bbox3D"):
         return {
-            "classes": torch.tensor([self.classes.index(ele["class"]) for ele in transformable.elements], dtype=torch.float32),
+            "classes": torch.tensor([self.classes.index(ele["class"]) for ele in transformable.elements], dtype=torch.int64),
             "xyz_lwh_yaw_vxvy": torch.tensor(
                 np.array(
                     [

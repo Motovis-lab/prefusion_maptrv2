@@ -8,6 +8,8 @@ from mmdet.models.task_modules.assigners import AssignResult, BaseAssigner
 from mmdet.models.task_modules import build_match_cost
 from contrib.petr.misc import normalize_bbox
 
+from prefusion.registry import MODELS
+
 try:
     from scipy.optimize import linear_sum_assignment
 except ImportError:
@@ -20,7 +22,7 @@ class HungarianAssigner3D(BaseAssigner):
                  reg_cost=dict(type='BBoxL1Cost', weight=1.0),
                  iou_cost=dict(type='IoUCost', weight=0.0),
                  pc_range=None):
-        self.cls_cost = build_match_cost(cls_cost)
+        self.cls_cost = MODELS.build(cls_cost)
         self.reg_cost = build_match_cost(reg_cost)
         self.iou_cost = build_match_cost(iou_cost)
         self.pc_range = pc_range
