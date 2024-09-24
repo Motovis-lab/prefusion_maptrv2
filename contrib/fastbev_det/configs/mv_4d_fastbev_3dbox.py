@@ -1,7 +1,7 @@
 __base__ = '../../configs/default_runtime.py'
 default_scope = "prefusion"
 custom_imports = dict(
-    imports=['prefusion', 'contrib'],
+    imports=['prefusion', 'contrib.fastbev_det'],
     allow_failed_imports=False
 )
 
@@ -160,7 +160,7 @@ train_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_train.pkl',
+        info_path=data_root + 'mv_4d_infos_val.pkl',
         dictionaries=dictionary,
         tensor_smiths=dict(type="BypassTensorSmith"),
         model_feeder=dict(type="BaseModelFeeder"),
@@ -374,7 +374,9 @@ lr = 0.004  # total lr per gpu lr is lr/n
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=lr, weight_decay=0.01),
-    clip_grad=dict(max_norm=35, norm_type=2))
+    clip_grad=dict(max_norm=35, norm_type=2),
+    dtype="bfloat16"  # it works only for arg --amp
+    )
 param_scheduler = dict(type='MultiStepLR', milestones=[16, 20])
 
 auto_scale_lr = dict(enable=False, batch_size=32)
@@ -397,5 +399,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = "work_dirs/mv_4d_fastbev_t_v1/epoch_45.pth"
+load_from = "work_dirs/mv_4d_fastbev_t_v1/epoch_24.pth"
 resume=False

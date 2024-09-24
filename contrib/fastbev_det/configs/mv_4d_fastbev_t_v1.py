@@ -27,7 +27,7 @@ img_scale = 1
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
 front_perspective_img_size = [768 * img_scale, 384 * img_scale]
-batch_size = 6
+batch_size = 2
 group_size = 3
 bev_range = [-12, 36, -12, 12, -0.5, 2.5]
 
@@ -364,7 +364,9 @@ lr = 0.002  # total lr per gpu lr is lr/n
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=lr, weight_decay=0.01),
-    clip_grad=dict(max_norm=35, norm_type=2))
+    clip_grad=dict(max_norm=35, norm_type=2),
+    dtype="bfloat16"  # it works only for arg --amp
+    )
 param_scheduler = dict(type='MultiStepLR', milestones=[16, 20])
 
 auto_scale_lr = dict(enable=False, batch_size=32)

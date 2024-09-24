@@ -44,7 +44,7 @@ class FastBEV_Det(BaseModel):
         fg_mask = torch.max(depth_labels, dim=1).values > 0.0
         assert depth_preds.device == depth_labels.device == fg_mask.device
         with autocast(device_type=depth_preds.device, enabled=False):
-            depth_loss = (F.binary_cross_entropy(
+            depth_loss = (F.binary_cross_entropy_with_logits(
                 depth_preds[fg_mask],
                 depth_labels[fg_mask],
                 reduction='none',
