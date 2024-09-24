@@ -1,7 +1,6 @@
-from typing import Union, List, Dict, Any, Optional
-from collections import OrderedDict
+from typing import List, Dict, Any
 
-import torch.nn as nn
+# import matplotlib.pyplot as plt
 import torch
 import numpy as np
 from mmengine.model import BaseModel
@@ -120,6 +119,21 @@ class StreamPETR(BaseModel):
         outs = self.box_head(img_feats, location, img_metas, bbox_3d, gt_labels, topk_indexes=topk_indexes, **data)
 
         loss_inputs = [bbox_3d, gt_labels, outs]
+
+        # Visualization
+        # for ts, m in zip(data['timestamp'], meta_info):
+        #     _ = plt.figure()
+        #     for bx_corners in m["bbox_3d"]["bbox3d_corners"]:
+        #         ground_corner_idx = [0, 1, 5, 4]
+        #         p0, p1, p5, p4 = [bx_corners[i][:2].tolist() for i in ground_corner_idx]
+        #         plt.plot((p0[0], p1[0]), (p0[1], p1[1]), linewidth=2, color='r')
+        #         plt.plot((p1[0], p5[0]), (p1[1], p5[1]), linewidth=2, color='r')
+        #         plt.plot((p5[0], p4[0]), (p5[1], p4[1]), linewidth=2, color='r')
+        #         plt.plot((p4[0], p0[0]), (p4[1], p0[1]), linewidth=2, color='r')
+        #     plt.savefig(f"./vis/{ts.item()}.png")
+        #     plt.close()
+        # a = 100
+
         losses = self.box_head.loss(*loss_inputs)
 
         # if self.with_img_roi_head:

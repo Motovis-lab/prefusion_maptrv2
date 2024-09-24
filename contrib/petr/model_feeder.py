@@ -54,8 +54,9 @@ class StreamPETRModelFeeder(BaseModelFeeder):
                     }
                     continue
                 if isinstance(trnsfmb, Bbox3D):
-                    processed_frame[k] = trnsfmb.tensor["xyz_lwh_yaw_vxvy"]
+                    processed_frame[k] = trnsfmb.tensor["xyz_lwh_sinyaw_cosyaw_vx_vy"]
                     processed_frame["meta_info"][k] = {"classes": trnsfmb.tensor["classes"]}
+                    processed_frame["meta_info"][k].update(bbox3d_corners=trnsfmb.tensor["corners"])
             processed_frame_batch.append(processed_frame)
         return processed_frame_batch
 
