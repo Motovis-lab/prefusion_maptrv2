@@ -57,7 +57,7 @@ def test_bbox3d_corners(bbox3d):
 def test_bbox3d_xyz_lwh_yaw_vxvy(bbox3d):
     tensor_smith = Bbox3D_XYZ_LWH_Yaw_VxVy(classes=["class.road_marker.arrow", "class.vehicle.passenger_car", "class.traffic_facility.box"])
     tensor_dict = tensor_smith(bbox3d)
-    assert tensor_dict["classes"] == [1]
+    assert tensor_dict["classes"].flatten().tolist() == [1]
     np.testing.assert_almost_equal(
         tensor_dict["xyz_lwh_yaw_vxvy"],
         np.array([[5, 4, 0.7, 4, 2, 1.5, -2.35619449, 0, 0]]),
