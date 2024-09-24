@@ -33,20 +33,59 @@ def test_camera_image_tensor():
 
 
 
-def test_planar_bbox_3d_get_roll_angle():
+def test_planar_bbox_3d_get_roll_from_vecs():
     a = [1, 1, 0]
     b = [-1, 1, 1]
-    result = np.array(PlanarBbox3D._get_roll_angle(a, b))
+    result = np.array(PlanarBbox3D._get_roll_from_vecs(a, b))
     answer = np.array((0.8164965669539823, 0.5773502593086969))
     np.testing.assert_almost_equal(result, answer, decimal=6)
 
 
+def test_planar_bbox_3d_get_yzvec_from_xvec_and_roll():
+    xvecs = np.float32([
+        [1, 1], 
+        [1, 1],
+        [0, 0]
+    ])
+    roll_vecs = np.array([
+        [0.8164965669539823, 1],  # cos
+        [0.5773502593086969, 0]   # sin
+    ])
+    yvecs, zvecs = PlanarBbox3D._get_yzvec_from_xvec_and_roll(xvecs, roll_vecs)
+    yvec_ans = np.float32([-1, 1, 1])
+    yvec_ans /= np.linalg.norm(yvec_ans)
+    np.testing.assert_almost_equal(yvecs[:, 0], yvec_ans, decimal=6)
 
-def test_planar_bbox_3d_generation():
+
+def test_planar_bbox_3d_get_yzvec_from_xvec_and_roll_single():
+    xvec = np.float32([1, 1, 0])
+    roll_vec = np.array([0.8164965669539823, 0.5773502593086969])
+    yvec, zvec = PlanarBbox3D._get_yzvec_from_xvec_and_roll(xvec, roll_vec)
+    yvec_ans = np.float32([-1, 1, 1])
+    yvec_ans /= np.linalg.norm(yvec_ans)
+    np.testing.assert_almost_equal(yvec, yvec_ans, decimal=6)
+
+
+
+def test_planar_bbox_3d_is_in_bbox3d():
     pbox3d = PlanarBbox3D(
         voxel_shape=(6, 160, 80),
         voxel_range=([-0.5, 2.5], [24, -8], [8, -8])
     )
+    delta_ij = np.float32([0.7, 0.2, 0])
+    sizes = np.float32([2, 1, 0.5])
+    xvec = np.float32([1, 0, 0]) 
+    roll = np.float32([0.8164965669539823, 0.5773502593086969])
+    assert pbox3d._is_in_bbox3d(delta_ij, sizes, xvec, roll) is True
+
+
+
+def test_planar_bbox_3d_generation_and_reverse():
+    pbox3d = PlanarBbox3D(
+        voxel_shape=(6, 160, 80),
+        voxel_range=([-0.5, 2.5], [24, -8], [8, -8])
+    )
+
     box3d = Bbox3D(
         elements=[
             {
@@ -85,6 +124,9 @@ def test_planar_bbox_3d_generation():
         dictionary={
             'branch_0': {
                 'classes': ['car', 'bus']
+            },
+            'branch_1': {
+                'classes': ['car'],
             }
         },
         tensor_smith=pbox3d
@@ -92,3 +134,12 @@ def test_planar_bbox_3d_generation():
     box3d.to_tensor()
     tensor_dict = box3d.tensor
     assert tensor_dict['branch_0']['seg'][0].max() == 1
+    pred_bboxes_3d = pbox3d.reverse(tensor_dict)
+    np.testing.assert_almost_equal(
+        pred_bboxes_3d['branch_0'][0]['size'],
+        box3d.elements[0]['size'],
+    decimal=3)
+    np.testing.assert_almost_equal(
+        pred_bboxes_3d['branch_1'][0]['rotation'],
+        box3d.elements[1]['rotation'],
+    decimal=3)

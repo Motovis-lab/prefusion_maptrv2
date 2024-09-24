@@ -20,7 +20,7 @@ from .transform import (
 
 __all__ = [
     "CameraImageTensor", "CameraDepthTensor", "CameraSegTensor", "PlanarBbox3D",
-    "PlanarBboxBev", "PlanarSegBev", "PlanarPolyline3D", "PlanarPolygon3D", "PlanarParkingSlot3D",
+    "PlanarSegBev", "PlanarPolyline3D", "PlanarPolygon3D", "PlanarParkingSlot3D",
     "BypassTensorSmith"
 ]
 
@@ -260,7 +260,7 @@ class PlanarBbox3D(TensorSmith):
             # maybe later, think about overlapped objects
             branch_seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
             branch_cen_im = np.zeros((1, X, Y), dtype=np.float32)
-            branch_reg_im = np.zeros((19, X, Y), dtype=np.float32)
+            branch_reg_im = np.zeros((20, X, Y), dtype=np.float32)
             for unit_xvec, unit_yvec, points_bev, center, size, velo, class_ind, attr_list in zip(
                 unit_xvecs, unit_yvecs, all_points_bev, centers, box_sizes, velocities, class_inds, attr_lists
             ):
@@ -291,14 +291,15 @@ class PlanarBbox3D(TensorSmith):
                 branch_reg_im[11] = branch_reg_im[11] * (1 - region_box) + np.abs(unit_xvec[2]) * region_box
                 branch_reg_im[12] = branch_reg_im[12] * (1 - region_box) + unit_xvec[0] * unit_xvec[1] * region_box
                 branch_reg_im[13] = branch_reg_im[13] * (1 - region_box) + unit_xvec[0] * unit_xvec[2] * region_box
-                # 14, 15: roll angle of yvec and xvec_bev_vertial                
+                # 14, 15, 16: abs roll angle of yvec and xvec_bev_vertial                
                 cos_roll, sin_roll = self._get_roll_from_vecs(unit_xvec, unit_yvec)
                 branch_reg_im[14] = branch_reg_im[14] * (1 - region_box) + abs(cos_roll) * region_box
-                branch_reg_im[15] = branch_reg_im[15] * (1 - region_box) + cos_roll * sin_roll * region_box
-                # 16, 17, 18: velocity
-                branch_reg_im[16] = branch_reg_im[16] * (1 - region_box) + velo[0] * region_box
-                branch_reg_im[17] = branch_reg_im[17] * (1 - region_box) + velo[1] * region_box
-                branch_reg_im[18] = branch_reg_im[18] * (1 - region_box) + velo[2] * region_box
+                branch_reg_im[15] = branch_reg_im[15] * (1 - region_box) + abs(sin_roll) * region_box
+                branch_reg_im[16] = branch_reg_im[16] * (1 - region_box) + cos_roll * sin_roll * region_box
+                # 17, 18, 19: velocity
+                branch_reg_im[17] = branch_reg_im[17] * (1 - region_box) + velo[0] * region_box
+                branch_reg_im[18] = branch_reg_im[18] * (1 - region_box) + velo[1] * region_box
+                branch_reg_im[19] = branch_reg_im[19] * (1 - region_box) + velo[2] * region_box
                 ## gen centerness
                 center_line_l = np.float32([points_bev[[0, 1]].mean(0), points_bev[[2, 3]].mean(0)])
                 center_line_w = np.float32([points_bev[[1, 2]].mean(0), points_bev[[0, 3]].mean(0)])
@@ -322,24 +323,49 @@ class PlanarBbox3D(TensorSmith):
                 'reg': torch.tensor(branch_reg_im, dtype=torch.float32)
             }
         return tensor_data
-    
+        
     
     
     @staticmethod
-    def _get_rmat_from_xvec_and_roll(xvec, roll):
-        pass
+    def _get_yzvec_from_xvec_and_roll(xvecs, roll_vecs):
+        xvecs_bev_vertical = np.array([-xvecs[1], xvecs[0], np.zeros_like(xvecs[0])], dtype=np.float32)
+        if np.linalg.norm(xvecs_bev_vertical) < 1e-3:
+            xvecs_bev_vertical = np.array([
+                np.zeros_like(xvecs[0]), 
+                np.ones_like(xvecs[0]), 
+                np.zeros_like(xvecs[0])
+            ], dtype=np.float32)
+        xvecs /= np.linalg.norm(xvecs, axis=0)
+        xvecs_bev_vertical /= np.linalg.norm(xvecs_bev_vertical, axis=0)        
+        cos_roll = roll_vecs[[0]]
+        sin_roll = roll_vecs[[1]]
+        yvecs = xvecs_bev_vertical * cos_roll + np.cross(xvecs, xvecs_bev_vertical, axis=0) * sin_roll
+        yvecs /= np.linalg.norm(yvecs, axis=0)
+        zvecs = np.cross(xvecs, yvecs, axis=0)
+        return yvecs, zvecs
+        
     
-    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_xvecs, roll_angles, velocities):
-        ranked_inds = np.argsort(seg_scores)[::-1]
+    def _is_in_bbox3d(self, delta_ij, sizes, xvec, roll):
+        yvec, zvec = self._get_yzvec_from_xvec_and_roll(xvec, roll)
+        return all([
+            np.linalg.norm(delta_ij * xvec) < 0.5 * sizes[0],
+            np.linalg.norm(delta_ij * yvec) < 0.5 * sizes[1],
+            np.linalg.norm(delta_ij * zvec) < 0.5 * sizes[2]
+        ])
+    
+    
+    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_xvecs, roll_vecs, velocities, ratio=0.7):
+        scores = cen_scores * seg_scores
+        ranked_inds = np.argsort(scores)[::-1]
         kept_groups = []
         kept_inds = []
-        
+        # group inds
         for i in ranked_inds:
             if i not in kept_inds:
                 center_i = centers[:, i]
                 sizes_i = sizes[:, i]
-                unit_xvecs_i = unit_xvecs[:, i]
-                
+                unit_xvec_i = unit_xvecs[:, i]
+                roll_vec_i = roll_vecs[:, i]
                 kept_inds.append(i)
                 grouped_inds = [i]
                 kept_groups.append(grouped_inds)
@@ -347,9 +373,45 @@ class PlanarBbox3D(TensorSmith):
                     if j not in kept_inds:
                         center_j = centers[:, j]
                         delta_ij = center_i - center_j
-                        # if _is_in_ellipse(delta_ij, vel_l_i * ratio, ss_i * ratio):
-                        #     kept_inds.append(j)
-                        #     grouped_inds.append(j)
+                        if self._is_in_bbox3d(delta_ij, sizes_i * ratio, unit_xvec_i, roll_vec_i):
+                            kept_inds.append(j)
+                            grouped_inds.append(j)
+        ## get mean bbox in group
+        pred_bboxes_3d = []
+        for group in kept_groups:
+            # use score weighted mean
+            score_sum = scores[group].sum() + 1e-6
+            mean_classes = (seg_classes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get mean_unit_xvec
+            # average all xvecs, xvecs may not have same directions
+            reference_unit_xvec = (unit_xvecs[:, group] * scores[group][None]).sum(1) / score_sum
+            # align all xvecs to the first one, then average all xvecs again
+            unit_xvec_0 = unit_xvecs[:, group[0]]
+            for i in group[1:]:
+                if np.sum(unit_xvec_0 * unit_xvecs[:, i]) < 0:
+                    unit_xvecs[:, i] *= -1
+            mean_unit_xvec = (unit_xvecs[:, group] * scores[group][None]).sum(1) / score_sum
+            # check whether reference_unit_xvec and mean_unit_xvec have same direction
+            sign_direction = _sign(np.sum(mean_unit_xvec * reference_unit_xvec))
+            mean_unit_xvec *= sign_direction
+            mean_roll_vec = (roll_vecs[:, group] * scores[group][None]).sum(1) / score_sum
+            unit_yvec, unit_zvec = self._get_yzvec_from_xvec_and_roll(mean_unit_xvec, mean_roll_vec)
+            # rotation matrix
+            mean_rmat = np.float32([mean_unit_xvec, unit_yvec, unit_zvec]).T
+            mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
+            if self.use_bottom_center:
+                mean_center = mean_center + 0.5 * unit_zvec * mean_size[2]
+            mean_velocity = (velocities[:, group] * scores[group][None]).sum(1) / score_sum
+            bbox_3d = {
+                'confs': mean_classes,
+                'size': mean_size,
+                'rotation': mean_rmat,
+                'translation': mean_center,
+                'velocity': mean_velocity,
+            }
+            pred_bboxes_3d.append(bbox_3d)
+        return pred_bboxes_3d
     
     def reverse(self, tensor_dict, pre_conf=0.5):
         """
@@ -375,8 +437,8 @@ class PlanarBbox3D(TensorSmith):
             3, 4, 5: size (l, w, h), ego coords
             6, 7, 8: unit xvec, ego coords
             9, 10, 11, 12, 13: absolute xvec, ego coords
-            14, 15: roll angle of yvec and xvec_bev_vertial, intrinsic rotation
-            16, 17, 18: velocity, eogo coords, TODO: should be converted to ego coords, currently world coords            
+            14, 15, 16: abs roll angle of yvec and xvec_bev_vertial, intrinsic rotation
+            17, 18, 19: velocity, eogo coords, TODO: should be converted to ego coords, currently world coords            
         ```
         """
         boxes_3d = {}
@@ -396,8 +458,8 @@ class PlanarBbox3D(TensorSmith):
             reg_values = reg_pred[:, valid_points_map]
             # 0, 1, 2: centers in ego coords
             cx, cy, fx, fy = self.bev_intrinsics
-            center_xs = (reg_values[1] - cx) / fx
-            center_ys = (reg_values[0] - cy) / fy
+            center_xs = (valid_points_bev[1] + reg_values[1] - cx) / fx
+            center_ys = (valid_points_bev[0] + reg_values[0] - cy) / fy
             center_zs = reg_values[2]
             centers = np.array([center_xs, center_ys, center_zs])
             # 3, 4, 5: sizes in ego coords
@@ -414,69 +476,28 @@ class PlanarBbox3D(TensorSmith):
             unit_xvecs = np.array([unit_xvecs_x, unit_xvecs_y, unit_xvecs_z])
             sign_xvecs = _sign(unit_xvecs * ref_unit_xvecs)
             unit_xvecs *= sign_xvecs
-            # 14, 15: roll angles
-            roll_angles = reg_values[[14, 15]]
-            # 16, 17, 18: velocities
-            velocities = reg_values[[16, 17, 18]]
+            # 14, 15, 16: roll angles
+            cos_rolls = reg_values[14]
+            sin_rolls = reg_values[15] * _sign(reg_values[16])
+            roll_vecs = np.array([cos_rolls, sin_rolls])
+            roll_vecs /= (np.linalg.norm(roll_vecs) + 1e-6)
+            # 17, 18, 19: velocities
+            velocities = reg_values[[17, 18, 19]]
             
             ## group nms
             mean_boxes_3d = self._group_nms(
                 seg_scores, cen_scores, seg_classes, 
-                centers, sizes, unit_xvecs, roll_angles, velocities
+                centers, sizes, unit_xvecs, roll_vecs, velocities
             )
 
             boxes_3d[branch] = mean_boxes_3d
+        return boxes_3d
 
             
                 
                 
                 
                 
-                
-
-
-
-@TENSOR_SMITHS.register_module()
-class PlanarBboxBev(TensorSmith):
-    def __init__(self, voxel_shape, voxel_range):
-        self.voxel_shape = voxel_shape
-        self.voxel_range = voxel_range
-    
-    def __call__(self, transformable: Bbox3D):
-        """
-        Parameters
-        ----------
-        elements : List[dict]
-            a list of boxes. Each element is a dict of box having the following format
-            ```elements[0] = {
-                'class': 'class.vehicle.passenger_car',
-                'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
-                        'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
-                        'attr.vehicle.is_door_open': 'attr.vehicle.is_door_open.false'},
-                'size': [4.6486, 1.9505, 1.5845],
-                'rotation': array([[ 0.93915682, -0.32818596, -0.10138267],
-                                [ 0.32677338,  0.94460343, -0.03071667],
-                                [ 0.1058472 , -0.00428138,  0.99437319]]),
-                'translation': array([[-15.70570354], [ 11.88484971], [ -0.61029085]]), # NOTE: it is a column vector
-                'track_id': '10035_0', # NOT USED
-                'velocity': array([[0.], [0.], [0.]]) # NOTE: it is a column vector
-            }
-            ```
-        dictionary : dict
-            following format
-            ```dictionary = {
-                'branch_0': {'classes': ['car', 'bus', 'pedestrain', ...], 'attrs': []}
-                'branch_1': {'classes': [], 'attrs': []}
-                ...
-            }
-            ```
-        flip_aware_class_pairs : List[tuple]
-            list of class pairs that are flip-aware
-            flip_aware_class_pairs = [('left_arrow', 'right_arrow')]
-        tensor_smith : TensorSmith, optional
-            a tensor smith object, providing ToTensor for the transformable, by default None
-        """
-        raise NotImplementedError
 
 
 
