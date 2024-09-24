@@ -70,7 +70,7 @@ class StreamPETR(BaseModel):
         assert not any(m is None for m in [img_backbone, img_neck])
         self.img_backbone = MODELS.build(img_backbone)
         self.box_head = MODELS.build(box_head)
-        self.roi_head = MODELS.build(roi_head)
+        self.roi_head = MODELS.build(roi_head) if roi_head else None
         self.img_neck = MODELS.build(img_neck) if img_neck else None
         self.stride = stride
         self.position_level = position_level
@@ -86,12 +86,19 @@ class StreamPETR(BaseModel):
         camera_images = torch.vstack([i.unsqueeze(0) for i in camera_images]).reshape(B * N, C, H, W)
         im_size = camera_images.shape[-2:][::-1]
         img_feats = self.extract_img_feat(camera_images)
+
         if self.img_neck is not None:
             img_feats = self.img_neck(img_feats)
+
         img_feats = img_feats[self.position_level]
         img_feats = img_feats.reshape(B, N, *img_feats.shape[1:])
         location = self.prepare_location(img_feats, im_size)
-        outs_roi = self.roi_head(location, img_feats)
+
+        if self.roi_head:
+            outs_roi = self.roi_head(location, img_feats)
+        else:
+            outs_roi = {'topk_indexes': None}
+
         topk_indexes = outs_roi['topk_indexes']
         _device = img_feats.device
         

@@ -89,27 +89,27 @@ model = dict(
         style="pytorch",
     ),
     img_neck=dict(type="mmdet3d.CPFPN", in_channels=[1024, 2048], out_channels=256, num_outs=2),
-    roi_head=dict(
-        type="FocalHead",
-        num_classes=len(det_classes),
-        loss_cls2d=dict(
-            type='mmdet.QualityFocalLoss',
-            use_sigmoid=True,
-            beta=2.0,
-            loss_weight=2.0),
-        loss_centerness=dict(type='mmdet.GaussianFocalLoss', reduction='mean', loss_weight=1.0),
-        loss_bbox2d=dict(type='mmdet.L1Loss', loss_weight=5.0),
-        loss_iou2d=dict(type='mmdet.GIoULoss', loss_weight=2.0),
-        loss_centers2d=dict(type='mmdet.L1Loss', loss_weight=10.0),
-        train_cfg=dict(
-            assigner2d=dict(
-                type='mmdet.HungarianAssigner2D',
-                cls_cost=dict(type='FocalLossCost', weight=2.),
-                reg_cost=dict(type='mmdet.BBoxL1Cost', weight=5.0, box_format='xywh'),
-                iou_cost=dict(type='mmdet.IoUCost', iou_mode='giou', weight=2.0),
-                centers2d_cost=dict(type='mmdet.BBox3DL1Cost', weight=10.0))
-        ),
-    ),
+    # roi_head=dict(
+    #     type="FocalHead",
+    #     num_classes=len(det_classes),
+    #     loss_cls2d=dict(
+    #         type='mmdet.QualityFocalLoss',
+    #         use_sigmoid=True,
+    #         beta=2.0,
+    #         loss_weight=2.0),
+    #     loss_centerness=dict(type='mmdet.GaussianFocalLoss', reduction='mean', loss_weight=1.0),
+    #     loss_bbox2d=dict(type='mmdet.L1Loss', loss_weight=5.0),
+    #     loss_iou2d=dict(type='mmdet.GIoULoss', loss_weight=2.0),
+    #     loss_centers2d=dict(type='mmdet.L1Loss', loss_weight=10.0),
+    #     train_cfg=dict(
+    #         assigner2d=dict(
+    #             type='mmdet.HungarianAssigner2D',
+    #             cls_cost=dict(type='FocalLossCost', weight=2.),
+    #             reg_cost=dict(type='mmdet.BBoxL1Cost', weight=5.0, box_format='xywh'),
+    #             iou_cost=dict(type='mmdet.IoUCost', iou_mode='giou', weight=2.0),
+    #             centers2d_cost=dict(type='mmdet.BBox3DL1Cost', weight=10.0))
+    #     ),
+    # ),
     box_head=dict(
         type='StreamPETRHead',
         num_classes=len(det_classes),
@@ -195,15 +195,35 @@ env_cfg = dict(
     dist_cfg=dict(backend="nccl"),
 )
 
-lr = 0.006  # total lr per gpu lr is lr/n
+lr = 4e-4  # total lr per gpu lr is lr/n
+num_epochs = 3
 
 optim_wrapper = dict(
     type="OptimWrapper",
-    optimizer=dict(type="AdamW", lr=lr, weight_decay=0.01),
+    optimizer=dict(
+        type="AdamW", 
+        lr=lr, 
+        weight_decay=0.01,
+    ),
+    paramwise_cfg=dict(
+        custom_keys={
+            "img_backbone": dict(lr_mult=0.25),  # 0.25 only for Focal-PETR with R50-in1k pretrained weights
+        }
+    ),
     clip_grad=dict(max_norm=35, norm_type=2),
 )
 
-param_scheduler = dict(type="MultiStepLR", milestones=[16, 20])
+param_scheduler = [
+    dict(type='CosineAnnealingLR',
+         eta_min=0.005,
+         begin=num_epochs * 0.75,
+         end=num_epochs,
+         T_max=num_epochs * 0.25,
+         by_epoch=True,
+    )
+]
+
+log_processor = dict(type='GroupAwareLogProcessor')
 
 default_hooks = dict(
     timer=dict(type="IterTimerHook"),
@@ -214,7 +234,6 @@ default_hooks = dict(
 )
 
 visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"), dict(type="TensorboardVisBackend")])
-
 
 # load_from = "work_dirs/mv_4d_fastbev_t/20240903_023804/epoch_24.pth"
 resume = False
