@@ -100,26 +100,6 @@ class GroupValLoop(ValLoop):
         self.runner.call_hook('after_val_epoch', metrics=metrics)
         self.runner.call_hook('after_val')
         return metrics
-    
-    @torch.no_grad()
-    def run_iter(self, idx, data_batch: Sequence[dict]):
-        """Iterate one mini-batch.
-
-        Args:
-            data_batch (Sequence[dict]): Batch of data
-                from dataloader.
-        """
-        self.runner.call_hook(
-            'before_val_iter', batch_idx=idx, data_batch=data_batch)
-        # outputs should be sequence of BaseDataElement
-        with autocast(enabled=self.fp16):
-            outputs = self.runner.model.val_step(data_batch)
-        self.evaluator.process(data_samples=outputs, data_batch=data_batch[0])
-        self.runner.call_hook(
-            'after_val_iter',
-            batch_idx=idx,
-            data_batch=data_batch,
-            outputs=outputs)
 
 
 @LOOPS.register_module()
@@ -154,25 +134,6 @@ class GroupTestLoop(TestLoop):
         self.runner.call_hook('after_test_epoch', metrics=metrics)
         self.runner.call_hook('after_test')
         return metrics
-    
-    @torch.no_grad()
-    def run_iter(self, idx, data_batch: Sequence[dict]) -> None:
-        """Iterate one mini-batch.
-
-        Args:
-            data_batch (Sequence[dict]): Batch of data from dataloader.
-        """
-        self.runner.call_hook(
-            'before_test_iter', batch_idx=idx, data_batch=data_batch)
-        # predictions should be sequence of BaseDataElement
-        with autocast(enabled=self.fp16):
-            outputs = self.runner.model.test_step(data_batch)
-        self.evaluator.process(data_samples=outputs, data_batch=data_batch[0])
-        self.runner.call_hook(
-            'after_test_iter',
-            batch_idx=idx,
-            data_batch=data_batch,
-            outputs=outputs)
         
 
 @LOOPS.register_module()

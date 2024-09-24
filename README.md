@@ -1,3 +1,8 @@
+
+[![pipeline status](https://gitlab.com/auto-ai-ragtag/prefusion/badges/main/pipeline.svg)](https://gitlab.com/auto-ai-ragtag/prefusion/-/commits/main)
+
+[![coverage report](https://gitlab.com/auto-ai-ragtag/prefusion/badges/main/coverage.svg)](https://gitlab.com/auto-ai-ragtag/prefusion/-/commits/main)
+
 # 前融合PreFusion
 
 
@@ -291,7 +296,38 @@ train.txt
 ## 任务设计
 TODO
 
-## TODO List
-- [ ] 利用 Gitlab 提供的 CI/CD功能来帮我们跑测试
-- [ ] 利用 Gitlab 提供的 docs 功能来帮我们部署文档
+## 环境安装
 
+### pip
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+pip install openmim
+mim install -r mim-requirements.txt
+```
+
+### Docker
+
+Build from Dockerfile
+
+```bash
+docker build -t prefusion:lastest .
+```
+
+Pull from Dockerhub
+
+```bash
+docker pull brianlan/prefusion:v2
+```
+
+Run with docker
+
+```bash
+docker run --gpus 0 --privileged --shm-size=32g --rm -it --name prefusion -v /home:/home -v /data:/data brianlan/prefusion:v2 /bin/bash
+```
+
+## TODO List
+
+- [x] 利用 Gitlab 提供的 CI/CD功能来帮我们跑测试
+- [ ] 利用 Gitlab 提供的 docs 功能来帮我们部署文档
