@@ -374,7 +374,9 @@ lr = 0.004  # total lr per gpu lr is lr/n
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=lr, weight_decay=0.01),
-    clip_grad=dict(max_norm=35, norm_type=2))
+    clip_grad=dict(max_norm=35, norm_type=2),
+    dtype="bfloat16"  # it works only for arg --amp
+    )
 param_scheduler = dict(type='MultiStepLR', milestones=[16, 20])
 
 auto_scale_lr = dict(enable=False, batch_size=32)
