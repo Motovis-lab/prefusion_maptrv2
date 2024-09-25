@@ -1,5 +1,4 @@
 import argparse
-from dataclasses import dataclass, fields
 from typing import Dict, List, Tuple, Sequence, Any
 from pathlib import Path
 
@@ -10,17 +9,6 @@ from easydict import EasyDict as edict
 from copious.io.fs import parent_ensured_path, read_yaml, read_json, write_pickle
 from copious.io.parallelism import maybe_multithreading
 from copious.cv.geometry import xyzq2mat, euler2mat, points3d_to_homo
-
-
-@dataclass
-class Args:
-    mv4d_data_root: Path
-    scene_ids: List[str]
-    save_path: Path
-    num_workers: int
-    calib_filename: Path
-    camera_root_name: str
-    ego_coordsys_align_mat: np.ndarray
 
 
 class Mat4x4(argparse.Action):
@@ -54,9 +42,7 @@ def parse_argument():
         default=np.eye(4),
         help="4x4 mat, 用来将原本的右前上ego系变换为prefusion框架要求的前左上ego系",
     )
-    args = parser.parse_args()
-    config_params = {field.name: getattr(args, field.name) for field in fields(Args) if hasattr(args, field.name)}
-    return Args(**config_params)
+    return edict({k: v for k, v in parser.parse_args()._get_kwargs()})
 
 
 args = parse_argument()
