@@ -25,7 +25,8 @@ num_cores=$(nproc)
 process_folder() {
     folder_name="$1"
     echo "处理文件夹: $folder_name"
-    python gen_info_4d.py "$folder_name"
+    python gene_info_4d.py "$folder_name"
+    # python shutil_file.py "$folder_name"
 }
 
 # 计数器，用于跟踪当前运行的作业数
