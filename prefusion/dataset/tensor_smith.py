@@ -21,8 +21,8 @@ from .transform import (
 __all__ = [
     "CameraImageTensor", "CameraDepthTensor", "CameraSegTensor", "PlanarBbox3D",
     "PlanarSegBev", "PlanarPolyline3D", "PlanarPolygon3D", "PlanarParkingSlot3D",
-    "BypassTensorSmith"
 ]
+
 
 class TensorSmith:
     def __call__(self, *args, **kwargs):
@@ -31,12 +31,6 @@ class TensorSmith:
     def reverse(self, tensor_dict):
         raise NotImplementedError
 
-
-
-@TENSOR_SMITHS.register_module()
-class BypassTensorSmith(TensorSmith):
-    def __call__(self, transformable):
-        return transformable
 
 
 
