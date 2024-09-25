@@ -1,5 +1,3 @@
-from easydict import EasyDict as edict
-
 import numpy as np
 import pytest
 

@@ -1,5 +1,6 @@
 import argparse
-from typing import Dict, List, Tuple
+from dataclasses import dataclass, fields
+from typing import Dict, List, Tuple, Sequence, Any
 from pathlib import Path
 
 import numpy as np
@@ -8,22 +9,72 @@ from loguru import logger
 from easydict import EasyDict as edict
 from copious.io.fs import parent_ensured_path, read_yaml, read_json, write_pickle
 from copious.io.parallelism import maybe_multithreading
-from copious.cv.geometry import xyzq2mat
+from copious.cv.geometry import xyzq2mat, euler2mat, points3d_to_homo
 
 
-def main(args):
+@dataclass
+class Args:
+    mv4d_data_root: Path
+    scene_ids: List[str]
+    save_path: Path
+    num_workers: int
+    calib_filename: Path
+    camera_root_name: str
+    ego_coordsys_align_mat: np.ndarray
+
+
+class Mat4x4(argparse.Action):
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: Sequence[Any],
+        option_string: str = None,
+    ) -> None:
+        if len(values) == 1 and isinstance(values[0], np.ndarray):
+            setattr(namespace, self.dest, values[0])
+        else:
+            assert len(values) == 16
+            setattr(namespace, self.dest, np.array(values).reshape(4, 4))
+
+
+def parse_argument():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mv4d-data-root", type=Path, required=True)
+    parser.add_argument("--scene-ids", nargs="*")
+    parser.add_argument("--save-path", type=parent_ensured_path, required=True)
+    parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--calib-filename", default="vcalib_center.yml")
+    parser.add_argument("--camera-root-name", default="vcamera")
+    parser.add_argument(
+        "--ego-coordsys-align-mat",
+        nargs=16,
+        action=Mat4x4,
+        type=float,
+        default=np.eye(4),
+        help="4x4 mat, 用来将原本的右前上ego系变换为prefusion框架要求的前左上ego系",
+    )
+    args = parser.parse_args()
+    config_params = {field.name: getattr(args, field.name) for field in fields(Args) if hasattr(args, field.name)}
+    return Args(**config_params)
+
+
+args = parse_argument()
+
+
+def main():
     scene_ids = args.scene_ids or list([p.parent.name for p in args.mv4d_data_root.glob("*/4d_anno_infos")])
     logger.info(f"Total number of scenes: {len(scene_ids)}, scene_list: {scene_ids}")
-    infos = {sid: prepare_scene(args, args.mv4d_data_root / sid, num_workers=args.num_workers) for sid in scene_ids}
+    infos = {sid: prepare_scene(args, args.mv4d_data_root / sid) for sid in scene_ids}
     write_pickle(infos, args.save_path)
     logger.info(f"All the info has been saved to {args.save_path}")
 
 
-def prepare_scene(args, scene_root: Path, num_workers: int = 0) -> Dict:
+def prepare_scene(args, scene_root: Path) -> Dict:
     logger.info(f"Generating info pkl for scene {scene_root.name}")
     return {
         "scene_info": {
-            "calibration": prepare_calibration(scene_root, args.calib_filename),
+            "calibration": prepare_calibration(scene_root),
             "camera_mask": prepare_camera_mask(scene_root),
             "depth_mode": prepare_depth_mode(scene_root),
         },
@@ -36,24 +87,22 @@ def prepare_scene(args, scene_root: Path, num_workers: int = 0) -> Dict:
             "time_range": 2,
             "time_unit": 1e-3,
         },
-        "frame_info": prepare_all_frame_infos(args, scene_root, num_workers=num_workers),
+        "frame_info": prepare_all_frame_infos(args, scene_root),
     }
 
 
-def prepare_calibration(scene_root: Path, calib_filename: str) -> Dict:
-    raw_calib = edict(read_yaml(scene_root / calib_filename)["rig"])
+def prepare_calibration(scene_root: Path) -> Dict:
+    raw_calib = edict(read_yaml(scene_root / args.calib_filename)["rig"])
     calib = {}
     for sensor_id, sensor_info in raw_calib.items():
-        calib[sensor_id] = {
-            "extrinsic": (
-                R.from_quat(sensor_info.extrinsic[3:]).as_matrix(),
-                np.array(sensor_info.extrinsic[:3], dtype=np.float32)
-            ),
-        }
-        if 'camera' in sensor_info.sensor_model.lower():
+        standard_extrinsic = args.ego_coordsys_align_mat @ xyzq2mat(*sensor_info.extrinsic, as_homo=True)
+        calib[sensor_id] = {"extrinsic": (standard_extrinsic[:3, :3], standard_extrinsic[:3, 3])}
+        if "camera" in sensor_info.sensor_model.lower():
             if "fisheye" in sensor_info.sensor_model.lower():
                 calib[sensor_id]["camera_type"] = "FisheyeCamera"
-                calib[sensor_id]["intrinsic"] = np.array(sensor_info.pp + sensor_info.focal + sensor_info.inv_poly[:4], dtype=np.float32)
+                calib[sensor_id]["intrinsic"] = np.array(
+                    sensor_info.pp + sensor_info.focal + sensor_info.inv_poly[:4], dtype=np.float32
+                )
             else:
                 calib[sensor_id]["camera_type"] = "PerspectiveCamera"
                 calib[sensor_id]["intrinsic"] = np.array(sensor_info.pp + sensor_info.focal, dtype=np.float32)
@@ -73,12 +122,13 @@ def prepare_ego_poses(scene_root: Path) -> Dict[int, np.ndarray]:
     trajectory = np.loadtxt(scene_root / "trajectory.txt")
     poses = {}
     for t, *xyzq in trajectory:
-        mat = xyzq2mat(*xyzq)
-        poses[int(t)] = (mat[:3, :3], mat[:3, 3])
+        mat = xyzq2mat(*xyzq, as_homo=True)
+        standard_mat = args.ego_coordsys_align_mat @ mat
+        poses[int(t)] = (standard_mat[:3, :3], standard_mat[:3, 3])
     return poses
 
 
-def prepare_all_frame_infos(args, scene_root: Path, num_workers: int = 0) -> Dict:
+def prepare_all_frame_infos(args, scene_root: Path) -> Dict:
     common_ts = read_common_ts(scene_root)
 
     # FIXME: Temprary code, need to remove
@@ -87,11 +137,11 @@ def prepare_all_frame_infos(args, scene_root: Path, num_workers: int = 0) -> Dic
 
     frame_infos = {}
     data_args = [(scene_root, ts) for ts in common_ts]
-    res = maybe_multithreading(prepare_object_info, data_args, num_threads=num_workers, use_tqdm=True)
+    res = maybe_multithreading(prepare_object_info, data_args, num_threads=args.num_workers, use_tqdm=True)
     ego_poses = prepare_ego_poses(scene_root)
     for ts, (boxes, polylines) in zip(common_ts, res):
         frame_infos[str(ts)] = {  # convert to str to make it align with the design
-            "camera_image": prepare_camera_image_paths(scene_root, ts, args.camera_root_name),
+            "camera_image": prepare_camera_image_paths(scene_root, ts),
             "3d_boxes": boxes,
             "3d_polylines": polylines,
             "ego_pose": ego_poses[ts],
@@ -106,12 +156,14 @@ def read_common_ts(scene_root: Path) -> List[int]:
     return [int(i["lidar"]) for i in ts_info]
 
 
-def prepare_camera_image_paths(scene_root: Path, ts: int, camera_root_name: str) -> Dict[str, str]:
-    return {p.parent.name: p.relative_to(scene_root.parent) for p in (scene_root / camera_root_name).rglob(f"*{ts}*.jpg")}
+def prepare_camera_image_paths(scene_root: Path, ts: int) -> Dict[str, str]:
+    return {
+        p.parent.name: p.relative_to(scene_root.parent) for p in (scene_root / args.camera_root_name).rglob(f"*{ts}*.jpg")
+    }
 
 
 def prepare_object_info(scene_root: Path, ts: int) -> Tuple[List[dict], List[dict]]:
-    object_info = read_json(scene_root / "4d_anno_infos" /  "4d_anno_infos_frame" / "frames_labels" / f"{ts}.json")
+    object_info = read_json(scene_root / "4d_anno_infos" / "4d_anno_infos_frame" / "frames_labels" / f"{ts}.json")
     boxes, polylines = [], []
     for obj in object_info:
         obj = edict(obj)
@@ -123,31 +175,29 @@ def prepare_object_info(scene_root: Path, ts: int) -> Tuple[List[dict], List[dic
 
 
 def convert_box3d_format(box_info: Dict):
+    Rt = euler2mat(*box_info.geometry.rot_xyz, degrees=False, as_homo=True)
+    Rt[:3, 3] = box_info.geometry.pos_xyz
+    standard_Rt = args.ego_coordsys_align_mat @ Rt
+    
     return {
         "class": box_info.obj_type,
         "attr": box_info.obj_attr,
         "size": box_info.geometry.scale_xyz,
-        "rotation": R.from_euler("XYZ", box_info.geometry.rot_xyz, degrees=False).as_matrix(),
-        "translation": np.array(box_info.geometry.pos_xyz, dtype=np.float32),
+        "rotation": standard_Rt[:3, :3],
+        "translation": standard_Rt[:3, 3],
         "track_id": box_info.obj_track_id,
         "velocity": np.array(box_info.velocity, dtype=np.float32),
     }
 
 
 def convert_polyline3d_format(polyline_info: Dict):
+    standard_points = points3d_to_homo(np.array(polyline_info.geometry, dtype=np.float32)) @ args.ego_coordsys_align_mat.T
     return {
         "class": polyline_info.obj_type,
         "attr": polyline_info.obj_attr,
-        "points": np.array(polyline_info.geometry, dtype=np.float32),
+        "points": standard_points[:3],
     }
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--mv4d-data-root", type=Path, required=True)
-    parser.add_argument("--scene-ids", nargs="*")
-    parser.add_argument("--save-path", type=parent_ensured_path, required=True)
-    parser.add_argument("--num-workers", type=int, default=0)
-    parser.add_argument("--calib-filename", default="vcalib_center.yml")
-    parser.add_argument("--camera-root-name", default="vcamera")
-    main(parser.parse_args())
+    main()

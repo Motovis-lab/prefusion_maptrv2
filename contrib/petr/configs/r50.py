@@ -24,11 +24,15 @@ det_classes = [
     'class.vehicle.passenger_car'
 ]
 
+def _calc_grid_size(_range, _voxel_size, n_axis=3):
+    return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
+
 batch_size = 4
 num_epochs = 24
 lr = 4e-4  # total lr per gpu lr is lr/n
 voxel_size = [0.1, 0.1, 3]
-point_cloud_range = [-25.6, -25.6, -1.0, 25.6, 25.6, 2.0]
+point_cloud_range = [-12.8, -12.8, -1.0, 12.8, 12.8, 2.0]
+grid_size = _calc_grid_size(point_cloud_range, voxel_size)
 
 train_dataloader = dict(
     num_workers=1,
@@ -52,10 +56,13 @@ train_dataloader = dict(
             ),
             bbox_3d=dict(type="Bbox3DBasic", classes=det_classes),
         ),
-        model_feeder=dict(type="StreamPETRModelFeeder"),
+        model_feeder=dict(
+            type="StreamPETRModelFeeder",
+            visible_range=point_cloud_range,
+        ),
         transformable_keys=["camera_images", "bbox_3d", "ego_poses"],
         transforms=[
-            dict(type="RandomMirrorSpace", prob=0.5, scope="group"),
+            # dict(type="RandomMirrorSpace", prob=0.5, scope="group"),
             dict(
                 type="RandomImageISP",
                 prob=0.5,
@@ -132,7 +139,7 @@ model = dict(
         LID=True,
         with_position=True,
         code_size=10, # x, y, z, l, w, h, sin(yaw), cos(yaw), Vx, Vy
-        position_range=[-30.6, -30.6, -10.0, 30.6, 30.6, 10.0],
+        position_range=[-13.0, -13.0, -3.0, 13.0, 13.0, 3.0],
         code_weights = [2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
         transformer=dict(
             type='PETRTemporalTransformer',
@@ -162,7 +169,7 @@ model = dict(
             )),
         bbox_coder=dict(
             type='NMSFreeCoder',
-            post_center_range=[-30.6, -30.6, -10.0, 30.6, 30.6, 10.0],
+            post_center_range=[-13.0, -13.0, -3.0, 13.0, 13.0, 3.0],
             pc_range=point_cloud_range,
             max_num=300,
             voxel_size=voxel_size,
@@ -176,7 +183,7 @@ model = dict(
         loss_bbox=dict(type='mmdet.L1Loss', loss_weight=0.25),
         loss_iou=dict(type='mmdet.GIoULoss', loss_weight=0.0),
         train_cfg=dict(
-            grid_size=[512, 512, 1],
+            grid_size=grid_size,
             voxel_size=voxel_size,
             point_cloud_range=point_cloud_range,
             out_size_factor=4,
