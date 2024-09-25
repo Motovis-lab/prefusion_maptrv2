@@ -406,12 +406,13 @@ def test_load_camera_depth():
     data["20231101_160337"]["frame_info"]["1698825817864"].update({'camera_image_depth': camera_image_depth})
     data["20231101_160337"]['scene_info']['camera_mask'] =  self_mask
     
-    mmengine.dump(data, "tests/prefusion/dataset/mv4d-infos-for-test-depth.pkl")
+    depth_path = tmpdir / "mv4d-infos-for-test-depth.pkl"
+    mmengine.dump(data, depth_path)
 
     dataset = GroupBatchDataset(
         name="gbd",
         data_root=Path(tmpdir),
-        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-depth.pkl"),
+        info_path=depth_path,
         transformable_keys=["camera_depths"],
         dictionaries={},
         tensor_smiths={"camera_depths": DummyDepthTensorSmith()},

@@ -71,6 +71,8 @@ def get_cam_type(name):
 def build_transforms(transforms: List[Union[dict, "Transform"]]) -> List["Transform"]: 
     from prefusion.dataset.transform import ToTensor
     built_transforms = []
+    if transforms is None:
+        transforms = []
     for transform in transforms:
         if isinstance(transform, dict):
             transform = TRANSFORMS.build(transform)
@@ -82,6 +84,8 @@ def build_transforms(transforms: List[Union[dict, "Transform"]]) -> List["Transf
 
 
 def build_tensor_smiths(tensor_smiths: Dict[str, Union[dict, "TensorSmith"]]) -> Dict[str, "TensorSmith"]: 
+    if tensor_smiths is None:
+        return {}
     built_tensor_smiths = {}
     for transformabel_key, tensor_smith in tensor_smiths.items():
         tensor_smith = copy.deepcopy(tensor_smith)
@@ -92,6 +96,8 @@ def build_tensor_smiths(tensor_smiths: Dict[str, Union[dict, "TensorSmith"]]) ->
 
 
 def build_model_feeder(model_feeder: Union["BaseModelFeeder", dict]) -> "BaseModelFeeder":
+    if model_feeder is None:
+        return MODEL_FEEDERS.build(dict(type='BaseModelFeeder'))
     model_feeder = copy.deepcopy(model_feeder)
     if isinstance(model_feeder, dict):
         return MODEL_FEEDERS.build(model_feeder)
