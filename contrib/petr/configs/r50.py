@@ -29,7 +29,7 @@ def _calc_grid_size(_range, _voxel_size, n_axis=3):
 
 batch_size = 4
 num_epochs = 24
-lr = 4e-4  # total lr per gpu lr is lr/n
+lr = 1e-4  # total lr per gpu lr is lr/n
 voxel_size = [0.1, 0.1, 3]
 point_cloud_range = [-12.8, -12.8, -1.0, 12.8, 12.8, 2.0]
 grid_size = _calc_grid_size(point_cloud_range, voxel_size)
@@ -65,7 +65,7 @@ train_dataloader = dict(
             # dict(type="RandomMirrorSpace", prob=0.5, scope="group"),
             dict(
                 type="RandomImageISP",
-                prob=0.5,
+                prob=0.0001,
             ),
         ],
         phase="train",

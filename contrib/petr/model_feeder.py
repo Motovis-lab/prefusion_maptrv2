@@ -57,7 +57,7 @@ class StreamPETRModelFeeder(BaseModelFeeder):
                     continue
                 if isinstance(trnsfmb, Bbox3D):
                     visible_boxes = self.get_boxes_within_visible_range(trnsfmb.tensor)
-                    processed_frame[k] = visible_boxes["xyz_lwh_sinyaw_cosyaw_vx_vy"]
+                    processed_frame[k] = visible_boxes["xyz_lwh_yaw_vx_vy"]
                     processed_frame["meta_info"][k] = {"classes": visible_boxes["classes"]}
                     processed_frame["meta_info"][k].update(bbox3d_corners=visible_boxes["corners"])
             processed_frame_batch.append(processed_frame)
@@ -80,7 +80,7 @@ class StreamPETRModelFeeder(BaseModelFeeder):
         return mat
 
     def get_boxes_within_visible_range(self, box3d_tensor_dict: dict):
-        box_centers = box3d_tensor_dict["xyz_lwh_sinyaw_cosyaw_vx_vy"][:, :3]
+        box_centers = box3d_tensor_dict["xyz_lwh_yaw_vx_vy"][:, :3]
         visible_mask = (
             (box_centers[:, 0] >= self.visible_range[0]) & (box_centers[:, 0] <= self.visible_range[3])
             & (box_centers[:, 1] >= self.visible_range[1]) & (box_centers[:, 1] <= self.visible_range[4])

@@ -119,9 +119,27 @@ class StreamPETR(BaseModel):
 
         loss_inputs = [bbox_3d, gt_labels, outs]
 
-        #######################
-        # FIXME: Visualization
-        #######################
+        ###########################
+        # FIXME: Visualize Images
+        ###########################
+        # import matplotlib.pyplot as plt
+        # import cv2
+        # nrows, ncols = 4, 3
+        # for ts, images, m in zip(data['timestamp'], camera_images.reshape(B, N, C, H, W), meta_info):
+        #     fig, ax = plt.subplots(nrows, ncols, figsize=(18, 18))
+        #     for i, im in enumerate(images):
+        #         restored_im = im.cpu().numpy().transpose(1, 2, 0) * np.array([58.395, 57.120, 57.375]) + np.array([123.675, 116.280, 103.530])
+        #         ax[i // ncols][i % ncols].imshow(restored_im.astype(np.uint8)[..., ::-1])
+        #         cam_id = m['camera_images']['camera_ids'][i]
+        #         rim = cv2.imread(f"/data/datasets/mv4d/20231101_160337/vcamera/{cam_id}/{ts.long().item()}.jpg")
+        #         ax[2 + i // ncols][i % ncols].imshow(rim[..., ::-1])
+        #     plt.savefig(f"./vis/{ts.item()}.png")
+        #     plt.close()
+        # a = 100
+
+        ###########################
+        # FIXME: Visualize BBoxes
+        ###########################
         # def _draw_rect(p0, p1, p5, p4, linewidth=1, color='r', alpha=1):
         #     plt.plot((p0[0], p1[0]), (p0[1], p1[1]), linewidth=linewidth, color=color, alpha=alpha)
         #     plt.plot((p1[0], p5[0]), (p1[1], p5[1]), linewidth=linewidth, color=color, alpha=alpha)

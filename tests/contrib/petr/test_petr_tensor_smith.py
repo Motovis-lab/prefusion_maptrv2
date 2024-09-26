@@ -29,13 +29,13 @@ def bbox3d():
     )
 
 
-def test_bbox3d_xyz_lwh_sinyaw_cosyaw_vx_vy(bbox3d):
+def test_bbox3d_xyz_lwh_yaw_vx_vy(bbox3d):
     tensor_smith = Bbox3DBasic(classes=["class.road_marker.arrow", "class.vehicle.passenger_car", "class.traffic_facility.box"])
     tensor_dict = tensor_smith(bbox3d)
     assert tensor_dict["classes"].flatten().tolist() == [1]
     np.testing.assert_almost_equal(
-        tensor_dict["xyz_lwh_sinyaw_cosyaw_vx_vy"],
-        np.array([[5, 4, 0.7, 4, 2, 1.5, -0.70710678, -0.70710678, 0, 0]]),
+        tensor_dict["xyz_lwh_yaw_vx_vy"],
+        np.array([[5, 4, 0.7, 4, 2, 1.5, -2.35619449, 0, 0]]),
     )
     np.testing.assert_almost_equal(
         tensor_dict["corners"],
