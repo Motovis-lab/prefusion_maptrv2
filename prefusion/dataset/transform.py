@@ -1646,7 +1646,7 @@ class RandomRenderExtrinsic(RandomTransform):
                 transformable.render_extrinsic(params)
 
 
-class RandomRotationSpace(Transform):
+class RandomRotateSpace(RandomTransform):
     def __init__(self, *, prob=0.5, angles=[2, 2, 10], 
                  prob_inverse_cameras_rotation=0.5, scope="group", **kwargs):
         '''
@@ -1657,12 +1657,8 @@ class RandomRotationSpace(Transform):
         self.angles = angles
         self.prob_inverse_cameras_rotation = prob_inverse_cameras_rotation
 
-    def __call__(self, *transformables, seeds=None, **kwargs):
-        if seeds:
-            random.seed(seeds[self.scope])
-        if random.random() > self.prob:
-            return list(transformables)
-        
+    def random_pick_param(self, seeds):
+        random.seed(seeds[self.scope])
         del_R = Rotation.from_euler(
             'xyz', 
             [random.uniform(-self.angles[0], self.angles[0]),
@@ -1674,9 +1670,14 @@ class RandomRotationSpace(Transform):
         inverse_cameras_rotation = False
         if random.random() < self.prob_inverse_cameras_rotation:
             inverse_cameras_rotation = True
+        
+        return del_R, inverse_cameras_rotation
 
-        for transformable in transformables:
+    def _apply(self, *transformables, seeds=None, **kwargs):
+        for i, transformable in enumerate(transformables):
             if transformable is not None:
+                _seeds = dict(**seeds, transformable=make_seed(seeds["frame"], i))
+                del_R, inverse_cameras_rotation = self.random_pick_param(_seeds)
                 transformable.rotate_3d(del_R)
                 if inverse_cameras_rotation:
                     del_extrinsic = (del_R.T, np.array([0.0, 0, 0]))
@@ -1685,7 +1686,7 @@ class RandomRotationSpace(Transform):
         return transformables
 
 
-class RandomMirrorSpace(Transform):
+class RandomMirrorSpace(RandomTransform):
     def __init__(self, *, prob=0.5, flip_mode='Y', scope="group", **kwargs):
         '''
         flip_mode: support X, Y, Z, XY, XZ, YZ, XYZ, however, Z is unnessary
@@ -1701,16 +1702,10 @@ class RandomMirrorSpace(Transform):
         if 'Z' in self.flip_mode:
             self.flip_mat[2, 2] = -1
 
-    def __call__(self, *transformables, seeds=None, **kwargs):
-        if seeds:
-            random.seed(seeds[self.scope])
-        if random.random() > self.prob:
-            return list(transformables)
-
+    def _apply(self, *transformables, seeds=None, **kwargs):
         for transformable in transformables:
             if transformable is not None:
                 transformable.flip_3d(self.flip_mat)
-        
 
 
 class MirrorTime(Transform):
@@ -1739,7 +1734,7 @@ available_transforms = [
     RenderIntrinsic, 
     RenderExtrinsic, 
     RandomRenderExtrinsic, 
-    RandomRotationSpace, 
+    RandomRotateSpace, 
     RandomMirrorSpace, 
     RandomSetIntrinsicParam, 
     RandomSetExtrinsicParam, 
