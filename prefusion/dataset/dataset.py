@@ -488,6 +488,7 @@ class GroupBatchDataset(Dataset):
             batch.append(group_of_inputs)
 
         # apply transforms
+        # TODO: set seed using seed_dataset
         batch_seed = int.from_bytes(os.urandom(2), byteorder="big")
         for group_of_inputs in batch:
             group_seed = int.from_bytes(os.urandom(2), byteorder="big")

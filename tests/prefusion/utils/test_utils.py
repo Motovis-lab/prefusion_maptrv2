@@ -3,7 +3,7 @@ import pytest
 from copious.io.fs import mktmpdir
 from pypcd_imp import pypcd
 
-from prefusion.dataset.utils import read_pcd
+from prefusion.dataset.utils import read_pcd, make_seed
 
 
 @pytest.fixture
@@ -40,3 +40,13 @@ def test_read_pcd(pcd_path):
     np.testing.assert_almost_equal(points[:, :3], np.array([[0, 0, 0], [0.5, -1.5, 2.5]]))
     np.testing.assert_almost_equal(points[:, 3], np.array([18, 50]))
     points = read_pcd(str(pcd_path), intensity=True)
+
+
+def test_make_seed_1():
+    seeds = [make_seed(3, i, exp_base=13) for i in range(3)]
+    assert seeds == [4, 5, 6]
+
+
+def test_make_seed_2():
+    seeds = [make_seed(2, i, j, exp_base=10) for i in range(2) for j in range(3)]
+    assert seeds == [31, 32, 33, 41, 42, 43]
