@@ -1,7 +1,5 @@
-from typing import Union, List, Dict, Any, Optional
-from collections import OrderedDict
+from typing import List, Dict, Any
 
-import torch.nn as nn
 import torch
 import numpy as np
 from mmengine.model import BaseModel
@@ -120,6 +118,42 @@ class StreamPETR(BaseModel):
         outs = self.box_head(img_feats, location, img_metas, bbox_3d, gt_labels, topk_indexes=topk_indexes, **data)
 
         loss_inputs = [bbox_3d, gt_labels, outs]
+
+        #######################
+        # FIXME: Visualization
+        #######################
+        # def _draw_rect(p0, p1, p5, p4, linewidth=1, color='r', alpha=1):
+        #     plt.plot((p0[0], p1[0]), (p0[1], p1[1]), linewidth=linewidth, color=color, alpha=alpha)
+        #     plt.plot((p1[0], p5[0]), (p1[1], p5[1]), linewidth=linewidth, color=color, alpha=alpha)
+        #     plt.plot((p5[0], p4[0]), (p5[1], p4[1]), linewidth=linewidth, color=color, alpha=alpha)
+        #     plt.plot((p4[0], p0[0]), (p4[1], p0[1]), linewidth=linewidth, color=color, alpha=alpha)
+
+        # import matplotlib.pyplot as plt
+        # for ts, boxes, m, ep in zip(data['timestamp'], bbox_3d, meta_info, ego_poses):
+        #     _ = plt.figure()
+        #     for bx in boxes:
+        #         l, w, h = bx[3:6].tolist()
+        #         translation = bx[:2].cpu().numpy()
+        #         sinyaw, cosyaw = bx[6:8].tolist()
+        #         corners = np.array([
+        #             [ l / 2, -w / 2],
+        #             [ l / 2, +w / 2],
+        #             [-l / 2, +w / 2],
+        #             [-l / 2, -w / 2],
+        #         ])
+        #         rotmat = np.array([[cosyaw, -sinyaw], [sinyaw, cosyaw]])
+        #         corners = corners @ rotmat.T + translation
+        #         _draw_rect(*corners.tolist(), color='b', alpha=0.3)
+            
+        #     plt.plot([0, 1], [0, 0], color="r", marker='.')
+        #     plt.plot([0, 0], [0, 1], color="green", marker='.')
+        #     plt.scatter([0], [0], color="black", marker='o')
+            
+        #     plt.gca().set_aspect('equal')
+        #     plt.savefig(f"./vis/{ts.item()}.png")
+        #     plt.close()
+        # a = 100
+
         losses = self.box_head.loss(*loss_inputs)
 
         # if self.with_img_roi_head:
