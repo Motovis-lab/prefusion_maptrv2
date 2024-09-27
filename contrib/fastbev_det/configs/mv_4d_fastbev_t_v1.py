@@ -23,11 +23,11 @@ bev_left = 60
 voxel_size = [0.2, 0.2, 0.5]
 downsample_factor=8
 
-img_scale = 1
+img_scale = 2
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
 front_perspective_img_size = [768 * img_scale, 384 * img_scale]
-batch_size = 2
+batch_size = 8
 group_size = 3
 bev_range = [-12, 36, -12, 12, -0.5, 2.5]
 
@@ -340,7 +340,7 @@ val_evaluator = [
 ]
 
 
-train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=24, val_interval=5)  # -1 note don't eval
+train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=24, val_interval=1)  # -1 note don't eval
 val_cfg = dict(type='GroupValLoop')
 
 test_dataloader = val_dataloader
@@ -356,7 +356,7 @@ find_unused_parameters = True
 
 runner_type = 'GroupRunner'
 
-lr = 0.002  # total lr per gpu lr is lr/n 
+lr = 0.008  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=lr, weight_decay=0.01),
@@ -385,5 +385,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = "work_dirs/mv_4d_fastbev_t_v1/20240910_201450/epoch_45.pth"
+load_from = "./work_dirs/mv_4d_fastbev_t_v1/20240911_114612/epoch_45.pth"
 resume=False
