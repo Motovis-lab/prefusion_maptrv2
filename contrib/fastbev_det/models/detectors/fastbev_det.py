@@ -44,9 +44,9 @@ class FastBEV_Det(BaseModel):
         fg_mask = torch.max(depth_labels, dim=1).values > 0.0
         assert depth_preds.device == depth_labels.device == fg_mask.device
         with autocast(device_type=depth_preds.device, enabled=False):
-            depth_loss = (F.binary_cross_entropy_with_logits(
-                depth_preds[fg_mask],
-                depth_labels[fg_mask],
+            depth_loss = (F.binary_cross_entropy(
+                depth_preds[fg_mask].float(),
+                depth_labels[fg_mask].float(),
                 reduction='none',
             ).sum() / max(1.0, fg_mask.sum()))
 
@@ -131,16 +131,16 @@ class FastBEV_Det(BaseModel):
             
             supervised_depth_loss = 0
             
-            for camera_type in batch_data:
-                depth_label = batch_data[camera_type]['depth']
-                depth_preds = features['depth_feats'][f"{camera_type.split('_')[0]}_feats"]
-                depth_loss = self.get_depth_loss(depth_label, depth_preds, camera_type.split('_')[0])
-                supervised_depth_loss += depth_loss
+            # for camera_type in batch_data:
+            #     depth_label = batch_data[camera_type]['depth']
+            #     depth_preds = features['depth_feats'][f"{camera_type.split('_')[0]}_feats"]
+            #     depth_loss = self.get_depth_loss(depth_label, depth_preds, camera_type.split('_')[0])
+            #     supervised_depth_loss += depth_loss
+            # losses['supervised_depth_loss'] = supervised_depth_loss
             
             losses['loss'] = detection_loss + supervised_depth_loss # + mono_total_losses 
             losses['detection_loss'] = detection_loss
             # losses['mono_total_loss'] = mono_total_losses
-            losses['supervised_depth_loss'] = supervised_depth_loss
             
             losses.update(record_loss)
             # losses.update(mono_losses)  # only for record
