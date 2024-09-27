@@ -43,20 +43,20 @@ def test_read_pcd(pcd_path):
 
 
 def test_make_seed_1():
-    seeds = [make_seed(3, i, exp_base=13) for i in range(3)]
+    seeds = [make_seed(3, i, base=13) for i in range(3)]
     assert seeds == [4, 5, 6]
 
 
 def test_make_seed_2():
-    seeds = [make_seed(2, i, j, exp_base=10) for i in range(2) for j in range(3)]
+    seeds = [make_seed(2, i, j, base=10) for i in range(2) for j in range(3)]
     assert seeds == [13, 14, 15, 23, 24, 25]
 
 
 def test_make_seed_3():
-    seeds = [make_seed(2, i, j, exp_base=10) for i in range(6) for j in range(2)]
+    seeds = [make_seed(2, i, j, base=10) for i in range(6) for j in range(2)]
     assert seeds == [13, 14, 23, 24, 33, 34, 43, 44, 53, 54, 63, 64]
 
 
 def test_make_seed_4():
-    seeds = [make_seed(2, i, j, k, exp_base=10) for i in range(2) for j in range(2) for k in range(2)]
+    seeds = [make_seed(2, i, j, k, base=10) for i in range(2) for j in range(2) for k in range(2)]
     assert seeds == [113, 114, 123, 124, 213, 214, 223, 224]
