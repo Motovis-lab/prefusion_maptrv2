@@ -223,6 +223,8 @@ optim_wrapper = dict(
     clip_grad=dict(max_norm=35, norm_type=2),
 )
 
+param_scheduler = dict(type='MultiStepLR', milestones=[12, 20])
+
 param_scheduler = [
     dict(type='CosineAnnealingLR',
          eta_min=0.005,
