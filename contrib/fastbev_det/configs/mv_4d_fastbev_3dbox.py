@@ -23,7 +23,11 @@ img_scale = 2
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
 front_perspective_img_size = [768 * img_scale, 384 * img_scale]
+<<<<<<< HEAD
 batch_size = 16
+=======
+batch_size = 4
+>>>>>>> origin/feature/box3d_0923
 group_size = 3
 bev_range = [-12, 36, -12, 12, -0.5, 2.5]
 
