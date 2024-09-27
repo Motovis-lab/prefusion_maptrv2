@@ -18,6 +18,7 @@ from copious.cv.geometry import Box3d as CopiousBox3d
 
 # from .tensor_smith import TensorSmith
 from prefusion.registry import TRANSFORMS, TRANSFORMABLES
+from prefusion.dataset.utils import make_seed
 
 
 if TYPE_CHECKING:
@@ -1248,12 +1249,26 @@ class Transform:
     '''
     Basic class for Transform.
     '''
-    def __init__(self, scope="frame"):
-        assert scope.lower() in ["frame", "batch", "group"]
+    def __init__(self, *, scope="frame", **kwargs):
+        assert scope.lower() in ["frame", "batch", "group", "transformable"]
         self.scope = scope.lower()
 
     def __call__(self, *args, **kwargs):
         raise NotImplementedError
+
+
+class RandomTransform(Transform, metaclass=abc.ABCMeta):
+    def __call__(self, *transformables, seeds=None, **kwargs):
+        if seeds: # IMPORTANT: To make sure every thing is synchonized when scope in ['batch', 'group']
+            _scope = "frame" if self.scope == 'transformable' else self.scope
+            random.seed(seeds[_scope])
+        if random.random() > self.prob:
+            return list(transformables)
+        return self._apply(*transformables, seeds=seeds, **kwargs)
+    
+    @abc.abstractmethod
+    def _apply(self, *transformables, seeds=None, **kwargs):
+        pass
 
 
 def random_transform_class_factory(cls_name, transform_func):
@@ -1291,7 +1306,7 @@ def random_transform_class_factory(cls_name, transform_func):
         scope : str, optional
             the scope of the Transform, by default "frame"
         """
-        Transform.__init__(self, scope=scope)
+        RandomTransform.__init__(self, scope=scope)
         self.prob = prob
         self.param_randomization_rules = param_randomization_rules or {}
         self.kwargs = kwargs
@@ -1309,8 +1324,8 @@ def random_transform_class_factory(cls_name, transform_func):
             else:
                 assert "range" in rule, "range should be used along with type: float or int."
 
-    def random_pick_param(self, rule: dict, seed: int):
-        random.seed(seed)  # why set seed inside? we want the same random results no matter what order of params it is.
+    def random_pick_param(self, rule: dict, seeds):
+        random.seed(seeds[self.scope])  # why set seed inside? we want the same random results no matter what order of params it is.
         if rule["type"] == "float":
             return random.uniform(*rule["range"])
         elif rule["type"] == "int":
@@ -1320,20 +1335,20 @@ def random_transform_class_factory(cls_name, transform_func):
         else:
             raise NotImplementedError
 
-    def __call__(self, *transformables, seeds=None, **kwargs):
-        if random.random() > self.prob:
-            return list(transformables)
-        _seed = seeds[self.scope] if seeds else None
-        params = {param_name: self.random_pick_param(rule, _seed)
-                  for param_name, rule in self.param_randomization_rules.items()}
-        return [None if i is None else getattr(i, transform_func)(**params) for i in transformables]
+    def _apply(self, *transformables, seeds=None, **kwargs):
+        for i, transformable in enumerate(transformables):
+            _seed = dict(**seeds, transformable=make_seed(seeds["frame"], i))
+            params = {param_name: self.random_pick_param(rule, _seed)
+                      for param_name, rule in self.param_randomization_rules.items()}
+            getattr(transformable, transform_func)(**params)
+        return transformables
 
     return type(
         cls_name,
-        (Transform,),
+        (RandomTransform,),
         {
             "__init__": __init__,
-            "__call__": __call__,
+            "_apply": _apply,
             "validate_param_randomization_rules": validate_param_randomization_rules,
             "random_pick_param": random_pick_param,
         },
@@ -1368,7 +1383,8 @@ ToTensor = deterministic_transform_class_factory("ToTensor", "to_tensor")
 #######################
 # Customed Transforms #
 #######################
-class RandomSetIntrinsicParam(Transform):
+class RandomSetIntrinsicParam(RandomTransform):
+
     def __init__(self, *, prob: float = 0.0, jitter_ratio: float = 0.0, scope: str = "frame", **kwargs):
         """This transform random jitters the intrinsic params of CameraTransformable.
         (NOTE: only applicable to cx, cy, fx, fy).
@@ -1387,23 +1403,20 @@ class RandomSetIntrinsicParam(Transform):
         self.jitter_ratio = jitter_ratio
         self.kwargs = kwargs
 
-    def __call__(self, *transformables, seeds=None, **kwargs):
-        if random.random() > self.prob:
-            return list(transformables)
-        _seed = seeds[self.scope] if seeds else None
+    def random_pick_param(self, seeds, base_value):
+        random.seed(seeds[self.scope])
+        return random.uniform(1 - self.jitter_ratio, 1 + self.jitter_ratio) * base_value
 
-        def _get_random_value(base_value):
-            random.seed(_seed) # different CameraTransformable will have the same different jittering magnitude.
-            return random.uniform(1 - self.jitter_ratio, 1 + self.jitter_ratio) * base_value
-
-        for transformable in transformables:
+    def _apply(self, *transformables, seeds=None, **kwargs):
+        for i, transformable in enumerate(transformables):
             if isinstance(transformable, CameraTransformable):
-                new_intrinsic = [_get_random_value(param) for param in transformable.intrinsic]
+                _seeds = dict(**seeds, transformable=make_seed(seeds["frame"], i))
+                new_intrinsic = [self.random_pick_param(_seeds, param) for param in transformable.intrinsic]
                 transformable.set_intrinsic_param(new_intrinsic)
         return transformables
 
 
-class RandomSetExtrinsicParam(Transform):
+class RandomSetExtrinsicParam(RandomTransform):
     def __init__(self, *, prob: float = 0.0, angle: float = 0.0, translation: float = 0.0, scope: str = "frame", **kwargs):
         """This transform random jitters the rotation angle and translation of CameraTransformable's extrinsic params.
 
@@ -1424,18 +1437,14 @@ class RandomSetExtrinsicParam(Transform):
         self.translation = translation
         self.kwargs = kwargs
 
-    def __call__(self, *transformables, seeds=None, **kwargs):
-        if random.random() > self.prob:
-            return list(transformables)
-        seed = seeds[self.scope] if seeds else None
+    def random_pick_param(self, seeds):
+        random.seed(seeds[self.scope])
 
         def _get_random_value(deviation):
-            random.seed(seed) # different CameraTransformable will have the same different jittering magnitude.
             deviation_abs = abs(deviation)
             return random.uniform(-deviation_abs, deviation_abs)
 
         def _get_random_delta_rotation():
-            random.seed(seed) # different CameraTransformable will have the same different jittering magnitude.
             return Rotation.from_euler(
                 'xyz', 
                 [_get_random_value(self.angle) for _ in range(3)],
@@ -1444,11 +1453,14 @@ class RandomSetExtrinsicParam(Transform):
         
         def _get_random_delta_translation():
             return np.array([_get_random_value(self.translation) for _ in range(3)])
+        
+        return _get_random_delta_rotation(),  _get_random_delta_translation()
 
-        for transformable in transformables:
+    def _apply(self, *transformables, seeds=None, **kwargs):
+        for i, transformable in enumerate(transformables):
             if isinstance(transformable, CameraTransformable):
-                delta_R = _get_random_delta_rotation()
-                delta_t = _get_random_delta_translation()
+                _seeds = dict(**seeds, transformable=make_seed(seeds['frame'], i))
+                delta_R, delta_t = self.random_pick_param(_seeds)
                 R, t = transformable.extrinsic
                 new_R = delta_R @ R
                 new_t = delta_t + t
@@ -1456,7 +1468,7 @@ class RandomSetExtrinsicParam(Transform):
         return transformables
 
 
-class RandomChooseKTransform(Transform):
+class RandomChooseKTransform(RandomTransform):
     def __init__(self, transforms, *, prob=0.5, K=1, transform_probs=None, scope="frame"):
         super().__init__(scope=scope)
         self.transforms = transforms
@@ -1465,17 +1477,16 @@ class RandomChooseKTransform(Transform):
         self.transform_probs = transform_probs
         self.prob = prob
         self.K = K
-
-    def __call__(self, *transformables, seeds=None, **kwargs):
-        if random.random() <= self.prob:
-            transforms = np.random.choice(
-                self.transforms,
-                size=self.K,
-                replace=False,
-                p=self.transform_probs,
-            )
-            for transform in transforms:
-                transform(*transformables, **kwargs, seeds=seeds)
+    
+    def _apply(self, *transformables, seeds=None, **kwargs):
+        transforms = np.random.choice(
+            self.transforms,
+            size=self.K,
+            replace=False,
+            p=self.transform_probs,
+        )
+        for transform in transforms:
+            transform(*transformables, **kwargs, seeds=seeds)
         return transformables
 
 
@@ -1603,18 +1614,15 @@ class RenderExtrinsic(Transform):
         return transformables
 
 
-class RandomRenderExtrinsic(Transform):
+class RandomRenderExtrinsic(RandomTransform):
     def __init__(self, *, prob=0.5, angles=[1, 1, 1], scope="frame", **kwargs):
         super().__init__(scope=scope)
         self.prob = prob
         self.angles = angles
 
-    def __call__(self, *transformables, seeds=None, **kwargs):
-        if seeds:
-            random.seed(seeds[self.scope])
-        if random.random() > self.prob:
-            return list(transformables)
-        
+    def random_pick_param(self, seeds):
+        random.seed(seeds[self.scope])
+
         del_R = Rotation.from_euler(
             'xyz', 
             [random.uniform(-self.angles[0], self.angles[0]),
@@ -1622,19 +1630,23 @@ class RandomRenderExtrinsic(Transform):
              random.uniform(-self.angles[2], self.angles[2])],
             degrees=True
         ).as_matrix()
-        del_extrinsic = (del_R, np.array([0, 0, 0]))
+        return (del_R, np.array([0, 0, 0]))
 
-        for transformable in transformables:
+    def _apply(self, *transformables, seeds=None, **kwargs):
+        for i, transformable in enumerate(transformables):
             if isinstance(transformable, (CameraImageSet, CameraSegMaskSet, CameraDepthSet)):
-                for t in transformable.transformables.values():
-                    t.render_extrinsic(del_extrinsic)
+                for j, t in enumerate(transformable.transformables.values()):
+                    _seeds = dict(**seeds, transformable=make_seed(seeds['frame'], i, j))
+                    params = self.random_pick_param(_seeds)
+                    t.render_extrinsic(params)
+
             elif isinstance(transformable, (CameraImage, CameraSegMask, CameraDepth)):
-                transformable.render_extrinsic(del_extrinsic)
+                _seeds = dict(**seeds, transformable=make_seed(seeds['frame'], i))
+                params = self.random_pick_param(_seeds)
+                transformable.render_extrinsic(params)
 
-        return transformables
 
-
-class RandomRotationSpace(Transform):
+class RandomRotateSpace(RandomTransform):
     def __init__(self, *, prob=0.5, angles=[2, 2, 10], 
                  prob_inverse_cameras_rotation=0.5, scope="group", **kwargs):
         '''
@@ -1645,12 +1657,8 @@ class RandomRotationSpace(Transform):
         self.angles = angles
         self.prob_inverse_cameras_rotation = prob_inverse_cameras_rotation
 
-    def __call__(self, *transformables, seeds=None, **kwargs):
-        if seeds:
-            random.seed(seeds[self.scope])
-        if random.random() > self.prob:
-            return list(transformables)
-        
+    def random_pick_param(self, seeds):
+        random.seed(seeds[self.scope])
         del_R = Rotation.from_euler(
             'xyz', 
             [random.uniform(-self.angles[0], self.angles[0]),
@@ -1662,9 +1670,14 @@ class RandomRotationSpace(Transform):
         inverse_cameras_rotation = False
         if random.random() < self.prob_inverse_cameras_rotation:
             inverse_cameras_rotation = True
+        
+        return del_R, inverse_cameras_rotation
 
-        for transformable in transformables:
+    def _apply(self, *transformables, seeds=None, **kwargs):
+        for i, transformable in enumerate(transformables):
             if transformable is not None:
+                _seeds = dict(**seeds, transformable=make_seed(seeds["frame"], i))
+                del_R, inverse_cameras_rotation = self.random_pick_param(_seeds)
                 transformable.rotate_3d(del_R)
                 if inverse_cameras_rotation:
                     del_extrinsic = (del_R.T, np.array([0.0, 0, 0]))
@@ -1673,7 +1686,7 @@ class RandomRotationSpace(Transform):
         return transformables
 
 
-class RandomMirrorSpace(Transform):
+class RandomMirrorSpace(RandomTransform):
     def __init__(self, *, prob=0.5, flip_mode='Y', scope="group", **kwargs):
         '''
         flip_mode: support X, Y, Z, XY, XZ, YZ, XYZ, however, Z is unnessary
@@ -1689,16 +1702,10 @@ class RandomMirrorSpace(Transform):
         if 'Z' in self.flip_mode:
             self.flip_mat[2, 2] = -1
 
-    def __call__(self, *transformables, seeds=None, **kwargs):
-        if seeds:
-            random.seed(seeds[self.scope])
-        if random.random() > self.prob:
-            return list(transformables)
-
+    def _apply(self, *transformables, seeds=None, **kwargs):
         for transformable in transformables:
             if transformable is not None:
                 transformable.flip_3d(self.flip_mat)
-        
 
 
 class MirrorTime(Transform):
@@ -1727,7 +1734,7 @@ available_transforms = [
     RenderIntrinsic, 
     RenderExtrinsic, 
     RandomRenderExtrinsic, 
-    RandomRotationSpace, 
+    RandomRotateSpace, 
     RandomMirrorSpace, 
     RandomSetIntrinsicParam, 
     RandomSetExtrinsicParam, 
