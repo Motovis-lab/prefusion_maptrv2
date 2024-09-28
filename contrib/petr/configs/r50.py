@@ -43,7 +43,7 @@ train_dataloader = dict(
         type="GroupBatchDataset",
         name="MvParkingTest",
         data_root="/data/datasets/mv4d",
-        info_path="/data/datasets/mv4d/mv4d_infos.pkl",
+        info_path="/data/datasets/mv4d/mv4d_infos_dbg.pkl",
         dictionaries={
             "camera_images": {},
             "bbox_3d": {"det": {"classes": det_classes}},
@@ -70,8 +70,8 @@ train_dataloader = dict(
         ],
         phase="train",
         batch_size=batch_size,
-        possible_group_sizes=[3, 4, 5],
-        possible_frame_intervals=[1, 2],
+        possible_group_sizes=[1],
+        possible_frame_intervals=[1],
     ),
 )
 
@@ -133,7 +133,7 @@ model = dict(
         with_ego_pos=True,
         match_with_velo=False,
         scalar=10, ##noise groups
-        noise_scale = 1.0, 
+        noise_scale = 1.0,
         dn_weight= 1.0, ##dn loss weight
         split = 0.75, ###positive rate
         LID=True,
@@ -173,7 +173,7 @@ model = dict(
             pc_range=point_cloud_range,
             max_num=300,
             voxel_size=voxel_size,
-            num_classes=len(det_classes)), 
+            num_classes=len(det_classes)),
         loss_cls=dict(
             type='mmdet.FocalLoss',
             use_sigmoid=True,
@@ -211,8 +211,8 @@ env_cfg = dict(
 optim_wrapper = dict(
     type="OptimWrapper",
     optimizer=dict(
-        type="AdamW", 
-        lr=lr, 
+        type="SGD",
+        lr=lr,
         weight_decay=0.01,
     ),
     paramwise_cfg=dict(
@@ -224,16 +224,6 @@ optim_wrapper = dict(
 )
 
 param_scheduler = dict(type='MultiStepLR', milestones=[12, 20])
-
-param_scheduler = [
-    dict(type='CosineAnnealingLR',
-         eta_min=0.005,
-         begin=num_epochs * 0.75,
-         end=num_epochs,
-         T_max=num_epochs * 0.25,
-         by_epoch=True,
-    )
-]
 
 log_processor = dict(type='GroupAwareLogProcessor')
 
@@ -247,5 +237,5 @@ default_hooks = dict(
 
 visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"), dict(type="TensorboardVisBackend")])
 
-# load_from = "work_dirs/mv_4d_fastbev_t/20240903_023804/epoch_24.pth"
+load_from = "work_dirs/r50/epoch_5.pth"
 resume = False

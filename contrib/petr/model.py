@@ -140,37 +140,45 @@ class StreamPETR(BaseModel):
         ###########################
         # FIXME: Visualize BBoxes
         ###########################
-        # def _draw_rect(p0, p1, p5, p4, linewidth=1, color='r', alpha=1):
-        #     plt.plot((p0[0], p1[0]), (p0[1], p1[1]), linewidth=linewidth, color=color, alpha=alpha)
-        #     plt.plot((p1[0], p5[0]), (p1[1], p5[1]), linewidth=linewidth, color=color, alpha=alpha)
-        #     plt.plot((p5[0], p4[0]), (p5[1], p4[1]), linewidth=linewidth, color=color, alpha=alpha)
-        #     plt.plot((p4[0], p0[0]), (p4[1], p0[1]), linewidth=linewidth, color=color, alpha=alpha)
+        def _draw_rect(p0, p1, p5, p4, linewidth=1, color='r', alpha=1):
+            plt.plot((p0[0], p1[0]), (p0[1], p1[1]), linewidth=linewidth, color=color, alpha=alpha)
+            plt.plot((p1[0], p5[0]), (p1[1], p5[1]), linewidth=linewidth, color=color, alpha=alpha)
+            plt.plot((p5[0], p4[0]), (p5[1], p4[1]), linewidth=linewidth, color=color, alpha=alpha)
+            plt.plot((p4[0], p0[0]), (p4[1], p0[1]), linewidth=linewidth, color=color, alpha=alpha)
 
-        # import matplotlib.pyplot as plt
-        # for ts, boxes, m, ep in zip(data['timestamp'], bbox_3d, meta_info, ego_poses):
-        #     _ = plt.figure()
-        #     for bx in boxes:
-        #         l, w, h = bx[3:6].tolist()
-        #         translation = bx[:2].cpu().numpy()
-        #         sinyaw, cosyaw = bx[6:8].tolist()
-        #         corners = np.array([
-        #             [ l / 2, -w / 2],
-        #             [ l / 2, +w / 2],
-        #             [-l / 2, +w / 2],
-        #             [-l / 2, -w / 2],
-        #         ])
-        #         rotmat = np.array([[cosyaw, -sinyaw], [sinyaw, cosyaw]])
-        #         corners = corners @ rotmat.T + translation
-        #         _draw_rect(*corners.tolist(), color='b', alpha=0.3)
+        def _draw_boxes(_boxes, color='blue'):
+            for bx in _boxes:
+                l, w, h = bx[3:6].tolist()
+                translation = bx[:2].detach().cpu().numpy()
+                yaw = bx[6].item()
+                corners = np.array([
+                    [ l / 2, -w / 2],
+                    [ l / 2, +w / 2],
+                    [-l / 2, +w / 2],
+                    [-l / 2, -w / 2],
+                ])
+                rotmat = np.array([[math.cos(yaw), -math.sin(yaw)], [math.sin(yaw), math.cos(yaw)]])
+                corners = corners @ rotmat.T + translation
+                _draw_rect(*corners.tolist(), color=color, alpha=0.3)
+
+        import matplotlib.pyplot as plt
+        import math
+        from contrib.petr.misc import denormalize_bbox
+        import torch.nn.functional as F
+        for ts, gt_boxes, pred_bboxes, pred_scores, m, ep in zip(data['timestamp'], bbox_3d, outs['all_bbox_preds'][-1], outs['all_cls_scores'][-1], meta_info, ego_poses):
+            _ = plt.figure()
+            _draw_boxes(gt_boxes, color='blue')
+            confident_idx = (F.softmax(pred_scores, dim=1).max(dim=1)[0] > 0.4).nonzero().flatten()
+            _draw_boxes(denormalize_bbox(pred_bboxes[confident_idx], None), color='red')
             
-        #     plt.plot([0, 1], [0, 0], color="r", marker='.')
-        #     plt.plot([0, 0], [0, 1], color="green", marker='.')
-        #     plt.scatter([0], [0], color="black", marker='o')
+            plt.plot([0, 1], [0, 0], color="r", marker='.')
+            plt.plot([0, 0], [0, 1], color="green", marker='.')
+            plt.scatter([0], [0], color="black", marker='o')
             
-        #     plt.gca().set_aspect('equal')
-        #     plt.savefig(f"./vis/{ts.item()}.png")
-        #     plt.close()
-        # a = 100
+            plt.gca().set_aspect('equal')
+            plt.savefig(f"./vis/{ts.item()}.png")
+            plt.close()
+        a = 100
 
         losses = self.box_head.loss(*loss_inputs)
 

@@ -42,6 +42,7 @@ def parse_argument():
         default=np.eye(4),
         help="4x4 mat, 用来将原本的右前上ego系变换为prefusion框架要求的前左上ego系",
     )
+    parser.add_argument("--timestamp-range", type=int, nargs=2)
     return edict({k: v for k, v in parser.parse_args()._get_kwargs()})
 
 
@@ -117,9 +118,9 @@ def prepare_ego_poses(scene_root: Path) -> Dict[int, np.ndarray]:
 def prepare_all_frame_infos(args, scene_root: Path) -> Dict:
     common_ts = read_common_ts(scene_root)
 
-    # FIXME: Temprary code, need to remove
-    # common_ts = [ts for ts in common_ts if ts <= 1698825819264]
-    # FIXME: Temprary code, need to remove
+    if args.timestamp_range is not None and len(args.timestamp_range) == 2:
+        common_ts = [ts for ts in common_ts if args.timestamp_range[0] <= ts <= args.timestamp_range[1]]
+        logger.info(f"Timestamp Range has been set to {args.timestamp_range}, only {len(common_ts)} frames will kept in the dataset.")
 
     frame_infos = {}
     data_args = [(scene_root, ts) for ts in common_ts]
