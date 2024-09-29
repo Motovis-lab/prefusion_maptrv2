@@ -23,11 +23,7 @@ img_scale = 2
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
 front_perspective_img_size = [768 * img_scale, 384 * img_scale]
-<<<<<<< HEAD
-batch_size = 16
-=======
-batch_size = 4
->>>>>>> origin/feature/box3d_0923
+batch_size = 8
 group_size = 3
 bev_range = [-12, 36, -12, 12, -0.5, 2.5]
 
@@ -164,7 +160,7 @@ train_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_train.pkl',
+        info_path=data_root + 'mv_4d_infos_fix.pkl',
         dictionaries=dictionary,
         transformable_keys=collection_info_type,
         transforms=train_pipeline,
@@ -185,7 +181,7 @@ val_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_val.pkl',
+        info_path=data_root + 'mv_4d_infos_fix.pkl',
         dictionaries=dictionary,
         transformable_keys=collection_info_type,
         transforms=val_pipeline,
@@ -370,12 +366,12 @@ find_unused_parameters = True
 
 runner_type = 'GroupRunner'
 
-lr = 0.008  # total lr per gpu lr is lr/n 
+lr = 0.04  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=lr, weight_decay=0.01),
     clip_grad=dict(max_norm=35, norm_type=2),
-    dtype="float16"  # it works only for arg --amp
+    # dtype="bfloat16"  # it works only for arg --amp
     )
 param_scheduler = dict(type='MultiStepLR', milestones=[16, 20])
 
