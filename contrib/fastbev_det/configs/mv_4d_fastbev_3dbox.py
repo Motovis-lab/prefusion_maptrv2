@@ -12,7 +12,7 @@ IMG_KEYS = [
         'VCAMERA_PERSPECTIVE_FRONT_RIGHT', 'VCAMERA_PERSPECTIVE_BACK_RIGHT', 'VCAMERA_FISHEYE_RIGHT', 'VCAMERA_PERSPECTIVE_FRONT'
         ]
 data_root = "data/mv_4d_data/"
-
+data_root = "data/146_data/"
 W, H = 120, 240
 bev_front = 180 
 bev_left = 60
@@ -23,7 +23,7 @@ img_scale = 1
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
 front_perspective_img_size = [768 * img_scale, 384 * img_scale]
-batch_size = 8
+batch_size = 6
 group_size = 3
 bev_range = [-12, 36, -12, 12, -0.5, 2.5]
 
@@ -151,7 +151,7 @@ dictionary=dict(
         )
 
 train_dataloader = dict(
-    num_workers=8,
+    num_workers=6,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     collate_fn=dict(type='collate_dict'),
@@ -160,19 +160,19 @@ train_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_val.pkl',
+        info_path=data_root + 'mv_4d_infos_train.pkl',
         dictionaries=dictionary,
         transformable_keys=collection_info_type,
         transforms=train_pipeline,
         phase='train',
         batch_size=batch_size, 
-        possible_group_sizes=[3],
+        possible_group_sizes=[1],
         possible_frame_intervals=[1]
         ),
     )
 
 val_dataloader = dict(
-    num_workers=4,
+    num_workers=6,
     persistent_workers=False,
     sampler=dict(type='DefaultSampler', shuffle=False),
     collate_fn=dict(type='collate_dict'),
@@ -187,7 +187,7 @@ val_dataloader = dict(
         transforms=val_pipeline,
         phase='val',
         batch_size=batch_size, 
-        possible_group_sizes=[3],
+        possible_group_sizes=[1],
         possible_frame_intervals=[1]
         ),
     )
@@ -244,8 +244,9 @@ model = dict(
         downsample_factor=downsample_factor,  # ds factor of the feature to be projected to BEV (e.g. 256x704 -> 16x44)  # noqa
         img_backbone_conf=dict(
             type='VoVNet',
-            model_type="vovnet39",
-            out_indices=[0, 1],
+            model_type="vovnet57",
+            out_indices=[7, 8],
+            # init_cfg=dict(type='Pretrained', checkpoint="./work_dirs/backbone_checkpoint/vovnet57_match.pth")
             ),
         img_neck_conf=dict(
             type='SECONDFPN',
@@ -335,7 +336,8 @@ model = dict(
         loss_bbox=dict(
             type='mmdet.L1Loss', reduction='mean', loss_weight=0.25),
     ),
-    is_train_depth=True
+    is_train_depth=True,
+    depth_weight=0.25
 )
 
 val_evaluator = [
@@ -350,7 +352,7 @@ val_evaluator = [
 ]
 
 
-train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=10, val_interval=2)  # -1 note don't eval
+train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=24, val_interval=1)  # -1 note don't eval
 val_cfg = dict(type='GroupValLoop')
 
 test_dataloader = val_dataloader
@@ -366,12 +368,12 @@ find_unused_parameters = True
 
 runner_type = 'GroupRunner'
 
-lr = 0.004  # total lr per gpu lr is lr/n 
+lr = 0.008  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=lr, weight_decay=0.01),
     clip_grad=dict(max_norm=35, norm_type=2),
-    dtype="bfloat16"  # it works only for arg --amp
+    # dtype="float16"  # it works only for arg --amp
     )
 param_scheduler = dict(type='MultiStepLR', milestones=[16, 20])
 
@@ -395,5 +397,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = "work_dirs/mv_4d_fastbev_t_v1/epoch_24.pth"
+load_from = None # "./work_dirs/mv_4d_fastbev_t_v1/20240911_114612/epoch_45.pth"
 resume=False
