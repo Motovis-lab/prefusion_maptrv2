@@ -28,7 +28,7 @@ def _calc_grid_size(_range, _voxel_size, n_axis=3):
     return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
 
 batch_size = 4
-num_epochs = 24
+num_epochs = 500
 lr = 1e-4  # total lr per gpu lr is lr/n
 voxel_size = [0.1, 0.1, 3]
 point_cloud_range = [-12.8, -12.8, -1.0, 12.8, 12.8, 2.0]
@@ -78,7 +78,7 @@ train_dataloader = dict(
 val_dataloader = train_dataloader
 test_dataloader = train_dataloader
 
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=24, val_interval=-1)  # -1 note don't eval
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=num_epochs, val_interval=-1)  # -1 note don't eval
 val_cfg = dict(type="GroupValLoop")
 test_cfg = dict(type="GroupTestLoop")
 
@@ -211,7 +211,7 @@ env_cfg = dict(
 optim_wrapper = dict(
     type="OptimWrapper",
     optimizer=dict(
-        type="SGD",
+        type="AdamW",
         lr=lr,
         weight_decay=0.01,
     ),
@@ -223,7 +223,7 @@ optim_wrapper = dict(
     clip_grad=dict(max_norm=35, norm_type=2),
 )
 
-param_scheduler = dict(type='MultiStepLR', milestones=[12, 20])
+# param_scheduler = dict(type='MultiStepLR', milestones=[12, 20])
 
 log_processor = dict(type='GroupAwareLogProcessor')
 
@@ -237,5 +237,5 @@ default_hooks = dict(
 
 visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"), dict(type="TensorboardVisBackend")])
 
-load_from = "work_dirs/r50/epoch_5.pth"
+# load_from = "work_dirs/r50/epoch_5.pth"
 resume = False
