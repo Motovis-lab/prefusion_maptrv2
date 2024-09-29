@@ -160,7 +160,7 @@ train_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_fix.pkl',
+        info_path=data_root + 'mv_4d_infos_train.pkl',
         dictionaries=dictionary,
         transformable_keys=collection_info_type,
         transforms=train_pipeline,
@@ -181,7 +181,7 @@ val_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_fix.pkl',
+        info_path=data_root + 'mv_4d_infos_val.pkl',
         dictionaries=dictionary,
         transformable_keys=collection_info_type,
         transforms=val_pipeline,
@@ -335,7 +335,8 @@ model = dict(
         loss_bbox=dict(
             type='mmdet.L1Loss', reduction='mean', loss_weight=0.25),
     ),
-    is_train_depth=True
+    is_train_depth=True,
+    depth_weight = 0.25
 )
 
 val_evaluator = [
@@ -366,7 +367,7 @@ find_unused_parameters = True
 
 runner_type = 'GroupRunner'
 
-lr = 0.04  # total lr per gpu lr is lr/n 
+lr = 0.008  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=lr, weight_decay=0.01),

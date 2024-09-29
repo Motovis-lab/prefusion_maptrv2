@@ -24,12 +24,14 @@ class FastBEV_Det(BaseModel):
                  is_train_depth=False, 
                  data_preprocessor=None, 
                  mono_depth=None,
+                 depth_weight=1.,
                  init_cfg=None):
         super().__init__(data_preprocessor=data_preprocessor, init_cfg=init_cfg)
         self.backbone = MODELS.build(backbone_conf)
         self.head = MODELS.build(head_conf)
         self.head_conf = head_conf
         self.is_train_depth = is_train_depth
+        self.depth_weight = depth_weight
         self.downsample_factor = backbone_conf.get('downsample_factor', 16)
         self.each_camera_nums = self.backbone.each_camera_nums if hasattr(self.backbone, 'each_camera_nums') else None
         self.head.each_camera_nums = self.each_camera_nums
@@ -131,12 +133,12 @@ class FastBEV_Det(BaseModel):
             
             supervised_depth_loss = 0
             
-            # for camera_type in batch_data:
-            #     depth_label = batch_data[camera_type]['depth']
-            #     depth_preds = features['depth_feats'][f"{camera_type.split('_')[0]}_feats"]
-            #     depth_loss = self.get_depth_loss(depth_label, depth_preds, camera_type.split('_')[0])
-            #     supervised_depth_loss += depth_loss
-            # losses['supervised_depth_loss'] = supervised_depth_loss
+            for camera_type in batch_data:
+                depth_label = batch_data[camera_type]['depth']
+                depth_preds = features['depth_feats'][f"{camera_type.split('_')[0]}_feats"]
+                depth_loss = self.get_depth_loss(depth_label, depth_preds, camera_type.split('_')[0])
+                supervised_depth_loss += depth_loss * self.depth_weight
+            losses['supervised_depth_loss'] = supervised_depth_loss
             
             losses['loss'] = detection_loss + supervised_depth_loss # + mono_total_losses 
             losses['detection_loss'] = detection_loss

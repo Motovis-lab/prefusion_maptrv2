@@ -1,7 +1,7 @@
 __base__ = '../../configs/default_runtime.py'
 default_scope = "prefusion"
 custom_imports = dict(
-    imports=['prefusion', 'contrib'],
+    imports=['prefusion', 'contrib.fastbev_det'],
     allow_failed_imports=False
 )
 
@@ -16,7 +16,7 @@ IMG_KEYS = [
         'VCAMERA_PERSPECTIVE_FRONT_RIGHT', 'VCAMERA_PERSPECTIVE_BACK_RIGHT', 'VCAMERA_FISHEYE_RIGHT', 'VCAMERA_PERSPECTIVE_FRONT'
         ]
 data_root = "data/mv_4d_data/"
-
+data_root = "data/146_data/"
 W, H = 120, 240
 bev_front = 180 
 bev_left = 60
@@ -141,7 +141,7 @@ dictionary=dict(
         )
 
 train_dataloader = dict(
-    num_workers=8,
+    num_workers=6,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     collate_fn=dict(type='collate_dict'),
@@ -150,7 +150,7 @@ train_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_fix_100.pkl',
+        info_path=data_root + 'mv_4d_infos_fix.pkl',
         dictionaries=dictionary,
         transformable_keys=collection_info_type,
         transforms=train_pipeline,
@@ -162,7 +162,7 @@ train_dataloader = dict(
     )
 
 val_dataloader = dict(
-    num_workers=4,
+    num_workers=6,
     persistent_workers=False,
     sampler=dict(type='DefaultSampler', shuffle=False),
     collate_fn=dict(type='collate_dict'),
@@ -171,7 +171,7 @@ val_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_fix_100.pkl',
+        info_path=data_root + 'mv_4d_infos_fix.pkl',
         dictionaries=dictionary,
         transformable_keys=collection_info_type,
         transforms=val_pipeline,
@@ -361,7 +361,7 @@ optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=lr, weight_decay=0.01),
     clip_grad=dict(max_norm=35, norm_type=2),
-    dtype="bfloat16"  # it works only for arg --amp
+    # dtype="bfloat16"  # it works only for arg --amp
     )
 param_scheduler = dict(type='MultiStepLR', milestones=[16, 20])
 
