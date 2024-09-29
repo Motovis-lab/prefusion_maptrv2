@@ -244,8 +244,9 @@ model = dict(
         downsample_factor=downsample_factor,  # ds factor of the feature to be projected to BEV (e.g. 256x704 -> 16x44)  # noqa
         img_backbone_conf=dict(
             type='VoVNet',
-            model_type="vovnet39",
-            out_indices=[0, 1],
+            model_type="vovnet57",
+            out_indices=[7, 8],
+            # init_cfg=dict(type='Pretrained', checkpoint="./work_dirs/backbone_checkpoint/vovnet57_match.pth")
             ),
         img_neck_conf=dict(
             type='SECONDFPN',
@@ -336,7 +337,7 @@ model = dict(
             type='mmdet.L1Loss', reduction='mean', loss_weight=0.25),
     ),
     is_train_depth=True,
-    depth_weight = 0.25
+    depth_weight=0.25
 )
 
 val_evaluator = [
@@ -396,5 +397,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = "./work_dirs/mv_4d_fastbev_t_v1/20240911_114612/epoch_45.pth"
+load_from = None # "./work_dirs/mv_4d_fastbev_t_v1/20240911_114612/epoch_45.pth"
 resume=False

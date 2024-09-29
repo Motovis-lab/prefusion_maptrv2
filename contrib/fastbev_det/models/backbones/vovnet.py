@@ -27,23 +27,23 @@ CONFIG = {
         [3, 112, 5, 512, True],
     ],
     "vovnet39": [
-        [3, 128, 5, 256, True],
-        [3, 160, 5, 512, True],
-        [3, 192, 5, 768, True],  # x2
-        [3, 192, 5, 768, False],
-        [3, 224, 5, 1024, True],  # x2
-        [3, 224, 5, 1024, False],
+        [3, 128, 5, 128, False],
+        [3, 128, 5, 128, False],
+        [3, 192, 5, 256, True],  # x2
+        [3, 192, 5, 256, False],
+        [3, 192, 5, 256, False],  # x2
+        [3, 224, 5, 512, True],
     ],
     "vovnet57": [
-        [3, 128, 5, 256, True],
-        [3, 160, 5, 512, True],
-        [3, 192, 5, 768, True],  # x4
-        [3, 192, 5, 768, False],
-        [3, 192, 5, 768, False],
-        [3, 192, 5, 768, False],
-        [3, 224, 5, 1024, True],  # x3
-        [3, 224, 5, 1024, False],
-        [3, 224, 5, 1024, False],
+        [3, 128, 5, 128, False],
+        [3, 128, 5, 128, False],
+        [3, 192, 5, 128, False],  # x4
+        [3, 192, 5, 128, False],
+        [3, 192, 5, 256, True],
+        [3, 192, 5, 256, False],
+        [3, 224, 5, 256, False],  # x3
+        [3, 224, 5, 256, False],
+        [3, 224, 5, 512, True],
     ],
     "vovnet99": [
         [3, 128, 5, 256, True],
@@ -201,7 +201,7 @@ class VoVNet(BaseModule):
             )
             in_ch = out_ch
         self.body = nn.Sequential(body_layers)
-        
+        self.init_weights()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         y = self.stem(x)
