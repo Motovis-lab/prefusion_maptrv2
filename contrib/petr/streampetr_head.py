@@ -413,6 +413,11 @@ class StreamPETRHead(AnchorFreeHead):
         img2lidars = topk_gather(img2lidars, topk_indexes)
 
         coords3d = torch.matmul(img2lidars, coords).squeeze(-1)[..., :3]
+        ###################################
+        # FIXME: visualize coords3d
+        ###################################
+        
+
         coords3d[..., 0:3] = (coords3d[..., 0:3] - self.position_range[0:3]) / (self.position_range[3:6] - self.position_range[0:3])
         coords3d = coords3d.reshape(B, -1, D*3)
 
@@ -421,6 +426,7 @@ class StreamPETRHead(AnchorFreeHead):
         focal = topk_gather(focal, topk_indexes)
 
         # for spatial alignment in focal petr
+        # FIXME: Why?? Why?? Why?? Why?? 应该是对应论文图4上的pose, time, velo才对？
         cone = torch.cat([focal, coords3d[..., -3:], coords3d[..., -90:-87]], dim=-1)
 
         return coords_position_embeding, cone
