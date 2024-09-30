@@ -27,8 +27,8 @@ det_classes = [
 def _calc_grid_size(_range, _voxel_size, n_axis=3):
     return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
 
-batch_size = 4
-num_epochs = 500
+batch_size = 2
+num_epochs = 100
 lr = 1e-4  # total lr per gpu lr is lr/n
 voxel_size = [0.1, 0.1, 3]
 point_cloud_range = [-12.8, -12.8, -1.0, 12.8, 12.8, 2.0]
@@ -43,7 +43,7 @@ train_dataloader = dict(
         type="GroupBatchDataset",
         name="MvParkingTest",
         data_root="/data/datasets/mv4d",
-        info_path="/data/datasets/mv4d/mv4d_infos_dbg.pkl",
+        info_path="/data/datasets/mv4d/mv4d_infos_dbg_246.pkl",
         dictionaries={
             "camera_images": {},
             "bbox_3d": {"det": {"classes": det_classes}},
@@ -70,7 +70,7 @@ train_dataloader = dict(
         ],
         phase="train",
         batch_size=batch_size,
-        possible_group_sizes=[1],
+        possible_group_sizes=[4],
         possible_frame_intervals=[1],
     ),
 )
