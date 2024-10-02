@@ -25,7 +25,7 @@ class fastray_vt(BaseModule):
         with autocast(enabled=False, device_type="cuda"):
             voxel_feature = self.voxel_feature.repeat(B, 1, 1, 1, C).view(B, C, -1)
             for key in img_feats:
-                img = torch.split(sweep_infos[f"{key.split('_')[0]}_data"]['imgs'], self.each_camera_nums[key.split('_')[0]], dim=0)
+                # img = torch.split(sweep_infos[f"{key.split('_')[0]}_data"]['imgs'], self.each_camera_nums[key.split('_')[0]], dim=0)
                 img_feats_ = torch.split(img_feats[key].float(), self.each_camera_nums[key.split('_')[0]], dim=0)
                 valid_ind_map = torch.split(sweep_infos[f"{key.split('_')[0]}_data"]['valid_map_sampled'], self.each_camera_nums[key.split('_')[0]], dim=0)
                 uu = torch.split(sweep_infos[f"{key.split('_')[0]}_data"]['uu'], self.each_camera_nums[key.split('_')[0]], dim=0)
