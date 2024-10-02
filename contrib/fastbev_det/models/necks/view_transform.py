@@ -25,7 +25,7 @@ class fastray_vt(BaseModule):
         with autocast(enabled=False, device_type="cuda"):
             voxel_feature = self.voxel_feature.repeat(B, 1, 1, 1, C).view(B, C, -1)
             for key in img_feats:
-                # tmp_img = torch.split(sweep_infos[f"{key.split('_')[0]}_data"]['imgs'], self.each_camera_nums[key.split('_')[0]], dim=0)
+                img = torch.split(sweep_infos[f"{key.split('_')[0]}_data"]['imgs'], self.each_camera_nums[key.split('_')[0]], dim=0)
                 img_feats_ = torch.split(img_feats[key].float(), self.each_camera_nums[key.split('_')[0]], dim=0)
                 valid_ind_map = torch.split(sweep_infos[f"{key.split('_')[0]}_data"]['valid_map_sampled'], self.each_camera_nums[key.split('_')[0]], dim=0)
                 uu = torch.split(sweep_infos[f"{key.split('_')[0]}_data"]['uu'], self.each_camera_nums[key.split('_')[0]], dim=0)
@@ -34,7 +34,12 @@ class fastray_vt(BaseModule):
                     for k in range(self.each_camera_nums[key.split('_')[0]]):
                         uu_ = uu[i][k][valid_ind_map[i][k]]
                         vv_ = vv[i][k][valid_ind_map[i][k]]
-                        # img_feats_ = F.interpolate(((img - img.min()) * 255).unsqueeze(0), scale_factor=1/8, mode='bilinear', align_corners=False)
+                        # img_feats_ = F.interpolate(((img[i][k] - img[i][k].min())).unsqueeze(0), scale_factor=1/4, mode='bilinear', align_corners=False)
+                        # voxel_feature[i][..., valid_ind_map[i][k]] = img_feats_[..., vv_, uu_]
+                        # import matplotlib.pyplot as plt
+                        # plt.imshow(img_feats_[0].cpu().numpy().transpose(1,2,0))
+                        # plt.savefig(f"./work_dirs/vt_debug/img_{key}_{i}_{k}.jpg")
+
                         # img_ = (img.cpu().numpy().transpose(1,2,0) - img.cpu().numpy().min()) * 255
                         # mmcv.imwrite(img_, f"./work_dirs/{i}_{key.split('_')[0]}_{k}.jpg")
                         voxel_feature[i][..., valid_ind_map[i][k]] = img_feats_[i][k][..., vv_, uu_]

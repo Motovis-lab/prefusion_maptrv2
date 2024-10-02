@@ -17,13 +17,13 @@ W, H = 120, 240
 bev_front = 180 
 bev_left = 60
 voxel_size = [0.2, 0.2, 0.5]
-downsample_factor=8
+downsample_factor=4
 
 img_scale = 1
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
 front_perspective_img_size = [768 * img_scale, 384 * img_scale]
-batch_size = 6
+batch_size = 2
 group_size = 3
 bev_range = [-12, 36, -12, 12, -0.5, 2.5]
 
@@ -160,7 +160,7 @@ train_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_train.pkl',
+        info_path=data_root + 'mv_4d_infos_20231028_150815_1.pkl',
         dictionaries=dictionary,
         transformable_keys=collection_info_type,
         transforms=train_pipeline,
