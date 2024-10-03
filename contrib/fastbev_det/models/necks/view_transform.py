@@ -22,6 +22,7 @@ class fastray_vt(BaseModule):
         # TODO: add multi-scale feature fusion
         BN, C, H, W = img_feats['fish_feats'].shape
         B = BN//4
+        # C = 3
         with autocast(enabled=False, device_type="cuda"):
             voxel_feature = self.voxel_feature.repeat(B, 1, 1, 1, C).view(B, C, -1)
             for key in img_feats:
@@ -42,6 +43,13 @@ class fastray_vt(BaseModule):
 
                         # img_ = (img.cpu().numpy().transpose(1,2,0) - img.cpu().numpy().min()) * 255
                         # mmcv.imwrite(img_, f"./work_dirs/{i}_{key.split('_')[0]}_{k}.jpg")
+                        
+                        # save u v map
+                        # if i==0:
+                        #     np.save(f"./work_dirs/vt_debug/uu_{key}_{i}_{k}.npy", uu_.cpu().numpy())
+                        #     np.save(f"./work_dirs/vt_debug/vv_{key}_{i}_{k}.npy", vv_.cpu().numpy())
+                        #     np.save(f"./work_dirs/vt_debug/valid_ind_map_{key}_{i}_{k}.npy", valid_ind_map[i][k].cpu().numpy())
+                        
                         voxel_feature[i][..., valid_ind_map[i][k]] = img_feats_[i][k][..., vv_, uu_]
             voxel_feature = voxel_feature.view(B, C * self.bev_z, self.bev_h, self.bev_w)
             # B * (C * Z) * H * W

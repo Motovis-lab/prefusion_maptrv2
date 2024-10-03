@@ -19,12 +19,12 @@ bev_left = 60
 voxel_size = [0.2, 0.2, 0.5]
 downsample_factor=4
 
-img_scale = 1
+img_scale = 2
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
-front_perspective_img_size = [768 * img_scale, 384 * img_scale]
-batch_size = 5
-group_size = 3
+front_perspective_img_size = [768, 384]
+batch_size = 2
+group_size = 1
 bev_range = [-12, 36, -12, 12, -0.5, 2.5]
 
 voxel_feature_config = dict(
@@ -64,8 +64,8 @@ train_pipeline = [
         scope='frame'
     ),
     dict(type='RandomRenderExtrinsic',
-        prob=0.8, 
-        angles=[0,0,3],
+        prob=0., 
+        angles=[0,0,0],
         scope='frame'),
     dict(type='FastRayLookUpTable', 
         voxel_feature_config=voxel_feature_config,
@@ -244,8 +244,10 @@ model = dict(
         downsample_factor=downsample_factor,  # ds factor of the feature to be projected to BEV (e.g. 256x704 -> 16x44)  # noqa
         img_backbone_conf=dict(
             type='VoVNet',
-            model_type="vovnet57",
-            out_indices=[4, 8],
+            # model_type="vovnet57",
+            # out_indices=[4, 8],
+            model_type="vovnet39",
+            out_indices=[2, 5],
             # init_cfg=dict(type='Pretrained', checkpoint="./work_dirs/backbone_checkpoint/vovnet57_match.pth")
             ),
         img_neck_conf=dict(
@@ -401,5 +403,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = "work_dirs/mv_4d_fastbev_3dbox/20240930_124434/epoch_20.pth"
+load_from = None
 resume=False
