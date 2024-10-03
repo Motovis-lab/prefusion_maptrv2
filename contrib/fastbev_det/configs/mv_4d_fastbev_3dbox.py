@@ -368,11 +368,15 @@ find_unused_parameters = True
 
 runner_type = 'GroupRunner'
 
-lr = 0.008  # total lr per gpu lr is lr/n 
+lr = 0.01  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(
     type='OptimWrapper',
-    optimizer=dict(type='ASGD', lr=lr),
+    optimizer=dict(type='SGD', lr=lr, weight_decay=0.0001),
     clip_grad=dict(max_norm=35, norm_type=2),
+    paramwise_cfg=dict(
+        custom_keys={
+            'backbone': dict(lr_mult=2)
+        }),
     # dtype="float16"  # it works only for arg --amp
     )
 param_scheduler = dict(type='MultiStepLR', milestones=[16, 20])
