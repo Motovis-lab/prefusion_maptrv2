@@ -13,6 +13,10 @@ from loguru import logger
 from copious.io.fs import ensured_path
 from copious.cv.geometry import Box3d, points3d_to_homo
 
+
+class NotOnImageError(Exception):
+    pass
+
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("--pickle-path", type=Path, required=True)
@@ -44,6 +48,10 @@ def _draw_axis(origin, xaxis, yaxis):
     plt.plot([origin[0], origin[0] + xaxis[0]], [origin[1], origin[1] + xaxis[1]], color="r", marker='.')
     plt.plot([origin[0], origin[0] + yaxis[0]], [origin[1], origin[1] + yaxis[1]], color="green", marker='.')
     plt.scatter([origin[0]], [origin[1]], color="black", marker='o')
+
+
+def _draw_text(position, text, fontsize=6):
+    plt.text(position[0], position[1], text, fontsize=fontsize, ha='center', va='center')
 
 
 def _draw_3d_box(img, corners):
@@ -96,13 +104,15 @@ def K3x3(cx, cy, fx, fy):
 
 def _plot_bbox_bev_of_single_frame(bbox_3d, ego_pose, save_path):
     ego2world = T4x4(*ego_pose)
-    _ = plt.figure()
+    _ = plt.figure(figsize=(14, 14))
     _draw_axis(ego2world[:2, 3], *(ego2world[:2, :2].T * 2))  # scale := 2
     _draw_axis([0, 0], [1, 0], [0, 1])  # global axis
     for bbox in bbox_3d:
+        _track_id = bbox['track_id']
         bbox = Box3d(bbox['translation'], np.array(bbox['size']), Rotation.from_matrix(bbox['rotation']))
         bbox_corners = points3d_to_homo(bbox.corners[[0, 1, 5, 4]]) @ ego2world.T
         _draw_rect(*bbox_corners.tolist(), color='blue', alpha=0.3)
+        _draw_text(bbox_corners.mean(axis=0), _track_id)
     plt.gca().set_aspect('equal')
     plt.gca().set_xlim([-50, 50])
     plt.gca().set_ylim([-50, 50])
@@ -123,10 +133,11 @@ def _plot_bbox_2d_of_single_frame(bbox_3d, calib, im_path, save_path):
     for bbox in bbox_3d:
         bbox = Box3d(bbox['translation'], np.array(bbox['size']), Rotation.from_matrix(bbox['rotation']))
         bbox_corners = points3d_to_homo(bbox.corners)
-        im_coords = pinhole_project(bbox_corners, cam_extr, cam_intr)
-        all_corners_in_image = im_pts_within_image(im_coords, (w, h)).all()
-        if all_corners_in_image:
-            _draw_3d_box(im, im_coords)
+        try:
+            im_coords = pinhole_project(bbox_corners, cam_extr, cam_intr, (w, h))
+        except NotOnImageError:
+            continue
+        _draw_3d_box(im, im_coords)
 
     cv2.imwrite(str(save_path), im)
 
@@ -134,12 +145,20 @@ def im_pts_within_image(pts, im_size):
     w, h = im_size
     return (pts[:, 0] >= 0) & (pts[:, 0] < w) & (pts[:, 1] >= 0) & (pts[:, 1] < h)
 
-def pinhole_project(points_homo, cam_extr, cam_intr):
-    cam_coords = (points_homo @ cam_extr.T)[:, :3]
+def pinhole_project(points_homo, cam_extr, cam_intr, im_size):
+    T_cam_ego = np.linalg.inv(cam_extr)
+    cam_coords = (T_cam_ego @ points_homo.T).T[:, :3]
+    
+    if (cam_coords[:, 2] < 0).any():
+        raise NotOnImageError
+    
     normalized_cam_coords = cam_coords[:, :2] / cam_coords[:, 2:3]
     im_coords = (cam_intr[:2, :2] @ normalized_cam_coords.T).T + cam_intr[:2, 2]
-    return im_coords
     
+    if not im_pts_within_image(im_coords, im_size).all():
+        raise NotOnImageError
+
+    return im_coords
 
 
 def plot_bbox_2d(data, save_dir):
