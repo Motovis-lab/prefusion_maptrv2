@@ -146,7 +146,7 @@ class StreamPETR(BaseModel):
             plt.plot((p5[0], p4[0]), (p5[1], p4[1]), linewidth=linewidth, color=color, alpha=alpha)
             plt.plot((p4[0], p0[0]), (p4[1], p0[1]), linewidth=linewidth, color=color, alpha=alpha)
 
-        def _draw_boxes(_boxes, color='blue'):
+        def _draw_boxes(_boxes, color='blue', alpha=0.3):
             for bx in _boxes:
                 l, w, h = bx[3:6].tolist()
                 translation = bx[:2].detach().cpu().numpy()
@@ -159,7 +159,7 @@ class StreamPETR(BaseModel):
                 ])
                 rotmat = np.array([[math.cos(yaw), -math.sin(yaw)], [math.sin(yaw), math.cos(yaw)]])
                 corners = corners @ rotmat.T + translation
-                _draw_rect(*corners.tolist(), color=color, alpha=0.3)
+                _draw_rect(*corners.tolist(), color=color, alpha=alpha)
 
         import matplotlib.pyplot as plt
         import math
@@ -169,12 +169,15 @@ class StreamPETR(BaseModel):
                 continue
             _ = plt.figure()
             _draw_boxes(gt_boxes, color='blue')
+            denormalized_bbox = denormalize_bbox(pred_bboxes, None)
             sigmoid_scores = pred_scores.sigmoid()
             sorted_scores, sorted_index = sigmoid_scores.max(dim=1)[0].topk(100)
-            thresh = 0.3
-            final_index = sorted_index[sorted_scores > thresh]
-            denormalized_bbox = denormalize_bbox(pred_bboxes[final_index], None)
-            _draw_boxes(denormalized_bbox, color='red')
+            _index_gt35 = sorted_index[sorted_scores >= 0.35]
+            _index_btw25_35 = sorted_index[(sorted_scores >= 0.25) & (sorted_scores < 0.35)]
+            _index_btw20_25 = sorted_index[(sorted_scores >= 0.2) & (sorted_scores < 0.25)]
+            _draw_boxes(denormalized_bbox[_index_gt35], color="red", alpha=0.5)
+            _draw_boxes(denormalized_bbox[_index_btw25_35], color="yellow", alpha=0.3)
+            _draw_boxes(denormalized_bbox[_index_btw20_25], color="gray", alpha=0.1)
             
             plt.plot([0, 1], [0, 0], color="r", marker='.')
             plt.plot([0, 0], [0, 1], color="green", marker='.')

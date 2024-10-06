@@ -32,7 +32,7 @@ args = parse_arguments()
 def main():
     with open(args.pickle_path, 'rb') as f:
         data = pickle.load(f)[args.scene_id]
-    # plot_bbox_bev(data, ensured_path(args.result_save_dir / "bbox_bev"))
+    plot_bbox_bev(data, ensured_path(args.result_save_dir / "bbox_bev"))
     plot_bbox_2d(data, ensured_path(args.result_save_dir / "bbox_2d"))
     plot_polyline_bev(data, ensured_path(args.result_save_dir / "polyline_bev"))
 
