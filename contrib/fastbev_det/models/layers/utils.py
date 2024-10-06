@@ -73,14 +73,12 @@ class ASPP(nn.Module):
         self.global_avg_pool = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Conv2d(inplanes, mid_channels, 1, stride=1, bias=False),
-            BatchNorm(mid_channels),
             nn.ReLU(),
         )
         self.conv1 = nn.Conv2d(int(mid_channels * 5),
                                mid_channels,
                                1,
                                bias=False)
-        self.bn1 = BatchNorm(mid_channels)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(0.5)
         self._init_weight()
@@ -98,7 +96,6 @@ class ASPP(nn.Module):
         x = torch.cat((x1, x2, x3, x4, x5), dim=1)
 
         x = self.conv1(x)
-        x = self.bn1(x)
         x = self.relu(x)
 
         return self.dropout(x)

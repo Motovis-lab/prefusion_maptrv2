@@ -160,7 +160,7 @@ train_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_train.pkl',
+        info_path=data_root + 'mv_4d_infos_val.pkl',
         dictionaries=dictionary,
         transformable_keys=collection_info_type,
         transforms=train_pipeline,
@@ -256,13 +256,23 @@ model = dict(
             upsample_strides=[1, 2],
             out_channels=[128, 128],
             ),
-        depth_net_conf=dict(type='DepthNet', 
+        depth_net_fish_conf=dict(type='DepthNet', 
                             in_channels=256, 
                             mid_channels=256, 
                             context_channels=80, 
-                            d_bound_fish=[0.1, 5.1, 0.2],  # Categorical Depth bounds and division (m)
-                            d_bound_pv=[0.1, 12.1, 0.2],
-                            d_bound_front=[0.1, 36.1, 0.2],
+                            d_bound=[0.1, 5.1, 0.2],  # Categorical Depth bounds and division (m)
+                            ),
+        depth_net_pv_conf=dict(type='DepthNet', 
+                            in_channels=256, 
+                            mid_channels=256, 
+                            context_channels=80, 
+                            d_bound=[0.1, 12.1, 0.2],   # Categorical Depth bounds and division (m)
+                            ),
+        depth_net_front_conf=dict(type='DepthNet', 
+                            in_channels=256, 
+                            mid_channels=256, 
+                            context_channels=80, 
+                            d_bound=[0.1, 36.1, 0.2],  # Categorical Depth bounds and division (m)
                             ),
         bev_feature_reducer_conf=dict(type='BEV_Feat_Reducer', in_channels=(256+80)*voxel_feature_config['voxel_shape'][0]),
         voxel_shape=voxel_feature_config['voxel_shape'] + [1]
