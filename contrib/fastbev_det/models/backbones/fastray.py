@@ -137,3 +137,55 @@ class FastRay(BaseModule):
         img_feats = self.img_neck_front(self.img_backbone_front(sweep_imgs))[0]
         
         return img_feats
+
+
+@MODELS.register_module()
+class FastRay_DP(FastRay):
+    def __init__(self, **kwargs):
+        super(FastRay_DP, self).__init__(**kwargs)
+
+
+    def forward(self, fish_data_imgs, pv_data_imgs, front_data_imgs,
+                      fish_intrinsic, fish_extrinsic,
+                      pv_intrinsic, pv_extrinsic,
+                      front_intrinsic, front_extrinsic,
+                      fish_uu, fish_vv, fish_valid,
+                      pv_uu, pv_vv, pv_valid,
+                      front_uu, front_vv, front_valid
+    ):
+        img_feats_fish = self.get_cam_feats_fish(fish_data_imgs)
+        img_feats_pv = self.get_cam_feats_pv(pv_data_imgs)
+        img_feats_front = self.get_cam_feats_front(front_data_imgs)
+
+        # intrinsic=fish_intrinsic.view(-1, 8)
+        # extrinsic=sweep_infos["fish_data"]['extrinsic'][:, :3, :].view(-1, 12)
+        img_depth_feats_fish, supervised_depth_feat_fish = self.depth_net_fish(img_feats_fish, fish_intrinsic, fish_extrinsic)
+
+        # intrinsic = torch.zeros(sweep_infos["pv_data"]['extrinsic'].shape[0], 8).to(sweep_infos["pv_data"]['extrinsic'].device)
+        # intrinsic[:, :4] = sweep_infos["pv_data"]['intrinsic']
+        # extrinsic=sweep_infos["pv_data"]['extrinsic'][:, :3, :].view(-1, 12)
+        img_depth_feats_pv, supervised_depth_feat_pv = self.depth_net_pv(img_feats_pv, pv_intrinsic, pv_extrinsic)
+
+        # intrinsic = torch.zeros(sweep_infos["front_data"]['extrinsic'].shape[0], 8).to(sweep_infos["front_data"]['extrinsic'].device)
+        # intrinsic[:, :4] = sweep_infos["front_data"]['intrinsic']
+        # extrinsic=sweep_infos["front_data"]['extrinsic'][:, :3, :].view(-1, 12)
+        img_depth_feats_front, supervised_depth_feat_front = self.depth_net_front(img_feats_front, front_intrinsic, front_extrinsic)
+
+
+        C, H, W = img_depth_feats_fish.shape[-3:]
+        img_bev_feats_fish = self.fastray_vt_fish(fish_uu, fish_vv, 
+                                                fish_valid, img_depth_feats_fish.reshape(1, 4, C, H, W)
+                                                )
+        C, H, W = img_depth_feats_pv.shape[-3:]
+        img_bev_feats_pv = self.fastray_vt_pv(pv_uu, pv_vv, 
+                                                pv_valid, img_depth_feats_pv.reshape(1, 5, C, H, W)
+                                                )
+        C, H, W = img_depth_feats_front.shape[-3:]
+        img_bev_feats_front = self.fastray_vt_front(front_uu, front_vv, 
+                                                front_valid, img_depth_feats_front.reshape(1, 1, C, H, W)
+                                                )
+        
+        img_bev_feats = img_bev_feats_fish + img_bev_feats_pv + img_bev_feats_front
+        img_bev_feats = self.bev_feat_reducer(img_bev_feats)
+        
+        return img_bev_feats
