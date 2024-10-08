@@ -24,12 +24,14 @@ class FastBEV_Det(BaseModel):
                  is_train_depth=False, 
                  data_preprocessor=None, 
                  mono_depth=None,
+                 depth_weight=1.,
                  init_cfg=None):
         super().__init__(data_preprocessor=data_preprocessor, init_cfg=init_cfg)
         self.backbone = MODELS.build(backbone_conf)
         self.head = MODELS.build(head_conf)
         self.head_conf = head_conf
         self.is_train_depth = is_train_depth
+        self.depth_weight = depth_weight
         self.downsample_factor = backbone_conf.get('downsample_factor', 16)
         self.each_camera_nums = self.backbone.each_camera_nums if hasattr(self.backbone, 'each_camera_nums') else None
         self.head.each_camera_nums = self.each_camera_nums
@@ -40,13 +42,13 @@ class FastBEV_Det(BaseModel):
     def get_depth_loss(self, depth_labels, depth_preds, camera_type):
         depth_labels = self.get_downsampled_gt_depth(depth_labels, camera_type)
         depth_preds = depth_preds.permute(0, 2, 3, 1).contiguous().view(
-            -1, getattr(self.backbone.depth_net, f"depth_channels_{camera_type}"))
+            -1, getattr(getattr(self.backbone, f"depth_net_{camera_type}"), "depth_channels"))
         fg_mask = torch.max(depth_labels, dim=1).values > 0.0
         assert depth_preds.device == depth_labels.device == fg_mask.device
         with autocast(device_type=depth_preds.device, enabled=False):
-            depth_loss = (F.binary_cross_entropy_with_logits(
-                depth_preds[fg_mask],
-                depth_labels[fg_mask],
+            depth_loss = (F.binary_cross_entropy(
+                depth_preds[fg_mask].float(),
+                depth_labels[fg_mask].float(),
                 reduction='none',
             ).sum() / max(1.0, fg_mask.sum()))
 
@@ -78,10 +80,10 @@ class FastBEV_Det(BaseModel):
         gt_depths = torch.min(gt_depths_tmp, dim=-1).values
         gt_depths = gt_depths.view(BN, H // self.downsample_factor,
                                    W // self.downsample_factor)
-        dbound = getattr(self.backbone.depth_net, f"d_bound_{camera_type}")
+        dbound = getattr(getattr(self.backbone, f"depth_net_{camera_type}"), "d_bound")
         gt_depths = (gt_depths -
                      (dbound[0] - dbound[2])) / dbound[2]
-        depth_channels = getattr(self.backbone.depth_net, f"depth_channels_{camera_type}")
+        depth_channels = getattr(getattr(self.backbone, f"depth_net_{camera_type}"), "depth_channels")
         gt_depths = torch.where(
             (gt_depths < depth_channels + 1) & (gt_depths >= 0.0),
             gt_depths, torch.zeros_like(gt_depths))
@@ -135,12 +137,12 @@ class FastBEV_Det(BaseModel):
                 depth_label = batch_data[camera_type]['depth']
                 depth_preds = features['depth_feats'][f"{camera_type.split('_')[0]}_feats"]
                 depth_loss = self.get_depth_loss(depth_label, depth_preds, camera_type.split('_')[0])
-                supervised_depth_loss += depth_loss
+                supervised_depth_loss += depth_loss * self.depth_weight
+            losses['supervised_depth_loss'] = supervised_depth_loss
             
             losses['loss'] = detection_loss + supervised_depth_loss # + mono_total_losses 
             losses['detection_loss'] = detection_loss
             # losses['mono_total_loss'] = mono_total_losses
-            losses['supervised_depth_loss'] = supervised_depth_loss
             
             losses.update(record_loss)
             # losses.update(mono_losses)  # only for record

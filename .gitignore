@@ -161,6 +161,7 @@ cython_debug/
 #.idea/
 
 refs
+vis
 data
 *.zip
 **/__pycache__
@@ -170,3 +171,6 @@ work_dir
 log
 logs
 ipynb
+
+tests/contrib/fastbev_det
+convert_model_key.py

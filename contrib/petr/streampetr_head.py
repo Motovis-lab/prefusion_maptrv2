@@ -13,11 +13,10 @@ from typing import List
 import torch
 import torch.nn as nn
 from mmcv.cnn import Linear
-from mmdet.models.task_modules import build_assigner, build_sampler
+from mmdet.models.task_modules import build_assigner
 from mmdet.utils.dist_utils import reduce_mean
 from mmdet.models.utils.misc import multi_apply
 from mmdet.models.layers.transformer.utils import inverse_sigmoid
-from mmdet3d.models.task_modules.builder import build_bbox_coder
 from mmdet.models.dense_heads.anchor_free_head import AnchorFreeHead
 from mmdet.models.layers.normed_predictor import NormedLinear
 from mmdet.utils import InstanceList, OptInstanceList
@@ -414,6 +413,11 @@ class StreamPETRHead(AnchorFreeHead):
         img2lidars = topk_gather(img2lidars, topk_indexes)
 
         coords3d = torch.matmul(img2lidars, coords).squeeze(-1)[..., :3]
+        ###################################
+        # FIXME: visualize coords3d
+        ###################################
+        
+
         coords3d[..., 0:3] = (coords3d[..., 0:3] - self.position_range[0:3]) / (self.position_range[3:6] - self.position_range[0:3])
         coords3d = coords3d.reshape(B, -1, D*3)
 
@@ -422,6 +426,7 @@ class StreamPETRHead(AnchorFreeHead):
         focal = topk_gather(focal, topk_indexes)
 
         # for spatial alignment in focal petr
+        # FIXME: Why?? Why?? Why?? Why?? 应该是对应论文图4上的pose, time, velo才对？
         cone = torch.cat([focal, coords3d[..., -3:], coords3d[..., -90:-87]], dim=-1)
 
         return coords_position_embeding, cone
@@ -852,7 +857,7 @@ class StreamPETRHead(AnchorFreeHead):
         # regression L1 loss
         bbox_preds = bbox_preds.reshape(-1, bbox_preds.size(-1))
         normalized_bbox_targets = normalize_bbox(bbox_targets, self.pc_range)
-        isnotnan = torch.isfinite(normalized_bbox_targets).all(dim=-1)
+        isnotnan = torch.isfinite(normalized_bbox_targets).all(dim=-1) # box with no gt assigned will have infinite value due to log(0)
         bbox_weights = bbox_weights * self.code_weights
 
         loss_bbox = self.loss_bbox(

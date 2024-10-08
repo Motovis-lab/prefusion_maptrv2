@@ -1,7 +1,5 @@
-from typing import Union, List, Dict, Any, Optional
-from collections import OrderedDict
+from typing import List, Dict, Any
 
-import torch.nn as nn
 import torch
 import numpy as np
 from mmengine.model import BaseModel
@@ -104,7 +102,7 @@ class StreamPETR(BaseModel):
         
         data = {
             "timestamp": torch.tensor([int(ii.frame_id) for ii in index_info], device=_device, dtype=torch.float64),
-            "prev_exists": torch.tensor([ii.prev is None for ii in index_info], device=_device, dtype=torch.float32),
+            "prev_exists": torch.tensor([ii.prev is not None for ii in index_info], device=_device, dtype=torch.float32),
             "ego_pose": torch.tensor(np.array([p.transformables['0'].trans_mat for p in ego_poses]), device=_device, dtype=torch.float32),
             "ego_pose_inv": torch.tensor(np.array([np.linalg.inv(p.transformables['0'].trans_mat) for p in ego_poses]), device=_device, dtype=torch.float32),
             "intrinsics": torch.tensor(np.array([m["camera_images"]["intrinsic"] for m in meta_info]), device=_device, dtype=torch.float32),
@@ -120,6 +118,76 @@ class StreamPETR(BaseModel):
         outs = self.box_head(img_feats, location, img_metas, bbox_3d, gt_labels, topk_indexes=topk_indexes, **data)
 
         loss_inputs = [bbox_3d, gt_labels, outs]
+
+        ###########################
+        # FIXME: Visualize Images
+        ###########################
+        # import matplotlib.pyplot as plt
+        # import cv2
+        # nrows, ncols = 4, 3
+        # for ts, images, m in zip(data['timestamp'], camera_images.reshape(B, N, C, H, W), meta_info):
+        #     fig, ax = plt.subplots(nrows, ncols, figsize=(18, 18))
+        #     for i, im in enumerate(images):
+        #         restored_im = im.cpu().numpy().transpose(1, 2, 0) * np.array([58.395, 57.120, 57.375]) + np.array([123.675, 116.280, 103.530])
+        #         ax[i // ncols][i % ncols].imshow(restored_im.astype(np.uint8)[..., ::-1])
+        #         cam_id = m['camera_images']['camera_ids'][i]
+        #         rim = cv2.imread(f"/data/datasets/mv4d/20231101_160337/vcamera/{cam_id}/{ts.long().item()}.jpg")
+        #         ax[2 + i // ncols][i % ncols].imshow(rim[..., ::-1])
+        #     plt.savefig(f"./vis/{ts.item()}.png")
+        #     plt.close()
+        # a = 100
+
+        ###########################
+        # FIXME: Visualize BBoxes
+        ###########################
+        def _draw_rect(p0, p1, p5, p4, linewidth=1, color='r', alpha=1):
+            plt.plot((p0[0], p1[0]), (p0[1], p1[1]), linewidth=linewidth, color=color, alpha=alpha)
+            plt.plot((p1[0], p5[0]), (p1[1], p5[1]), linewidth=linewidth, color=color, alpha=alpha)
+            plt.plot((p5[0], p4[0]), (p5[1], p4[1]), linewidth=linewidth, color=color, alpha=alpha)
+            plt.plot((p4[0], p0[0]), (p4[1], p0[1]), linewidth=linewidth, color=color, alpha=alpha)
+
+        def _draw_boxes(_boxes, color='blue', alpha=0.3):
+            for bx in _boxes:
+                l, w, h = bx[3:6].tolist()
+                translation = bx[:2].detach().cpu().numpy()
+                yaw = bx[6].item()
+                corners = np.array([
+                    [ l / 2, -w / 2],
+                    [ l / 2, +w / 2],
+                    [-l / 2, +w / 2],
+                    [-l / 2, -w / 2],
+                ])
+                rotmat = np.array([[math.cos(yaw), -math.sin(yaw)], [math.sin(yaw), math.cos(yaw)]])
+                corners = corners @ rotmat.T + translation
+                _draw_rect(*corners.tolist(), color=color, alpha=alpha)
+
+        import matplotlib.pyplot as plt
+        import math
+        from contrib.petr.misc import denormalize_bbox
+        for ts, gt_boxes, pred_bboxes, pred_scores, m, ep in zip(data['timestamp'], bbox_3d, outs['all_bbox_preds'][-1], outs['all_cls_scores'][-1], meta_info, ego_poses):
+            if int(ts.item()) not in [1698825828064, 1698825829564, 1698825837064, 1698825846064, 1698825852564]:
+                continue
+            _ = plt.figure()
+            _draw_boxes(gt_boxes, color='blue')
+            denormalized_bbox = denormalize_bbox(pred_bboxes, None)
+            sigmoid_scores = pred_scores.sigmoid()
+            sorted_scores, sorted_index = sigmoid_scores.max(dim=1)[0].topk(100)
+            _index_gt35 = sorted_index[sorted_scores >= 0.35]
+            _index_btw25_35 = sorted_index[(sorted_scores >= 0.25) & (sorted_scores < 0.35)]
+            _index_btw20_25 = sorted_index[(sorted_scores >= 0.2) & (sorted_scores < 0.25)]
+            _draw_boxes(denormalized_bbox[_index_gt35], color="red", alpha=0.5)
+            _draw_boxes(denormalized_bbox[_index_btw25_35], color="yellow", alpha=0.3)
+            _draw_boxes(denormalized_bbox[_index_btw20_25], color="gray", alpha=0.1)
+            
+            plt.plot([0, 1], [0, 0], color="r", marker='.')
+            plt.plot([0, 0], [0, 1], color="green", marker='.')
+            plt.scatter([0], [0], color="black", marker='o')
+            
+            plt.gca().set_aspect('equal')
+            plt.savefig(f"./vis/{ts.item()}.png")
+            plt.close()
+        a = 100
+
         losses = self.box_head.loss(*loss_inputs)
 
         # if self.with_img_roi_head:

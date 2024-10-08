@@ -58,6 +58,26 @@ def _sign(x):
     return 2 * (x > 0) - 1
 
 
+def make_seed(base_number: int, *variables, base=17) -> int:
+    """Create a new Integer seed based on `base_number` and extra varying input values such as i=0,1,2,...; j=0,1,2,... 
+
+    Parameters
+    ----------
+    base_number : int
+        _description_
+    base : int, optional
+        _description_, by default 17
+
+    Returns
+    -------
+    int
+        _description_
+    """
+    for i, v in enumerate(reversed(variables)):
+        base_number += (base ** i) * (v + 1)
+    return base_number
+
+
 def get_cam_type(name):
     if 'perspective' in name.lower():
         return 'PerspectiveCamera'

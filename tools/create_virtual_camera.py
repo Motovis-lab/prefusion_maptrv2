@@ -127,6 +127,12 @@ def main(args):
 
 
 if __name__ == "__main__":
+    # "--rotation-euler-angles", "-90", "0", "45",   // camera8  -> VCAMERA_PERSPECTIVE_FRONT_LEFT
+    # "--rotation-euler-angles", "-90", "0", "-45",  // camera8  -> VCAMERA_PERSPECTIVE_FRONT_RIGHT
+    # "--rotation-euler-angles", "-90", "0", "135",  // camera1  -> VCAMERA_PERSPECTIVE_BACK_LEFT
+    # "--rotation-euler-angles", "-90", "0", "-135", // camera1  -> VCAMERA_PERSPECTIVE_BACK_RIGHT
+    # "--rotation-euler-angles", "-90", "0", "90",   // camera5  -> VCAMERA_PERSPECTIVE_LEFT_FORWARD
+    # "--rotation-euler-angles", "-90", "0", "-90",  // camera11 -> VCAMERA_PERSPECTIVE_RIGHT_FORWARD
     parser = argparse.ArgumentParser()
     parser.add_argument("--motovis-calibration", type=Path, required=True)
     parser.add_argument("--img-suffix", default="jpg", required=True)
@@ -134,7 +140,7 @@ if __name__ == "__main__":
     parser.add_argument("--real-camera-type", choices=["PerspectiveCamera", "FisheyeCamera"], required=True)
     parser.add_argument("--real-camera-ego-mask", type=Path)
     parser.add_argument("--real-camera-image-dir", type=Path, required=True)
-    parser.add_argument("--rotation-euler-angles", nargs=3, type=float, required=True)
+    parser.add_argument("--rotation-euler-angles", nargs=3, type=float, required=True, help="基于初始状态(XYZ对应自车前左上)进行旋转")
     parser.add_argument("--virtual-camera-id", type=str, required=True)
     parser.add_argument("--virtual-camera-type", choices=["PerspectiveCamera", "FisheyeCamera"], required=True)
     parser.add_argument("--virtual-camera-size", nargs=2, type=int, required=True, help="--virtual-camera-size <width> <height>")

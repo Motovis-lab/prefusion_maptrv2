@@ -163,6 +163,22 @@ def test_random_render_extrinsic(fisheye_image, perspective_image, camera_images
     np.testing.assert_almost_equal(camera_imageset.transformables['front'].img, answer_perspective_img)
 
 
+def test_random_render_extrinsic_transformable_scope(fisheye_image, perspective_image, camera_imageset):
+    transform = RandomRenderExtrinsic(
+        prob=1,
+        angles=[10, 10, 10],
+        scope='transformable'
+    )
+    transform(fisheye_image, perspective_image, camera_imageset, seeds={'frame': 520})
+    answer_fisheye_img = mmcv.imread('tests/prefusion/transform/test_render_imgs/test_fisheye_render_random_extrinsic_result_transformable_scope.png')
+    answer_perspective_img = mmcv.imread('tests/prefusion/transform/test_render_imgs/test_perspective_render_random_extrinsic_result_transformable_scope.png')
+    answer_camset_front_fish_img = mmcv.imread('tests/prefusion/transform/test_render_imgs/test_camset_front_fish_render_random_extrinsic_result_transformable_scope.png')
+    answer_camset_front_img = mmcv.imread('tests/prefusion/transform/test_render_imgs/test_camset_front_render_random_extrinsic_result_transformable_scope.png')
+
+    np.testing.assert_almost_equal(fisheye_image.img, answer_fisheye_img)
+    np.testing.assert_almost_equal(perspective_image.img, answer_perspective_img)
+    np.testing.assert_almost_equal(camera_imageset.transformables['front_fish'].img, answer_camset_front_fish_img)
+    np.testing.assert_almost_equal(camera_imageset.transformables['front'].img, answer_camset_front_img)
 
 
 def test_random_transform_class_factory_float_int():
@@ -193,14 +209,11 @@ def test_random_transform_class_factory_seeds_setting():
     txt = MockTextTransformable("hello")
     RandomWrapTransform = random_transform_class_factory("RandomWrapTransform", "wrap")
     transform = RandomWrapTransform(
-        prob=0.2, param_randomization_rules={"wrapper": {"type": "enum", "choices": ["[]", "()", "<>"]}}, scope="frame"
+        prob=0.7, param_randomization_rules={"wrapper": {"type": "enum", "choices": ["[]", "()", "<>"]}}, scope="frame"
     )
     assert txt.text == "hello"
-    outer_seed = 100
-    for _ in range(10):
-        random.seed(outer_seed)
+    for _ in range(3):
         _ = transform(txt, seeds={"frame": 42})
-        outer_seed += 1
     assert txt.text == "<<<hello>>>"
 
 
@@ -232,16 +245,23 @@ def test_random_set_intrinsic_param(cam_im):
     assert cam_im.intrinsic == pytest.approx([9.566968, 19.13393662, 0.47834841, 0.76535746])
 
 
+def test_random_set_intrinsic_param_transformable_scope(cam_im):
+    transform = RandomSetIntrinsicParam(prob=1.0, jitter_ratio=0.05, scope="transformable")
+    assert transform.jitter_ratio == 0.05
+    transform(cam_im, seeds={"frame": 42, "group": 1142})
+    assert cam_im.intrinsic == pytest.approx([9.53855184, 19.07710368, 0.47692759, 0.763084147])
+
+
 def test_random_set_extrinsic_param(cam_im):
     transform = RandomSetExtrinsicParam(prob=1.0, angle=10, translation=4, scope="batch")
     assert transform.angle == 10 and transform.translation == 4
     transform(cam_im, seeds={"frame": 42, "batch": 142, "group": 1142})
     np.testing.assert_almost_equal(cam_im.extrinsic[0], 
-        np.array([[ 0.9991691, -0.0279823,  0.0296317],
-                  [ 0.0288128,  0.9991931, -0.0279823],
-                  [-0.0288248,  0.0288128,  0.9991691]])
+        np.array([[ 0.99801237,  0.00632895,  0.06269974],
+                  [-0.00451007,  0.99956608, -0.02910845],
+                  [-0.06285676,  0.02876781,  0.99760786]])
     ) 
-    np.testing.assert_almost_equal(cam_im.extrinsic[1], np.array([[0.6607075, 0.6607075, 0.6607075]]))
+    np.testing.assert_almost_equal(cam_im.extrinsic[1], np.array([[-0.11172955, -1.2373623, 2.66947292]]))
 
 
 class MockNumberTransformable:
@@ -332,17 +352,17 @@ def test_random_isp_delegate_transform():
     delegate_transform(im, seeds={'frame': 2, 'batch': 4, 'group': 8})
     np.testing.assert_almost_equal(im.img, np.array(
         [[[ 4,  5,  8, 11, 13, 15],
-          [15, 17, 20, 23, 25, 27],
-          [30, 33, 35, 38, 40, 42],
-          [42, 44, 46, 49, 52, 53]],
+        [15, 17, 20, 23, 25, 27],
+        [30, 33, 35, 38, 40, 42],
+        [42, 44, 46, 49, 52, 53]],
 
-         [[ 5,  6,  9, 11, 14, 16],
-          [16, 18, 21, 23, 26, 28],
-          [31, 34, 36, 39, 41, 43],
-          [43, 45, 47, 50, 52, 54]],
+       [[ 5,  6,  9, 11, 14, 16],
+        [16, 18, 21, 23, 26, 28],
+        [31, 34, 36, 39, 41, 43],
+        [43, 45, 47, 50, 52, 54]],
 
-         [[ 5,  7, 10, 12, 15, 17],
-          [17, 19, 22, 24, 27, 29],
-          [32, 35, 37, 40, 42, 44],
-          [44, 46, 48, 51, 53, 55]]]
+       [[ 5,  7, 10, 12, 15, 17],
+        [17, 19, 22, 24, 27, 29],
+        [32, 35, 37, 40, 42, 44],
+        [44, 46, 48, 51, 53, 55]]]
     ).transpose(1, 2, 0))

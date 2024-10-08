@@ -12,19 +12,19 @@ IMG_KEYS = [
         'VCAMERA_PERSPECTIVE_FRONT_RIGHT', 'VCAMERA_PERSPECTIVE_BACK_RIGHT', 'VCAMERA_FISHEYE_RIGHT', 'VCAMERA_PERSPECTIVE_FRONT'
         ]
 data_root = "data/mv_4d_data/"
-
+data_root = "data/146_data/"
 W, H = 120, 240
 bev_front = 180 
 bev_left = 60
 voxel_size = [0.2, 0.2, 0.5]
-downsample_factor=8
+downsample_factor=4
 
-img_scale = 1
+img_scale = 2
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
-front_perspective_img_size = [768 * img_scale, 384 * img_scale]
-batch_size = 8
-group_size = 3
+front_perspective_img_size = [768, 384]
+batch_size = 2
+group_size = 1
 bev_range = [-12, 36, -12, 12, -0.5, 2.5]
 
 voxel_feature_config = dict(
@@ -64,8 +64,8 @@ train_pipeline = [
         scope='frame'
     ),
     dict(type='RandomRenderExtrinsic',
-        prob=0.8, 
-        angles=[0,0,3],
+        prob=0., 
+        angles=[0,0,0],
         scope='frame'),
     dict(type='FastRayLookUpTable', 
         voxel_feature_config=voxel_feature_config,
@@ -151,7 +151,7 @@ dictionary=dict(
         )
 
 train_dataloader = dict(
-    num_workers=8,
+    num_workers=6,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     collate_fn=dict(type='collate_dict'),
@@ -166,13 +166,13 @@ train_dataloader = dict(
         transforms=train_pipeline,
         phase='train',
         batch_size=batch_size, 
-        possible_group_sizes=[3],
+        possible_group_sizes=[1],
         possible_frame_intervals=[1]
         ),
     )
 
 val_dataloader = dict(
-    num_workers=4,
+    num_workers=6,
     persistent_workers=False,
     sampler=dict(type='DefaultSampler', shuffle=False),
     collate_fn=dict(type='collate_dict'),
@@ -187,7 +187,7 @@ val_dataloader = dict(
         transforms=val_pipeline,
         phase='val',
         batch_size=batch_size, 
-        possible_group_sizes=[3],
+        possible_group_sizes=[1],
         possible_frame_intervals=[1]
         ),
     )
@@ -244,22 +244,35 @@ model = dict(
         downsample_factor=downsample_factor,  # ds factor of the feature to be projected to BEV (e.g. 256x704 -> 16x44)  # noqa
         img_backbone_conf=dict(
             type='VoVNet',
+            # model_type="vovnet57",
+            # out_indices=[4, 8],
             model_type="vovnet39",
-            out_indices=[0, 1],
+            out_indices=[2, 5],
+            # init_cfg=dict(type='Pretrained', checkpoint="./work_dirs/backbone_checkpoint/vovnet57_match.pth")
             ),
         img_neck_conf=dict(
             type='SECONDFPN',
             in_channels=[256, 512],
-            upsample_strides=[0.5, 1],
+            upsample_strides=[1, 2],
             out_channels=[128, 128],
             ),
-        depth_net_conf=dict(type='DepthNet', 
+        depth_net_fish_conf=dict(type='DepthNet', 
                             in_channels=256, 
                             mid_channels=256, 
                             context_channels=80, 
-                            d_bound_fish=[0.1, 5.1, 0.2],  # Categorical Depth bounds and division (m)
-                            d_bound_pv=[0.1, 12.1, 0.2],
-                            d_bound_front=[0.1, 36.1, 0.2],
+                            d_bound=[0.1, 5.1, 0.2],  # Categorical Depth bounds and division (m)
+                            ),
+        depth_net_pv_conf=dict(type='DepthNet', 
+                            in_channels=256, 
+                            mid_channels=256, 
+                            context_channels=80, 
+                            d_bound=[0.1, 12.1, 0.2],   # Categorical Depth bounds and division (m)
+                            ),
+        depth_net_front_conf=dict(type='DepthNet', 
+                            in_channels=256, 
+                            mid_channels=256, 
+                            context_channels=80, 
+                            d_bound=[0.1, 36.1, 0.2],  # Categorical Depth bounds and division (m)
                             ),
         bev_feature_reducer_conf=dict(type='BEV_Feat_Reducer', in_channels=(256+80)*voxel_feature_config['voxel_shape'][0]),
         voxel_shape=voxel_feature_config['voxel_shape'] + [1]
@@ -335,7 +348,8 @@ model = dict(
         loss_bbox=dict(
             type='mmdet.L1Loss', reduction='mean', loss_weight=0.25),
     ),
-    is_train_depth=True
+    is_train_depth=True,
+    depth_weight=0.25
 )
 
 val_evaluator = [
@@ -350,7 +364,7 @@ val_evaluator = [
 ]
 
 
-train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=10, val_interval=2)  # -1 note don't eval
+train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=24, val_interval=1)  # -1 note don't eval
 val_cfg = dict(type='GroupValLoop')
 
 test_dataloader = val_dataloader
@@ -366,12 +380,16 @@ find_unused_parameters = True
 
 runner_type = 'GroupRunner'
 
-lr = 0.004  # total lr per gpu lr is lr/n 
+lr = 0.01  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(
     type='OptimWrapper',
-    optimizer=dict(type='AdamW', lr=lr, weight_decay=0.01),
+    optimizer=dict(type='SGD', lr=lr, weight_decay=0.0001),
     clip_grad=dict(max_norm=35, norm_type=2),
-    dtype="bfloat16"  # it works only for arg --amp
+    paramwise_cfg=dict(
+        custom_keys={
+            'backbone': dict(lr_mult=2)
+        }),
+    # dtype="float16"  # it works only for arg --amp
     )
 param_scheduler = dict(type='MultiStepLR', milestones=[16, 20])
 
@@ -395,5 +413,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = "work_dirs/mv_4d_fastbev_t_v1/epoch_24.pth"
+load_from = None
 resume=False

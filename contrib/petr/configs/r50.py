@@ -1,4 +1,4 @@
-experiment_name = "stream_petr_r50_demo"
+experiment_name = "stream_petr_r50_demo_grpsize1_bs4_lr6e-5"
 
 _base_ = "../../../configs/default_runtime.py"
 
@@ -15,15 +15,24 @@ custom_imports = dict(imports=["prefusion", "contrib.petr"], allow_failed_import
 backend_args = None
 
 det_classes = [
-    "class.vehicle.passenger_car",
-    "class.traffic_facility.box",
-    "class.road_marker.arrow",
-    "class.parking.text_icon",
-    "class.cycle.motorcycle",
+    'class.cycle.motorcycle',
+    'class.parking.text_icon',
+    'class.pedestrian.pedestrian',
+    'class.road_marker.arrow',
+    'class.traffic_facility.box',
+    'class.traffic_facility.speed_bump',
+    'class.vehicle.passenger_car'
 ]
 
-voxel_size = [0.2, 0.2, 8]
-point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+def _calc_grid_size(_range, _voxel_size, n_axis=3):
+    return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
+
+batch_size = 4
+num_epochs = 500
+lr = 6e-5  # total lr per gpu lr is lr/n
+voxel_size = [0.1, 0.1, 3]
+point_cloud_range = [-12.8, -12.8, -1.0, 12.8, 12.8, 2.0]
+grid_size = _calc_grid_size(point_cloud_range, voxel_size)
 
 train_dataloader = dict(
     num_workers=1,
@@ -33,8 +42,8 @@ train_dataloader = dict(
     dataset=dict(
         type="GroupBatchDataset",
         name="MvParkingTest",
-        data_root="/ssd2/datasets/mv4d",
-        info_path="/ssd2/datasets/mv4d/mv4d_infos.pkl",
+        data_root="/data/datasets/mv4d",
+        info_path="/data/datasets/mv4d/mv4d_infos_dbg_246_noalign.pkl",
         dictionaries={
             "camera_images": {},
             "bbox_3d": {"det": {"classes": det_classes}},
@@ -45,28 +54,31 @@ train_dataloader = dict(
                 means=[123.675, 116.280, 103.530],
                 stds=[58.395, 57.120, 57.375],
             ),
-            bbox_3d=dict(type="Bbox3D_XYZ_LWH_Yaw_VxVy", classes=det_classes),
+            bbox_3d=dict(type="Bbox3DBasic", classes=det_classes),
         ),
-        model_feeder=dict(type="StreamPETRModelFeeder"),
+        model_feeder=dict(
+            type="StreamPETRModelFeeder",
+            visible_range=point_cloud_range,
+        ),
         transformable_keys=["camera_images", "bbox_3d", "ego_poses"],
         transforms=[
-            dict(type="RandomMirrorSpace", prob=0.5, scope="group"),
+            # dict(type="RandomMirrorSpace", prob=0.5, scope="group"),
             dict(
                 type="RandomImageISP",
-                prob=0.5,
+                prob=0.0001,
             ),
         ],
         phase="train",
-        batch_size=3,
-        possible_group_sizes=[3, 4, 5],
-        possible_frame_intervals=[1, 2],
+        batch_size=batch_size,
+        possible_group_sizes=[1],
+        possible_frame_intervals=[1],
     ),
 )
 
 val_dataloader = train_dataloader
 test_dataloader = train_dataloader
 
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=24, val_interval=-1)  # -1 note don't eval
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=num_epochs, val_interval=-1)  # -1 note don't eval
 val_cfg = dict(type="GroupValLoop")
 test_cfg = dict(type="GroupTestLoop")
 
@@ -121,12 +133,13 @@ model = dict(
         with_ego_pos=True,
         match_with_velo=False,
         scalar=10, ##noise groups
-        noise_scale = 1.0, 
+        noise_scale = 1.0,
         dn_weight= 1.0, ##dn loss weight
         split = 0.75, ###positive rate
         LID=True,
         with_position=True,
-        position_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
+        code_size=10, # x, y, z, l, w, h, sin(yaw), cos(yaw), Vx, Vy
+        position_range=[-13.0, -13.0, -3.0, 13.0, 13.0, 3.0],
         code_weights = [2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
         transformer=dict(
             type='PETRTemporalTransformer',
@@ -156,11 +169,11 @@ model = dict(
             )),
         bbox_coder=dict(
             type='NMSFreeCoder',
-            post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
-            pc_range=[-51.2, -51.2, -5.0, 51.2, 51.2, 3.0],
+            post_center_range=[-13.0, -13.0, -3.0, 13.0, 13.0, 3.0],
+            pc_range=point_cloud_range,
             max_num=300,
             voxel_size=voxel_size,
-            num_classes=10), 
+            num_classes=len(det_classes)),
         loss_cls=dict(
             type='mmdet.FocalLoss',
             use_sigmoid=True,
@@ -170,7 +183,7 @@ model = dict(
         loss_bbox=dict(type='mmdet.L1Loss', loss_weight=0.25),
         loss_iou=dict(type='mmdet.GIoULoss', loss_weight=0.0),
         train_cfg=dict(
-            grid_size=[512, 512, 1],
+            grid_size=grid_size,
             voxel_size=voxel_size,
             point_cloud_range=point_cloud_range,
             out_size_factor=4,
@@ -195,14 +208,11 @@ env_cfg = dict(
     dist_cfg=dict(backend="nccl"),
 )
 
-lr = 4e-4  # total lr per gpu lr is lr/n
-num_epochs = 3
-
 optim_wrapper = dict(
     type="OptimWrapper",
     optimizer=dict(
-        type="AdamW", 
-        lr=lr, 
+        type="AdamW",
+        lr=lr,
         weight_decay=0.01,
     ),
     paramwise_cfg=dict(
@@ -213,15 +223,7 @@ optim_wrapper = dict(
     clip_grad=dict(max_norm=35, norm_type=2),
 )
 
-param_scheduler = [
-    dict(type='CosineAnnealingLR',
-         eta_min=0.005,
-         begin=num_epochs * 0.75,
-         end=num_epochs,
-         T_max=num_epochs * 0.25,
-         by_epoch=True,
-    )
-]
+# param_scheduler = dict(type='MultiStepLR', milestones=[12, 20])
 
 log_processor = dict(type='GroupAwareLogProcessor')
 
@@ -235,5 +237,5 @@ default_hooks = dict(
 
 visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"), dict(type="TensorboardVisBackend")])
 
-# load_from = "work_dirs/mv_4d_fastbev_t/20240903_023804/epoch_24.pth"
-resume = False
+# load_from = "work_dirs/r50/epoch_5.pth"
+# resume = True
