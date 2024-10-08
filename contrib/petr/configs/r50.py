@@ -1,4 +1,4 @@
-experiment_name = "stream_petr_r50_demo"
+experiment_name = "stream_petr_r50_demo_grpsize1_bs4_lr6e-5"
 
 _base_ = "../../../configs/default_runtime.py"
 
@@ -28,8 +28,8 @@ def _calc_grid_size(_range, _voxel_size, n_axis=3):
     return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
 
 batch_size = 4
-num_epochs = 24
-lr = 4e-4  # total lr per gpu lr is lr/n
+num_epochs = 500
+lr = 6e-5  # total lr per gpu lr is lr/n
 voxel_size = [0.1, 0.1, 3]
 point_cloud_range = [-12.8, -12.8, -1.0, 12.8, 12.8, 2.0]
 grid_size = _calc_grid_size(point_cloud_range, voxel_size)
@@ -43,7 +43,7 @@ train_dataloader = dict(
         type="GroupBatchDataset",
         name="MvParkingTest",
         data_root="/data/datasets/mv4d",
-        info_path="/data/datasets/mv4d/mv4d_infos.pkl",
+        info_path="/data/datasets/mv4d/mv4d_infos_dbg_246_noalign.pkl",
         dictionaries={
             "camera_images": {},
             "bbox_3d": {"det": {"classes": det_classes}},
@@ -65,20 +65,20 @@ train_dataloader = dict(
             # dict(type="RandomMirrorSpace", prob=0.5, scope="group"),
             dict(
                 type="RandomImageISP",
-                prob=0.5,
+                prob=0.0001,
             ),
         ],
         phase="train",
         batch_size=batch_size,
-        possible_group_sizes=[3, 4, 5],
-        possible_frame_intervals=[1, 2],
+        possible_group_sizes=[1],
+        possible_frame_intervals=[1],
     ),
 )
 
 val_dataloader = train_dataloader
 test_dataloader = train_dataloader
 
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=24, val_interval=-1)  # -1 note don't eval
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=num_epochs, val_interval=-1)  # -1 note don't eval
 val_cfg = dict(type="GroupValLoop")
 test_cfg = dict(type="GroupTestLoop")
 
@@ -133,7 +133,7 @@ model = dict(
         with_ego_pos=True,
         match_with_velo=False,
         scalar=10, ##noise groups
-        noise_scale = 1.0, 
+        noise_scale = 1.0,
         dn_weight= 1.0, ##dn loss weight
         split = 0.75, ###positive rate
         LID=True,
@@ -173,7 +173,7 @@ model = dict(
             pc_range=point_cloud_range,
             max_num=300,
             voxel_size=voxel_size,
-            num_classes=len(det_classes)), 
+            num_classes=len(det_classes)),
         loss_cls=dict(
             type='mmdet.FocalLoss',
             use_sigmoid=True,
@@ -211,8 +211,8 @@ env_cfg = dict(
 optim_wrapper = dict(
     type="OptimWrapper",
     optimizer=dict(
-        type="AdamW", 
-        lr=lr, 
+        type="AdamW",
+        lr=lr,
         weight_decay=0.01,
     ),
     paramwise_cfg=dict(
@@ -223,15 +223,7 @@ optim_wrapper = dict(
     clip_grad=dict(max_norm=35, norm_type=2),
 )
 
-param_scheduler = [
-    dict(type='CosineAnnealingLR',
-         eta_min=0.005,
-         begin=num_epochs * 0.75,
-         end=num_epochs,
-         T_max=num_epochs * 0.25,
-         by_epoch=True,
-    )
-]
+# param_scheduler = dict(type='MultiStepLR', milestones=[12, 20])
 
 log_processor = dict(type='GroupAwareLogProcessor')
 
@@ -245,5 +237,5 @@ default_hooks = dict(
 
 visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"), dict(type="TensorboardVisBackend")])
 
-# load_from = "work_dirs/mv_4d_fastbev_t/20240903_023804/epoch_24.pth"
-resume = False
+# load_from = "work_dirs/r50/epoch_5.pth"
+# resume = True
