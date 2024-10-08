@@ -100,17 +100,17 @@ class FastRay(BaseModule):
         if is_return_bev:
             C, H, W = img_depth_feats_fish.shape[-3:]
             img_bev_feats_fish = self.fastray_vt_fish(sweep_infos['fish_data']['uu'], sweep_infos['fish_data']['vv'], 
-                                                 sweep_infos['fish_data']['valid_map_sampled'], img_depth_feats_fish.reshape(B, -1, C, H, W),
-                                                 # img=sweep_infos['fish_data']['imgs']
+                                                 sweep_infos['fish_data']['valid_map'], sweep_infos['fish_data']['norm_density_map'].float(), img_depth_feats_fish.reshape(B, -1, C, H, W),
+                                                #  img=sweep_infos['fish_data']['imgs']
                                                  )
             C, H, W = img_depth_feats_pv.shape[-3:]
             img_bev_feats_pv = self.fastray_vt_pv(sweep_infos['pv_data']['uu'], sweep_infos['pv_data']['vv'], 
-                                                 sweep_infos['pv_data']['valid_map_sampled'], img_depth_feats_pv.reshape(B, -1, C, H, W),
+                                                 sweep_infos['pv_data']['valid_map'], sweep_infos['pv_data']['norm_density_map'].float(), img_depth_feats_pv.reshape(B, -1, C, H, W),
                                                  # img=sweep_infos['pv_data']['imgs']
                                                  )
             C, H, W = img_depth_feats_front.shape[-3:]
             img_bev_feats_front = self.fastray_vt_front(sweep_infos['front_data']['uu'], sweep_infos['front_data']['vv'], 
-                                                 sweep_infos['front_data']['valid_map_sampled'], img_depth_feats_front.reshape(B, -1, C, H, W),
+                                                 sweep_infos['front_data']['valid_map'], sweep_infos['front_data']['norm_density_map'].float(), img_depth_feats_front.reshape(B, -1, C, H, W),
                                                  # img=sweep_infos['front_data']['imgs']
                                                  )
             
