@@ -160,7 +160,7 @@ class FastBEV_Det(BaseModel):
                     results[i][1] = results[i][1].detach().cpu().numpy()
                     results[i][2] = results[i][2].detach().cpu().numpy()
                     
-                if False:
+                if True:
                     self.head.show_results(results, batch_data, frame_ids)
             else:
                 all_pred, all_classes, all_scores = self.head.get_bboxes(preds, batch_data, targets)
