@@ -442,7 +442,7 @@ class PlanarBbox3D(PlanarTensorSmith):
             6, 7, 8: unit xvec, ego coords
             9, 10, 11, 12, 13: absolute xvec, ego coords
             14, 15, 16: abs roll angle of yvec and xvec_bev_vertial, intrinsic rotation
-            17, 18, 19: velocity, eogo coords, TODO: should be converted to ego coords, currently world coords            
+            17, 18, 19: velocity, ego coords, TODO: should be converted to ego coords, currently world coords            
         ```
         """
         boxes_3d = {}
@@ -1108,6 +1108,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             centers = []
             radii = []
             heights = []
+            velocities = []
             class_inds = []
             attr_lists = []
             attr_available = 'attrs' in transformable.dictionary[branch]
@@ -1129,6 +1130,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
                     radius = max(l, w)  # l, w should be the same
                     radii.append(radius)
                     heights.append(h)
+                    velocities.append(element['velocity'][:, 0])
                     # get class and attr index
                     class_inds.append(transformable.dictionary[branch]['classes'].index(element['class']))
                     attr_ind_list = []
@@ -1146,9 +1148,9 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
                 num_attr_channels = 0
             branch_seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
             branch_cen_im = np.zeros((1, X, Y), dtype=np.float32)
-            branch_reg_im = np.zeros((10, X, Y), dtype=np.float32)
-            for unit_xvec, unit_zvec, center, radius, height, class_ind, attr_list in zip(
-                unit_xvecs, unit_zvecs, centers, radii, heights, class_inds, attr_lists
+            branch_reg_im = np.zeros((13, X, Y), dtype=np.float32)
+            for unit_xvec, unit_zvec, center, radius, height, velocity, class_ind, attr_list in zip(
+                unit_xvecs, unit_zvecs, centers, radii, heights, velocities, class_inds, attr_lists
             ):
                 center_bev = np.round(center[:2]).astype(int)
                 radius_bev = np.round(max(1, radius * max(fx, fy))).astype(int)  # fx, fy should be the same
@@ -1175,6 +1177,10 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
                 yaw_angle = self._get_yaw_from_zxvecs(unit_zvec, unit_xvec)
                 branch_reg_im[8] = branch_reg_im[8] * (1 - region_obj) + np.cos(yaw_angle) * region_obj
                 branch_reg_im[9] = branch_reg_im[9] * (1 - region_obj) + np.sin(yaw_angle) * region_obj
+                # 10, 11, 12: velocity
+                branch_reg_im[10] = branch_reg_im[10] * (1 - region_obj) + velocity[0] * region_obj
+                branch_reg_im[11] = branch_reg_im[11] * (1 - region_obj) + velocity[1] * region_obj
+                branch_reg_im[12] = branch_reg_im[12] * (1 - region_obj) + velocity[2] * region_obj
                 ## gen centerness
                 centerness = (radius_bev ** 2 - (branch_reg_im[0] ** 2 + branch_reg_im[1] ** 2)) / radius ** 2
                 branch_cen_im[0] = branch_cen_im[0] * (1 - region_obj) + centerness * region_obj
@@ -1214,7 +1220,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
         ])
 
     
-    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_zvecs, vecs_yaw, ratio=1):
+    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_zvecs, vecs_yaw, velocities, ratio=0.7):
         scores = seg_scores * cen_scores
         ranked_inds = np.argsort(scores)[::-1]
         kept_groups = []
@@ -1253,11 +1259,13 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[1]
+            mean_velocity = (velocities[:, group] * scores[group][None]).sum(1) / score_sum
             cylinder_3d = {
                 'confs': mean_classes,
                 'size': mean_size[[0, 0, 1]],
                 'rotation': mean_rmat,
-                'translation': mean_center
+                'translation': mean_center,
+                'velocity': mean_velocity
             }
             pred_cylinders.append(cylinder_3d)
         return pred_cylinders
@@ -1288,6 +1296,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             3, 4: size radius, height
             5, 6, 7: unit zvec
             8, 9: yaw angle of zvec, intrinsical
+            10, 11, 12: velocity, ego coords
         ```
         """
         cylinders_3d = {}
@@ -1320,11 +1329,13 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             sin_yaws = reg_values[9]
             vecs_yaw = np.array([cos_yaws, sin_yaws])
             vecs_yaw /= np.maximum(np.linalg.norm(vecs_yaw), 1e-6)
+            # 10, 11, 12: velocities
+            velocities = reg_values[[10, 11, 12]]
             
             ## group nms
             mean_cylinders_3d = self._group_nms(
                 seg_scores, cen_scores, seg_classes,
-                centers, sizes, unit_zvecs, vecs_yaw
+                centers, sizes, unit_zvecs, vecs_yaw, velocities
             )
             cylinders_3d[branch] = mean_cylinders_3d
         return cylinders_3d
