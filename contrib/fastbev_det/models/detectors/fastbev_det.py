@@ -42,7 +42,7 @@ class FastBEV_Det(BaseModel):
     def get_depth_loss(self, depth_labels, depth_preds, camera_type):
         depth_labels = self.get_downsampled_gt_depth(depth_labels, camera_type)
         depth_preds = depth_preds.permute(0, 2, 3, 1).contiguous().view(
-            -1, getattr(self.backbone.depth_net, f"depth_channels_{camera_type}"))
+            -1, getattr(getattr(self.backbone, f"depth_net_{camera_type}"), "depth_channels"))
         fg_mask = torch.max(depth_labels, dim=1).values > 0.0
         assert depth_preds.device == depth_labels.device == fg_mask.device
         with autocast(device_type=depth_preds.device, enabled=False):
@@ -80,10 +80,10 @@ class FastBEV_Det(BaseModel):
         gt_depths = torch.min(gt_depths_tmp, dim=-1).values
         gt_depths = gt_depths.view(BN, H // self.downsample_factor,
                                    W // self.downsample_factor)
-        dbound = getattr(self.backbone.depth_net, f"d_bound_{camera_type}")
+        dbound = getattr(getattr(self.backbone, f"depth_net_{camera_type}"), "d_bound")
         gt_depths = (gt_depths -
                      (dbound[0] - dbound[2])) / dbound[2]
-        depth_channels = getattr(self.backbone.depth_net, f"depth_channels_{camera_type}")
+        depth_channels = getattr(getattr(self.backbone, f"depth_net_{camera_type}"), "depth_channels")
         gt_depths = torch.where(
             (gt_depths < depth_channels + 1) & (gt_depths >= 0.0),
             gt_depths, torch.zeros_like(gt_depths))

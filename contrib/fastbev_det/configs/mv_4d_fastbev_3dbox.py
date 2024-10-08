@@ -17,14 +17,14 @@ W, H = 120, 240
 bev_front = 180 
 bev_left = 60
 voxel_size = [0.2, 0.2, 0.5]
-downsample_factor=8
+downsample_factor=4
 
-img_scale = 1
+img_scale = 2
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
-front_perspective_img_size = [768 * img_scale, 384 * img_scale]
-batch_size = 6
-group_size = 3
+front_perspective_img_size = [768, 384]
+batch_size = 2
+group_size = 1
 bev_range = [-12, 36, -12, 12, -0.5, 2.5]
 
 voxel_feature_config = dict(
@@ -64,8 +64,8 @@ train_pipeline = [
         scope='frame'
     ),
     dict(type='RandomRenderExtrinsic',
-        prob=0.8, 
-        angles=[0,0,3],
+        prob=0., 
+        angles=[0,0,0],
         scope='frame'),
     dict(type='FastRayLookUpTable', 
         voxel_feature_config=voxel_feature_config,
@@ -160,7 +160,7 @@ train_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_train.pkl',
+        info_path=data_root + 'mv_4d_infos_val.pkl',
         dictionaries=dictionary,
         transformable_keys=collection_info_type,
         transforms=train_pipeline,
@@ -244,23 +244,35 @@ model = dict(
         downsample_factor=downsample_factor,  # ds factor of the feature to be projected to BEV (e.g. 256x704 -> 16x44)  # noqa
         img_backbone_conf=dict(
             type='VoVNet',
-            model_type="vovnet57",
-            out_indices=[7, 8],
+            # model_type="vovnet57",
+            # out_indices=[4, 8],
+            model_type="vovnet39",
+            out_indices=[2, 5],
             # init_cfg=dict(type='Pretrained', checkpoint="./work_dirs/backbone_checkpoint/vovnet57_match.pth")
             ),
         img_neck_conf=dict(
             type='SECONDFPN',
             in_channels=[256, 512],
-            upsample_strides=[0.5, 1],
+            upsample_strides=[1, 2],
             out_channels=[128, 128],
             ),
-        depth_net_conf=dict(type='DepthNet', 
+        depth_net_fish_conf=dict(type='DepthNet', 
                             in_channels=256, 
                             mid_channels=256, 
                             context_channels=80, 
-                            d_bound_fish=[0.1, 5.1, 0.2],  # Categorical Depth bounds and division (m)
-                            d_bound_pv=[0.1, 12.1, 0.2],
-                            d_bound_front=[0.1, 36.1, 0.2],
+                            d_bound=[0.1, 5.1, 0.2],  # Categorical Depth bounds and division (m)
+                            ),
+        depth_net_pv_conf=dict(type='DepthNet', 
+                            in_channels=256, 
+                            mid_channels=256, 
+                            context_channels=80, 
+                            d_bound=[0.1, 12.1, 0.2],   # Categorical Depth bounds and division (m)
+                            ),
+        depth_net_front_conf=dict(type='DepthNet', 
+                            in_channels=256, 
+                            mid_channels=256, 
+                            context_channels=80, 
+                            d_bound=[0.1, 36.1, 0.2],  # Categorical Depth bounds and division (m)
                             ),
         bev_feature_reducer_conf=dict(type='BEV_Feat_Reducer', in_channels=(256+80)*voxel_feature_config['voxel_shape'][0]),
         voxel_shape=voxel_feature_config['voxel_shape'] + [1]
@@ -368,11 +380,15 @@ find_unused_parameters = True
 
 runner_type = 'GroupRunner'
 
-lr = 0.008  # total lr per gpu lr is lr/n 
+lr = 0.01  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(
     type='OptimWrapper',
-    optimizer=dict(type='AdamW', lr=lr, weight_decay=0.01),
+    optimizer=dict(type='SGD', lr=lr, weight_decay=0.0001),
     clip_grad=dict(max_norm=35, norm_type=2),
+    paramwise_cfg=dict(
+        custom_keys={
+            'backbone': dict(lr_mult=2)
+        }),
     # dtype="float16"  # it works only for arg --amp
     )
 param_scheduler = dict(type='MultiStepLR', milestones=[16, 20])
@@ -397,5 +413,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = None # "./work_dirs/mv_4d_fastbev_t_v1/20240911_114612/epoch_45.pth"
+load_from = None
 resume=False
