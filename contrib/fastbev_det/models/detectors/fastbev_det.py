@@ -25,6 +25,7 @@ class FastBEV_Det(BaseModel):
                  data_preprocessor=None, 
                  mono_depth=None,
                  depth_weight=1.,
+                 eval_only=False,
                  init_cfg=None):
         super().__init__(data_preprocessor=data_preprocessor, init_cfg=init_cfg)
         self.backbone = MODELS.build(backbone_conf)
@@ -32,6 +33,7 @@ class FastBEV_Det(BaseModel):
         self.head_conf = head_conf
         self.is_train_depth = is_train_depth
         self.depth_weight = depth_weight
+        self.eval_only = eval_only
         self.downsample_factor = backbone_conf.get('downsample_factor', 16)
         self.each_camera_nums = self.backbone.each_camera_nums if hasattr(self.backbone, 'each_camera_nums') else None
         self.head.each_camera_nums = self.each_camera_nums
@@ -160,7 +162,7 @@ class FastBEV_Det(BaseModel):
                     results[i][1] = results[i][1].detach().cpu().numpy()
                     results[i][2] = results[i][2].detach().cpu().numpy()
                     
-                if True:
+                if self.eval_only:
                     self.head.show_results(results, batch_data, frame_ids)
             else:
                 all_pred, all_classes, all_scores = self.head.get_bboxes(preds, batch_data, targets)

@@ -349,7 +349,8 @@ model = dict(
             type='mmdet.L1Loss', reduction='mean', loss_weight=0.25),
     ),
     is_train_depth=True,
-    depth_weight=0.25
+    depth_weight=0.25,
+    eval_only=False
 )
 
 val_evaluator = [
