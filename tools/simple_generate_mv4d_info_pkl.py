@@ -42,6 +42,7 @@ def parse_argument():
         default=np.eye(4),
         help="4x4 mat, 用来将原本的右前上ego系变换为prefusion框架要求的前左上ego系",
     )
+    parser.add_argument("--timestamp-range", type=int, nargs=2)
     return edict({k: v for k, v in parser.parse_args()._get_kwargs()})
 
 
@@ -109,7 +110,7 @@ def prepare_ego_poses(scene_root: Path) -> Dict[int, np.ndarray]:
     poses = {}
     for t, *xyzq in trajectory:
         mat = xyzq2mat(*xyzq, as_homo=True)
-        standard_mat = args.ego_coordsys_align_mat @ mat
+        standard_mat = mat @ np.linalg.inv(args.ego_coordsys_align_mat)
         poses[int(t)] = (standard_mat[:3, :3], standard_mat[:3, 3])
     return poses
 
@@ -117,15 +118,15 @@ def prepare_ego_poses(scene_root: Path) -> Dict[int, np.ndarray]:
 def prepare_all_frame_infos(args, scene_root: Path) -> Dict:
     common_ts = read_common_ts(scene_root)
 
-    # FIXME: Temprary code, need to remove
-    # common_ts = [ts for ts in common_ts if ts <= 1698825819264]
-    # FIXME: Temprary code, need to remove
+    if args.timestamp_range is not None and len(args.timestamp_range) == 2:
+        common_ts = [ts for ts in common_ts if args.timestamp_range[0] <= ts <= args.timestamp_range[1]]
+        logger.info(f"Timestamp Range has been set to {args.timestamp_range}, only {len(common_ts)} frames will kept in the dataset.")
 
     frame_infos = {}
     data_args = [(scene_root, ts) for ts in common_ts]
     res = maybe_multithreading(prepare_object_info, data_args, num_threads=args.num_workers, use_tqdm=True)
     ego_poses = prepare_ego_poses(scene_root)
-    for ts, (boxes, polylines) in zip(common_ts, res):
+    for ts, boxes, polylines in res:
         frame_infos[str(ts)] = {  # convert to str to make it align with the design
             "camera_image": prepare_camera_image_paths(scene_root, ts),
             "3d_boxes": boxes,
@@ -157,7 +158,7 @@ def prepare_object_info(scene_root: Path, ts: int) -> Tuple[List[dict], List[dic
             boxes.append(convert_box3d_format(obj))
         elif obj.geometry_type == "polyline3d":
             polylines.append(convert_polyline3d_format(obj))
-    return boxes, polylines
+    return ts, boxes, polylines
 
 
 def convert_box3d_format(box_info: Dict):
@@ -177,7 +178,10 @@ def convert_box3d_format(box_info: Dict):
 
 
 def convert_polyline3d_format(polyline_info: Dict):
-    standard_points = points3d_to_homo(np.array(polyline_info.geometry, dtype=np.float32)) @ args.ego_coordsys_align_mat.T
+    _pts = np.array(polyline_info.geometry, dtype=np.float32)
+    if _pts.ndim == 1:
+        pts = pts.reshape(-1, 3)
+    standard_points = points3d_to_homo(_pts) @ args.ego_coordsys_align_mat.T
     return {
         "class": polyline_info.obj_type,
         "attr": polyline_info.obj_attr,

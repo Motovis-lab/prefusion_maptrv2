@@ -23,12 +23,13 @@ class Bbox3DBasic(TensorSmith):
     def __call__(self, transformable: "Bbox3D"):
         return {
             "classes": torch.tensor([self.classes.index(ele["class"]) for ele in transformable.elements], dtype=torch.int64),
-            "xyz_lwh_sinyaw_cosyaw_vx_vy": torch.tensor(
+            "xyz_lwh_yaw_vx_vy": torch.tensor(
                 np.array(
                     [
                         bx["translation"].flatten().tolist()
                         + bx["size"]
-                        + self._encode_yaw(Rotation.from_matrix(bx["rotation"]).as_euler("XYZ", degrees=False)[2])
+                        + [Rotation.from_matrix(bx["rotation"]).as_euler("XYZ", degrees=False)[2]]
+                        # + self._encode_yaw(Rotation.from_matrix(bx["rotation"]).as_euler("XYZ", degrees=False)[2])
                         + bx["velocity"].flatten()[:2].tolist()
                         for bx in transformable.elements
                     ]
