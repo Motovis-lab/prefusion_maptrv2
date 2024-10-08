@@ -1,4 +1,4 @@
-experiment_name = "stream_petr_r50_demo_grpsize1_lr6e-5"
+experiment_name = "stream_petr_r50_demo_grpsize1_bs4_lr6e-5"
 
 _base_ = "../../../configs/default_runtime.py"
 
@@ -27,8 +27,8 @@ det_classes = [
 def _calc_grid_size(_range, _voxel_size, n_axis=3):
     return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
 
-batch_size = 2
-num_epochs = 100
+batch_size = 4
+num_epochs = 500
 lr = 6e-5  # total lr per gpu lr is lr/n
 voxel_size = [0.1, 0.1, 3]
 point_cloud_range = [-12.8, -12.8, -1.0, 12.8, 12.8, 2.0]
@@ -238,4 +238,4 @@ default_hooks = dict(
 visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"), dict(type="TensorboardVisBackend")])
 
 # load_from = "work_dirs/r50/epoch_5.pth"
-resume = False
+# resume = True
