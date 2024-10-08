@@ -6,6 +6,7 @@ from easydict import EasyDict as edict
 from prefusion.dataset.tensor_smith import get_bev_intrinsics, CameraImageTensor
 from prefusion.dataset.transform import Bbox3D, ParkingSlot3D
 from prefusion.dataset.tensor_smith import PlanarBbox3D, PlanarParkingSlot3D, PlanarSquarePillar
+from prefusion.dataset.tensor_smith import PlanarCylinder3D, PlanarOrientedCylinder3D
 
 def test_get_bev_intrinsics():
     voxel_shape=(6, 200, 160)
@@ -193,6 +194,101 @@ def test_planar_squre_pillars_generation_and_reverse():
         pred_bboxes_3d['branch_0'][0]['rotation'],
         box3d.elements[0]['rotation'],
     decimal=3)
+
+
+
+def test_planar_cylinder3d_generation_and_reverse():
+    pc = PlanarCylinder3D(
+        voxel_shape=(6, 160, 80),
+        voxel_range=([-0.5, 2.5], [24, -8], [8, -8]),
+        use_bottom_center=True
+    )
+    box3d = Bbox3D(
+        elements=[
+            {
+                'class': 'cylinder_pillar',
+                'attr': {},
+                'size': [1, 1, 4],
+                'rotation': np.array([
+                    [ 0.8658935 , -0.48977932,  0.1017087 ],
+                    [ 0.49992385,  0.85438382, -0.1417901 ],
+                    [-0.01745241,  0.17362173,  0.98465776]
+                ]),
+                'translation': np.float32([
+                    [8], [4], [0]
+                ]),
+                'velocity': np.float32([
+                    [0], [0], [0]
+                ]),
+            },
+        ],
+        dictionary={
+            'branch_0': {
+                'classes': ['cylinder_pillar']
+            }
+        },
+        tensor_smith=pc
+    )
+    box3d.to_tensor()
+    tensor_dict = box3d.tensor
+    assert tensor_dict['branch_0']['seg'][0].max() == 1
+    pred_bboxes_3d = pc.reverse(tensor_dict)
+    np.testing.assert_almost_equal(
+        pred_bboxes_3d['branch_0'][0]['height'],
+        box3d.elements[0]['size'][2],
+    decimal=3)
+    np.testing.assert_almost_equal(
+        pred_bboxes_3d['branch_0'][0]['zvec'],
+        box3d.elements[0]['rotation'][:, 2],
+    decimal=3)
+
+
+
+def test_planar_oriented_cylinder3d_generation_and_reverse():
+    poc = PlanarOrientedCylinder3D(
+        voxel_shape=(6, 160, 80),
+        voxel_range=([-0.5, 2.5], [24, -8], [8, -8]),
+        use_bottom_center=True
+    )
+    box3d = Bbox3D(
+        elements=[
+            {
+                'class': 'pedestrain',
+                'attr': {},
+                'size': [0.5, 0.5, 1.75],
+                'rotation': np.array([
+                    [ 0.8658935 , -0.48977932,  0.1017087 ],
+                    [ 0.49992385,  0.85438382, -0.1417901 ],
+                    [-0.01745241,  0.17362173,  0.98465776]
+                ]),
+                'translation': np.float32([
+                    [8], [4], [0]
+                ]),
+                'velocity': np.float32([
+                    [0], [0], [0]
+                ]),
+            },
+        ],
+        dictionary={
+            'branch_0': {
+                'classes': ['pedestrain']
+            }
+        },
+        tensor_smith=poc
+    )
+    box3d.to_tensor()
+    tensor_dict = box3d.tensor
+    assert tensor_dict['branch_0']['seg'][0].max() == 1
+    pred_bboxes_3d = poc.reverse(tensor_dict)
+    np.testing.assert_almost_equal(
+        pred_bboxes_3d['branch_0'][0]['size'],
+        box3d.elements[0]['size'],
+    decimal=3)
+    np.testing.assert_almost_equal(
+        pred_bboxes_3d['branch_0'][0]['rotation'],
+        box3d.elements[0]['rotation'],
+    decimal=3)
+
 
 
 
