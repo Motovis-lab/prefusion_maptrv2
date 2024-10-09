@@ -5,10 +5,11 @@ from mmengine.model import BaseModule
 from prefusion.registry import MODELS
 import torch.nn.functional as F
 import numpy as np
-from time import sleep
 import matplotlib.pyplot as plt
 import mmcv
 import pdb
+from torch import Tensor
+
 
 @MODELS.register_module()
 class fastray_vt(BaseModule):
@@ -54,3 +55,22 @@ class fastray_vt(BaseModule):
             voxel_feature = voxel_feature.view(B, C * self.bev_z, self.bev_h, self.bev_w)
             # B * (C * Z) * H * W
             return voxel_feature
+    
+
+class ProjectPlugin(torch.autograd.Function):
+    output_size = None
+
+    @staticmethod
+    def set_output_size(output_size):
+        ProjectPlugin.output_size = tuple(output_size)
+
+    @staticmethod
+    def symbolic(g, input, projection_u, projection_v, projection_valid):
+        return g.op("Plugin", input, projection_u, projection_v, projection_valid, name_s='Project2Dto3D', info_s='')
+
+    @staticmethod
+    def forward(ctx, input: Tensor, projection_u: Tensor, projection_v: Tensor, projection_valid: Tensor):
+        # input: [bs*n_cams, h, w, c]
+        # projection: [bs*n_cams, 3, 4]
+        # output: [bev_h, bev_w, z, c']
+        return torch.ones(ProjectPlugin.output_size)

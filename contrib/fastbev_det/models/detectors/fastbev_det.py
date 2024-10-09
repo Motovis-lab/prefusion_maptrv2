@@ -234,3 +234,20 @@ class FastBEV_Det(BaseModel):
         """
         return self.head.get_bboxes(preds_dicts)
     
+
+
+@MODELS.register_module()
+class FastBEV_Det_DP(FastBEV_Det):
+    def __init__(self, **kwargs):
+        super(FastBEV_Det_DP, self).__init__(**kwargs)
+
+    def forward(self, fish_imgs, pv_imgs, front_imgs,
+                fish_intrinsic, fish_extrinsic,
+                pv_intrinsic, pv_extrinsic,
+                front_intrinsic, front_extrinsic
+                ):
+        features = self.backbone(fish_imgs, pv_imgs, front_imgs, 
+                                 fish_intrinsic, fish_extrinsic, pv_intrinsic, pv_extrinsic, front_intrinsic, front_extrinsic)
+        preds = self.head(features)
+        
+        return preds
