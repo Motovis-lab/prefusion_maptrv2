@@ -145,51 +145,22 @@ class FastRay_DP(FastRay):
     def __init__(self, **kwargs):
         super(FastRay_DP, self).__init__(**kwargs)
         self.plugin = ProjectPlugin()
-        self.plugin.set_output_size([1, 336, 240, 120])
+        self.plugin.set_output_size([1, 336 * 6, 240, 120])
 
-        self.fish_uu_0 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/uu_fish_feats_0_0.npy")), requires_grad=False)
-        self.fish_uu_2 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/uu_fish_feats_0_1.npy")), requires_grad=False)
-        self.fish_uu_1 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/uu_fish_feats_0_2.npy")), requires_grad=False)
-        self.fish_uu_3 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/uu_fish_feats_0_3.npy")), requires_grad=False)
-        self.fish_uu = torch.stack([self.fish_uu_0, self.fish_uu_1, self.fish_uu_2, self.fish_uu_3], dim=0)
+        self.fish_uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_uu.npy")), requires_grad=False)
+        self.fish_vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_vv.npy")), requires_grad=False)
+        self.fish_valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_valid_map.npy")), requires_grad=False)
+        self.fish_norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_norm_density_map.npy")), requires_grad=False)
         
-        self.fish_vv_0  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/vv_fish_feats_0_0.npy")), requires_grad=False)
-        self.fish_vv_1  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/vv_fish_feats_0_1.npy")), requires_grad=False)
-        self.fish_vv_2  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/vv_fish_feats_0_2.npy")), requires_grad=False)
-        self.fish_vv_3  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/vv_fish_feats_0_3.npy")), requires_grad=False)
-        self.fish_vv = torch.stack([self.fish_vv_0, self.fish_vv_1, self.fish_vv_2, self.fish_vv_3], dim=0)
-
-        self.fish_valid_0 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/valid_ind_map_fish_feats_0_0.npy")), requires_grad=False)
-        self.fish_valid_1 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/valid_ind_map_fish_feats_0_1.npy")), requires_grad=False)
-        self.fish_valid_2 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/valid_ind_map_fish_feats_0_2.npy")), requires_grad=False)
-        self.fish_valid_3 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/valid_ind_map_fish_feats_0_3.npy")), requires_grad=False)
-        self.fish_valid = torch.stack([self.fish_valid_0, self.fish_valid_1, self.fish_valid_2, self.fish_valid_3], dim=0)
+        self.pv_uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_uu.npy")), requires_grad=False)
+        self.pv_vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_vv.npy")), requires_grad=False)
+        self.pv_valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_valid_map.npy")), requires_grad=False)
+        self.pv_norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_norm_density_map.npy")), requires_grad=False)
         
-        self.pv_uu_0 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/uu_pv_feats_0_0.npy")), requires_grad=False)
-        self.pv_uu_1 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/uu_pv_feats_0_1.npy")), requires_grad=False)
-        self.pv_uu_2 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/uu_pv_feats_0_2.npy")), requires_grad=False)
-        self.pv_uu_3 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/uu_pv_feats_0_3.npy")), requires_grad=False)
-        self.pv_uu_4 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/uu_pv_feats_0_4.npy")), requires_grad=False)
-        self.pv_uu = torch.stack([self.pv_uu_0, self.pv_uu_1, self.pv_uu_2, self.pv_uu_3, self.pv_uu_4], dim=0) 
-
-        self.pv_vv_0 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/vv_pv_feats_0_0.npy")), requires_grad=False)
-        self.pv_vv_1 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/vv_pv_feats_0_1.npy")), requires_grad=False)
-        self.pv_vv_2 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/vv_pv_feats_0_2.npy")), requires_grad=False)
-        self.pv_vv_3 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/vv_pv_feats_0_3.npy")), requires_grad=False)
-        self.pv_vv_4 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/vv_pv_feats_0_4.npy")), requires_grad=False)
-        self.pv_vv = torch.stack([self.pv_vv_0, self.pv_vv_1, self.pv_vv_2, self.pv_vv_3, self.pv_vv_4], dim=0)
-
-        self.pv_valid_0 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/valid_ind_map_pv_feats_0_0.npy")), requires_grad=False)
-        self.pv_valid_1 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/valid_ind_map_pv_feats_0_1.npy")), requires_grad=False)
-        self.pv_valid_2 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/valid_ind_map_pv_feats_0_2.npy")), requires_grad=False)
-        self.pv_valid_3 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/valid_ind_map_pv_feats_0_3.npy")), requires_grad=False)
-        self.pv_valid_4 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/valid_ind_map_pv_feats_0_4.npy")), requires_grad=False)
-        self.pv_valid = torch.stack([self.pv_valid_0, self.pv_valid_1, self.pv_valid_2, self.pv_valid_3, self.pv_valid_4], dim=0)
-
-        self.front_uu_0 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/uu_front_feats_0_0.npy")), requires_grad=False)
-        self.front_vv_0 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/vv_front_feats_0_0.npy")), requires_grad=False)
-        self.front_valid_0 = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/valid_ind_map_front_feats_0_0.npy")), requires_grad=False)
-
+        self.front_uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_uu.npy")), requires_grad=False)
+        self.front_vv = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_vv.npy")), requires_grad=False)
+        self.front_valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_valid_map.npy")), requires_grad=False)
+        self.front_norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_norm_density_map.npy")), requires_grad=False)
 
     def forward(self, fish_data_imgs, pv_data_imgs, front_data_imgs,
                 fish_intrinsic, fish_extrinsic,
@@ -208,15 +179,15 @@ class FastRay_DP(FastRay):
 
         C, H, W = img_depth_feats_fish.shape[-3:]
         img_bev_feats_fish = self.plugin.apply(img_depth_feats_fish.reshape(4, C, H, W), self.fish_uu, self.fish_vv, 
-                                                self.fish_valid
+                                                self.fish_valid, self.fish_norm_density_map
                                                 )
         C, H, W = img_depth_feats_pv.shape[-3:]
         img_bev_feats_pv = self.plugin.apply(img_depth_feats_pv.reshape(5, C, H, W), self.pv_uu, self.pv_vv, 
-                                                self.pv_valid
+                                                self.pv_valid, self.pv_norm_density_map
                                                 )
         C, H, W = img_depth_feats_front.shape[-3:]
-        img_bev_feats_front = self.plugin.apply(img_depth_feats_front.reshape(1, C, H, W), self.front_uu_0, self.front_vv_0, 
-                                                self.front_valid_0
+        img_bev_feats_front = self.plugin.apply(img_depth_feats_front.reshape(1, C, H, W), self.front_uu, self.front_vv, 
+                                                self.front_valid, self.front_norm_density_map
                                                 )
         
         img_bev_feats = img_bev_feats_fish + img_bev_feats_pv + img_bev_feats_front
