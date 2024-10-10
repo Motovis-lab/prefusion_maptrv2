@@ -86,8 +86,9 @@ class FastRayModelFeeders(BaseModelFeeder):
             'annotations': {},
         }
         for input_dict in frame_batch:
-            transformable_keys = input_dict['transformables'].keys()
-            # get camera tensors and lookups
+            # batching index info
+            processed_frame_batch['index_infos'].append(input_dict['index_info'])
+            # batching camera tensors and lookups
             camera_image_set = input_dict['transformables']['camera_images']
             LUT = self.voxel_lut_gen.generate(camera_image_set)
             for cam_id in camera_image_set:
@@ -109,7 +110,8 @@ class FastRayModelFeeders(BaseModelFeeder):
             # delta poses
             # TODO:
             
-            # annotations
+            # batching annotations
+            transformable_keys = input_dict['transformables'].keys()
             for transformable_key in transformable_keys:
                 if transformable_key in ['camera_images', 'camera_poses', 'lidar_points']:
                     continue
