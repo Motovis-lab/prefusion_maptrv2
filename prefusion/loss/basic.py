@@ -3,35 +3,63 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-def seg_iou(pred, label):
+def seg_iou(pred, label, dim=None):
     """
     pred must be sigmoided, pred and label share same shape
     shape in (N, C, H, W) or (N, H, W) or (H, W)
     """
     if label.max() == 0:
         return seg_iou(1 - pred, 1 - label)
-    inter = (pred * label).sum() + 1
-    union = (pred + label - pred * label).sum() + 1
+    inter = (pred * label).sum(dim=dim) + 1
+    union = (pred + label - pred * label).sum(dim=dim) + 1
     return inter / union
 
 
 class SegIouLoss(nn.Module):
-    def __init__(self, method='log', pred_logits=True):
+    def __init__(self, method='log', pred_logits=True, channel_weights=None):
         super().__init__()
         assert method in ['log', 'linear']
         self.method = method
         self.pred_logits = pred_logits
-    
+        self.channel_weights = channel_weights
+
+    @staticmethod
+    def _validate_inputs(pred, label, channel_weights):
+        assert pred.shape == label.shape
+        assert 2 <= pred.ndim <= 4
+        if channel_weights is not None:
+            assert len(channel_weights) == pred.shape[1]
+   
+    @staticmethod
+    def _ensure_shape_nchw(tensor):
+        if tensor.dim() == 2:
+            tensor = tensor.unsqueeze(0).unsqueeze(0)
+        elif tensor.dim() == 3:
+            tensor = tensor.unsqueeze(1)
+        return tensor
+
     def forward(self, pred, label, mask=None):
+        pred = self._ensure_shape_nchw(pred)
+        label = self._ensure_shape_nchw(label)
+        channel_weights = torch.ones(pred.shape[1]) if self.channel_weights is None else torch.tensor(self.channel_weights)
+        self._validate_inputs(pred, label, channel_weights)
+
         if self.pred_logits:
             pred = pred.sigmoid()
         if mask is None:
             mask = torch.ones_like(label)
-        iou = seg_iou(pred * mask, label * mask)
+
+        iou = seg_iou(pred * mask, label * mask, dim=(0, 2, 3))
+
         if self.method == 'log':
-            return - iou.log()
+            loss = -iou.log()
         else:
-            return 1 - iou
+            loss = 1 - iou
+        
+        if channel_weights is not None:
+            loss = (loss * channel_weights).sum() / channel_weights.sum()
+
+        return loss
 
 
 def dual_focal_loss(pred, label, reduction='mean', pos_weight=None):
