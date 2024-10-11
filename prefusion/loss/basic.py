@@ -16,19 +16,12 @@ def seg_iou(pred, label, dim=None):
 
 
 class SegIouLoss(nn.Module):
-    def __init__(self, method='log', pred_logits=True, channel_weights=None):
+    def __init__(self, method='log', pred_logits=True, reduction_dim=None):
         super().__init__()
         assert method in ['log', 'linear']
         self.method = method
         self.pred_logits = pred_logits
-        self.channel_weights = channel_weights
-
-    @staticmethod
-    def _validate_inputs(pred, label, channel_weights):
-        assert pred.shape == label.shape
-        assert 2 <= pred.ndim <= 4
-        if channel_weights is not None:
-            assert len(channel_weights) == pred.shape[1]
+        self.reduction_dim = reduction_dim
    
     @staticmethod
     def _ensure_shape_nchw(tensor):
@@ -39,25 +32,21 @@ class SegIouLoss(nn.Module):
         return tensor
 
     def forward(self, pred, label, mask=None):
+        assert pred.shape == label.shape
         pred = self._ensure_shape_nchw(pred)
         label = self._ensure_shape_nchw(label)
-        channel_weights = torch.ones(pred.shape[1]) if self.channel_weights is None else torch.tensor(self.channel_weights)
-        self._validate_inputs(pred, label, channel_weights)
 
         if self.pred_logits:
             pred = pred.sigmoid()
         if mask is None:
             mask = torch.ones_like(label)
 
-        iou = seg_iou(pred * mask, label * mask, dim=(0, 2, 3))
+        iou = seg_iou(pred * mask, label * mask, dim=self.reduction_dim)
 
         if self.method == 'log':
             loss = -iou.log()
         else:
-            loss = 1 - iou
-        
-        if channel_weights is not None:
-            loss = (loss * channel_weights).sum() / channel_weights.sum()
+            loss = 1 - iou        
 
         return loss
 

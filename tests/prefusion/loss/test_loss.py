@@ -47,23 +47,18 @@ def test_seg_iou(seg_pred, seg_label):
 
 def test_seg_iou_loss_sigmoid(seg_pred, seg_label):
     iou_loss = SegIouLoss(method="linear", pred_logits=True)
-    assert iou_loss(seg_pred, seg_label).item() == _approx(0.748484)
+    assert iou_loss(seg_pred, seg_label).item() == _approx(0.7773743)
 
 
-def test_seg_iou_loss_no_channel_weights(seg_pred, seg_label):
+def test_seg_iou_loss_no_sigmoid(seg_pred, seg_label):
     iou_loss = SegIouLoss(method="linear", pred_logits=False)
-    assert iou_loss(seg_pred, seg_label).item() == _approx(0.470546)
+    assert iou_loss(seg_pred, seg_label).item() == _approx(0.5083333)
     
 
-def test_seg_iou_loss_with_channel_weights(seg_pred, seg_label):
-    iou_loss = SegIouLoss(method="linear", pred_logits=False, channel_weights=[0.5, 0.5])
-    assert iou_loss(seg_pred, seg_label).item() == _approx(0.470546)
-    iou_loss = SegIouLoss(method="linear", pred_logits=False, channel_weights=[1.0, 0.0])
-    assert iou_loss(seg_pred, seg_label).item() == _approx(0.482756)
-    iou_loss = SegIouLoss(method="linear", pred_logits=False, channel_weights=[0.0, 1.0])
-    assert iou_loss(seg_pred, seg_label).item() == _approx(0.458334)
-    iou_loss = SegIouLoss(method="linear", pred_logits=False, channel_weights=[0.7, 0.3])
-    assert iou_loss(seg_pred, seg_label).item() == _approx(0.4754294)
+def test_seg_iou_loss(seg_pred, seg_label):
+    iou_loss = SegIouLoss(method="linear", pred_logits=False, reduction_dim=(0, 2, 3))
+    assert iou_loss(seg_pred, seg_label).tolist() == _approx([0.482756, 0.458334])
+
 
 def test_seg_iou_loss_with_mask(seg_pred, seg_label):
     pass
