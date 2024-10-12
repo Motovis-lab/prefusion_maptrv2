@@ -24,7 +24,7 @@ class PlanarBbox3DLoss(nn.Module):
 
     @staticmethod
     def _ensure_shape_nchw(tensor_dict):
-        for k, v in tensor_dict.items():    
+        for k, v in tensor_dict.items():
             if v.dim() == 2:
                 tensor_dict[k] = v.unsqueeze(0).unsqueeze(0)
             elif v.dim() == 3:
@@ -38,8 +38,8 @@ class PlanarBbox3DLoss(nn.Module):
 
         loss = dict(
             **self._seg_loss(pred["seg"], label["seg"]),
-            **self._cen_loss(pred["cen"], label["cen"], mask=label["seg"][:, 0:1]),
-            **self._reg_loss(pred["reg"], label["reg"], mask=label["seg"][:, 0:1]),
+            **self._cen_loss(pred["cen"], label["cen"], fg_mask=label["seg"][:, 0:1]),
+            **self._reg_loss(pred["reg"], label["reg"], fg_mask=label["seg"][:, 0:1]),
         )
         _L = self.complete_loss_name
         loss[self.total_loss_name] = loss[_L("seg")] + loss[_L("cen")] + loss[_L("reg")]
@@ -69,8 +69,41 @@ class PlanarBbox3DLoss(nn.Module):
         loss_dict[_L("cen_fg_dual_focal")] = fg_weight * fg_dual_loss
         loss_dict[_L("cen")] = (loss_dict[_L("cen_dual_focal")] + loss_dict[_L("cen_fg_dual_focal")]) * self.loss_weights["cen"]
         return loss_dict
-    
-    def _reg_loss(self, pred, label, mask):
-        # only apply to foreground (leverage label['seg'] as mask)
+
+    def _reg_loss(
+        self,
+        pred,
+        label,
+        fg_mask,
+        center_xy_weight=1.0,
+        center_z_weight=1.0,
+        size_weight=1.0,
+        unit_xvec_weight=1.0,
+        abs_xvec_weight=1.0,
+        xvec_product_weight=1.0,
+        abs_roll_angle_weight=1.0,
+        roll_angle_product_weight=1.0,
+        velo_weight=1.0,
+    ):
+        assert pred.shape[1] == 20
         loss_dict = {}
-        return {"reg_loss": nn.L1Loss(pred["reg"], label["reg"], reduction="mean") * self.loss_weights["reg"]}
+        _L = self.complete_loss_name
+        mask_sum = fg_mask.sum()
+        def _calc_sub_loss(_weight, channel_slice):
+            l1 = nn.L1Loss(reduction="none")(pred[:, channel_slice, ...], label[:, channel_slice, ...])
+            n_channels = l1.shape[1]
+            return _weight * (fg_mask * l1).sum() / mask_sum / n_channels
+
+        loss_dict = {
+            _L("reg_center_xy"): _calc_sub_loss(center_xy_weight, slice(0, 2)),
+            _L("reg_center_z"): _calc_sub_loss(center_z_weight, slice(2, 3)),
+            _L("reg_size"): _calc_sub_loss(size_weight, slice(3, 6)),
+            _L("reg_unit_xvec"): _calc_sub_loss(unit_xvec_weight, slice(6, 9)),
+            _L("reg_abs_xvec"): _calc_sub_loss(abs_xvec_weight, slice(9, 12)),
+            _L("reg_xvec_product"): _calc_sub_loss(xvec_product_weight, slice(12, 14)),
+            _L("reg_abs_roll_angle"): _calc_sub_loss(abs_roll_angle_weight, slice(14, 16)),
+            _L("reg_roll_angle_product"): _calc_sub_loss(roll_angle_product_weight, slice(16, 17)),
+            _L("reg_velo"): _calc_sub_loss(velo_weight, slice(17, 20)),
+        }
+        loss_dict[_L("reg")] = sum(loss_dict.values()) * self.loss_weights["reg"]
+        return loss_dict
