@@ -20,7 +20,8 @@ from .transform import (
 __all__ = [
     "CameraImageTensor", 
     "CameraDepthTensor", 
-    "CameraSegTensor", 
+    "CameraSegTensor",
+    "PoseMatrixTensor",
     "PlanarBbox3D", 
     "PlanarSquarePillar", 
     "PlanarCylinder3D", 
@@ -89,13 +90,12 @@ class CameraSegTensor(TensorSmith):
 
 
 @TENSOR_SMITHS.register_module()
-class PoseTensor(TensorSmith):
+class PoseMatrixTensor(TensorSmith):
     def __call__(self, transformable: Pose):
-        tensor_dict = dict(
-            rotation=torch.tensor(transformable.rotation),
-            translation=torch.tensor(transformable.translation),
-        )
-        return tensor_dict
+        mat_tensor = torch.eye(4)
+        mat_tensor[:3, :3] = torch.tensor(transformable.rotation)
+        mat_tensor[:3, 3] = torch.tensor(transformable.translation)
+        return mat_tensor
 
 
 
