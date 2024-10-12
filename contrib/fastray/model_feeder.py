@@ -208,3 +208,5 @@ class FastRayModelFeeders(BaseModelFeeder):
                     anno_batch_dict[transformable_key]['seg'])
                 anno_batch_dict[transformable_key]['reg'] = torch.tensor(
                     anno_batch_dict[transformable_key]['reg'])
+        
+        return processed_frame_batch
