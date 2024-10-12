@@ -1038,8 +1038,11 @@ class Pose(SpatialTransformable):
 
         return self
     
-    def rotate_3d(self, **kwargs):
-        raise NotImplementedError
+    def rotate_3d(self, rmat, **kwargs):
+        self.rotation = rmat @ self.rotation
+        self.translation = rmat @ self.translation
+
+        return self
     
     @property
     def trans_mat(self) -> np.array:

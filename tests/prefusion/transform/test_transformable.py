@@ -692,3 +692,22 @@ def test_pose_flip_3d_flip_y(pose0, pose1):
 def test_pose_trans_mat(pose0, pose1):
     np.testing.assert_almost_equal(pose0.trans_mat, np.array([[1, 0, 0, 1], [0, 1, 0, -1], [0, 0, 1, -1.9], [0, 0, 0, 1]]))
     np.testing.assert_almost_equal(pose1.trans_mat, np.array([[0.8660254, 0.5, 0, 3], [-0.5, 0.8660254, 0, -2], [0, 0, 1, 2.1], [0, 0, 0, 1]]))
+
+
+def test_pose_rotate_3d(pose0, pose1):
+    rot_mat = np.array([
+        [0.7071, -0.7071, 0], 
+        [0.7071,  0.7071, 0], 
+        [     0,       0, 1]])
+
+    pose0.rotate_3d(rmat=rot_mat)
+    np.testing.assert_almost_equal(pose0.rotation, np.array([[0.7071, -0.7071, 0],
+                                                             [0.7071,  0.7071, 0],
+                                                             [     0,       0, 1]]))
+    np.testing.assert_almost_equal(pose0.translation.flatten().tolist(), [1.4142, 0, -1.9])
+
+    pose1.rotate_3d(rmat=rot_mat)
+    np.testing.assert_almost_equal(pose1.rotation, np.array([[ 0.9659166, -0.2588166,  0.],
+                                                             [ 0.2588166,  0.9659166,  0.],
+                                                             [ 0.       ,  0.       ,  1.]]))
+    np.testing.assert_almost_equal(pose1.translation.flatten().tolist(), [3.5355, 0.7071, 2.1])
