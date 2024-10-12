@@ -538,6 +538,7 @@ class GroupBatchDataset(Dataset):
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         points = read_pcd(self.data_root / frame["lidar_points"]["lidar1"])
+        points = np.pad(points, [[0, 0], [0, 1]], constant_values=0)
         return LidarPoints(points[:, :3], points[:, 3:], self.tensor_smiths[transformable_key])
 
     def load_lidar_sweeps(self, transformable_key: str, index_info: IndexInfo):

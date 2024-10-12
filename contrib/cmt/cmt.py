@@ -20,6 +20,7 @@ import numpy as np
 # from mmdet3d.core import (Box3DMode, Coord3DMode, bbox3d2result,
 #                           merge_aug_bboxes_3d, show_result)
 from mmdet3d.models import HardSimpleVFE
+from mmdet3d.structures import BaseInstance3DBoxes
 from mmdet3d.models.detectors.mvx_two_stage import MVXTwoStageDetector
 from mmengine import MODELS, digit_version
 from mmengine.model import BaseDataPreprocessor
@@ -260,8 +261,10 @@ class CmtDetector(MVXTwoStageDetector):
              tuple: Two elements in tuple arrange as
              image features and point cloud features.
         """
-        img_feats = self.extract_img_feat(imgs, img_metas)
-        pts_feats = self.extract_pts_feat(voxel_dict)
+
+        img_feats = self.extract_img_feat(imgs, img_metas) if imgs is not None else None
+        pts_feats = self.extract_pts_feat(voxel_dict) if voxel_dict is not None else None
+
         return (img_feats, pts_feats)
 
     @auto_fp16(apply_to=('img'), out_fp32=True)
@@ -311,8 +314,8 @@ class CmtDetector(MVXTwoStageDetector):
         coors = []
         voxel_features = []
         for val, voxel in enumerate(voxel_dicts):
-            voxel_features += [voxel['res_voxels']]
-            coors += F.pad(voxel['res_coors'], (1, 0), mode='constant', value=val)
+            voxel_features += [voxel['res_voxels'].clone()]
+            coors += [F.pad(voxel['res_coors'].clone(), (1, 0), mode='constant', value=val)]
         voxels_features = torch.cat(voxel_features, dim=0)
         coors_batch = torch.cat(coors, dim=0)
         x = self.pts_middle_encoder(voxels_features, coors_batch, batch_size)
@@ -350,7 +353,8 @@ class CmtDetector(MVXTwoStageDetector):
 
     def forward_train(self,
                       *,
-                      index_info=None, camera_images=None, bbox_3d=None, ego_poses=None, meta_info=None,lidar_points=None,
+                      index_info=None, camera_images=None, bbox_3d=None, ego_poses=None, meta_info=None,
+                      lidar_points=None,
                       # points=None,
                       # img_metas=None,
                       # gt_bboxes_3d=None,
@@ -389,9 +393,14 @@ class CmtDetector(MVXTwoStageDetector):
         img_feats, pts_feats = self.extract_feat(lidar_points, imgs=imgs, img_metas=img_metas)
         losses = dict()
         if pts_feats or img_feats:
-            losses_pts = self.forward_pts_train(pts_feats, img_feats, bbox_3d,
-                                                gt_labels_3d, img_metas,
-                                                gt_bboxes_ignore)
+            for meta, bbox, img in zip(img_metas, bbox_3d, imgs):
+                meta['gt_bboxes_3d'] = BaseInstance3DBoxes(bbox[:, :9], box_dim=9)
+                meta['gt_labels_3d'] = meta['bbox_3d']['classes']
+                meta['pad_shape'] = [[img.shape[-2], img.shape[-1], 3]]
+                meta['cam_inv_poly'] = meta['camera_images']['cam_inv_poly']
+                meta['cam_intrinsic'] = meta['camera_images']['intrinsic']
+                meta['lidar2cam'] = meta['camera_images']['extrinsic']
+            losses_pts = self.forward_pts_train(pts_feats, img_feats, None, None, img_metas)
             losses.update(losses_pts)
         return losses
 
@@ -423,9 +432,11 @@ class CmtDetector(MVXTwoStageDetector):
         if img_feats is None:
             img_feats = [None]
         outs = self.pts_bbox_head(pts_feats, img_feats, img_metas)
-        loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs]  # 看看是哪个部分造成的bug。为什么streampetr这个问题
+        gt_bboxes_3d = [meta['gt_bboxes_3d'] for meta in img_metas]
+        gt_labels_3d = [meta['gt_labels_3d'] for meta in img_metas]
+        loss_inputs = [gt_bboxes_3d, gt_labels_3d, outs]
         losses = self.pts_bbox_head.loss(*loss_inputs)
-        # losses = self.pseudo_loss(outs)  # todo 需要改回来
+        # losses = self.pseudo_loss(outs)
         return losses
 
     def pseudo_loss(self, outs):

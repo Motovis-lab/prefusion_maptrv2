@@ -53,6 +53,7 @@ class CMTModelFeeder(BaseModelFeeder):
                             np.linalg.inv(self._extrinsic_param_to_4x4_mat(*cam_im.extrinsic))
                             for cam_im in camera_images
                         ],
+                        'cam_inv_poly' : [cam_im.intrinsic[4:] for cam_im in camera_images],
                     }
                     continue
                 if isinstance(trnsfmb, Bbox3D):

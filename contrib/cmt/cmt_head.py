@@ -19,7 +19,7 @@ from mmcv.cnn import ConvModule, build_conv_layer
 # from mmcv.cnn.bricks.transformer import FFN, build_positional_encoding
 # from mmcv.runner import BaseModule, force_fp32
 from mmdet.models import NormedLinear, AnchorFreeHead, inverse_sigmoid
-from mmdet.structures.bbox import bbox_cxcywh_to_xyxy,  bbox_xyxy_to_cxcywh
+from mmdet.structures.bbox import bbox_cxcywh_to_xyxy, bbox_xyxy_to_cxcywh
 from mmdet.utils import reduce_mean
 from mmdet3d.models import circle_nms, gaussian_radius, draw_heatmap_gaussian
 from mmdet3d.models.task_modules.builder import build_assigner, build_sampler, build_bbox_coder
@@ -29,14 +29,16 @@ from mmdet3d.structures import xywhr2xyxyr
 from mmengine import MODELS
 from mmengine.model import BaseModule, xavier_init, constant_init, kaiming_init
 
-
 import collections
 
 from functools import reduce, partial
 
+from mmengine.structures import InstanceData
 from scipy.optimize import curve_fit
 
 from contrib.cmt.bbox.util import normalize_bbox
+from prefusion.registry import DATA_SAMPLERS
+
 
 def multi_apply(func, *args, **kwargs):
     """Apply function to a list of arguments.
@@ -58,6 +60,7 @@ def multi_apply(func, *args, **kwargs):
     pfunc = partial(func, **kwargs) if kwargs else func
     map_results = map(pfunc, *args)
     return tuple(map(list, zip(*map_results)))
+
 
 def pos2embed(pos, num_pos_feats=128, temperature=10000):
     scale = 2 * math.pi
@@ -361,9 +364,9 @@ class CmtHead(BaseModule):
     def prepare_for_dn(self, batch_size, reference_points, img_metas):
         if self.training:
             targets = [
-                torch.cat((img_meta['gt_bboxes_3d']._data.gravity_center, img_meta['gt_bboxes_3d']._data.tensor[:, 3:]),
+                torch.cat((img_meta['gt_bboxes_3d'].gravity_center, img_meta['gt_bboxes_3d'].tensor[:, 3:]),
                           dim=1) for img_meta in img_metas]
-            labels = [img_meta['gt_labels_3d']._data for img_meta in img_metas]
+            labels = [img_meta['gt_labels_3d'] for img_meta in img_metas]
             known = [(torch.ones_like(t)).cuda() for t in labels]
             know_idx = known
             unmask_bbox = unmask_label = torch.cat(known)
@@ -697,7 +700,7 @@ class CmtHead(BaseModule):
         task_num = len(labels_list[0])
         num_total_pos_tasks, num_total_neg_tasks = [], []
         task_labels_list, task_labels_weight_list, task_bbox_targets_list, \
-        task_bbox_weights_list = [], [], [], []
+            task_bbox_weights_list = [], [], [], []
 
         for task_id in range(task_num):
             num_total_pos_task = sum((inds[task_id].numel() for inds in pos_inds_list))
@@ -1254,8 +1257,11 @@ class CmtFisheyeHead(BaseModule):
 
         # assigner
         if train_cfg:
-            sampler_cfg = dict(type='mmdet3d.PseudoSampler')
-            self.sampler = build_sampler(sampler_cfg, context=self)
+            # self.assigner = build_assigner(train_cfg["assigner"])
+            self.assigner = MODELS.build(train_cfg["assigner"])
+            # sampler_cfg = dict(type='mmdet3d.PseudoSampler')
+            # self.sampler = DATA_SAMPLERS.build(kwargs['sampler_cfg'], context=self)
+            self.sampler = DATA_SAMPLERS.build(kwargs['sampler_cfg'])
 
     def init_weights(self):
         super().init_weights()
@@ -1279,9 +1285,9 @@ class CmtFisheyeHead(BaseModule):
     def prepare_for_dn(self, batch_size, reference_points, img_metas):
         if self.training:
             targets = [
-                torch.cat((img_meta['gt_bboxes_3d']._data.gravity_center, img_meta['gt_bboxes_3d']._data.tensor[:, 3:]),
+                torch.cat((img_meta['gt_bboxes_3d'].gravity_center, img_meta['gt_bboxes_3d'].tensor[:, 3:]),
                           dim=1) for img_meta in img_metas]
-            labels = [img_meta['gt_labels_3d']._data for img_meta in img_metas]
+            labels = [img_meta['gt_labels_3d'] for img_meta in img_metas]
             known = [(torch.ones_like(t)).cuda() for t in labels]
             know_idx = known
             unmask_bbox = unmask_label = torch.cat(known)
@@ -1345,11 +1351,11 @@ class CmtFisheyeHead(BaseModule):
                     attn_mask[single_pad * i:single_pad * (i + 1), :single_pad * i] = True
 
             mask_dict = {
-                'known_indice': torch.as_tensor(known_indice).long(),
-                'batch_idx': torch.as_tensor(batch_idx).long(),
-                'map_known_indice': torch.as_tensor(map_known_indice).long(),
-                'known_lbs_bboxes': (known_labels, known_bboxs),
-                'known_labels_raw': known_labels_raw,
+                'known_indice': torch.as_tensor(known_indice).long().to(reference_points.device),  # todo check why need to again
+                'batch_idx': torch.as_tensor(batch_idx).long().to(reference_points.device),  # todo check why need to again
+                'map_known_indice': torch.as_tensor(map_known_indice).long().to(reference_points.device),  # todo check why need to again
+                'known_lbs_bboxes': (known_labels, known_bboxs),  # todo check why need to again
+                'known_labels_raw': known_labels_raw.to(reference_points.device),  # todo check why need to again
                 'know_idx': know_idx,
                 'pad_size': pad_size
             }
@@ -1393,7 +1399,7 @@ class CmtFisheyeHead(BaseModule):
         x_distorted = (u - cx) / fx
         y_distorted = (v - cy) / fy
         # r_distorted = theta_distorted = torch.sqrt(x_distorted ** 2 + y_distorted ** 2)
-        r_distorted = theta_distorted = torch.norm(torch.stack([x_distorted, y_distorted], dim=-1), dim=-1)
+        r_distorted = theta_distorted = torch.norm(torch.stack([x_distorted, y_distorted], dim=-1), dim=-1).detach()
         r_distorted[r_distorted < 1e-5] = 1e-5
         theta = unproj_func(r_distorted)
         theta = torch.clip(theta, - 0.5 * fov * np.pi / 180, 0.5 * fov * np.pi / 180)
@@ -1605,7 +1611,8 @@ class CmtFisheyeHead(BaseModule):
             [self.project_points(pts, inv_poly, K, [pad_h, pad_w]) for pts, inv_poly, K in zip(
                 proj_points_clone,  # / proj_points_clone[..., 2:3].detach(),  # BVNC * coords_d
                 torch.tensor(np.stack([np.array(i['cam_inv_poly']) for i in img_metas]).reshape(-1, 4)).to(ref_points),
-                torch.tensor(np.stack([np.array(i['cam_intrinsic']) for i in img_metas]).reshape(-1, 4, 4)).to(ref_points),
+                torch.tensor(np.stack([np.array(i['cam_intrinsic']) for i in img_metas]).reshape(-1, 4, 4)).to(
+                    ref_points),
             )]).reshape(B, V, N, 2)  # 投影到img上，然后补充z和
         # proj_points_to_img = proj_points[..., :2]
         mask = (proj_points_to_img[..., 0] < pad_w) & (proj_points_to_img[..., 0] >= 0) & (
@@ -1774,6 +1781,7 @@ class CmtFisheyeHead(BaseModule):
         def task_assign(bbox_pred, logits_pred, gt_bboxes, gt_labels, num_classes):
             num_bboxes = bbox_pred.shape[0]
             assign_results = self.assigner.assign(bbox_pred, logits_pred, gt_bboxes, gt_labels)
+            # gt_bboxes = InstanceData(gt_bboxes)
             sampling_result = self.sampler.sample(assign_results, bbox_pred, gt_bboxes)
             pos_inds, neg_inds = sampling_result.pos_inds, sampling_result.neg_inds
             # label targets
@@ -1821,7 +1829,7 @@ class CmtFisheyeHead(BaseModule):
         task_num = len(labels_list[0])
         num_total_pos_tasks, num_total_neg_tasks = [], []
         task_labels_list, task_labels_weight_list, task_bbox_targets_list, \
-        task_bbox_weights_list = [], [], [], []
+            task_bbox_weights_list = [], [], [], []
 
         for task_id in range(task_num):
             num_total_pos_task = sum((inds[task_id].numel() for inds in pos_inds_list))
@@ -2094,5 +2102,3 @@ class CmtFisheyeHead(BaseModule):
             labels = preds['labels']
             ret_list.append([bboxes, scores, labels])
         return ret_list
-
-

@@ -290,6 +290,7 @@ model = dict(
         tasks=[
             dict(num_class=len(class_names), class_names=class_names),
         ],
+        sampler_cfg =dict(type='PseudoSampler'),
         bbox_coder=dict(
             type='MultiTaskBBoxCoder',
             post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
@@ -344,10 +345,11 @@ model = dict(
                 # cls_cost=dict(type='ClassificationCost', weight=2.0),
                 cls_cost=dict(type='FocalLossCost', weight=2.0),
                 reg_cost=dict(type='BBox3DL1Cost', weight=0.25),
-                iou_cost=dict(type='IoUCost', weight=0.0),
+                # iou_cost=dict(type='IoUCost', weight=0.0),
                 # Fake cost. This is just to make it compatible with DETR head.
                 pc_range=point_cloud_range,
-                code_weights=[2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2],
+                # code_weights=[2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2],
+                code_weights=[2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0., 0.0],
             ),
             pos_weight=-1,
             gaussian_overlap=0.1,

@@ -57,7 +57,7 @@ class PointsToVoxelsTensor(TensorSmith):
         self.voxel_size = voxel_size
         self.max_point_per_voxel = max_point_per_voxel
         self.max_input_points = max_input_points
-        self.num_features = 4
+        self.num_features = 5
         self.max_voxels = max_voxels
         self.point_cloud_range = point_cloud_range
         self.voxel_generator = PointToVoxel(

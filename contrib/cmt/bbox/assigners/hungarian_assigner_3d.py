@@ -18,15 +18,15 @@ import torch
 # from mmdet.core.bbox.iou_calculators import build_iou_calculator
 # from mmdet.models.utils.transformer import inverse_sigmoid
 from mmdet.models import build_match_cost
-from mmdet.models.task_modules import BaseAssigner, AssignResult
+from mmdet.models.task_modules import BaseAssigner, AssignResult, FocalLossCost
 from mmengine import TASK_UTILS
 from scipy.optimize import linear_sum_assignment
 
+# FocalLossCost
 from contrib.cmt.bbox.util import normalize_bbox, denormalize_bbox
-
-
-
-@TASK_UTILS.register_module()
+from prefusion.registry import MODELS
+from mmdet3d.registry import MODELS as MM_MODELS
+@MODELS.register_module()
 class HungarianAssigner3D(BaseAssigner):
     """Computes one-to-one matching between predictions and ground truth.
     This class computes an assignment between the targets and the predictions
@@ -58,9 +58,12 @@ class HungarianAssigner3D(BaseAssigner):
                  iou_cost=dict(type='IoUCost', weight=0.0),
                  pc_range=None,
                  code_weights=None):
-        self.cls_cost = build_match_cost(cls_cost)
-        self.reg_cost = build_match_cost(reg_cost)
-        self.iou_cost = build_match_cost(iou_cost)
+        # self.cls_cost = build_match_cost(cls_cost)
+        # self.reg_cost = build_match_cost(reg_cost)
+        # self.iou_cost = build_match_cost(iou_cost)
+        self.cls_cost = TASK_UTILS.build(cls_cost)
+        self.reg_cost = TASK_UTILS.build(reg_cost)
+        # self.iou_cost = TASK_UTILS.build(iou_cost)
         self.pc_range = pc_range
         self.code_weights = code_weights
         if self.code_weights:
