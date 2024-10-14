@@ -438,7 +438,7 @@ if __name__ == "__main__":
                 "timestamp_window": deepcopy(timestamp_window),
                 "lidar_points": lidar_point,
                 "ego_pose": {
-                    "rotation": (R_t.T @ Twes[timestamp])[:3, :3],
+                    "rotation": (R_t.T @ Twes[timestamp])[:3, :3] @ R_nus,
                     'translation': (R_t.T @ Twes[timestamp])[:3, 3]
                 },
                 "camera_image_seg": None, 
