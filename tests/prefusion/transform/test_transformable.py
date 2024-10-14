@@ -22,7 +22,7 @@ from prefusion.dataset.transform import (
     Polyline3D,
     ParkingSlot3D,
     OccSdfBev,
-    Pose,
+    EgoPose,
 )
 
 
@@ -637,12 +637,12 @@ def test_occ_sdf_bev_flip_y(occ_sdf_bev):
 
 @pytest.fixture()
 def pose0():
-    return Pose(1, np.eye(3), np.array([[1, -1, -1.9]]))
+    return EgoPose(1, np.eye(3), np.array([[1, -1, -1.9]]))
 
 
 @pytest.fixture()
 def pose1():
-    return Pose(2, np.array(
+    return EgoPose(2, np.array(
         [[0.8660254,       0.5, 0], 
          [     -0.5, 0.8660254, 0], 
          [        0,         0, 1]]), 
