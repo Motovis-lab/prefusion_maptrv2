@@ -1006,7 +1006,7 @@ class ParkingSlot3D(SpatialTransformable):
         return self
 
 
-class Pose(SpatialTransformable):
+class EgoPose(SpatialTransformable):
     def __init__(self, timestamp: str, rotation: np.ndarray, translation: np.ndarray, tensor_smith: "TensorSmith" = None):
         """The pose in 3D space of a given timestamp. 
 
@@ -1038,8 +1038,10 @@ class Pose(SpatialTransformable):
 
         return self
     
-    def rotate_3d(self, **kwargs):
-        raise NotImplementedError
+    def rotate_3d(self, rmat, **kwargs):
+        self.rotation = self.rotation @ rmat.T
+
+        return self
     
     @property
     def trans_mat(self) -> np.array:
@@ -1049,8 +1051,8 @@ class Pose(SpatialTransformable):
         return _trans_mat
 
 
-class PoseSet(TransformableSet):
-    transformable_cls = Pose
+class EgoPoseSet(TransformableSet):
+    transformable_cls = EgoPose
 
 
 
@@ -1747,6 +1749,6 @@ for transform in available_transforms:
 __all__ = [t.__name__ for t in available_transforms] + [
     "CameraImage", "CameraImageSet", "CameraSegMask", "CameraSegMaskSet",
     "CameraDepth", "CameraDepthSet", "LidarPoints", "Bbox3D",
-    "Polyline3D", "Polygon3D", "ParkingSlot3D", "Pose",
-    "PoseSet", "Trajectory", "SegBev", "OccSdfBev", "OccSdf3D",
+    "Polyline3D", "Polygon3D", "ParkingSlot3D", "EgoPose",
+    "EgoPoseSet", "Trajectory", "SegBev", "OccSdfBev", "OccSdf3D",
 ]

@@ -22,7 +22,7 @@ from prefusion.dataset.transform import (
     Polyline3D,
     ParkingSlot3D,
     OccSdfBev,
-    Pose,
+    EgoPose,
 )
 
 
@@ -637,12 +637,12 @@ def test_occ_sdf_bev_flip_y(occ_sdf_bev):
 
 @pytest.fixture()
 def pose0():
-    return Pose(1, np.eye(3), np.array([[1, -1, -1.9]]))
+    return EgoPose(1, np.eye(3), np.array([[1, -1, -1.9]]))
 
 
 @pytest.fixture()
 def pose1():
-    return Pose(2, np.array(
+    return EgoPose(2, np.array(
         [[0.8660254,       0.5, 0], 
          [     -0.5, 0.8660254, 0], 
          [        0,         0, 1]]), 
@@ -692,3 +692,22 @@ def test_pose_flip_3d_flip_y(pose0, pose1):
 def test_pose_trans_mat(pose0, pose1):
     np.testing.assert_almost_equal(pose0.trans_mat, np.array([[1, 0, 0, 1], [0, 1, 0, -1], [0, 0, 1, -1.9], [0, 0, 0, 1]]))
     np.testing.assert_almost_equal(pose1.trans_mat, np.array([[0.8660254, 0.5, 0, 3], [-0.5, 0.8660254, 0, -2], [0, 0, 1, 2.1], [0, 0, 0, 1]]))
+
+
+def test_pose_rotate_3d(pose0, pose1):
+    rot_mat = np.array([
+        [0.70710678, -0.70710678, 0], 
+        [0.70710678,  0.70710678, 0], 
+        [         0,           0, 1]])
+
+    pose0.rotate_3d(rmat=rot_mat)
+    np.testing.assert_almost_equal(pose0.rotation, np.array([[ 0.70710678,  0.70710678, 0],
+                                                             [-0.70710678,  0.70710678, 0],
+                                                             [          0,           0, 1]]))
+    np.testing.assert_almost_equal(pose0.translation.flatten().tolist(), [1, -1, -1.9])
+
+    pose1.rotate_3d(rmat=rot_mat)
+    np.testing.assert_almost_equal(pose1.rotation, np.array([[   0.258819, 0.9659258,  0.],
+                                                             [ -0.9659258,  0.258819,  0.],
+                                                             [ 0.       ,  0.       ,  1.]]))
+    np.testing.assert_almost_equal(pose1.translation.flatten().tolist(), [3, -2, 2.1])
