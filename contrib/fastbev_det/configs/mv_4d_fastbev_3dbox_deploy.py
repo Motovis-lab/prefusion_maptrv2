@@ -23,7 +23,7 @@ img_scale = 2
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
 front_perspective_img_size = [768, 384]
-batch_size = 2
+batch_size = 1
 group_size = 1
 bev_range = [-12, 36, -12, 12, -0.5, 2.5]
 
@@ -222,7 +222,7 @@ model_test_cfg = dict(
 )
 
 model = dict(
-    type='FastBEV_Det',
+    type='FastBEV_Det_DP',
     data_preprocessor=dict(
         type='GroupDataPreprocess',
         mean=[128, 128, 128],
@@ -235,7 +235,7 @@ model = dict(
         label_start_idx=2, # process labels info start index of collection_info_type
     ),
     backbone_conf=dict(
-        type='FastRay',
+        type='FastRay_DP',
         x_bound=[36, -12, 0.2],  # BEV grids bounds and size (m)
         y_bound=[12, -12, 0.2],  # BEV grids bounds and size (m)
         z_bound=[-0.5, 2.5, 0.5],  # BEV grids bounds and size (m)
