@@ -23,18 +23,8 @@ class SegIouLoss(nn.Module):
         self.pred_logits = pred_logits
         self.reduction_dim = reduction_dim
    
-    @staticmethod
-    def _ensure_shape_nchw(tensor):
-        if tensor.dim() == 2:
-            tensor = tensor.unsqueeze(0).unsqueeze(0)
-        elif tensor.dim() == 3:
-            tensor = tensor.unsqueeze(1)
-        return tensor
-
     def forward(self, pred, label, mask=None):
         assert pred.shape == label.shape
-        pred = self._ensure_shape_nchw(pred)
-        label = self._ensure_shape_nchw(label)
 
         if self.pred_logits:
             pred = pred.sigmoid()
