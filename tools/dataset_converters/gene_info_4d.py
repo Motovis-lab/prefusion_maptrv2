@@ -310,7 +310,7 @@ if __name__ == "__main__":
                 timestamps.remove(key)
         assert all([i in Twes.keys() for i in timestamps])  # TODO: 确定是否内含这个assert
         all_frames_infos = generate_labels_scene_from_4dMapjson(scene_root, Twes)
-        pdb.set_trace()
+        
         scene_info = {}
         scene_info["scene_info"] = {}
         scene_info["scene_info"]['camera_mask'] = {

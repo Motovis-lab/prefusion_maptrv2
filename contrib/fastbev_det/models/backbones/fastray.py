@@ -9,7 +9,7 @@ from time import sleep
 import matplotlib.pyplot as plt
 import mmcv
 import pdb
-from ..necks import ProjectPlugin
+from ..necks import VoxelProjection_fish, VoxelProjection_pv, VoxelProjection_front
 
 @MODELS.register_module()
 class FastRay(BaseModule):
@@ -144,23 +144,24 @@ class FastRay(BaseModule):
 class FastRay_DP(FastRay):
     def __init__(self, **kwargs):
         super(FastRay_DP, self).__init__(**kwargs)
-        self.plugin = ProjectPlugin()
-        self.plugin.set_output_size([1, 336 * 6, 240, 120])
+        self.plugin_fish = VoxelProjection_fish()
+        self.plugin_pv = VoxelProjection_pv()
+        self.plugin_front = VoxelProjection_front()
 
-        self.fish_uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_uu.npy")), requires_grad=False)
-        self.fish_vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_vv.npy")), requires_grad=False)
-        self.fish_valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_valid_map.npy")), requires_grad=False)
-        self.fish_norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_norm_density_map.npy")), requires_grad=False)
+        # self.fish_uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_uu.npy")), requires_grad=False)
+        # self.fish_vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_vv.npy")), requires_grad=False)
+        # self.fish_valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_valid_map.npy")), requires_grad=False)
+        # self.fish_norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_norm_density_map.npy")), requires_grad=False)
         
-        self.pv_uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_uu.npy")), requires_grad=False)
-        self.pv_vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_vv.npy")), requires_grad=False)
-        self.pv_valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_valid_map.npy")), requires_grad=False)
-        self.pv_norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_norm_density_map.npy")), requires_grad=False)
+        # self.pv_uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_uu.npy")), requires_grad=False)
+        # self.pv_vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_vv.npy")), requires_grad=False)
+        # self.pv_valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_valid_map.npy")), requires_grad=False)
+        # self.pv_norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_norm_density_map.npy")), requires_grad=False)
         
-        self.front_uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_uu.npy")), requires_grad=False)
-        self.front_vv = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_vv.npy")), requires_grad=False)
-        self.front_valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_valid_map.npy")), requires_grad=False)
-        self.front_norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_norm_density_map.npy")), requires_grad=False)
+        # self.front_uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_uu.npy")), requires_grad=False)
+        # self.front_vv = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_vv.npy")), requires_grad=False)
+        # self.front_valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_valid_map.npy")), requires_grad=False)
+        # self.front_norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_norm_density_map.npy")), requires_grad=False)
 
     def forward(self, fish_data_imgs, pv_data_imgs, front_data_imgs,
                 fish_intrinsic, fish_extrinsic,
@@ -177,17 +178,14 @@ class FastRay_DP(FastRay):
 
         img_depth_feats_front, supervised_depth_feat_front = self.depth_net_front(img_feats_front, front_intrinsic, front_extrinsic)
 
-        C, H, W = img_depth_feats_fish.shape[-3:]
-        img_bev_feats_fish = self.plugin.apply(img_depth_feats_fish.reshape(4, C, H, W), self.fish_uu, self.fish_vv, 
-                                                self.fish_valid, self.fish_norm_density_map
+        # C, H, W = img_depth_feats_fish.shape[-3:]
+        img_bev_feats_fish = self.plugin_fish(img_depth_feats_fish
                                                 )
-        C, H, W = img_depth_feats_pv.shape[-3:]
-        img_bev_feats_pv = self.plugin.apply(img_depth_feats_pv.reshape(5, C, H, W), self.pv_uu, self.pv_vv, 
-                                                self.pv_valid, self.pv_norm_density_map
+        # C, H, W = img_depth_feats_pv.shape[-3:]
+        img_bev_feats_pv = self.plugin_pv(img_depth_feats_pv
                                                 )
-        C, H, W = img_depth_feats_front.shape[-3:]
-        img_bev_feats_front = self.plugin.apply(img_depth_feats_front.reshape(1, C, H, W), self.front_uu, self.front_vv, 
-                                                self.front_valid, self.front_norm_density_map
+        # C, H, W = img_depth_feats_front.shape[-3:]
+        img_bev_feats_front = self.plugin_front(img_depth_feats_front
                                                 )
         
         img_bev_feats = img_bev_feats_fish + img_bev_feats_pv + img_bev_feats_front
