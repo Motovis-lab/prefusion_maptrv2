@@ -14,14 +14,13 @@ from .utils import (
 )
 from .transform import (
     CameraImage, CameraSegMask, CameraDepth,
-    Pose, Bbox3D, Polyline3D, SegBev, ParkingSlot3D
+    Bbox3D, Polyline3D, SegBev, ParkingSlot3D
 )
 
 __all__ = [
     "CameraImageTensor", 
     "CameraDepthTensor", 
     "CameraSegTensor",
-    "PoseMatrixTensor",
     "PlanarBbox3D", 
     "PlanarSquarePillar", 
     "PlanarCylinder3D", 
@@ -86,17 +85,6 @@ class CameraSegTensor(TensorSmith):
 
     def __call__(self, transformable: CameraSegMask):
         raise NotImplementedError
-
-
-
-@TENSOR_SMITHS.register_module()
-class PoseMatrixTensor(TensorSmith):
-    def __call__(self, transformable: Pose):
-        mat_tensor = torch.eye(4)
-        mat_tensor[:3, :3] = torch.tensor(transformable.rotation)
-        mat_tensor[:3, 3] = torch.tensor(transformable.translation)
-        return mat_tensor
-
 
 
 
