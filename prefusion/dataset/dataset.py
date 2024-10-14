@@ -636,8 +636,8 @@ class GroupBatchDataset(Dataset):
         def _create_pose(frame_id):
             return Pose(
                 frame_id, 
-                scene[frame_id]["ego_pose"][0], 
-                scene[frame_id]["ego_pose"][1], 
+                scene[frame_id]["ego_pose"]["rotation"], 
+                scene[frame_id]["ego_pose"]["translation"], 
                 tensor_smith=self.tensor_smiths.get(transformable_key)
             )
 
