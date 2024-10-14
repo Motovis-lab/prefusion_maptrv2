@@ -310,6 +310,7 @@ if __name__ == "__main__":
                 timestamps.remove(key)
         assert all([i in Twes.keys() for i in timestamps])  # TODO: 确定是否内含这个assert
         all_frames_infos = generate_labels_scene_from_4dMapjson(scene_root, Twes)
+        
         scene_info = {}
         scene_info["scene_info"] = {}
         scene_info["scene_info"]['camera_mask'] = {
@@ -437,7 +438,7 @@ if __name__ == "__main__":
                 "timestamp_window": deepcopy(timestamp_window),
                 "lidar_points": lidar_point,
                 "ego_pose": {
-                    "rotation": (R_t.T @ Twes[timestamp])[:3, :3],
+                    "rotation": (R_t.T @ Twes[timestamp])[:3, :3] @ R_nus,
                     'translation': (R_t.T @ Twes[timestamp])[:3, 3]
                 },
                 "camera_image_seg": None, 

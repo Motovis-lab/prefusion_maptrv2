@@ -25,8 +25,8 @@ from .transform import (
     Polyline3D,
     Polygon3D,
     ParkingSlot3D,
-    Pose,
-    PoseSet,
+    EgoPose,
+    EgoPoseSet,
     Trajectory,
     SegBev,
     OccSdfBev,
@@ -633,11 +633,11 @@ class GroupBatchDataset(Dataset):
             elements, self.dictionaries.get(transformable_key), tensor_smith=self.tensor_smiths.get(transformable_key)
         )
 
-    def load_ego_poses(self, transformable_key: str, index_info: IndexInfo) -> PoseSet:
+    def load_ego_poses(self, transformable_key: str, index_info: IndexInfo) -> EgoPoseSet:
         scene = self.info[index_info.scene_id]['frame_info']
 
         def _create_pose(frame_id):
-            return Pose(
+            return EgoPose(
                 frame_id, 
                 scene[frame_id]["ego_pose"]["rotation"], 
                 scene[frame_id]["ego_pose"]["translation"], 
@@ -664,7 +664,7 @@ class GroupBatchDataset(Dataset):
 
         sorted_poses = dict(sorted(poses.items(), key=lambda x: int(x[0])))
 
-        return PoseSet(transformables=sorted_poses)
+        return EgoPoseSet(transformables=sorted_poses)
 
 
     def load_trajectory(self, transformable_key: str, index_info: IndexInfo, time_window=2) -> Trajectory:
