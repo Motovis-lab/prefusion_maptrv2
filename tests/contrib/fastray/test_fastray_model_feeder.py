@@ -7,7 +7,7 @@ from prefusion.dataset import (
     IndexInfo, 
     CameraImage, CameraImageSet, CameraImageTensor,
     Bbox3D, PlanarBbox3D,
-    Pose, PoseSet
+    EgoPose, EgoPoseSet
 )
 from contrib.fastray.model_feeder import FastRayModelFeeder
 
@@ -48,9 +48,9 @@ def test_fastray_model_feeder():
         )
     ))
     camera_images.to_tensor()
-    ego_poses = PoseSet({
-        '0':Pose(index_infos[0], translation=np.zeros((3, 1)), rotation=np.eye(3)),
-        '1':Pose(index_infos[1], translation=np.zeros((3, 1)), rotation=np.eye(3)),
+    ego_poses = EgoPoseSet({
+        '0':EgoPose(index_infos[0].scene_frame_id, translation=np.zeros((3, 1)), rotation=np.eye(3)),
+        '1':EgoPose(index_infos[1].scene_frame_id, translation=np.zeros((3, 1)), rotation=np.eye(3)),
     })
     ego_poses.to_tensor()
     pbox3d = PlanarBbox3D(
