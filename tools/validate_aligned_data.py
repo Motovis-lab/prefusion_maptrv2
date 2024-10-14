@@ -103,7 +103,7 @@ def K3x3(cx, cy, fx, fy):
 
 
 def _plot_bbox_bev_of_single_frame(bbox_3d, ego_pose, save_path):
-    ego2world = T4x4(*ego_pose)
+    ego2world = T4x4(ego_pose["rotation"], ego_pose["translation"])
     _ = plt.figure(figsize=(14, 14))
     _draw_axis(ego2world[:2, 3], *(ego2world[:2, :2].T * 2))  # scale := 2
     _draw_axis([0, 0], [1, 0], [0, 1])  # global axis
