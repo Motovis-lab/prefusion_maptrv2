@@ -110,17 +110,18 @@ class VoxelProjection_pv(nn.Module):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.plugin = ProjectPlugin()
-        self.plugin.set_output_size([1, 336 * 6, 240, 120])
-
-        self.uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_uu.npy")), requires_grad=False)
-        self.vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_vv.npy")), requires_grad=False)
-        self.valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_valid_map.npy")), requires_grad=False)
-        self.norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_norm_density_map.npy")).float(), requires_grad=False)        
+        self.plugin.set_output_size([1, 18, 240, 120])
+        
+        self.length = 172800
+        self.uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_uu.npy")).float())
+        self.vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_vv.npy")).float())
+        self.valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_valid_map.npy")).float())
+        self.norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_norm_density_map.npy")).float())        
 
         
     def forward(self, input):
         img_bev_feats_fish = self.plugin.apply(input, self.uu, self.vv, 
-                                                self.valid, self.norm_density_map
+                                                self.valid, self.norm_density_map, self.length
                                                 )
     
         return img_bev_feats_fish
@@ -129,17 +130,18 @@ class VoxelProjection_front(nn.Module):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.plugin = ProjectPlugin()
-        self.plugin.set_output_size([1, 336 * 6, 240, 120])
-
-        self.uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_uu.npy")), requires_grad=False)
-        self.vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_vv.npy")), requires_grad=False)
-        self.valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_valid_map.npy")), requires_grad=False)
-        self.norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_norm_density_map.npy")).float(), requires_grad=False)        
+        self.plugin.set_output_size([1, 18, 240, 120])
+        
+        self.length = 172800
+        self.uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_uu.npy")).float())
+        self.vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_vv.npy")).float())
+        self.valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_valid_map.npy")).float())
+        self.norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_norm_density_map.npy")).float())        
 
         
     def forward(self, input):
         img_bev_feats_fish = self.plugin.apply(input, self.uu, self.vv, 
-                                                self.valid, self.norm_density_map
+                                                self.valid, self.norm_density_map, self.length
                                                 )
     
         return img_bev_feats_fish
