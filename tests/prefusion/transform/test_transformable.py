@@ -696,18 +696,18 @@ def test_pose_trans_mat(pose0, pose1):
 
 def test_pose_rotate_3d(pose0, pose1):
     rot_mat = np.array([
-        [0.7071, -0.7071, 0], 
-        [0.7071,  0.7071, 0], 
-        [     0,       0, 1]])
+        [0.70710678, -0.70710678, 0], 
+        [0.70710678,  0.70710678, 0], 
+        [         0,           0, 1]])
 
     pose0.rotate_3d(rmat=rot_mat)
-    np.testing.assert_almost_equal(pose0.rotation, np.array([[0.7071, -0.7071, 0],
-                                                             [0.7071,  0.7071, 0],
-                                                             [     0,       0, 1]]))
-    np.testing.assert_almost_equal(pose0.translation.flatten().tolist(), [1.4142, 0, -1.9])
+    np.testing.assert_almost_equal(pose0.rotation, np.array([[ 0.70710678,  0.70710678, 0],
+                                                             [-0.70710678,  0.70710678, 0],
+                                                             [          0,           0, 1]]))
+    np.testing.assert_almost_equal(pose0.translation.flatten().tolist(), [1, -1, -1.9])
 
     pose1.rotate_3d(rmat=rot_mat)
-    np.testing.assert_almost_equal(pose1.rotation, np.array([[ 0.9659166, -0.2588166,  0.],
-                                                             [ 0.2588166,  0.9659166,  0.],
+    np.testing.assert_almost_equal(pose1.rotation, np.array([[   0.258819, 0.9659258,  0.],
+                                                             [ -0.9659258,  0.258819,  0.],
                                                              [ 0.       ,  0.       ,  1.]]))
-    np.testing.assert_almost_equal(pose1.translation.flatten().tolist(), [3.5355, 0.7071, 2.1])
+    np.testing.assert_almost_equal(pose1.translation.flatten().tolist(), [3, -2, 2.1])

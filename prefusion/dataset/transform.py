@@ -1039,8 +1039,7 @@ class Pose(SpatialTransformable):
         return self
     
     def rotate_3d(self, rmat, **kwargs):
-        self.rotation = rmat @ self.rotation
-        self.translation = rmat @ self.translation
+        self.rotation = self.rotation @ rmat.T
 
         return self
     
