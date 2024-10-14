@@ -40,7 +40,10 @@ if TYPE_CHECKING:
     from .transform import Transform
     from .model_feeder import BaseModelFeeder
 
-__all__ = ["GroupBatchDataset"]
+__all__ = [
+    "IndexInfo",
+    "GroupBatchDataset"
+]
 
 def get_frame_index(sequence, timestamp):
     for t in sequence:
