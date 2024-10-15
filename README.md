@@ -267,7 +267,6 @@ train.txt
   - polyline3d: Polyline3D
   - polygon3d: Polygon3D(Polyline3D)
   - parkingslot3d: ParkingSlot3D(Polyline3D)
-  - trajectory: Trajectory
   - seg_bev: SegBev
   - occ_sdf_bev: OccSdfBev
   - occ_sdf_3d: OccSdf3D

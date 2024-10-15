@@ -27,7 +27,6 @@ from .transform import (
     ParkingSlot3D,
     EgoPose,
     EgoPoseSet,
-    Trajectory,
     SegBev,
     OccSdfBev,
     OccSdf3D,
@@ -310,7 +309,6 @@ class GroupBatchDataset(Dataset):
         "polygon_3d",
         "parkingslot_3d",
         "ego_poses",
-        "trajectory",
         "seg_bev",
         "occ_sdf_bev",
         "occ_sdf_3d",
@@ -653,30 +651,6 @@ class GroupBatchDataset(Dataset):
         sorted_poses = dict(sorted(poses.items(), key=lambda x: int(x[0])))
 
         return EgoPoseSet(name, transformables=sorted_poses)
-
-
-    def load_trajectory(self, name: str, index_info: IndexInfo, dictionary: dict, time_window: int = 2, tensor_smith: "TensorSmith" = None, **kwargs) -> Trajectory:
-        cur_frame_id = index_info.frame_id
-        scene = self.info[index_info.scene_id]
-        frame_list = list(scene["frame_info"].keys())
-        cur_ind = frame_list.index(cur_frame_id)
-        end_time = int(cur_frame_id) * scene["meta_info"]["time_unit"] + time_window
-        end_timestamp = str(int(end_time / scene["meta_info"]["time_unit"]))
-        end_frame_id = get_frame_index(frame_list, end_timestamp)
-        end_ind = frame_list.index(end_frame_id) + 1
-        frame_ids = frame_list[cur_ind:end_ind]
-
-        ego_trajectory = []
-        for frame_id in frame_ids:
-            # ego_trajectory
-            R = scene[frame_id]["ego_pose"]["rotation"]
-            t = scene[frame_id]["ego_pose"]["translation"]
-            ego_trajectory.append((R, t))
-
-        # TODO: other object trajectories
-
-        trajectories = [ego_trajectory]
-        return Trajectory(name, trajectories, dictionary, tensor_smith=tensor_smith)
 
     def load_seg_bev(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> SegBev:
         scene = self.info[index_info.scene_id]
