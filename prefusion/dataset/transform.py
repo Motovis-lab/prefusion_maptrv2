@@ -1065,32 +1065,6 @@ class EgoPoseSet(TransformableSet):
     transformable_cls = EgoPose
 
 
-
-class Trajectory(SpatialTransformable):
-    def __init__(self, name: str, trajectories: List[List[Tuple[np.ndarray, np.ndarray]]], tensor_smith: "TensorSmith" = None):
-        """Trajectory
-
-        Parameters
-        ----------
-        name : str
-            arbitrary string, will be set to each Transformable object to distinguish it with others
-        trajectories : List[List[Tuple[np.ndarray, np.ndarray]]]
-            Each trajectory is a list of poses, each pose is a tuple of (R, t), where R is of shape (3, 3) and t is of shape (3, 1)
-        tensor_smith : TensorSmith, optional
-            a tensor smith object, providing ToTensor for the transformable, by default None
-        """
-        super().__init__(name)
-        self.trajectories = trajectories
-        self.tensor_smith = tensor_smith
-
-    def flip_3d(self, **kwargs):
-        raise NotImplementedError
-    
-    def rotate_3d(self, **kwargs):
-        raise NotImplementedError
-
-
-
 class SegBev(SpatialTransformable):
     def flip_3d(self, **kwargs):
         raise NotImplementedError
@@ -1734,6 +1708,44 @@ class ScaleTime(Transform):
     pass
 
 
+# TODO: Implement this function for the model that relies on or need to predict objects' trajectory.
+def extract_trajectory_from_bbox3d(bbox3d_list: List[Bbox3D], ego_poses: EgoPoseSet) -> List[Dict[str, List[Tuple[np.ndarray, np.ndarray]]]]:
+    """Extract trajectory of each distinct obj_track_id from a list of Bbox3D. 
+
+    Parameters
+    ----------
+    bbox3d_list : List[Bbox3D]
+        a list of input Bbox3D in current group
+    ego_poses: EgoPoseSet
+        the ego-poses of current group
+    Returns
+    -------
+    List[Dict[str, List[Tuple[np.ndarray, np.ndarray]]]]
+        Trajectories of each object (i.e. obj_track_id) in each frame of the group. 
+        The return is of the same length as `bbox3d_list` and `ego_poses`.
+        Say we have 3 frames in current group, below is an examplar return: 
+            [
+                {
+                    "10000_0": [(R0, t0), (R1, t1), (R2, t2)],
+                    "10001_0": [(R0, t0), (R1, t1)],
+                },
+                {
+                    "10000_0": [(R0, t0), (R1, t1), (R2, t2)],
+                    "10001_0": [(R0, t0), (R1, t1)],
+                    "10002_0": [(R1, t1), (R2, t2)],
+                },
+                {
+                    "10000_0": [(R0, t0), (R1, t1), (R2, t2)],
+                    "10002_0": [(R1, t1), (R2, t2)],
+                },
+            ]
+    """
+    # Some initial thoughts and notes:
+    # 1. we have to traverse through all the bbox3d in `bbox3d_list` to created object_track_id centric representation
+    # 2. determine which trajectories to expose for each frame based on what object it has.
+    # 3. all poses of the same obj_track_id should be converted to current frame's ego-coordsys.
+    # 4. any one who want to use this function should overwrite __call__ in the model feeder class, because it needs cross-time info
+    pass
 
 
 available_transforms = [
@@ -1761,7 +1773,7 @@ available_transformables = [
     CameraImage, CameraImageSet, CameraSegMask, CameraSegMaskSet,
     CameraDepth, CameraDepthSet, LidarPoints, Bbox3D,
     Polyline3D, Polygon3D, ParkingSlot3D, EgoPose,
-    EgoPoseSet, Trajectory, SegBev, OccSdfBev, OccSdf3D,
+    EgoPoseSet, SegBev, OccSdfBev, OccSdf3D,
 ]
 
 for transform in available_transforms:
