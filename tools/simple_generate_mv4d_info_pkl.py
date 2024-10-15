@@ -110,7 +110,7 @@ def prepare_ego_poses(scene_root: Path) -> Dict[int, np.ndarray]:
     poses = {}
     for t, *xyzq in trajectory:
         mat = xyzq2mat(*xyzq, as_homo=True)
-        standard_mat = mat @ np.linalg.inv(args.ego_coordsys_align_mat)
+        standard_mat = mat @ np.linalg.inv(args.ego_coordsys_align_mat) # i.e. R_w_e' = R_w_e @ R_e_e' (e is right-front-up, e' is front-left-up)
         poses[int(t)] = {"rotation": standard_mat[:3, :3], "translation": standard_mat[:3, 3]}
     return poses
 

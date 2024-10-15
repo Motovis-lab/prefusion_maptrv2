@@ -303,16 +303,6 @@ class CameraImage(CameraTransformable):
             if it's FisheyeCamera, it contains more values: cx, cy, fx, fy, *distortion_params
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
-
-
-        - \<fast_ray_LUT\> = {
-            uu: uu, 
-            vv: vv, 
-            dd: dd, 
-            valid_map: valid_map,
-            valid_map_sampled: valid_map_sampled,
-            norm_density_map: norm_density_map
-        }
         """
         super().__init__()
         assert cam_type in ['FisheyeCamera', 'PerspectiveCamera']
@@ -1006,7 +996,7 @@ class ParkingSlot3D(SpatialTransformable):
         return self
 
 
-class Pose(SpatialTransformable):
+class EgoPose(SpatialTransformable):
     def __init__(self, timestamp: str, rotation: np.ndarray, translation: np.ndarray, tensor_smith: "TensorSmith" = None):
         """The pose in 3D space of a given timestamp. 
 
@@ -1038,8 +1028,10 @@ class Pose(SpatialTransformable):
 
         return self
     
-    def rotate_3d(self, **kwargs):
-        raise NotImplementedError
+    def rotate_3d(self, rmat, **kwargs):
+        self.rotation = self.rotation @ rmat.T
+
+        return self
     
     @property
     def trans_mat(self) -> np.array:
@@ -1049,8 +1041,8 @@ class Pose(SpatialTransformable):
         return _trans_mat
 
 
-class PoseSet(TransformableSet):
-    transformable_cls = Pose
+class EgoPoseSet(TransformableSet):
+    transformable_cls = EgoPose
 
 
 
@@ -1747,6 +1739,6 @@ for transform in available_transforms:
 __all__ = [t.__name__ for t in available_transforms] + [
     "CameraImage", "CameraImageSet", "CameraSegMask", "CameraSegMaskSet",
     "CameraDepth", "CameraDepthSet", "LidarPoints", "Bbox3D",
-    "Polyline3D", "Polygon3D", "ParkingSlot3D", "Pose",
-    "PoseSet", "Trajectory", "SegBev", "OccSdfBev", "OccSdf3D",
+    "Polyline3D", "Polygon3D", "ParkingSlot3D", "EgoPose",
+    "EgoPoseSet", "Trajectory", "SegBev", "OccSdfBev", "OccSdf3D",
 ]
