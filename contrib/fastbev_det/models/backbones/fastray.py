@@ -20,8 +20,9 @@ class FastRay(BaseModule):
         z_bound,
         downsample_factor,
         output_channels,
-        img_backbone_conf=None,
-        img_neck_conf=None,
+        fish_img_backbone_neck_conf=None,
+        pv_img_backbone_neck_conf=None,
+        front_img_backbone_neck_conf=None,
         depth_net_fish_conf=None,
         depth_net_pv_conf=None,
         depth_net_front_conf=None,
@@ -39,13 +40,10 @@ class FastRay(BaseModule):
         self.z_bound = z_bound  
         self.downsample_factor = downsample_factor
         self.outptu_channels = output_channels
-        self.img_backbone_fish = MODELS.build(img_backbone_conf)
-        self.img_backbone_pv = MODELS.build(img_backbone_conf)
-        self.img_backbone_front = MODELS.build(img_backbone_conf)
-        
-        self.img_neck_fish = MODELS.build(img_neck_conf)
-        self.img_neck_pv = MODELS.build(img_neck_conf)
-        self.img_neck_front = MODELS.build(img_neck_conf)
+
+        self.img_backbone_neck_fish = MODELS.build(fish_img_backbone_neck_conf)
+        self.img_backbone_neck_pv = MODELS.build(pv_img_backbone_neck_conf)
+        self.img_backbone_neck_front = MODELS.build(front_img_backbone_neck_conf)
 
         self.depth_net_fish = MODELS.build(depth_net_fish_conf)
         self.depth_net_pv = MODELS.build(depth_net_pv_conf)
@@ -125,17 +123,17 @@ class FastRay(BaseModule):
             return dict(bev_img_feats=img_bev_feats)
 
     def get_cam_feats_fish(self, sweep_imgs):
-        img_feats = self.img_neck_fish(self.img_backbone_fish(sweep_imgs))[0]
+        img_feats = self.img_backbone_neck_fish(sweep_imgs)[0]
         
         return img_feats
 
     def get_cam_feats_pv(self, sweep_imgs):
-        img_feats = self.img_neck_pv(self.img_backbone_pv(sweep_imgs))[0]
+        img_feats = self.img_backbone_neck_pv(sweep_imgs)[0]
         
         return img_feats
     
     def get_cam_feats_front(self, sweep_imgs):
-        img_feats = self.img_neck_front(self.img_backbone_front(sweep_imgs))[0]
+        img_feats = self.img_backbone_neck_front(sweep_imgs)[0]
         
         return img_feats
 
