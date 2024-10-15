@@ -303,16 +303,6 @@ class CameraImage(CameraTransformable):
             if it's FisheyeCamera, it contains more values: cx, cy, fx, fy, *distortion_params
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
-
-
-        - \<fast_ray_LUT\> = {
-            uu: uu, 
-            vv: vv, 
-            dd: dd, 
-            valid_map: valid_map,
-            valid_map_sampled: valid_map_sampled,
-            norm_density_map: norm_density_map
-        }
         """
         super().__init__()
         assert cam_type in ['FisheyeCamera', 'PerspectiveCamera']
