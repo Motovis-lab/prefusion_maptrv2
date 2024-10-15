@@ -26,7 +26,7 @@ def bbox3d():
                 "velocity": np.array([[0], [0], [0]]),
             }
         ],
-        {"det": {"classes": ["class.vehicle.passenger_car"]}},
+        {"classes": ["class.vehicle.passenger_car"]},
     )
 
 
