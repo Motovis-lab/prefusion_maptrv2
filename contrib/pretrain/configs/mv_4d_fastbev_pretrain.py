@@ -1,7 +1,7 @@
 __base__ = '../../configs/default_runtime.py'
 default_scope = "prefusion"
 custom_imports = dict(
-    imports=['prefusion', 'contrib.fastbev_det'],
+    imports=['prefusion', 'contrib.fastbev_det', 'contrib.pretrain'],
     allow_failed_imports=False
 )
 
@@ -11,8 +11,8 @@ IMG_KEYS = [
         'VCAMERA_FISHEYE_FRONT', 'VCAMERA_PERSPECTIVE_FRONT_LEFT', 'VCAMERA_PERSPECTIVE_BACK_LEFT', 'VCAMERA_FISHEYE_LEFT', 'VCAMERA_PERSPECTIVE_BACK', 'VCAMERA_FISHEYE_BACK', 
         'VCAMERA_PERSPECTIVE_FRONT_RIGHT', 'VCAMERA_PERSPECTIVE_BACK_RIGHT', 'VCAMERA_FISHEYE_RIGHT', 'VCAMERA_PERSPECTIVE_FRONT'
         ]
-data_root = "data/mv_4d_data/"
-data_root = "data/146_data/"
+data_root = "data/pretrain_data/"
+
 W, H = 120, 240
 bev_front = 180 
 bev_left = 60
@@ -424,5 +424,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = "work_dirs/mv_4d_fastbev_3dbox/20241006_223808/epoch_24.pth"
+load_from = None
 resume=False

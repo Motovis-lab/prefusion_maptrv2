@@ -442,7 +442,6 @@ if __name__ == "__main__":
                     'translation': (R_t.T @ Twes[timestamp])[:3, 3]
                 },
                 "camera_image_seg": None, 
-                "camera_image_depth": None,
                 "occ_sdf": sdf_about,
                 "camera_image_depth": camera_image_depth
             }
