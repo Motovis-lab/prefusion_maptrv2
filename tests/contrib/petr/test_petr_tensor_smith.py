@@ -8,6 +8,7 @@ from prefusion.dataset.transform import Bbox3D
 @pytest.fixture()
 def bbox3d():
     return Bbox3D(
+        "bbox_3d",
         [
             {
                 "class": "class.vehicle.passenger_car",

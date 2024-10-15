@@ -86,6 +86,7 @@ def test_planar_bbox_3d_generation_and_reverse():
     )
 
     box3d = Bbox3D(
+        "bbox_3d",
         elements=[
             {
                 'class': 'bus',
@@ -152,6 +153,7 @@ def test_planar_squre_pillars_generation_and_reverse():
         use_bottom_center=True
     )
     box3d = Bbox3D(
+        "bbox_3d",
         elements=[
             {
                 'class': 'pillar',
@@ -204,6 +206,7 @@ def test_planar_cylinder3d_generation_and_reverse():
         use_bottom_center=True
     )
     box3d = Bbox3D(
+        "bbox_3d",
         elements=[
             {
                 'class': 'cylinder_pillar',
@@ -251,6 +254,7 @@ def test_planar_oriented_cylinder3d_generation_and_reverse():
         use_bottom_center=True
     )
     box3d = Bbox3D(
+        "bbox_3d",
         elements=[
             {
                 'class': 'pedestrain',
@@ -298,6 +302,7 @@ def test_planar_parkingslot_3d_generation_and_reverse():
         voxel_range=([-0.5, 2.5], [24, -8], [8, -8])
     )
     slots = ParkingSlot3D(
+        "parkingslot_3d",
         elements=[{
             'class': 'class.parking.paring_slot',
             'attr': {},

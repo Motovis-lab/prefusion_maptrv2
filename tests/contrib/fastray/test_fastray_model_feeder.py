@@ -36,8 +36,9 @@ def test_fastray_model_feeder():
             prev=IndexInfo("20231101_160337", "1698825817764")
         ),
     ]
-    camera_images = CameraImageSet(dict(
+    camera_images = CameraImageSet("camera_images", dict(
         cam_6=CameraImage(
+            name="camera_images:cam_6",
             cam_id='cam_6',
             cam_type='PerspectiveCamera',
             img=np.array(np.random.randint(256, size=(720, 1280, 3)), dtype=np.uint8),
@@ -48,16 +49,19 @@ def test_fastray_model_feeder():
         )
     ))
     camera_images.to_tensor()
-    ego_poses = EgoPoseSet({
-        '0':EgoPose(index_infos[0].scene_frame_id, translation=np.zeros((3, 1)), rotation=np.eye(3)),
-        '1':EgoPose(index_infos[1].scene_frame_id, translation=np.zeros((3, 1)), rotation=np.eye(3)),
-    })
+    ego_poses = EgoPoseSet(
+        "ego_pose_set",
+        {
+            '0':EgoPose("ego_poses:0:1698825817764", index_infos[0].scene_frame_id, translation=np.zeros((3, 1)), rotation=np.eye(3)),
+            '1':EgoPose("ego_poses:0:1698825817864", index_infos[1].scene_frame_id, translation=np.zeros((3, 1)), rotation=np.eye(3)),}
+        )
     ego_poses.to_tensor()
     pbox3d = PlanarBbox3D(
         voxel_shape=voxel_feature_config['voxel_shape'],
         voxel_range=voxel_feature_config['voxel_range'],
     )
     bbox3d = Bbox3D(
+        "bbox_3d",
         elements=[
             {
                 'class': 'car',
