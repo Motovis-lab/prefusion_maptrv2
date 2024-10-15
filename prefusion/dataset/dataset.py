@@ -492,12 +492,6 @@ class GroupBatchDataset(Dataset):
             for input_dict in group_of_inputs:
                 frame_seed = int.from_bytes(os.urandom(2), byteorder="big")
                 transformables = input_dict["transformables"]
-                # transformables = []
-                # for transformable in input_dict["transformables"]:
-                #     if isinstance(transformable, dict):
-                #         transformables.extend(transformable.values())
-                #     else:
-                #         transformables.append(transformable)
                 for transform in self.transforms:
                     transform(*transformables, seeds={"group": group_seed, "batch": batch_seed, "frame": frame_seed})
 
