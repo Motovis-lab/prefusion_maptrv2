@@ -48,6 +48,7 @@ def test_random_transform_class_factory_enum():
 @pytest.fixture()
 def fisheye_image():
     return CameraImage(
+        name="camera_image_fisheye",
         cam_id='VCAMERA_FISHEYE_FRONT',
         cam_type='FisheyeCamera', 
         img=mmcv.imread('tests/prefusion/transform/test_render_imgs/test_fisheye.jpg'), 
@@ -62,6 +63,7 @@ def fisheye_image():
 @pytest.fixture()
 def perspective_image():
     return CameraImage(
+        name="camera_image_perspective",
         cam_id='VCAMERA_PERSPECTIVE_FRONT',
         cam_type='PerspectiveCamera', 
         img=mmcv.imread('tests/prefusion/transform/test_render_imgs/test_perspective.jpg'), 
@@ -76,8 +78,9 @@ def perspective_image():
 
 @pytest.fixture()
 def camera_imageset():
-    return CameraImageSet(transformables={
+    return CameraImageSet("camera_image_set", transformables={
         'front_fish': CameraImage(
+            name="camera_image_front_fish",
             cam_id='VCAMERA_FISHEYE_FRONT',
             cam_type='FisheyeCamera', 
             img=mmcv.imread('tests/prefusion/transform/test_render_imgs/test_fisheye.jpg'), 
@@ -89,6 +92,7 @@ def camera_imageset():
             intrinsic=[47.5, 31.5, 24, 24, 0.1, 0, 0, 0]
         ), 
         'front': CameraImage(
+            name="camera_image_front",
             cam_id='VCAMERA_PERSPECTIVE_FRONT',
             cam_type='PerspectiveCamera', 
             img=mmcv.imread('tests/prefusion/transform/test_render_imgs/test_perspective.jpg'), 
@@ -230,6 +234,7 @@ def test_random_transform_class_factory_validate_rules():
 @pytest.fixture
 def cam_im():
     return CameraImage(
+        "camera_image_front",
         "front",
         "FisheyeCamera",
         np.ones((4, 6, 3)),
@@ -348,7 +353,7 @@ def test_random_isp_delegate_transform():
     )
     np.random.seed(85)  # for np.random.choice(transforms): RandomSharpness -> RandomBrightness -> RandomImEqualize
     random.seed(77)  # for random.random() <= probs: [0.32590, 0.240493, 0.82255]
-    im = CameraImage("front", "FisheyeCamera", np.arange(4 * 6 * 3, dtype=np.uint8).reshape(4, 6, 3), np.ones((4, 6, 3)), (np.eye(3), np.eye(3)), np.eye(3))
+    im = CameraImage("camera_image_front", "front", "FisheyeCamera", np.arange(4 * 6 * 3, dtype=np.uint8).reshape(4, 6, 3), np.ones((4, 6, 3)), (np.eye(3), np.eye(3)), np.eye(3))
     delegate_transform(im, seeds={'frame': 2, 'batch': 4, 'group': 8})
     np.testing.assert_almost_equal(im.img, np.array(
         [[[ 4,  5,  8, 11, 13, 15],

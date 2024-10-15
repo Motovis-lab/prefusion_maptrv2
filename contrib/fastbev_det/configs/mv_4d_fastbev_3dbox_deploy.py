@@ -161,8 +161,31 @@ train_dataloader = dict(
         name="mv_4d",
         data_root=data_root,
         info_path=data_root + 'mv_4d_infos_val.pkl',
-        dictionaries=dictionary,
-        transformable_keys=collection_info_type,
+        transformables=[
+            dict(
+                name="camera_images",
+                transformable_key="camera_images",
+            ),
+            dict(
+                name="camera_depths",
+                transformable_key="camera_depths",
+            ),
+            dict(
+                name="bbox_3d",
+                transformable_key="bbox_3d",
+                dictionary=Bbox3d,
+            ),
+            dict(
+                name="bbox_bev",
+                transformable_key="bbox_bev",
+                dictionary=BboxBev,
+            ),
+            dict(
+                name="square_3d",
+                transformable_key="square_3d",
+                dictionary=Square3D,
+            ),
+        ],
         transforms=train_pipeline,
         phase='train',
         batch_size=batch_size, 
@@ -182,8 +205,31 @@ val_dataloader = dict(
         name="mv_4d",
         data_root=data_root,
         info_path=data_root + 'mv_4d_infos_val.pkl',
-        dictionaries=dictionary,
-        transformable_keys=collection_info_type,
+        transformables=[
+            dict(
+                name="camera_images",
+                transformable_key="camera_images",
+            ),
+            dict(
+                name="camera_depths",
+                transformable_key="camera_depths",
+            ),
+            dict(
+                name="bbox_3d",
+                transformable_key="bbox_3d",
+                dictionary=Bbox3d,
+            ),
+            dict(
+                name="bbox_bev",
+                transformable_key="bbox_bev",
+                dictionary=BboxBev,
+            ),
+            dict(
+                name="square_3d",
+                transformable_key="square_3d",
+                dictionary=Square3D,
+            ),
+        ],
         transforms=val_pipeline,
         phase='val',
         batch_size=batch_size, 

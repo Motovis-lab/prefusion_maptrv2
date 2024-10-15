@@ -3,6 +3,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from mmengine.config.config import ConfigDict
 
 from prefusion.dataset.dataset import GroupBatchDataset, GroupSampler, IndexInfo, generate_groups
 from prefusion.dataset.model_feeder import BaseModelFeeder
@@ -338,9 +339,7 @@ def test_load_ego_poses():
         name="gbd",
         data_root=Path("tests/prefusion/dataset"),
         info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl"),
-        transformable_keys=["camera_images"],
-        dictionaries={},
-        tensor_smiths={"camera_images": DummyImgTensorSmith()},
+        transformables=[ConfigDict(name="my_ego_poses", transformable_key="ego_poses")],
         transforms=[DummyTransform(scope="group")],
         model_feeder=BaseModelFeeder(),
         phase="val",
@@ -413,9 +412,7 @@ def test_load_camera_depth():
         name="gbd",
         data_root=Path(tmpdir),
         info_path=depth_path,
-        transformable_keys=["camera_depths"],
-        dictionaries={},
-        tensor_smiths={"camera_depths": DummyDepthTensorSmith()},
+        transformables=[],
         transforms=[DummyTransform(scope="group")],
         model_feeder=BaseModelFeeder(),
         phase="val",
