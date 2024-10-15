@@ -375,7 +375,7 @@ def boxes_data2():
 
 
 def test_bbox3d_creation(boxes_data, dictionary):
-    bbox3d = Bbox3D("bbox3d", boxes_data, dictionary)
+    bbox3d = Bbox3D("bbox3d", boxes_data, dictionary['det'])
     bbox3d.rotate_3d(np.array([[0.5, 0.5, 0], [-0.5, 0.5, 1], [0, 0, 1]]))
     assert [ele["class"] for ele in bbox3d.elements] == ["class.vehicle.passenger_car", "class.pedestrian.pedestrian"]
     np.testing.assert_almost_equal(
@@ -384,7 +384,7 @@ def test_bbox3d_creation(boxes_data, dictionary):
 
 
 def test_bbox3d_get_corners(boxes_data2, dictionary):
-    bbox3d = Bbox3D("bbox3d", boxes_data2, dictionary)
+    bbox3d = Bbox3D("bbox3d", boxes_data2, dictionary['det'])
     np.testing.assert_almost_equal(bbox3d.corners, np.array([[
         [2.87867966, 3.29289322, -0.05],
         [4.29289322, 1.87867966, -0.05],
@@ -399,7 +399,7 @@ def test_bbox3d_get_corners(boxes_data2, dictionary):
 
 def test_bbox3d_flip_with_flip_aware_class_pairs(boxes_data, dictionary):
     flip_aware_class_pairs = [('class.pedestrian.pedestrian', 'class.pedestrian.flipped_pedestrian')]
-    bbox3d = Bbox3D("bbox3d", boxes_data, dictionary, flip_aware_class_pairs=flip_aware_class_pairs)
+    bbox3d = Bbox3D("bbox3d", boxes_data, dictionary['det'], flip_aware_class_pairs=flip_aware_class_pairs)
     flip_mat = np.eye(3)
     flip_mat[1, 1] = -1
     bbox3d.flip_3d(flip_mat)
@@ -452,7 +452,7 @@ def polyline_data():
 
 
 def test_polyline3d_creation(polyline_data, dictionary):
-    pl = Polyline3D("polyline_3d", polyline_data, dictionary)
+    pl = Polyline3D("polyline_3d", polyline_data, dictionary['arrow'])
     pl.rotate_3d(np.array([[0.5, 0.5, 0], [-0.5, 0.5, 1], [0, 0, 1]]))
     assert [ele["class"] for ele in pl.elements] == ["class.parking.parking_slot"] * 2
     np.testing.assert_almost_equal(
@@ -470,7 +470,7 @@ def test_polyline3d_creation(polyline_data, dictionary):
 
 def test_polyline3d_flip_with_flip_aware_class_pairs(polyline_data, dictionary):
     flip_aware_class_pairs = [('class.parking.parking_slot', 'class.parking.parking_slot.flipped')]
-    pl = Polyline3D("polyline_3d", polyline_data, dictionary, flip_aware_class_pairs=flip_aware_class_pairs)
+    pl = Polyline3D("polyline_3d", polyline_data, dictionary['arrow'], flip_aware_class_pairs=flip_aware_class_pairs)
     flip_mat = np.eye(3)
     flip_mat[1, 1] = -1
     pl.flip_3d(flip_mat)
@@ -527,13 +527,13 @@ def horizontal_parkslot():
 
 
 def test_parking_slot_3d_creation(vertical_parkslot, horizontal_parkslot, dictionary):
-    parking_slots = ParkingSlot3D("parkingslot_3d", vertical_parkslot + horizontal_parkslot, dictionary)
+    parking_slots = ParkingSlot3D("parkingslot_3d", vertical_parkslot + horizontal_parkslot, dictionary['arrow'])
     assert [slot["class"] for slot in parking_slots.elements] == ["class.parking.parking_slot"] * 2
 
 
 
 def test_parking_slot_3d_flip_y_horizontal_slot(horizontal_parkslot, dictionary):
-    parking_slots = ParkingSlot3D("parkingslot_3d", horizontal_parkslot, dictionary)
+    parking_slots = ParkingSlot3D("parkingslot_3d", horizontal_parkslot, dictionary['arrow'])
     assert [ele["class"] for ele in parking_slots.elements] == ["class.parking.parking_slot"]
     parking_slots.flip_3d(np.array(
         [[1, 0, 0], 
@@ -545,7 +545,7 @@ def test_parking_slot_3d_flip_y_horizontal_slot(horizontal_parkslot, dictionary)
 
 
 def test_parking_slot_3d_flip_x_horizontal_slot(horizontal_parkslot, dictionary):
-    parking_slots = ParkingSlot3D("parkingslot_3d", horizontal_parkslot, dictionary)
+    parking_slots = ParkingSlot3D("parkingslot_3d", horizontal_parkslot, dictionary['arrow'])
     assert [ele["class"] for ele in parking_slots.elements] == ["class.parking.parking_slot"]
     parking_slots.flip_3d(np.array(
         [[-1, 0, 0], 
@@ -558,7 +558,7 @@ def test_parking_slot_3d_flip_x_horizontal_slot(horizontal_parkslot, dictionary)
 
 
 def test_parking_slot_3d_flip_y_vertical_slot(vertical_parkslot, dictionary):
-    parking_slots = ParkingSlot3D("parkingslot_3d", vertical_parkslot, dictionary)
+    parking_slots = ParkingSlot3D("parkingslot_3d", vertical_parkslot, dictionary["arrow"])
     assert [ele["class"] for ele in parking_slots.elements] == ["class.parking.parking_slot"]
     parking_slots.flip_3d(np.array(
         [[1, 0, 0], 
@@ -571,7 +571,7 @@ def test_parking_slot_3d_flip_y_vertical_slot(vertical_parkslot, dictionary):
 
 
 def test_parking_slot_3d_flip_x_vertical_slot(vertical_parkslot, dictionary):
-    parking_slots = ParkingSlot3D("parkingslot_3d", vertical_parkslot, dictionary)
+    parking_slots = ParkingSlot3D("parkingslot_3d", vertical_parkslot, dictionary["arrow"])
     assert [ele["class"] for ele in parking_slots.elements] == ["class.parking.parking_slot"]
     parking_slots.flip_3d(np.array(
         [[-1, 0, 0], 
@@ -583,7 +583,7 @@ def test_parking_slot_3d_flip_x_vertical_slot(vertical_parkslot, dictionary):
 
 
 def test_parking_slot_3d_flip_y_multiple_slots(vertical_parkslot, horizontal_parkslot, dictionary):
-    parking_slots = ParkingSlot3D("parkingslot_3d", vertical_parkslot + horizontal_parkslot, dictionary)
+    parking_slots = ParkingSlot3D("parkingslot_3d", vertical_parkslot + horizontal_parkslot, dictionary["arrow"])
     assert [ele["class"] for ele in parking_slots.elements] == ["class.parking.parking_slot"] * 2
     parking_slots.flip_3d(np.array(
         [[1, 0, 0], 
