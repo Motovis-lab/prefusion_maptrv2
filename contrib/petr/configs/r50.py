@@ -44,23 +44,31 @@ train_dataloader = dict(
         name="MvParkingTest",
         data_root="/data/datasets/mv4d",
         info_path="/data/datasets/mv4d/mv4d_infos_dbg_246_noalign.pkl",
-        dictionaries={
-            "camera_images": {},
-            "bbox_3d": {"det": {"classes": det_classes}},
-        },
-        tensor_smiths=dict(
-            camera_images=dict(
-                type="CameraImageTensor",
-                means=[123.675, 116.280, 103.530],
-                stds=[58.395, 57.120, 57.375],
-            ),
-            bbox_3d=dict(type="Bbox3DBasic", classes=det_classes),
-        ),
         model_feeder=dict(
             type="StreamPETRModelFeeder",
             visible_range=point_cloud_range,
         ),
-        transformable_keys=["camera_images", "bbox_3d", "ego_poses"],
+        transformables=[
+            dict(
+                name="camera_images",  # arbitrary string, will be set to each Transformable object to distinguish it with others
+                transformable_key="camera_images",  # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
+                tensor_smith=dict(
+                    type="CameraImageTensor",
+                    means=[123.675, 116.280, 103.530],
+                    stds=[58.395, 57.120, 57.375],
+                )
+            ),
+            dict(
+                name="bbox_3d", # arbitrary string, will be set to each Transformable object to distinguish it with others
+                transformable_key="bbox_3d",  # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
+                dictionary={"classes": det_classes},
+                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes),
+            ),
+            dict(
+                name="ego_poses", # arbitrary string, will be set to each Transformable object to distinguish it with others
+                transformable_key="ego_poses", # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
+            ),
+        ],
         transforms=[
             # dict(type="RandomMirrorSpace", prob=0.5, scope="group"),
             dict(

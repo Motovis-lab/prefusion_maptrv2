@@ -14,14 +14,13 @@ from .utils import (
 )
 from .transform import (
     CameraImage, CameraSegMask, CameraDepth,
-    Bbox3D,
-    Polyline3D, SegBev, ParkingSlot3D
+    Bbox3D, Polyline3D, SegBev, ParkingSlot3D
 )
 
 __all__ = [
     "CameraImageTensor", 
     "CameraDepthTensor", 
-    "CameraSegTensor", 
+    "CameraSegTensor",
     "PlanarBbox3D", 
     "PlanarSquarePillar", 
     "PlanarCylinder3D", 
@@ -189,13 +188,9 @@ class PlanarBbox3D(PlanarTensorSmith):
         }
         ```
         dictionary: dict
-        following format
-        ```dictionary = {
-            'branch_0': {'classes': ['car', 'bus', 'pedestrain', ...], 'attrs': []}
-            'branch_1': {'classes': [], 'attrs': []}
-            ...
-        }
-        ```
+            following format
+            ```dictionary = {'classes': ['car', 'bus', 'pedestrain', ...], 'attrs': []}
+            ```
         flip_aware_class_pairs: List[tuple]
             list of class pairs that are flip-aware
             flip_aware_class_pairs = [('left_arrow', 'right_arrow')]
@@ -209,126 +204,124 @@ class PlanarBbox3D(PlanarTensorSmith):
         cx, cy, fx, fy = self.bev_intrinsics
         points_grid_bev = self.points_grid_bev
 
-        tensor_data = {}
-        for branch in transformable.dictionary:
-            unit_xvecs = []
-            unit_yvecs = []
-            centers = []
-            all_points_bev = []
-            box_sizes = []
-            velocities = []
-            class_inds = []
-            attr_lists = []
-            attr_available = 'attrs' in transformable.dictionary[branch]
-            for element in transformable.elements:
-                if element['class'] in transformable.dictionary[branch]['classes']:
-                    # unit vector of x_axis/y_axis of the box
-                    unit_xvecs.append(element['rotation'][:, 0])
-                    unit_yvecs.append(element['rotation'][:, 1])
-                    # get the position of the box
-                    center = element['translation'][:, 0]
-                    if self.use_bottom_center:
-                        center -= 0.5 * element['size'][2] * element['rotation'][:, 2]
-                    centers.append(np.array([
-                        center[1] * fy + cy,
-                        center[0] * fx + cx,
-                        center[2]
-                    ], dtype=np.float32))
-                    xvec = element['size'][0] * element['rotation'][:, 0]
-                    yvec = element['size'][1] * element['rotation'][:, 1]
-                    corner_points = np.array([
-                        center + 0.5 * xvec - 0.5 * yvec,
-                        center + 0.5 * xvec + 0.5 * yvec,
-                        center - 0.5 * xvec + 0.5 * yvec,
-                        center - 0.5 * xvec - 0.5 * yvec
-                    ], dtype=np.float32)
-                    points_bev = np.array([
-                        corner_points[..., 1] * fy + cy,
-                        corner_points[..., 0] * fx + cx
-                    ], dtype=np.float32).T
-                    all_points_bev.append(points_bev)
-                    box_sizes.append(element['size'])
-                    velocities.append(element['velocity'][:, 0])
-                    # get class and attr index
-                    class_inds.append(transformable.dictionary[branch]['classes'].index(element['class']))
-                    attr_ind_list = []
-                    if 'attr' in element and attr_available:
-                        element_attrs = element['attr'].values()
-                        for attr in element_attrs:
-                            if attr in transformable.dictionary[branch]['attrs']:
-                                attr_ind_list.append(transformable.dictionary[branch]['attrs'].index(attr))
-                    attr_lists.append(attr_ind_list)
-                    # TODO: add ignore_mask according to ignore classes and attrs
-            num_class_channels = len(transformable.dictionary[branch]['classes'])
-            if attr_available:
-                num_attr_channels = len(transformable.dictionary[branch]['attrs'])
-            else:
-                num_attr_channels = 0
-            # maybe later, think about overlapped objects
-            branch_seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
-            branch_cen_im = np.zeros((1, X, Y), dtype=np.float32)
-            branch_reg_im = np.zeros((20, X, Y), dtype=np.float32)
-            for unit_xvec, unit_yvec, points_bev, center, size, velo, class_ind, attr_list in zip(
-                unit_xvecs, unit_yvecs, all_points_bev, centers, box_sizes, velocities, class_inds, attr_lists
-            ):
-                points_bev_int = np.round(points_bev).astype(int)
-                region_box = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [points_bev_int], 1)
-                ## gen segmentation
-                cv2.fillPoly(branch_seg_im[0], [points_bev_int], 1)
-                cv2.fillPoly(branch_seg_im[1 + class_ind], [points_bev_int], 1)
-                for attr_ind in attr_list:
-                    cv2.fillPoly(branch_seg_im[1 + num_class_channels + attr_ind], [points_bev_int], 1)
-                ## gen regression
-                # 0, 1: center x y, in bev coord
-                vec2center = center[:2][..., None, None] - points_grid_bev
-                branch_reg_im[[0, 1]] = branch_reg_im[[0, 1]] * (1 - region_box) + vec2center * region_box
-                # 2: center z
-                branch_reg_im[2] = branch_reg_im[2] * (1 - region_box) + center[2] * region_box
-                # 3, 4, 5: size l, w, h
-                branch_reg_im[3] = branch_reg_im[3] * (1 - region_box) + size[0] * region_box
-                branch_reg_im[4] = branch_reg_im[4] * (1 - region_box) + size[1] * region_box
-                branch_reg_im[5] = branch_reg_im[5] * (1 - region_box) + size[2] * region_box
-                # 6, 7, 8: unit xvec
-                branch_reg_im[6] = branch_reg_im[6] * (1 - region_box) + unit_xvec[0] * region_box
-                branch_reg_im[7] = branch_reg_im[7] * (1 - region_box) + unit_xvec[1] * region_box
-                branch_reg_im[8] = branch_reg_im[8] * (1 - region_box) + unit_xvec[2] * region_box
-                # 9, 10, 11, 12, 13: absolute xvec
-                branch_reg_im[9] = branch_reg_im[9] * (1 - region_box) + np.abs(unit_xvec[0]) * region_box
-                branch_reg_im[10] = branch_reg_im[10] * (1 - region_box) + np.abs(unit_xvec[1]) * region_box
-                branch_reg_im[11] = branch_reg_im[11] * (1 - region_box) + np.abs(unit_xvec[2]) * region_box
-                branch_reg_im[12] = branch_reg_im[12] * (1 - region_box) + unit_xvec[0] * unit_xvec[1] * region_box
-                branch_reg_im[13] = branch_reg_im[13] * (1 - region_box) + unit_xvec[0] * unit_xvec[2] * region_box
-                # 14, 15, 16: abs roll angle of yvec and xvec_bev_vertial                
-                cos_roll, sin_roll = self._get_roll_from_xyvecs(unit_xvec, unit_yvec)
-                branch_reg_im[14] = branch_reg_im[14] * (1 - region_box) + abs(cos_roll) * region_box
-                branch_reg_im[15] = branch_reg_im[15] * (1 - region_box) + abs(sin_roll) * region_box
-                branch_reg_im[16] = branch_reg_im[16] * (1 - region_box) + cos_roll * sin_roll * region_box
-                # 17, 18, 19: velocity
-                branch_reg_im[17] = branch_reg_im[17] * (1 - region_box) + velo[0] * region_box
-                branch_reg_im[18] = branch_reg_im[18] * (1 - region_box) + velo[1] * region_box
-                branch_reg_im[19] = branch_reg_im[19] * (1 - region_box) + velo[2] * region_box
-                ## gen centerness
-                center_line_l = np.float32([points_bev[[0, 1]].mean(0), points_bev[[2, 3]].mean(0)])
-                center_line_w = np.float32([points_bev[[1, 2]].mean(0), points_bev[[0, 3]].mean(0)])
-                direction_l = np.float32(center_line_l[0] - center_line_l[1])
-                direction_w = np.float32(center_line_w[0] - center_line_w[1])
-                dist2front = dist_point2line_along_direction(points_grid_bev, points_bev[[0, 1]], direction_l)
-                dist2left  = dist_point2line_along_direction(points_grid_bev, points_bev[[1, 2]], direction_w)
-                dist2rear  = dist_point2line_along_direction(points_grid_bev, points_bev[[2, 3]], direction_l)
-                dist2right = dist_point2line_along_direction(points_grid_bev, points_bev[[3, 0]], direction_w)
-                min_ds = np.minimum(dist2front, dist2rear) * region_box
-                min_ds /= (min_ds.max() + 1e-3)
-                min_dl = np.minimum(dist2left, dist2right) * region_box
-                min_dl /= (min_dl.max() + 1e-3)
-                centerness = min_ds * min_dl
-                centerness /= (centerness.max() + 1e-3)
-                branch_cen_im[0] = branch_cen_im[0] * (1 - region_box) + centerness * region_box
-            ## tensor
-            tensor_data[branch] = {
-                'seg': torch.tensor(branch_seg_im, dtype=torch.float32),
-                'cen': torch.tensor(branch_cen_im, dtype=torch.float32),
-                'reg': torch.tensor(branch_reg_im, dtype=torch.float32)
-            }
+        unit_xvecs = []
+        unit_yvecs = []
+        centers = []
+        all_points_bev = []
+        box_sizes = []
+        velocities = []
+        class_inds = []
+        attr_lists = []
+        attr_available = 'attrs' in transformable.dictionary
+        for element in transformable.elements:
+            if element['class'] in transformable.dictionary['classes']:
+                # unit vector of x_axis/y_axis of the box
+                unit_xvecs.append(element['rotation'][:, 0])
+                unit_yvecs.append(element['rotation'][:, 1])
+                # get the position of the box
+                center = element['translation'][:, 0]
+                if self.use_bottom_center:
+                    center -= 0.5 * element['size'][2] * element['rotation'][:, 2]
+                centers.append(np.array([
+                    center[1] * fy + cy,
+                    center[0] * fx + cx,
+                    center[2]
+                ], dtype=np.float32))
+                xvec = element['size'][0] * element['rotation'][:, 0]
+                yvec = element['size'][1] * element['rotation'][:, 1]
+                corner_points = np.array([
+                    center + 0.5 * xvec - 0.5 * yvec,
+                    center + 0.5 * xvec + 0.5 * yvec,
+                    center - 0.5 * xvec + 0.5 * yvec,
+                    center - 0.5 * xvec - 0.5 * yvec
+                ], dtype=np.float32)
+                points_bev = np.array([
+                    corner_points[..., 1] * fy + cy,
+                    corner_points[..., 0] * fx + cx
+                ], dtype=np.float32).T
+                all_points_bev.append(points_bev)
+                box_sizes.append(element['size'])
+                velocities.append(element['velocity'][:, 0])
+                # get class and attr index
+                class_inds.append(transformable.dictionary['classes'].index(element['class']))
+                attr_ind_list = []
+                if 'attr' in element and attr_available:
+                    element_attrs = element['attr'].values()
+                    for attr in element_attrs:
+                        if attr in transformable.dictionary['attrs']:
+                            attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
+                attr_lists.append(attr_ind_list)
+                # TODO: add ignore_mask according to ignore classes and attrs
+        num_class_channels = len(transformable.dictionary['classes'])
+        if attr_available:
+            num_attr_channels = len(transformable.dictionary['attrs'])
+        else:
+            num_attr_channels = 0
+        # maybe later, think about overlapped objects
+        seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
+        cen_im = np.zeros((1, X, Y), dtype=np.float32)
+        reg_im = np.zeros((20, X, Y), dtype=np.float32)
+        for unit_xvec, unit_yvec, points_bev, center, size, velo, class_ind, attr_list in zip(
+            unit_xvecs, unit_yvecs, all_points_bev, centers, box_sizes, velocities, class_inds, attr_lists
+        ):
+            points_bev_int = np.round(points_bev).astype(int)
+            region_box = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [points_bev_int], 1)
+            ## gen segmentation
+            cv2.fillPoly(seg_im[0], [points_bev_int], 1)
+            cv2.fillPoly(seg_im[1 + class_ind], [points_bev_int], 1)
+            for attr_ind in attr_list:
+                cv2.fillPoly(seg_im[1 + num_class_channels + attr_ind], [points_bev_int], 1)
+            ## gen regression
+            # 0, 1: center x y, in bev coord
+            vec2center = center[:2][..., None, None] - points_grid_bev
+            reg_im[[0, 1]] = reg_im[[0, 1]] * (1 - region_box) + vec2center * region_box
+            # 2: center z
+            reg_im[2] = reg_im[2] * (1 - region_box) + center[2] * region_box
+            # 3, 4, 5: size l, w, h
+            reg_im[3] = reg_im[3] * (1 - region_box) + size[0] * region_box
+            reg_im[4] = reg_im[4] * (1 - region_box) + size[1] * region_box
+            reg_im[5] = reg_im[5] * (1 - region_box) + size[2] * region_box
+            # 6, 7, 8: unit xvec
+            reg_im[6] = reg_im[6] * (1 - region_box) + unit_xvec[0] * region_box
+            reg_im[7] = reg_im[7] * (1 - region_box) + unit_xvec[1] * region_box
+            reg_im[8] = reg_im[8] * (1 - region_box) + unit_xvec[2] * region_box
+            # 9, 10, 11, 12, 13: absolute xvec
+            reg_im[9] = reg_im[9] * (1 - region_box) + np.abs(unit_xvec[0]) * region_box
+            reg_im[10] = reg_im[10] * (1 - region_box) + np.abs(unit_xvec[1]) * region_box
+            reg_im[11] = reg_im[11] * (1 - region_box) + np.abs(unit_xvec[2]) * region_box
+            reg_im[12] = reg_im[12] * (1 - region_box) + unit_xvec[0] * unit_xvec[1] * region_box
+            reg_im[13] = reg_im[13] * (1 - region_box) + unit_xvec[0] * unit_xvec[2] * region_box
+            # 14, 15, 16: abs roll angle of yvec and xvec_bev_vertial                
+            cos_roll, sin_roll = self._get_roll_from_xyvecs(unit_xvec, unit_yvec)
+            reg_im[14] = reg_im[14] * (1 - region_box) + abs(cos_roll) * region_box
+            reg_im[15] = reg_im[15] * (1 - region_box) + abs(sin_roll) * region_box
+            reg_im[16] = reg_im[16] * (1 - region_box) + cos_roll * sin_roll * region_box
+            # 17, 18, 19: velocity
+            reg_im[17] = reg_im[17] * (1 - region_box) + velo[0] * region_box
+            reg_im[18] = reg_im[18] * (1 - region_box) + velo[1] * region_box
+            reg_im[19] = reg_im[19] * (1 - region_box) + velo[2] * region_box
+            ## gen centerness
+            center_line_l = np.float32([points_bev[[0, 1]].mean(0), points_bev[[2, 3]].mean(0)])
+            center_line_w = np.float32([points_bev[[1, 2]].mean(0), points_bev[[0, 3]].mean(0)])
+            direction_l = np.float32(center_line_l[0] - center_line_l[1])
+            direction_w = np.float32(center_line_w[0] - center_line_w[1])
+            dist2front = dist_point2line_along_direction(points_grid_bev, points_bev[[0, 1]], direction_l)
+            dist2left  = dist_point2line_along_direction(points_grid_bev, points_bev[[1, 2]], direction_w)
+            dist2rear  = dist_point2line_along_direction(points_grid_bev, points_bev[[2, 3]], direction_l)
+            dist2right = dist_point2line_along_direction(points_grid_bev, points_bev[[3, 0]], direction_w)
+            min_ds = np.minimum(dist2front, dist2rear) * region_box
+            min_ds /= (min_ds.max() + 1e-3)
+            min_dl = np.minimum(dist2left, dist2right) * region_box
+            min_dl /= (min_dl.max() + 1e-3)
+            centerness = min_ds * min_dl
+            centerness /= (centerness.max() + 1e-3)
+            cen_im[0] = cen_im[0] * (1 - region_box) + centerness * region_box
+        ## tensor
+        tensor_data = {
+            'seg': torch.tensor(seg_im, dtype=torch.float32),
+            'cen': torch.tensor(cen_im, dtype=torch.float32),
+            'reg': torch.tensor(reg_im, dtype=torch.float32)
+        }
         return tensor_data
         
     
@@ -427,10 +420,11 @@ class PlanarBbox3D(PlanarTensorSmith):
         ----------
         tensor_dict : dict
         ```
-        dict(
-            branch_id = dict,
-            branch_id = dict
-        )
+        {
+            'seg': torch.Tensor,
+            'cen': torch.Tensor,
+            'reg': torch.Tensor
+        }
         ```
         pre_conf : float, optional, by default 0.1
 
@@ -446,59 +440,56 @@ class PlanarBbox3D(PlanarTensorSmith):
             6, 7, 8: unit xvec, ego coords
             9, 10, 11, 12, 13: absolute xvec, ego coords
             14, 15, 16: abs roll angle of yvec and xvec_bev_vertial, intrinsic rotation
-            17, 18, 19: velocity, eogo coords, TODO: should be converted to ego coords, currently world coords            
+            17, 18, 19: velocity, ego coords, TODO: should be converted to ego coords, currently world coords            
         ```
         """
-        boxes_3d = {}
-        for branch in tensor_dict:
-            seg_pred = tensor_dict[branch]['seg'].detach().cpu().numpy()
-            cen_pred = tensor_dict[branch]['cen'].detach().cpu().numpy()
-            reg_pred = tensor_dict[branch]['reg'].detach().cpu().numpy()
-            ## pickup bbox points
-            valid_points_map = seg_pred[0] > pre_conf
-            # valid postions
-            valid_points_bev = self.points_grid_bev[:, valid_points_map]
-            # pickup scores and classes
-            seg_scores = seg_pred[0][valid_points_map]
-            cen_scores = cen_pred[0][valid_points_map]
-            seg_classes = seg_pred[:, valid_points_map]
-            # pickup regressions
-            reg_values = reg_pred[:, valid_points_map]
-            # 0, 1, 2: centers in ego coords
-            cx, cy, fx, fy = self.bev_intrinsics
-            center_xs = (valid_points_bev[1] + reg_values[1] - cx) / fx
-            center_ys = (valid_points_bev[0] + reg_values[0] - cy) / fy
-            center_zs = reg_values[2]
-            centers = np.array([center_xs, center_ys, center_zs])
-            # 3, 4, 5: sizes in ego coords
-            sizes = reg_values[[3, 4, 5]]
-            # infer unit xvecs from absolute xvecs and ref_unit xvecs
-            # 6, 7, 8: reference unit xvecs in ego coords
-            ref_unit_xvecs = reg_values[[6, 7, 8]]
-            # 9, 10, 11, 12, 13: absolute unit xvecs in ego coords
-            abs_unit_xvecs = reg_values[[9, 10, 11, 12, 13]]
-            # calculte unit xvecs
-            unit_xvecs_x = abs_unit_xvecs[0]
-            unit_xvecs_y = abs_unit_xvecs[1] * _sign(abs_unit_xvecs[3])
-            unit_xvecs_z = abs_unit_xvecs[2] * _sign(abs_unit_xvecs[4])
-            unit_xvecs = np.array([unit_xvecs_x, unit_xvecs_y, unit_xvecs_z])
-            sign_xvecs = _sign(unit_xvecs * ref_unit_xvecs)
-            unit_xvecs *= sign_xvecs
-            # 14, 15, 16: roll angles
-            cos_rolls = reg_values[14]
-            sin_rolls = reg_values[15] * _sign(reg_values[16])
-            roll_vecs = np.array([cos_rolls, sin_rolls])
-            roll_vecs /= np.maximum(np.linalg.norm(roll_vecs), 1e-6)
-            # 17, 18, 19: velocities
-            velocities = reg_values[[17, 18, 19]]
-            
-            ## group nms
-            mean_boxes_3d = self._group_nms(
-                seg_scores, cen_scores, seg_classes, 
-                centers, sizes, unit_xvecs, roll_vecs, velocities
-            )
+        seg_pred = tensor_dict['seg'].detach().cpu().numpy()
+        cen_pred = tensor_dict['cen'].detach().cpu().numpy()
+        reg_pred = tensor_dict['reg'].detach().cpu().numpy()
+        ## pickup bbox points
+        valid_points_map = seg_pred[0] > pre_conf
+        # valid postions
+        valid_points_bev = self.points_grid_bev[:, valid_points_map]
+        # pickup scores and classes
+        seg_scores = seg_pred[0][valid_points_map]
+        cen_scores = cen_pred[0][valid_points_map]
+        seg_classes = seg_pred[:, valid_points_map]
+        # pickup regressions
+        reg_values = reg_pred[:, valid_points_map]
+        # 0, 1, 2: centers in ego coords
+        cx, cy, fx, fy = self.bev_intrinsics
+        center_xs = (valid_points_bev[1] + reg_values[1] - cx) / fx
+        center_ys = (valid_points_bev[0] + reg_values[0] - cy) / fy
+        center_zs = reg_values[2]
+        centers = np.array([center_xs, center_ys, center_zs])
+        # 3, 4, 5: sizes in ego coords
+        sizes = reg_values[[3, 4, 5]]
+        # infer unit xvecs from absolute xvecs and ref_unit xvecs
+        # 6, 7, 8: reference unit xvecs in ego coords
+        ref_unit_xvecs = reg_values[[6, 7, 8]]
+        # 9, 10, 11, 12, 13: absolute unit xvecs in ego coords
+        abs_unit_xvecs = reg_values[[9, 10, 11, 12, 13]]
+        # calculte unit xvecs
+        unit_xvecs_x = abs_unit_xvecs[0]
+        unit_xvecs_y = abs_unit_xvecs[1] * _sign(abs_unit_xvecs[3])
+        unit_xvecs_z = abs_unit_xvecs[2] * _sign(abs_unit_xvecs[4])
+        unit_xvecs = np.array([unit_xvecs_x, unit_xvecs_y, unit_xvecs_z])
+        sign_xvecs = _sign(unit_xvecs * ref_unit_xvecs)
+        unit_xvecs *= sign_xvecs
+        # 14, 15, 16: roll angles
+        cos_rolls = reg_values[14]
+        sin_rolls = reg_values[15] * _sign(reg_values[16])
+        roll_vecs = np.array([cos_rolls, sin_rolls])
+        roll_vecs /= np.maximum(np.linalg.norm(roll_vecs), 1e-6)
+        # 17, 18, 19: velocities
+        velocities = reg_values[[17, 18, 19]]
+        
+        ## group nms
+        boxes_3d = self._group_nms(
+            seg_scores, cen_scores, seg_classes, 
+            centers, sizes, unit_xvecs, roll_vecs, velocities
+        )
 
-            boxes_3d[branch] = mean_boxes_3d
         return boxes_3d
 
 
@@ -560,112 +551,110 @@ class PlanarSquarePillar(PlanarTensorSmith):
         cx, cy, fx, fy = self.bev_intrinsics
         points_grid_bev = self.points_grid_bev
         
-        tensor_data = {}
-        for branch in transformable.dictionary:
-            unit_xvecs = []
-            unit_zvecs = []
-            centers = []
-            all_points_bev = []
-            box_sizes = []
-            class_inds = []
-            attr_lists = []
-            attr_available = 'attrs' in transformable.dictionary[branch]
-            for element in transformable.elements:
-                if element['class'] in transformable.dictionary[branch]['classes']:
-                    # unit vector of x_axis/z_axis of the box
-                    unit_xvecs.append(element['rotation'][:, 0])
-                    unit_zvecs.append(element['rotation'][:, 2])
-                    # get the position of the box
-                    center = element['translation'][:, 0]
-                    if self.use_bottom_center:
-                        center -= 0.5 * element['size'][2] * element['rotation'][:, 2]
-                    centers.append(np.array([
-                        center[1] * fy + cy,
-                        center[0] * fx + cx,
-                        center[2]
-                    ], dtype=np.float32))
-                    xvec = element['size'][0] * element['rotation'][:, 0]
-                    yvec = element['size'][1] * element['rotation'][:, 1]
-                    corner_points = np.array([
-                        center + 0.5 * xvec - 0.5 * yvec,
-                        center + 0.5 * xvec + 0.5 * yvec,
-                        center - 0.5 * xvec + 0.5 * yvec,
-                        center - 0.5 * xvec - 0.5 * yvec
-                    ], dtype=np.float32)
-                    points_bev = np.array([
-                        corner_points[..., 1] * fy + cy,
-                        corner_points[..., 0] * fx + cx
-                    ], dtype=np.float32).T
-                    all_points_bev.append(points_bev)
-                    box_sizes.append(element['size'])
-                    # get class and attr index
-                    class_inds.append(transformable.dictionary[branch]['classes'].index(element['class']))
-                    attr_ind_list = []
-                    if 'attr' in element and attr_available:
-                        element_attrs = element['attr'].values()
-                        for attr in element_attrs:
-                            if attr in transformable.dictionary[branch]['attrs']:
-                                attr_ind_list.append(transformable.dictionary[branch]['attrs'].index(attr))
-                    attr_lists.append(attr_ind_list)
-                    # TODO: add ignore_mask according to ignore classes and attrs
-            num_class_channels = len(transformable.dictionary[branch]['classes'])
-            if attr_available:
-                num_attr_channels = len(transformable.dictionary[branch]['attrs'])
-            else:
-                num_attr_channels = 0
-            branch_seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
-            branch_cen_im = np.zeros((1, X, Y), dtype=np.float32)
-            branch_reg_im = np.zeros((20, X, Y), dtype=np.float32)
-            for unit_xvec, unit_zvec, points_bev, center, size, class_ind, attr_list in zip(
-                unit_xvecs, unit_zvecs, all_points_bev, centers, box_sizes, class_inds, attr_lists
-            ):
-                points_bev_int = np.round(points_bev).astype(int)
-                region_box = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [points_bev_int], 1)
-                ## gen segmentation
-                cv2.fillPoly(branch_seg_im[0], [points_bev_int], 1)
-                cv2.fillPoly(branch_seg_im[1 + class_ind], [points_bev_int], 1)
-                for attr_ind in attr_list:
-                    cv2.fillPoly(branch_seg_im[1 + num_class_channels + attr_ind], [points_bev_int], 1)
-                ## gen regression
-                # 0, 1: center x y, in bev coord
-                vec2center = center[:2][..., None, None] - points_grid_bev
-                branch_reg_im[[0, 1]] = branch_reg_im[[0, 1]] * (1 - region_box) + vec2center * region_box
-                # 2: center z
-                branch_reg_im[2] = branch_reg_im[2] * (1 - region_box) + center[2] * region_box
-                # 3, 4, 5: size l, w, h
-                branch_reg_im[3] = branch_reg_im[3] * (1 - region_box) + size[0] * region_box
-                branch_reg_im[4] = branch_reg_im[4] * (1 - region_box) + size[1] * region_box
-                branch_reg_im[5] = branch_reg_im[5] * (1 - region_box) + size[2] * region_box
-                # 6, 7, 8: unit zvec
-                branch_reg_im[6] = branch_reg_im[6] * (1 - region_box) + unit_zvec[0] * region_box
-                branch_reg_im[7] = branch_reg_im[7] * (1 - region_box) + unit_zvec[1] * region_box
-                branch_reg_im[8] = branch_reg_im[8] * (1 - region_box) + unit_zvec[2] * region_box
-                # 9, 10: yaw angle of zvec, intrinsical
-                yaw_angle = self._get_yaw_from_zxvecs(unit_zvec, unit_xvec)
-                branch_reg_im[9] = branch_reg_im[9] * (1 - region_box) + np.cos(4 * yaw_angle) * region_box
-                branch_reg_im[10] = branch_reg_im[10] * (1 - region_box) + np.sin(4 * yaw_angle) * region_box
-                ## gen centerness
-                center_line_l = np.float32([points_bev[[0, 1]].mean(0), points_bev[[2, 3]].mean(0)])
-                center_line_w = np.float32([points_bev[[1, 2]].mean(0), points_bev[[0, 3]].mean(0)])
-                direction_l = np.float32(center_line_l[0] - center_line_l[1])
-                direction_w = np.float32(center_line_w[0] - center_line_w[1])
-                dist2front = dist_point2line_along_direction(points_grid_bev, points_bev[[0, 1]], direction_l)
-                dist2left  = dist_point2line_along_direction(points_grid_bev, points_bev[[1, 2]], direction_w)
-                dist2rear  = dist_point2line_along_direction(points_grid_bev, points_bev[[2, 3]], direction_l)
-                dist2right = dist_point2line_along_direction(points_grid_bev, points_bev[[3, 0]], direction_w)
-                min_ds = np.minimum(dist2front, dist2rear) * region_box
-                min_ds /= (min_ds.max() + 1e-3)
-                min_dl = np.minimum(dist2left, dist2right) * region_box
-                min_dl /= (min_dl.max() + 1e-3)
-                centerness = min_ds * min_dl
-                centerness /= (centerness.max() + 1e-3)
-                branch_cen_im[0] = branch_cen_im[0] * (1 - region_box) + centerness * region_box
-            ## tensor
-            tensor_data[branch] = {
-                'seg': torch.tensor(branch_seg_im, dtype=torch.float32),
-                'cen': torch.tensor(branch_cen_im, dtype=torch.float32),
-                'reg': torch.tensor(branch_reg_im, dtype=torch.float32)
-            }
+        unit_xvecs = []
+        unit_zvecs = []
+        centers = []
+        all_points_bev = []
+        box_sizes = []
+        class_inds = []
+        attr_lists = []
+        attr_available = 'attrs' in transformable.dictionary
+        for element in transformable.elements:
+            if element['class'] in transformable.dictionary['classes']:
+                # unit vector of x_axis/z_axis of the box
+                unit_xvecs.append(element['rotation'][:, 0])
+                unit_zvecs.append(element['rotation'][:, 2])
+                # get the position of the box
+                center = element['translation'][:, 0]
+                if self.use_bottom_center:
+                    center -= 0.5 * element['size'][2] * element['rotation'][:, 2]
+                centers.append(np.array([
+                    center[1] * fy + cy,
+                    center[0] * fx + cx,
+                    center[2]
+                ], dtype=np.float32))
+                xvec = element['size'][0] * element['rotation'][:, 0]
+                yvec = element['size'][1] * element['rotation'][:, 1]
+                corner_points = np.array([
+                    center + 0.5 * xvec - 0.5 * yvec,
+                    center + 0.5 * xvec + 0.5 * yvec,
+                    center - 0.5 * xvec + 0.5 * yvec,
+                    center - 0.5 * xvec - 0.5 * yvec
+                ], dtype=np.float32)
+                points_bev = np.array([
+                    corner_points[..., 1] * fy + cy,
+                    corner_points[..., 0] * fx + cx
+                ], dtype=np.float32).T
+                all_points_bev.append(points_bev)
+                box_sizes.append(element['size'])
+                # get class and attr index
+                class_inds.append(transformable.dictionary['classes'].index(element['class']))
+                attr_ind_list = []
+                if 'attr' in element and attr_available:
+                    element_attrs = element['attr'].values()
+                    for attr in element_attrs:
+                        if attr in transformable.dictionary['attrs']:
+                            attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
+                attr_lists.append(attr_ind_list)
+                # TODO: add ignore_mask according to ignore classes and attrs
+        num_class_channels = len(transformable.dictionary['classes'])
+        if attr_available:
+            num_attr_channels = len(transformable.dictionary['attrs'])
+        else:
+            num_attr_channels = 0
+        seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
+        cen_im = np.zeros((1, X, Y), dtype=np.float32)
+        reg_im = np.zeros((20, X, Y), dtype=np.float32)
+        for unit_xvec, unit_zvec, points_bev, center, size, class_ind, attr_list in zip(
+            unit_xvecs, unit_zvecs, all_points_bev, centers, box_sizes, class_inds, attr_lists
+        ):
+            points_bev_int = np.round(points_bev).astype(int)
+            region_box = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [points_bev_int], 1)
+            ## gen segmentation
+            cv2.fillPoly(seg_im[0], [points_bev_int], 1)
+            cv2.fillPoly(seg_im[1 + class_ind], [points_bev_int], 1)
+            for attr_ind in attr_list:
+                cv2.fillPoly(seg_im[1 + num_class_channels + attr_ind], [points_bev_int], 1)
+            ## gen regression
+            # 0, 1: center x y, in bev coord
+            vec2center = center[:2][..., None, None] - points_grid_bev
+            reg_im[[0, 1]] = reg_im[[0, 1]] * (1 - region_box) + vec2center * region_box
+            # 2: center z
+            reg_im[2] = reg_im[2] * (1 - region_box) + center[2] * region_box
+            # 3, 4, 5: size l, w, h
+            reg_im[3] = reg_im[3] * (1 - region_box) + size[0] * region_box
+            reg_im[4] = reg_im[4] * (1 - region_box) + size[1] * region_box
+            reg_im[5] = reg_im[5] * (1 - region_box) + size[2] * region_box
+            # 6, 7, 8: unit zvec
+            reg_im[6] = reg_im[6] * (1 - region_box) + unit_zvec[0] * region_box
+            reg_im[7] = reg_im[7] * (1 - region_box) + unit_zvec[1] * region_box
+            reg_im[8] = reg_im[8] * (1 - region_box) + unit_zvec[2] * region_box
+            # 9, 10: yaw angle of zvec, intrinsical
+            yaw_angle = self._get_yaw_from_zxvecs(unit_zvec, unit_xvec)
+            reg_im[9] = reg_im[9] * (1 - region_box) + np.cos(4 * yaw_angle) * region_box
+            reg_im[10] = reg_im[10] * (1 - region_box) + np.sin(4 * yaw_angle) * region_box
+            ## gen centerness
+            center_line_l = np.float32([points_bev[[0, 1]].mean(0), points_bev[[2, 3]].mean(0)])
+            center_line_w = np.float32([points_bev[[1, 2]].mean(0), points_bev[[0, 3]].mean(0)])
+            direction_l = np.float32(center_line_l[0] - center_line_l[1])
+            direction_w = np.float32(center_line_w[0] - center_line_w[1])
+            dist2front = dist_point2line_along_direction(points_grid_bev, points_bev[[0, 1]], direction_l)
+            dist2left  = dist_point2line_along_direction(points_grid_bev, points_bev[[1, 2]], direction_w)
+            dist2rear  = dist_point2line_along_direction(points_grid_bev, points_bev[[2, 3]], direction_l)
+            dist2right = dist_point2line_along_direction(points_grid_bev, points_bev[[3, 0]], direction_w)
+            min_ds = np.minimum(dist2front, dist2rear) * region_box
+            min_ds /= (min_ds.max() + 1e-3)
+            min_dl = np.minimum(dist2left, dist2right) * region_box
+            min_dl /= (min_dl.max() + 1e-3)
+            centerness = min_ds * min_dl
+            centerness /= (centerness.max() + 1e-3)
+            cen_im[0] = cen_im[0] * (1 - region_box) + centerness * region_box
+        ## tensor
+        tensor_data = {
+            'seg': torch.tensor(seg_im, dtype=torch.float32),
+            'cen': torch.tensor(cen_im, dtype=torch.float32),
+            'reg': torch.tensor(reg_im, dtype=torch.float32)
+        }
         return tensor_data
     
     
@@ -761,10 +750,11 @@ class PlanarSquarePillar(PlanarTensorSmith):
         ----------
         tensor_dict : dict
         ```
-        dict(
-            branch_id = dict,
-            branch_id = dict
-        )
+        {
+            'seg': torch.Tensor,
+            'cen': torch.Tensor,
+            'reg': torch.Tensor
+        }
         ```
         pre_conf : float, optional, by default 0.1
 
@@ -781,43 +771,41 @@ class PlanarSquarePillar(PlanarTensorSmith):
             9, 10: yaw angle of zvec
         ```
         """
-        pillars_3d = {}
-        for branch in tensor_dict:
-            seg_pred = tensor_dict[branch]['seg'].detach().cpu().numpy()
-            cen_pred = tensor_dict[branch]['cen'].detach().cpu().numpy()
-            reg_pred = tensor_dict[branch]['reg'].detach().cpu().numpy()
-            ## pickup bbox points
-            valid_points_map = seg_pred[0] > pre_conf
-            # valid postions
-            valid_points_bev = self.points_grid_bev[:, valid_points_map]
-            # pickup scores and classes
-            seg_scores = seg_pred[0][valid_points_map]
-            cen_scores = cen_pred[0][valid_points_map]
-            seg_classes = seg_pred[:, valid_points_map]
-            # pickup regressions
-            reg_values = reg_pred[:, valid_points_map]
-            # 0, 1, 2: centers in ego coords
-            cx, cy, fx, fy = self.bev_intrinsics
-            center_xs = (valid_points_bev[1] + reg_values[1] - cx) / fx
-            center_ys = (valid_points_bev[0] + reg_values[0] - cy) / fy
-            center_zs = reg_values[2]
-            centers = np.array([center_xs, center_ys, center_zs])
-            # 3, 4, 5: sizes in ego coords
-            sizes = reg_values[[3, 4, 5]]
-            # 6, 7, 8: unit zvecs in ego coords
-            unit_zvecs = reg_values[[6, 7, 8]]
-            # 9, 10: yaw angles
-            cos4yaws = reg_values[9]
-            sin4yaws = reg_values[10]
-            vecs_4yaw = np.array([cos4yaws, sin4yaws])
-            vecs_4yaw /= np.maximum(np.linalg.norm(vecs_4yaw), 1e-6)
-            
-            ## group nms
-            mean_pillars_3d = self._group_nms(
-                seg_scores, cen_scores, seg_classes,
-                centers, sizes, unit_zvecs, vecs_4yaw
-            )
-            pillars_3d[branch] = mean_pillars_3d
+        seg_pred = tensor_dict['seg'].detach().cpu().numpy()
+        cen_pred = tensor_dict['cen'].detach().cpu().numpy()
+        reg_pred = tensor_dict['reg'].detach().cpu().numpy()
+        ## pickup bbox points
+        valid_points_map = seg_pred[0] > pre_conf
+        # valid postions
+        valid_points_bev = self.points_grid_bev[:, valid_points_map]
+        # pickup scores and classes
+        seg_scores = seg_pred[0][valid_points_map]
+        cen_scores = cen_pred[0][valid_points_map]
+        seg_classes = seg_pred[:, valid_points_map]
+        # pickup regressions
+        reg_values = reg_pred[:, valid_points_map]
+        # 0, 1, 2: centers in ego coords
+        cx, cy, fx, fy = self.bev_intrinsics
+        center_xs = (valid_points_bev[1] + reg_values[1] - cx) / fx
+        center_ys = (valid_points_bev[0] + reg_values[0] - cy) / fy
+        center_zs = reg_values[2]
+        centers = np.array([center_xs, center_ys, center_zs])
+        # 3, 4, 5: sizes in ego coords
+        sizes = reg_values[[3, 4, 5]]
+        # 6, 7, 8: unit zvecs in ego coords
+        unit_zvecs = reg_values[[6, 7, 8]]
+        # 9, 10: yaw angles
+        cos4yaws = reg_values[9]
+        sin4yaws = reg_values[10]
+        vecs_4yaw = np.array([cos4yaws, sin4yaws])
+        vecs_4yaw /= np.maximum(np.linalg.norm(vecs_4yaw), 1e-6)
+        
+        ## group nms
+        pillars_3d = self._group_nms(
+            seg_scores, cen_scores, seg_classes,
+            centers, sizes, unit_zvecs, vecs_4yaw
+        )
+        
         return pillars_3d
         
     
@@ -852,83 +840,81 @@ class PlanarCylinder3D(PlanarTensorSmith):
         cx, cy, fx, fy = self.bev_intrinsics
         points_grid_bev = self.points_grid_bev
         
-        tensor_data = {}
-        for branch in transformable.dictionary:
-            unit_zvecs = []
-            centers = []
-            radii = []
-            heights = []
-            class_inds = []
-            attr_lists = []
-            attr_available = 'attrs' in transformable.dictionary[branch]
-            for element in transformable.elements:
-                if element['class'] in transformable.dictionary[branch]['classes']:
-                    # unit vector of z_axis of the box
-                    unit_zvecs.append(element['rotation'][:, 2])
-                    # get the position of the box
-                    center = element['translation'][:, 0]
-                    if self.use_bottom_center:
-                        center -= 0.5 * element['size'][2] * element['rotation'][:, 2]
-                    centers.append(np.array([
-                        center[1] * fy + cy,
-                        center[0] * fx + cx,
-                        center[2]
-                    ], dtype=np.float32))
-                    l, w, h = element['size']
-                    radius = max(l, w)  # l, w should be the same
-                    radii.append(radius)
-                    heights.append(h)
-                    # get class and attr index
-                    class_inds.append(transformable.dictionary[branch]['classes'].index(element['class']))
-                    attr_ind_list = []
-                    if 'attr' in element and attr_available:
-                        element_attrs = element['attr'].values()
-                        for attr in element_attrs:
-                            if attr in transformable.dictionary[branch]['attrs']:
-                                attr_ind_list.append(transformable.dictionary[branch]['attrs'].index(attr))
-                    attr_lists.append(attr_ind_list)
-                    # TODO: add ignore_mask according to ignore classes and attrs
-            num_class_channels = len(transformable.dictionary[branch]['classes'])
-            if attr_available:
-                num_attr_channels = len(transformable.dictionary[branch]['attrs'])
-            else:
-                num_attr_channels = 0
-            branch_seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
-            branch_cen_im = np.zeros((1, X, Y), dtype=np.float32)
-            branch_reg_im = np.zeros((10, X, Y), dtype=np.float32)
-            for unit_zvec, center, radius, height, class_ind, attr_list in zip(
-                unit_zvecs, centers, radii, heights, class_inds, attr_lists
-            ):
-                center_bev = np.round(center[:2]).astype(int)
-                radius_bev = np.round(max(1, radius * max(fx, fy))).astype(int)  # fx, fy should be the same
-                region_obj = cv2.circle(np.zeros((X, Y), dtype=np.float32), center_bev, radius_bev, 1, -1)
-                ## gen segmentation
-                cv2.circle(branch_seg_im[0], center_bev, radius_bev, 1, -1)
-                cv2.circle(branch_seg_im[1 + class_ind], center_bev, radius_bev, 1, -1)
-                for attr_ind in attr_list:
-                    cv2.circle(branch_seg_im[1 + num_class_channels + attr_ind], center_bev, radius_bev, 1, -1)
-                ## gen regression
-                # 0, 1: center x y, in bev coord
-                vec2center = center[:2][..., None, None] - points_grid_bev
-                branch_reg_im[[0, 1]] = branch_reg_im[[0, 1]] * (1 - region_obj) + vec2center * region_obj
-                # 2: center z
-                branch_reg_im[2] = branch_reg_im[2] * (1 - region_obj) + center[2] * region_obj
-                # 3, 4: size radius, height
-                branch_reg_im[3] = branch_reg_im[3] * (1 - region_obj) + radius * region_obj
-                branch_reg_im[4] = branch_reg_im[4] * (1 - region_obj) + height * region_obj
-                # 5, 6, 7: unit zvec
-                branch_reg_im[5] = branch_reg_im[5] * (1 - region_obj) + unit_zvec[0] * region_obj
-                branch_reg_im[6] = branch_reg_im[6] * (1 - region_obj) + unit_zvec[1] * region_obj
-                branch_reg_im[7] = branch_reg_im[7] * (1 - region_obj) + unit_zvec[2] * region_obj
-                ## gen centerness
-                centerness = (radius_bev ** 2 - (branch_reg_im[0] ** 2 + branch_reg_im[1] ** 2)) / radius ** 2
-                branch_cen_im[0] = branch_cen_im[0] * (1 - region_obj) + centerness * region_obj
-            ## tensor
-            tensor_data[branch] = {
-                'seg': torch.tensor(branch_seg_im, dtype=torch.float32),
-                'cen': torch.tensor(branch_cen_im, dtype=torch.float32),
-                'reg': torch.tensor(branch_reg_im, dtype=torch.float32)
-            }
+        unit_zvecs = []
+        centers = []
+        radii = []
+        heights = []
+        class_inds = []
+        attr_lists = []
+        attr_available = 'attrs' in transformable.dictionary
+        for element in transformable.elements:
+            if element['class'] in transformable.dictionary['classes']:
+                # unit vector of z_axis of the box
+                unit_zvecs.append(element['rotation'][:, 2])
+                # get the position of the box
+                center = element['translation'][:, 0]
+                if self.use_bottom_center:
+                    center -= 0.5 * element['size'][2] * element['rotation'][:, 2]
+                centers.append(np.array([
+                    center[1] * fy + cy,
+                    center[0] * fx + cx,
+                    center[2]
+                ], dtype=np.float32))
+                l, w, h = element['size']
+                radius = max(l, w)  # l, w should be the same
+                radii.append(radius)
+                heights.append(h)
+                # get class and attr index
+                class_inds.append(transformable.dictionary['classes'].index(element['class']))
+                attr_ind_list = []
+                if 'attr' in element and attr_available:
+                    element_attrs = element['attr'].values()
+                    for attr in element_attrs:
+                        if attr in transformable.dictionary['attrs']:
+                            attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
+                attr_lists.append(attr_ind_list)
+                # TODO: add ignore_mask according to ignore classes and attrs
+        num_class_channels = len(transformable.dictionary['classes'])
+        if attr_available:
+            num_attr_channels = len(transformable.dictionary['attrs'])
+        else:
+            num_attr_channels = 0
+        seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
+        cen_im = np.zeros((1, X, Y), dtype=np.float32)
+        reg_im = np.zeros((10, X, Y), dtype=np.float32)
+        for unit_zvec, center, radius, height, class_ind, attr_list in zip(
+            unit_zvecs, centers, radii, heights, class_inds, attr_lists
+        ):
+            center_bev = np.round(center[:2]).astype(int)
+            radius_bev = np.round(max(1, radius * max(fx, fy))).astype(int)  # fx, fy should be the same
+            region_obj = cv2.circle(np.zeros((X, Y), dtype=np.float32), center_bev, radius_bev, 1, -1)
+            ## gen segmentation
+            cv2.circle(seg_im[0], center_bev, radius_bev, 1, -1)
+            cv2.circle(seg_im[1 + class_ind], center_bev, radius_bev, 1, -1)
+            for attr_ind in attr_list:
+                cv2.circle(seg_im[1 + num_class_channels + attr_ind], center_bev, radius_bev, 1, -1)
+            ## gen regression
+            # 0, 1: center x y, in bev coord
+            vec2center = center[:2][..., None, None] - points_grid_bev
+            reg_im[[0, 1]] = reg_im[[0, 1]] * (1 - region_obj) + vec2center * region_obj
+            # 2: center z
+            reg_im[2] = reg_im[2] * (1 - region_obj) + center[2] * region_obj
+            # 3, 4: size radius, height
+            reg_im[3] = reg_im[3] * (1 - region_obj) + radius * region_obj
+            reg_im[4] = reg_im[4] * (1 - region_obj) + height * region_obj
+            # 5, 6, 7: unit zvec
+            reg_im[5] = reg_im[5] * (1 - region_obj) + unit_zvec[0] * region_obj
+            reg_im[6] = reg_im[6] * (1 - region_obj) + unit_zvec[1] * region_obj
+            reg_im[7] = reg_im[7] * (1 - region_obj) + unit_zvec[2] * region_obj
+            ## gen centerness
+            centerness = (radius_bev ** 2 - (reg_im[0] ** 2 + reg_im[1] ** 2)) / radius ** 2
+            cen_im[0] = cen_im[0] * (1 - region_obj) + centerness * region_obj
+        ## tensor
+        tensor_data= {
+            'seg': torch.tensor(seg_im, dtype=torch.float32),
+            'cen': torch.tensor(cen_im, dtype=torch.float32),
+            'reg': torch.tensor(reg_im, dtype=torch.float32)
+        }
         return tensor_data
         
     
@@ -993,10 +979,11 @@ class PlanarCylinder3D(PlanarTensorSmith):
         ----------
         tensor_dict : dict
         ```
-        dict(
-            branch_id = dict,
-            branch_id = dict
-        )
+        {
+            'seg': torch.Tensor,
+            'cen': torch.Tensor,
+            'reg': torch.Tensor
+        }
         ```
         pre_conf : float, optional, by default 0.1
 
@@ -1012,37 +999,34 @@ class PlanarCylinder3D(PlanarTensorSmith):
             5, 6, 7: unit zvec
         ```
         """
-        cylinders_3d = {}
-        for branch in tensor_dict:
-            seg_pred = tensor_dict[branch]['seg'].detach().cpu().numpy()
-            cen_pred = tensor_dict[branch]['cen'].detach().cpu().numpy()
-            reg_pred = tensor_dict[branch]['reg'].detach().cpu().numpy()
-            ## pickup obj points
-            valid_points_map = seg_pred[0] > pre_conf
-            # valid postions
-            valid_points_bev = self.points_grid_bev[:, valid_points_map]
-            # pickup scores and classes
-            seg_scores = seg_pred[0][valid_points_map]
-            cen_scores = cen_pred[0][valid_points_map]
-            seg_classes = seg_pred[:, valid_points_map]
-            # pickup regressions
-            reg_values = reg_pred[:, valid_points_map]
-            # 0, 1, 2: centers in ego coords
-            cx, cy, fx, fy = self.bev_intrinsics
-            center_xs = (valid_points_bev[1] + reg_values[1] - cx) / fx
-            center_ys = (valid_points_bev[0] + reg_values[0] - cy) / fy
-            center_zs = reg_values[2]
-            centers = np.array([center_xs, center_ys, center_zs])
-            # 3, 4: size radius, height in ego coords
-            sizes = reg_values[[3, 4]]
-            # 5, 6, 7: unit zvecs in ego coords
-            unit_zvecs = reg_values[[5, 6, 7]]
-            
-            ## group nms
-            mean_cylinders_3d = self._group_nms(
-                seg_scores, cen_scores, seg_classes, centers, sizes, unit_zvecs
-            )
-            cylinders_3d[branch] = mean_cylinders_3d
+        seg_pred = tensor_dict['seg'].detach().cpu().numpy()
+        cen_pred = tensor_dict['cen'].detach().cpu().numpy()
+        reg_pred = tensor_dict['reg'].detach().cpu().numpy()
+        ## pickup obj points
+        valid_points_map = seg_pred[0] > pre_conf
+        # valid postions
+        valid_points_bev = self.points_grid_bev[:, valid_points_map]
+        # pickup scores and classes
+        seg_scores = seg_pred[0][valid_points_map]
+        cen_scores = cen_pred[0][valid_points_map]
+        seg_classes = seg_pred[:, valid_points_map]
+        # pickup regressions
+        reg_values = reg_pred[:, valid_points_map]
+        # 0, 1, 2: centers in ego coords
+        cx, cy, fx, fy = self.bev_intrinsics
+        center_xs = (valid_points_bev[1] + reg_values[1] - cx) / fx
+        center_ys = (valid_points_bev[0] + reg_values[0] - cy) / fy
+        center_zs = reg_values[2]
+        centers = np.array([center_xs, center_ys, center_zs])
+        # 3, 4: size radius, height in ego coords
+        sizes = reg_values[[3, 4]]
+        # 5, 6, 7: unit zvecs in ego coords
+        unit_zvecs = reg_values[[5, 6, 7]]
+        
+        ## group nms
+        cylinders_3d = self._group_nms(
+            seg_scores, cen_scores, seg_classes, centers, sizes, unit_zvecs
+        )
         return cylinders_3d
 
 
@@ -1105,89 +1089,93 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
         cx, cy, fx, fy = self.bev_intrinsics
         points_grid_bev = self.points_grid_bev
         
-        tensor_data = {}
-        for branch in transformable.dictionary:
-            unit_xvecs = []
-            unit_zvecs = []
-            centers = []
-            radii = []
-            heights = []
-            class_inds = []
-            attr_lists = []
-            attr_available = 'attrs' in transformable.dictionary[branch]
-            for element in transformable.elements:
-                if element['class'] in transformable.dictionary[branch]['classes']:
-                    # unit vector of x_axis/z_axis of the box
-                    unit_xvecs.append(element['rotation'][:, 0])
-                    unit_zvecs.append(element['rotation'][:, 2])
-                    # get the position of the box
-                    center = element['translation'][:, 0]
-                    if self.use_bottom_center:
-                        center -= 0.5 * element['size'][2] * element['rotation'][:, 2]
-                    centers.append(np.array([
-                        center[1] * fy + cy,
-                        center[0] * fx + cx,
-                        center[2]
-                    ], dtype=np.float32))
-                    l, w, h = element['size']
-                    radius = max(l, w)  # l, w should be the same
-                    radii.append(radius)
-                    heights.append(h)
-                    # get class and attr index
-                    class_inds.append(transformable.dictionary[branch]['classes'].index(element['class']))
-                    attr_ind_list = []
-                    if 'attr' in element and attr_available:
-                        element_attrs = element['attr'].values()
-                        for attr in element_attrs:
-                            if attr in transformable.dictionary[branch]['attrs']:
-                                attr_ind_list.append(transformable.dictionary[branch]['attrs'].index(attr))
-                    attr_lists.append(attr_ind_list)
-                    # TODO: add ignore_mask according to ignore classes and attrs
-            num_class_channels = len(transformable.dictionary[branch]['classes'])
-            if attr_available:
-                num_attr_channels = len(transformable.dictionary[branch]['attrs'])
-            else:
-                num_attr_channels = 0
-            branch_seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
-            branch_cen_im = np.zeros((1, X, Y), dtype=np.float32)
-            branch_reg_im = np.zeros((10, X, Y), dtype=np.float32)
-            for unit_xvec, unit_zvec, center, radius, height, class_ind, attr_list in zip(
-                unit_xvecs, unit_zvecs, centers, radii, heights, class_inds, attr_lists
-            ):
-                center_bev = np.round(center[:2]).astype(int)
-                radius_bev = np.round(max(1, radius * max(fx, fy))).astype(int)  # fx, fy should be the same
-                region_obj = cv2.circle(np.zeros((X, Y), dtype=np.float32), center_bev, radius_bev, 1, -1)
-                ## gen segmentation
-                cv2.circle(branch_seg_im[0], center_bev, radius_bev, 1, -1)
-                cv2.circle(branch_seg_im[1 + class_ind], center_bev, radius_bev, 1, -1)
-                for attr_ind in attr_list:
-                    cv2.circle(branch_seg_im[1 + num_class_channels + attr_ind], center_bev, radius_bev, 1, -1)
-                ## gen regression
-                # 0, 1: center x y, in bev coord
-                vec2center = center[:2][..., None, None] - points_grid_bev
-                branch_reg_im[[0, 1]] = branch_reg_im[[0, 1]] * (1 - region_obj) + vec2center * region_obj
-                # 2: center z
-                branch_reg_im[2] = branch_reg_im[2] * (1 - region_obj) + center[2] * region_obj
-                # 3, 4: size radius, height
-                branch_reg_im[3] = branch_reg_im[3] * (1 - region_obj) + radius * region_obj
-                branch_reg_im[4] = branch_reg_im[4] * (1 - region_obj) + height * region_obj
-                # 5, 6, 7: unit zvec
-                branch_reg_im[5] = branch_reg_im[5] * (1 - region_obj) + unit_zvec[0] * region_obj
-                branch_reg_im[6] = branch_reg_im[6] * (1 - region_obj) + unit_zvec[1] * region_obj
-                branch_reg_im[7] = branch_reg_im[7] * (1 - region_obj) + unit_zvec[2] * region_obj
-                # 8, 9: yaw angle of zvec, intrinsical
-                yaw_angle = self._get_yaw_from_zxvecs(unit_zvec, unit_xvec)
-                branch_reg_im[8] = branch_reg_im[8] * (1 - region_obj) + np.cos(yaw_angle) * region_obj
-                branch_reg_im[9] = branch_reg_im[9] * (1 - region_obj) + np.sin(yaw_angle) * region_obj
-                ## gen centerness
-                centerness = (radius_bev ** 2 - (branch_reg_im[0] ** 2 + branch_reg_im[1] ** 2)) / radius ** 2
-                branch_cen_im[0] = branch_cen_im[0] * (1 - region_obj) + centerness * region_obj
-            ## tensor
-            tensor_data[branch] = {
-                'seg': torch.tensor(branch_seg_im, dtype=torch.float32),
-                'cen': torch.tensor(branch_cen_im, dtype=torch.float32),
-                'reg': torch.tensor(branch_reg_im, dtype=torch.float32)
-            }
+        unit_xvecs = []
+        unit_zvecs = []
+        centers = []
+        radii = []
+        heights = []
+        velocities = []
+        class_inds = []
+        attr_lists = []
+        attr_available = 'attrs' in transformable.dictionary
+        for element in transformable.elements:
+            if element['class'] in transformable.dictionary['classes']:
+                # unit vector of x_axis/z_axis of the box
+                unit_xvecs.append(element['rotation'][:, 0])
+                unit_zvecs.append(element['rotation'][:, 2])
+                # get the position of the box
+                center = element['translation'][:, 0]
+                if self.use_bottom_center:
+                    center -= 0.5 * element['size'][2] * element['rotation'][:, 2]
+                centers.append(np.array([
+                    center[1] * fy + cy,
+                    center[0] * fx + cx,
+                    center[2]
+                ], dtype=np.float32))
+                l, w, h = element['size']
+                radius = max(l, w)  # l, w should be the same
+                radii.append(radius)
+                heights.append(h)
+                velocities.append(element['velocity'][:, 0])
+                # get class and attr index
+                class_inds.append(transformable.dictionary['classes'].index(element['class']))
+                attr_ind_list = []
+                if 'attr' in element and attr_available:
+                    element_attrs = element['attr'].values()
+                    for attr in element_attrs:
+                        if attr in transformable.dictionary['attrs']:
+                            attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
+                attr_lists.append(attr_ind_list)
+                # TODO: add ignore_mask according to ignore classes and attrs
+        num_class_channels = len(transformable.dictionary['classes'])
+        if attr_available:
+            num_attr_channels = len(transformable.dictionary['attrs'])
+        else:
+            num_attr_channels = 0
+        seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
+        cen_im = np.zeros((1, X, Y), dtype=np.float32)
+        reg_im = np.zeros((13, X, Y), dtype=np.float32)
+        for unit_xvec, unit_zvec, center, radius, height, velocity, class_ind, attr_list in zip(
+            unit_xvecs, unit_zvecs, centers, radii, heights, velocities, class_inds, attr_lists
+        ):
+            center_bev = np.round(center[:2]).astype(int)
+            radius_bev = np.round(max(1, radius * max(fx, fy))).astype(int)  # fx, fy should be the same
+            region_obj = cv2.circle(np.zeros((X, Y), dtype=np.float32), center_bev, radius_bev, 1, -1)
+            ## gen segmentation
+            cv2.circle(seg_im[0], center_bev, radius_bev, 1, -1)
+            cv2.circle(seg_im[1 + class_ind], center_bev, radius_bev, 1, -1)
+            for attr_ind in attr_list:
+                cv2.circle(seg_im[1 + num_class_channels + attr_ind], center_bev, radius_bev, 1, -1)
+            ## gen regression
+            # 0, 1: center x y, in bev coord
+            vec2center = center[:2][..., None, None] - points_grid_bev
+            reg_im[[0, 1]] = reg_im[[0, 1]] * (1 - region_obj) + vec2center * region_obj
+            # 2: center z
+            reg_im[2] = reg_im[2] * (1 - region_obj) + center[2] * region_obj
+            # 3, 4: size radius, height
+            reg_im[3] = reg_im[3] * (1 - region_obj) + radius * region_obj
+            reg_im[4] = reg_im[4] * (1 - region_obj) + height * region_obj
+            # 5, 6, 7: unit zvec
+            reg_im[5] = reg_im[5] * (1 - region_obj) + unit_zvec[0] * region_obj
+            reg_im[6] = reg_im[6] * (1 - region_obj) + unit_zvec[1] * region_obj
+            reg_im[7] = reg_im[7] * (1 - region_obj) + unit_zvec[2] * region_obj
+            # 8, 9: yaw angle of zvec, intrinsical
+            yaw_angle = self._get_yaw_from_zxvecs(unit_zvec, unit_xvec)
+            reg_im[8] = reg_im[8] * (1 - region_obj) + np.cos(yaw_angle) * region_obj
+            reg_im[9] = reg_im[9] * (1 - region_obj) + np.sin(yaw_angle) * region_obj
+            # 10, 11, 12: velocity
+            reg_im[10] = reg_im[10] * (1 - region_obj) + velocity[0] * region_obj
+            reg_im[11] = reg_im[11] * (1 - region_obj) + velocity[1] * region_obj
+            reg_im[12] = reg_im[12] * (1 - region_obj) + velocity[2] * region_obj
+            ## gen centerness
+            centerness = (radius_bev ** 2 - (reg_im[0] ** 2 + reg_im[1] ** 2)) / radius ** 2
+            cen_im[0] = cen_im[0] * (1 - region_obj) + centerness * region_obj
+        ## tensor
+        tensor_data = {
+            'seg': torch.tensor(seg_im, dtype=torch.float32),
+            'cen': torch.tensor(cen_im, dtype=torch.float32),
+            'reg': torch.tensor(reg_im, dtype=torch.float32)
+        }
         return tensor_data
     
 
@@ -1218,7 +1206,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
         ])
 
     
-    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_zvecs, vecs_yaw, ratio=1):
+    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_zvecs, vecs_yaw, velocities, ratio=0.7):
         scores = seg_scores * cen_scores
         ranked_inds = np.argsort(scores)[::-1]
         kept_groups = []
@@ -1257,11 +1245,13 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[1]
+            mean_velocity = (velocities[:, group] * scores[group][None]).sum(1) / score_sum
             cylinder_3d = {
                 'confs': mean_classes,
                 'size': mean_size[[0, 0, 1]],
                 'rotation': mean_rmat,
-                'translation': mean_center
+                'translation': mean_center,
+                'velocity': mean_velocity
             }
             pred_cylinders.append(cylinder_3d)
         return pred_cylinders
@@ -1273,12 +1263,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
         Parameters
         ----------
         tensor_dict : dict
-        ```
-        dict(
-            branch_id = dict,
-            branch_id = dict
-        )
-        ```
+        
         pre_conf : float, optional, by default 0.1
 
         Notes
@@ -1292,45 +1277,45 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             3, 4: size radius, height
             5, 6, 7: unit zvec
             8, 9: yaw angle of zvec, intrinsical
+            10, 11, 12: velocity, ego coords
         ```
         """
-        cylinders_3d = {}
-        for branch in tensor_dict:
-            seg_pred = tensor_dict[branch]['seg'].detach().cpu().numpy()
-            cen_pred = tensor_dict[branch]['cen'].detach().cpu().numpy()
-            reg_pred = tensor_dict[branch]['reg'].detach().cpu().numpy()
-            ## pickup obj points
-            valid_points_map = seg_pred[0] > pre_conf
-            # valid postions
-            valid_points_bev = self.points_grid_bev[:, valid_points_map]
-            # pickup scores and classes
-            seg_scores = seg_pred[0][valid_points_map]
-            cen_scores = cen_pred[0][valid_points_map]
-            seg_classes = seg_pred[:, valid_points_map]
-            # pickup regressions
-            reg_values = reg_pred[:, valid_points_map]
-            # 0, 1, 2: centers in ego coords
-            cx, cy, fx, fy = self.bev_intrinsics
-            center_xs = (valid_points_bev[1] + reg_values[1] - cx) / fx
-            center_ys = (valid_points_bev[0] + reg_values[0] - cy) / fy
-            center_zs = reg_values[2]
-            centers = np.array([center_xs, center_ys, center_zs])
-            # 3, 4: size radius, height in ego coords
-            sizes = reg_values[[3, 4]]
-            # 5, 6, 7: unit zvecs in ego coords
-            unit_zvecs = reg_values[[5, 6, 7]]
-            # 8, 9: yaw angles
-            cos_yaws = reg_values[8]
-            sin_yaws = reg_values[9]
-            vecs_yaw = np.array([cos_yaws, sin_yaws])
-            vecs_yaw /= np.maximum(np.linalg.norm(vecs_yaw), 1e-6)
-            
-            ## group nms
-            mean_cylinders_3d = self._group_nms(
-                seg_scores, cen_scores, seg_classes,
-                centers, sizes, unit_zvecs, vecs_yaw
-            )
-            cylinders_3d[branch] = mean_cylinders_3d
+        seg_pred = tensor_dict['seg'].detach().cpu().numpy()
+        cen_pred = tensor_dict['cen'].detach().cpu().numpy()
+        reg_pred = tensor_dict['reg'].detach().cpu().numpy()
+        ## pickup obj points
+        valid_points_map = seg_pred[0] > pre_conf
+        # valid postions
+        valid_points_bev = self.points_grid_bev[:, valid_points_map]
+        # pickup scores and classes
+        seg_scores = seg_pred[0][valid_points_map]
+        cen_scores = cen_pred[0][valid_points_map]
+        seg_classes = seg_pred[:, valid_points_map]
+        # pickup regressions
+        reg_values = reg_pred[:, valid_points_map]
+        # 0, 1, 2: centers in ego coords
+        cx, cy, fx, fy = self.bev_intrinsics
+        center_xs = (valid_points_bev[1] + reg_values[1] - cx) / fx
+        center_ys = (valid_points_bev[0] + reg_values[0] - cy) / fy
+        center_zs = reg_values[2]
+        centers = np.array([center_xs, center_ys, center_zs])
+        # 3, 4: size radius, height in ego coords
+        sizes = reg_values[[3, 4]]
+        # 5, 6, 7: unit zvecs in ego coords
+        unit_zvecs = reg_values[[5, 6, 7]]
+        # 8, 9: yaw angles
+        cos_yaws = reg_values[8]
+        sin_yaws = reg_values[9]
+        vecs_yaw = np.array([cos_yaws, sin_yaws])
+        vecs_yaw /= np.maximum(np.linalg.norm(vecs_yaw), 1e-6)
+        # 10, 11, 12: velocities
+        velocities = reg_values[[10, 11, 12]]
+        
+        ## group nms
+        cylinders_3d = self._group_nms(
+            seg_scores, cen_scores, seg_classes,
+            centers, sizes, unit_zvecs, vecs_yaw, velocities
+        )
         return cylinders_3d
 
 
@@ -1373,99 +1358,97 @@ class PlanarPolyline3D(PlanarTensorSmith):
         cx, cy, fx, fy = self.bev_intrinsics
         points_grid_bev = self.points_grid_bev
 
-        tensor_data = {}
-        for branch in transformable.dictionary:
-            polylines = []
-            class_inds = []
-            attr_lists = []
-            attr_available = 'attrs' in transformable.dictionary[branch]
-            for element in transformable.elements:
-                if element['class'] in transformable.dictionary[branch]['classes']:
-                    points = element['points']
-                    polylines.append(np.array([
-                        points[..., 1] * fy + cy,
-                        points[..., 0] * fx + cx,
-                        points[..., 2]
-                    ]).T)
-                    class_inds.append(transformable.dictionary[branch]['classes'].index(element['class']))
-                    attr_ind_list = []
-                    if 'attr' in element and attr_available:
-                        element_attrs = element['attr'].values()
-                        for attr in element_attrs:
-                            if attr in transformable.dictionary[branch]['attrs']:
-                                attr_ind_list.append(transformable.dictionary[branch]['attrs'].index(attr))
-                    attr_lists.append(attr_ind_list)
-                    # TODO: add ignore_mask according to ignore classes and attrs
-            num_class_channels = len(transformable.dictionary[branch]['classes'])
-            if attr_available:
-                num_attr_channels = len(transformable.dictionary[branch]['attrs'])
-            else:
-                num_attr_channels = 0
-            branch_seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y))
+        polylines = []
+        class_inds = []
+        attr_lists = []
+        attr_available = 'attrs' in transformable.dictionary
+        for element in transformable.elements:
+            if element['class'] in transformable.dictionary['classes']:
+                points = element['points']
+                polylines.append(np.array([
+                    points[..., 1] * fy + cy,
+                    points[..., 0] * fx + cx,
+                    points[..., 2]
+                ]).T)
+                class_inds.append(transformable.dictionary['classes'].index(element['class']))
+                attr_ind_list = []
+                if 'attr' in element and attr_available:
+                    element_attrs = element['attr'].values()
+                    for attr in element_attrs:
+                        if attr in transformable.dictionary['attrs']:
+                            attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
+                attr_lists.append(attr_ind_list)
+                # TODO: add ignore_mask according to ignore classes and attrs
+        num_class_channels = len(transformable.dictionary['classes'])
+        if attr_available:
+            num_attr_channels = len(transformable.dictionary['attrs'])
+        else:
+            num_attr_channels = 0
+        seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y))
 
-            line_ims = []
-            dist_ims = []
-            vec_ims = []
-            dir_ims = []
-            height_ims = []
+        line_ims = []
+        dist_ims = []
+        vec_ims = []
+        dir_ims = []
+        height_ims = []
 
-            linewidth = int(max(0.51, abs(fx * 0.1)))
+        linewidth = int(max(0.51, abs(fx * 0.1)))
 
-            for polyline, class_ind, attr_list in zip(polylines, class_inds, attr_lists):
-                for line_3d in zip(polyline[:-1], polyline[1:]):
-                    line_3d = np.float32(line_3d)
-                    line_bev = line_3d[:, :2]
-                    polygon = expand_line_2d(line_bev, radius=linewidth)
-                    polygon_int = np.round(polygon).astype(int)
-                    # seg_bev_im
-                    cv2.fillPoly(branch_seg_im[0], [polygon_int], 1)
-                    cv2.fillPoly(branch_seg_im[1 + class_ind], [polygon_int], 1)
-                    for attr_ind in attr_list:
-                        cv2.fillPoly(branch_seg_im[1 + num_class_channels + attr_ind], [polygon_int], 1)
-                    # line segment
-                    line_im = cv2.fillPoly(np.zeros((X, Y)), [polygon_int], 1)
-                    line_ims.append(line_im)
-                    # line direction regressions
-                    line_dir = line_bev[1] - line_bev[0]
-                    line_length = np.linalg.norm(line_dir)
-                    line_dir /= line_length
-                    line_dir_vert = line_dir[::-1] * [1, -1]
-                    vec_map = vec_point2line_along_direction(points_grid_bev, line_bev, line_dir_vert)
-                    dist_im = line_im * np.linalg.norm(vec_map, axis=0) + (1 - line_im) * INF_DIST
-                    vec_im = line_im * vec_map
-                    abs_dir_im = line_im * np.float32([
-                        np.abs(line_dir[0]),
-                        np.abs(line_dir[1]),
-                        line_dir[0] * line_dir[1]
-                    ])[..., None, None]
-                    dist_ims.append(dist_im)
-                    vec_ims.append(vec_im)
-                    dir_ims.append(abs_dir_im)
-                    # height map
-                    h2s = (line_3d[1, 2] - line_3d[0, 2]) / max(1e-3, line_length)
-                    height_im =  line_3d[0, 2] + h2s * line_im * np.linalg.norm(
-                        points_grid_bev + vec_map - line_bev[0][..., None, None], axis=0
-                    )
-                    height_ims.append(height_im)
+        for polyline, class_ind, attr_list in zip(polylines, class_inds, attr_lists):
+            for line_3d in zip(polyline[:-1], polyline[1:]):
+                line_3d = np.float32(line_3d)
+                line_bev = line_3d[:, :2]
+                polygon = expand_line_2d(line_bev, radius=linewidth)
+                polygon_int = np.round(polygon).astype(int)
+                # seg_bev_im
+                cv2.fillPoly(seg_im[0], [polygon_int], 1)
+                cv2.fillPoly(seg_im[1 + class_ind], [polygon_int], 1)
+                for attr_ind in attr_list:
+                    cv2.fillPoly(seg_im[1 + num_class_channels + attr_ind], [polygon_int], 1)
+                # line segment
+                line_im = cv2.fillPoly(np.zeros((X, Y)), [polygon_int], 1)
+                line_ims.append(line_im)
+                # line direction regressions
+                line_dir = line_bev[1] - line_bev[0]
+                line_length = np.linalg.norm(line_dir)
+                line_dir /= line_length
+                line_dir_vert = line_dir[::-1] * [1, -1]
+                vec_map = vec_point2line_along_direction(points_grid_bev, line_bev, line_dir_vert)
+                dist_im = line_im * np.linalg.norm(vec_map, axis=0) + (1 - line_im) * INF_DIST
+                vec_im = line_im * vec_map
+                abs_dir_im = line_im * np.float32([
+                    np.abs(line_dir[0]),
+                    np.abs(line_dir[1]),
+                    line_dir[0] * line_dir[1]
+                ])[..., None, None]
+                dist_ims.append(dist_im)
+                vec_ims.append(vec_im)
+                dir_ims.append(abs_dir_im)
+                # height map
+                h2s = (line_3d[1, 2] - line_3d[0, 2]) / max(1e-3, line_length)
+                height_im =  line_3d[0, 2] + h2s * line_im * np.linalg.norm(
+                    points_grid_bev + vec_map - line_bev[0][..., None, None], axis=0
+                )
+                height_ims.append(height_im)
 
-            index_im = np.argmin(np.array(dist_ims), axis=0)
-            branch_vec_im = np.choose(index_im, vec_ims)
-            branch_dist_im = np.choose(index_im, dist_ims)
-            branch_dir_im = np.choose(index_im, dir_ims)
-            branch_height_im = np.choose(index_im, height_ims)
+        index_im = np.argmin(np.array(dist_ims), axis=0)
+        vec_im = np.choose(index_im, vec_ims)
+        dist_im = np.choose(index_im, dist_ims)
+        dir_im = np.choose(index_im, dir_ims)
+        height_im = np.choose(index_im, height_ims)
 
-            branch_reg_im = np.concatenate([
-                branch_seg_im[:1] * branch_dist_im[None],
-                branch_vec_im,
-                branch_dir_im,
-                branch_height_im[None]
-            ], axis=0)
-            # TODO: add branch_ignore_seg_mask according to ignore classes and attrs
+        reg_im = np.concatenate([
+            seg_im[:1] * dist_im[None],
+            vec_im,
+            dir_im,
+            height_im[None]
+        ], axis=0)
+        # TODO: add ignore_seg_mask according to ignore classes and attrs
 
-            tensor_data[branch] = {
-                'seg': torch.tensor(branch_seg_im, dtype=torch.float32),
-                'reg': torch.tensor(branch_reg_im, dtype=torch.float32)
-            }
+        tensor_data = {
+            'seg': torch.tensor(seg_im, dtype=torch.float32),
+            'reg': torch.tensor(reg_im, dtype=torch.float32)
+        }
         
         return tensor_data
 
@@ -1589,12 +1572,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
         Parameters
         ----------
         tensor_dict : dict
-        ```
-        dict(
-            branch_id = dict,
-            branch_id = dict
-        )
-        ```
+        
         pre_conf : float, optional, by default 0.1
 
         Notes
@@ -1608,68 +1586,66 @@ class PlanarPolyline3D(PlanarTensorSmith):
             6 height_im # 每个分割图上的点的高度分布图
         ```
         """
-        polylines_3d = {}
-        for branch in tensor_dict:
-            seg_pred = tensor_dict[branch]['seg'].detach().cpu().numpy()
-            reg_pred = tensor_dict[branch]['reg'].detach().cpu().numpy()
+        
+        seg_pred = tensor_dict['seg'].detach().cpu().numpy()
+        reg_pred = tensor_dict['reg'].detach().cpu().numpy()
 
-            ## pickup line points
-            valid_points_map = seg_pred[0] > pre_conf
-            # line point postions
-            valid_points_bev = self.points_grid_bev[:, valid_points_map]
-            # pickup scores
-            seg_scores = seg_pred[0][valid_points_map]
-            seg_classes = seg_pred[:, valid_points_map]
-            # pickup regressions
-            reg_values = reg_pred[:, valid_points_map]
-            # get vertical vectors of line points
-            vert_vecs = np.float32([reg_values[4], - reg_values[3] * _sign(reg_values[5])])
-            vert_vecs *= _sign(np.sum(vert_vecs * reg_values[1:3], axis=0))
-            # get precise points, vector of directions, and heights of line
-            dst_points = valid_points_bev + reg_values[0] * vert_vecs
-            dst_vecs =  reg_values[3:6]
-            dst_heights = reg_values[6]
-            
-            ## fuse points, group nms
-            # group points
-            kept_groups = self._group_points(dst_points, seg_scores)
-            # fuse points in one group
-            fused_classes = []
-            fused_points = []
-            fused_vecs = []
-            fused_heights = []
-            for g in kept_groups:
-                weights = seg_scores[g]
-                total_weight = weights.sum()
-                mean_classes = (seg_classes[:, g] * weights[None]).sum(axis=-1) / total_weight
-                mean_point = (dst_points[:, g] * weights[None]).sum(axis=-1) / total_weight
-                mean_vec = (dst_vecs[:, g] * weights[None]).sum(axis=-1) / total_weight
-                mean_height = (dst_heights[g] * weights).sum(axis=-1) / total_weight
-                # mean_point = dst_points[:, g].mean(axis=-1)
-                # mean_vec = dst_vecs[:, g].mean(axis=-1)
-                # mean_height = dst_heights[g].mean(axis=-1)
-                fused_classes.append(mean_classes)
-                fused_points.append(mean_point)
-                fused_vecs.append(mean_vec)
-                fused_heights.append(mean_height)
-            fused_classes = np.float32(fused_classes).T
-            fused_points = np.float32(fused_points).T
-            fused_vecs = np.float32(fused_vecs).T
-            fused_heights = np.float32(fused_heights)
-            
-            ## link all points and get 3d polylines
-            line_segments = self._link_line_points(fused_points, fused_vecs)
-            cx, cy, fx, fy = self.bev_intrinsics
-            polylines_3d[branch] = []
-
-            for g in line_segments:
-                polyline_3d = np.concatenate([
-                    np.stack([(fused_points[1, g] - cx) / fx,
-                              (fused_points[0, g] - cy) / fy,
-                              fused_heights[g]]),
-                    fused_classes[:, g],
-                ], axis=0)
-                polylines_3d[branch].append(polyline_3d)
+        ## pickup line points
+        valid_points_map = seg_pred[0] > pre_conf
+        # line point postions
+        valid_points_bev = self.points_grid_bev[:, valid_points_map]
+        # pickup scores
+        seg_scores = seg_pred[0][valid_points_map]
+        seg_classes = seg_pred[:, valid_points_map]
+        # pickup regressions
+        reg_values = reg_pred[:, valid_points_map]
+        # get vertical vectors of line points
+        vert_vecs = np.float32([reg_values[4], - reg_values[3] * _sign(reg_values[5])])
+        vert_vecs *= _sign(np.sum(vert_vecs * reg_values[1:3], axis=0))
+        # get precise points, vector of directions, and heights of line
+        dst_points = valid_points_bev + reg_values[0] * vert_vecs
+        dst_vecs =  reg_values[3:6]
+        dst_heights = reg_values[6]
+        
+        ## fuse points, group nms
+        # group points
+        kept_groups = self._group_points(dst_points, seg_scores)
+        # fuse points in one group
+        fused_classes = []
+        fused_points = []
+        fused_vecs = []
+        fused_heights = []
+        for g in kept_groups:
+            weights = seg_scores[g]
+            total_weight = weights.sum()
+            mean_classes = (seg_classes[:, g] * weights[None]).sum(axis=-1) / total_weight
+            mean_point = (dst_points[:, g] * weights[None]).sum(axis=-1) / total_weight
+            mean_vec = (dst_vecs[:, g] * weights[None]).sum(axis=-1) / total_weight
+            mean_height = (dst_heights[g] * weights).sum(axis=-1) / total_weight
+            # mean_point = dst_points[:, g].mean(axis=-1)
+            # mean_vec = dst_vecs[:, g].mean(axis=-1)
+            # mean_height = dst_heights[g].mean(axis=-1)
+            fused_classes.append(mean_classes)
+            fused_points.append(mean_point)
+            fused_vecs.append(mean_vec)
+            fused_heights.append(mean_height)
+        fused_classes = np.float32(fused_classes).T
+        fused_points = np.float32(fused_points).T
+        fused_vecs = np.float32(fused_vecs).T
+        fused_heights = np.float32(fused_heights)
+        
+        ## link all points and get 3d polylines
+        line_segments = self._link_line_points(fused_points, fused_vecs)
+        cx, cy, fx, fy = self.bev_intrinsics
+        polylines_3d = []
+        for g in line_segments:
+            polyline_3d = np.concatenate([
+                np.stack([(fused_points[1, g] - cx) / fx,
+                            (fused_points[0, g] - cy) / fy,
+                            fused_heights[g]]),
+                fused_classes[:, g],
+            ], axis=0)
+            polylines_3d.append(polyline_3d)
         return polylines_3d
 
 
@@ -1704,99 +1680,97 @@ class PlanarPolygon3D(PlanarTensorSmith):
         cx, cy, fx, fy = self.bev_intrinsics
         points_grid_bev = self.points_grid_bev
 
-        tensor_data = {}
-        for branch in transformable.dictionary:
-            polylines = []
-            class_inds = []
-            attr_lists = []
-            attr_available = 'attrs' in transformable.dictionary[branch]
-            for element in transformable.elements:
-                if element['class'] in transformable.dictionary[branch]['classes']:
-                    points = element['points']
-                    polylines.append(np.array([
-                        points[..., 1] * fy + cy,
-                        points[..., 0] * fx + cx,
-                        points[..., 2]
-                    ]).T)
-                    class_inds.append(transformable.dictionary[branch]['classes'].index(element['class']))
-                    attr_ind_list = []
-                    if 'attr' in element and attr_available:
-                        element_attrs = element['attr'].values()
-                        for attr in element_attrs:
-                            if attr in transformable.dictionary[branch]['attrs']:
-                                attr_ind_list.append(transformable.dictionary[branch]['attrs'].index(attr))
-                    attr_lists.append(attr_ind_list)
-                    # TODO: add ignore_mask according to ignore classes and attrs
-            num_class_channels = len(transformable.dictionary[branch]['classes'])
-            if attr_available:
-                num_attr_channels = len(transformable.dictionary[branch]['attrs'])
-            else:
-                num_attr_channels = 0
-            branch_seg_im = np.zeros((2 + num_class_channels + num_attr_channels, X, Y))
+        polylines = []
+        class_inds = []
+        attr_lists = []
+        attr_available = 'attrs' in transformable.dictionary
+        for element in transformable.elements:
+            if element['class'] in transformable.dictionary['classes']:
+                points = element['points']
+                polylines.append(np.array([
+                    points[..., 1] * fy + cy,
+                    points[..., 0] * fx + cx,
+                    points[..., 2]
+                ]).T)
+                class_inds.append(transformable.dictionary['classes'].index(element['class']))
+                attr_ind_list = []
+                if 'attr' in element and attr_available:
+                    element_attrs = element['attr'].values()
+                    for attr in element_attrs:
+                        if attr in transformable.dictionary['attrs']:
+                            attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
+                attr_lists.append(attr_ind_list)
+                # TODO: add ignore_mask according to ignore classes and attrs
+        num_class_channels = len(transformable.dictionary['classes'])
+        if attr_available:
+            num_attr_channels = len(transformable.dictionary['attrs'])
+        else:
+            num_attr_channels = 0
+        seg_im = np.zeros((2 + num_class_channels + num_attr_channels, X, Y))
 
-            line_ims = []
-            dist_ims = []
-            vec_ims = []
-            dir_ims = []
-            height_ims = []
+        line_ims = []
+        dist_ims = []
+        vec_ims = []
+        dir_ims = []
+        height_ims = []
 
-            for polyline, class_ind, attr_list in zip(polylines, class_inds, attr_lists):
-                polyline_int = np.round(polyline).astype(int)
-                # seg_bev_im
-                cv2.fillPoly(branch_seg_im[2 + class_ind], [polyline_int], 1)
-                for attr_ind in attr_list:
-                    cv2.fillPoly(branch_seg_im[2 + num_class_channels + attr_ind], [polyline_int], 1)
-                for line_3d in zip(polyline[:-1], polyline[1:]):
-                    line_3d = np.float32(line_3d)
-                    line_bev = line_3d[:, :2]
-                    polygon = expand_line_2d(line_bev, radius=0.5)
-                    polygon_int = np.round(polygon).astype(int)
-                    # edge_seg_bev_im
-                    cv2.fillPoly(branch_seg_im[0], [polygon_int], 1)
-                    # line segment
-                    line_im = cv2.fillPoly(np.zeros((X, Y)), [polygon_int], 1)
-                    line_ims.append(line_im)
-                    # line direction regressions
-                    line_dir = line_bev[1] - line_bev[0]
-                    line_length = np.linalg.norm(line_dir)
-                    line_dir /= line_length
-                    line_dir_vert = line_dir[::-1] * [1, -1]
-                    vec_map = vec_point2line_along_direction(points_grid_bev, line_bev, line_dir_vert)
-                    dist_im = line_im * np.linalg.norm(vec_map, axis=0) + (1 - line_im) * INF_DIST
-                    vec_im = line_im * vec_map
-                    abs_dir_im = line_im * np.float32([
-                        np.abs(line_dir[0]),
-                        np.abs(line_dir[1]),
-                        line_dir[0] * line_dir[1]
-                    ])[..., None, None]
-                    dist_ims.append(dist_im)
-                    vec_ims.append(vec_im)
-                    dir_ims.append(abs_dir_im)
-                    # height map
-                    h2s = (line_3d[1, 2] - line_3d[0, 2]) / max(1e-3, line_length)
-                    height_im =  line_3d[0, 2] + h2s * line_im * np.linalg.norm(
-                        points_grid_bev + vec_map - line_bev[0][..., None, None], axis=0
-                    )
-                    height_ims.append(height_im)
+        for polyline, class_ind, attr_list in zip(polylines, class_inds, attr_lists):
+            polyline_int = np.round(polyline).astype(int)
+            # seg_bev_im
+            cv2.fillPoly(seg_im[2 + class_ind], [polyline_int], 1)
+            for attr_ind in attr_list:
+                cv2.fillPoly(seg_im[2 + num_class_channels + attr_ind], [polyline_int], 1)
+            for line_3d in zip(polyline[:-1], polyline[1:]):
+                line_3d = np.float32(line_3d)
+                line_bev = line_3d[:, :2]
+                polygon = expand_line_2d(line_bev, radius=0.5)
+                polygon_int = np.round(polygon).astype(int)
+                # edge_seg_bev_im
+                cv2.fillPoly(seg_im[0], [polygon_int], 1)
+                # line segment
+                line_im = cv2.fillPoly(np.zeros((X, Y)), [polygon_int], 1)
+                line_ims.append(line_im)
+                # line direction regressions
+                line_dir = line_bev[1] - line_bev[0]
+                line_length = np.linalg.norm(line_dir)
+                line_dir /= line_length
+                line_dir_vert = line_dir[::-1] * [1, -1]
+                vec_map = vec_point2line_along_direction(points_grid_bev, line_bev, line_dir_vert)
+                dist_im = line_im * np.linalg.norm(vec_map, axis=0) + (1 - line_im) * INF_DIST
+                vec_im = line_im * vec_map
+                abs_dir_im = line_im * np.float32([
+                    np.abs(line_dir[0]),
+                    np.abs(line_dir[1]),
+                    line_dir[0] * line_dir[1]
+                ])[..., None, None]
+                dist_ims.append(dist_im)
+                vec_ims.append(vec_im)
+                dir_ims.append(abs_dir_im)
+                # height map
+                h2s = (line_3d[1, 2] - line_3d[0, 2]) / max(1e-3, line_length)
+                height_im =  line_3d[0, 2] + h2s * line_im * np.linalg.norm(
+                    points_grid_bev + vec_map - line_bev[0][..., None, None], axis=0
+                )
+                height_ims.append(height_im)
 
-            index_im = np.argmin(np.array(dist_ims), axis=0)
-            branch_vec_im = np.choose(index_im, vec_ims)
-            branch_dist_im = np.choose(index_im, dist_ims)
-            branch_dir_im = np.choose(index_im, dir_ims)
-            branch_height_im = np.choose(index_im, height_ims)
+        index_im = np.argmin(np.array(dist_ims), axis=0)
+        vec_im = np.choose(index_im, vec_ims)
+        dist_im = np.choose(index_im, dist_ims)
+        dir_im = np.choose(index_im, dir_ims)
+        height_im = np.choose(index_im, height_ims)
 
-            branch_reg_im = np.concatenate([
-                branch_seg_im * branch_dist_im[None],
-                branch_vec_im,
-                branch_dir_im,
-                branch_height_im[None]
-            ], axis=0)
-            # TODO: add branch_ignore_seg_mask according to ignore classes and attrs
+        reg_im = np.concatenate([
+            seg_im * dist_im[None],
+            vec_im,
+            dir_im,
+            height_im[None]
+        ], axis=0)
+        # TODO: add ignore_seg_mask according to ignore classes and attrs
 
-            tensor_data[branch] = {
-                'seg': torch.tensor(branch_seg_im, dtype=torch.float32),
-                'reg': torch.tensor(branch_reg_im, dtype=torch.float32)
-            }
+        tensor_data = {
+            'seg': torch.tensor(seg_im, dtype=torch.float32),
+            'reg': torch.tensor(reg_im, dtype=torch.float32)
+        }
         
         return tensor_data
 

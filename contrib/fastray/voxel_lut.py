@@ -4,7 +4,7 @@ import numpy as np
 import virtual_camera as vc
 
 from typing import Dict
-from prefusion.dataset.transform import CameraImage
+from prefusion.dataset.transform import CameraImage, CameraImageSet
 
 
 def get_voxel_points_in_ego(voxel_shape, voxel_range):
@@ -98,7 +98,7 @@ class VoxelLookUpTableGenerator:
         # gen voxel_ego_points, in shape of (3, 4*320*160) <3, Z*X*Y>
         self.voxel_points = get_voxel_points_in_ego(self.voxel_shape, self.voxel_range)
     
-    def generate(self, camera_images: Dict[str, CameraImage], seed=None):
+    def generate(self, camera_images: Dict[str, CameraImage] | CameraImageSet, seed=None):
         """
         ```python
         LUT = dict(
@@ -115,7 +115,7 @@ class VoxelLookUpTableGenerator:
 
         Parameters
         ----------
-        camera_images : dict
+        camera_images : dict | CameraImageSet
             dict of CameraImage transformables
         seed : int, optional, by default None
             seed for randomness of sampled valid_map
@@ -135,6 +135,8 @@ class VoxelLookUpTableGenerator:
         # loop in cameras, gen LUTS from <x,y,z> to <img_id,u,v,d>
         keys = []
         density_maps = []
+        if isinstance(camera_images, CameraImageSet):
+            camera_images = camera_images.transformables
         for key in camera_images:
             keys.append(key)
             camera_image = camera_images[key]
@@ -189,6 +191,8 @@ class VoxelLookUpTableGenerator:
         # normalize density
         density_maps = np.stack(density_maps)
         density_maps_norm = density_maps / (density_maps.sum(axis=0, keepdims=True) + 1e-5)
+        for key_ind, key in enumerate(keys):
+            LUT[key]['norm_density_map'] = density_maps_norm[key_ind]
         
         # generate random sampled LUT from x,y,z to <cam_id> according to density
         rng = np.random.default_rng(seed)
@@ -197,6 +201,16 @@ class VoxelLookUpTableGenerator:
             acc_density_min = density_maps_norm[:key_ind].sum(axis=0)
             acc_density_max = density_maps_norm[:key_ind + 1].sum(axis=0)
             LUT[key]['valid_map_sampled'] = (random_map >= acc_density_min) * (random_map < acc_density_max)
-            LUT[key]['norm_density_map'] = density_maps_norm[key_ind]
         
         return LUT
+    
+    @staticmethod
+    def update_random_sampled_LUT(LUT):
+        keys = LUT.keys()
+        density_maps_norm = np.stack([LUT[key]['norm_density_map'] for key in keys])
+        rng = np.random.default_rng()
+        random_map = rng.random(density_maps_norm.shape[1:])
+        for key_ind, key in enumerate(keys):
+            acc_density_min = density_maps_norm[:key_ind].sum(axis=0)
+            acc_density_max = density_maps_norm[:key_ind + 1].sum(axis=0)
+            LUT[key]['valid_map_sampled'] = (random_map >= acc_density_min) * (random_map < acc_density_max)

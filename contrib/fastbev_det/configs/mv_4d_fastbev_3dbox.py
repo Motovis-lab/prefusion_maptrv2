@@ -119,27 +119,22 @@ CLASSES = [
 ]
 
 Bbox3d = dict(
-    branch_0=dict(
-        classes=[
-        'class.vehicle.passenger_car', 'class.vehicle.bus', 'class.vehicle.truck', 'class.vehicle.ambulance', 'class.vehicle.fire_engine', 'class.cycle.tricycle', \
-        'class.cycle.motorcycle', 'class.cycle.bicycle', 'class.wheeled_push_device.cleaning_cart', 'class.wheeled_push_device.stroller', 'class.wheeled_push_device.shopping_cart', \
-        'class.wheeled_push_device.scooter', 'class.animal.animal', 'class.traffic_facility.bollard', 'class.traffic_facility.box', 'class.traffic_facility.cone',  'class.traffic_facility.soft_barrier',\
-        'class.traffic_facility.hard_barrier', 'class.traffic_facility.speed_bump', 'class.traffic_facility.gate_barrier', 'class.sign.traffic_sign', 'class.parking.indoor_column',\
-        'class.parking.parking_guide', 'class.parking.charging_infra', 'class.parking.parking_lock', 'class.parking.wheel_stopper'], 
-        attrs=[['attr.vehicle.is_door_open', 'attr.vehicle.is_trunk_open'], [], [], []])
+    classes=[
+    'class.vehicle.passenger_car', 'class.vehicle.bus', 'class.vehicle.truck', 'class.vehicle.ambulance', 'class.vehicle.fire_engine', 'class.cycle.tricycle', \
+    'class.cycle.motorcycle', 'class.cycle.bicycle', 'class.wheeled_push_device.cleaning_cart', 'class.wheeled_push_device.stroller', 'class.wheeled_push_device.shopping_cart', \
+    'class.wheeled_push_device.scooter', 'class.animal.animal', 'class.traffic_facility.bollard', 'class.traffic_facility.box', 'class.traffic_facility.cone',  'class.traffic_facility.soft_barrier',\
+    'class.traffic_facility.hard_barrier', 'class.traffic_facility.speed_bump', 'class.traffic_facility.gate_barrier', 'class.sign.traffic_sign', 'class.parking.indoor_column',\
+    'class.parking.parking_guide', 'class.parking.charging_infra', 'class.parking.parking_lock', 'class.parking.wheel_stopper'], 
+    attrs=[['attr.vehicle.is_door_open', 'attr.vehicle.is_trunk_open'], [], [], []]
 )
 
-BboxBev = dict(
-    branch_0=dict(classes=['class.road_marker.arrow', 'class.parking.access_aisle', 'class.road_marker.text', 'class.parking.text_icon'], attrs=[[], [], [], []]),
-)
+BboxBev = dict(classes=['class.road_marker.arrow', 'class.parking.access_aisle', 'class.road_marker.text', 'class.parking.text_icon'], attrs=[[], [], [], []])
 
 Cylinder3D = dict(
 
 )
 
-Square3D = dict(
-    branch_0=dict(classes=['class.pedestiran.pedestiran'], attrs=[[]])
-)
+Square3D = dict(classes=['class.pedestiran.pedestiran'], attrs=[[]])
 
 collection_info_type = ['camera_images','camera_depths', 'bbox_3d', 'bbox_bev', 'square_3d']
 
@@ -161,8 +156,31 @@ train_dataloader = dict(
         name="mv_4d",
         data_root=data_root,
         info_path=data_root + 'mv_4d_infos_val.pkl',
-        dictionaries=dictionary,
-        transformable_keys=collection_info_type,
+        transformables=[
+            dict(
+                name="camera_images",
+                transformable_key="camera_images",
+            ),
+            dict(
+                name="camera_depths",
+                transformable_key="camera_depths",
+            ),
+            dict(
+                name="bbox_3d",
+                transformable_key="bbox_3d",
+                dictionary=Bbox3d,
+            ),
+            dict(
+                name="bbox_bev",
+                transformable_key="bbox_bev",
+                dictionary=BboxBev,
+            ),
+            dict(
+                name="square_3d",
+                transformable_key="square_3d",
+                dictionary=Square3D,
+            ),
+        ],
         transforms=train_pipeline,
         phase='train',
         batch_size=batch_size, 
@@ -182,8 +200,31 @@ val_dataloader = dict(
         name="mv_4d",
         data_root=data_root,
         info_path=data_root + 'mv_4d_infos_val.pkl',
-        dictionaries=dictionary,
-        transformable_keys=collection_info_type,
+        transformables=[
+            dict(
+                name="camera_images",
+                transformable_key="camera_images",
+            ),
+            dict(
+                name="camera_depths",
+                transformable_key="camera_depths",
+            ),
+            dict(
+                name="bbox_3d",
+                transformable_key="bbox_3d",
+                dictionary=Bbox3d,
+            ),
+            dict(
+                name="bbox_bev",
+                transformable_key="bbox_bev",
+                dictionary=BboxBev,
+            ),
+            dict(
+                name="square_3d",
+                transformable_key="square_3d",
+                dictionary=Square3D,
+            ),
+        ],
         transforms=val_pipeline,
         phase='val',
         batch_size=batch_size, 
@@ -221,6 +262,21 @@ model_test_cfg = dict(
     nms_thr=0.2,
 )
 
+img_backbone_conf=dict(
+                type='VoVNet',
+                # model_type="vovnet57",
+                # out_indices=[4, 8],
+                model_type="vovnet39",
+                out_indices=[2, 5],
+                # init_cfg=dict(type='Pretrained', checkpoint="./work_dirs/backbone_checkpoint/vovnet57_match.pth")
+                )
+img_neck_conf=dict(
+    type='SECONDFPN',
+    in_channels=[256, 512],
+    upsample_strides=[1, 2],
+    out_channels=[128, 128],
+    )
+
 model = dict(
     type='FastBEV_Det',
     data_preprocessor=dict(
@@ -242,20 +298,15 @@ model = dict(
         # final_dim=[fish_img_size[1], fish_img_size[0]],  # img size for model input (pix)
         output_channels=80,  # BEV feature channels
         downsample_factor=downsample_factor,  # ds factor of the feature to be projected to BEV (e.g. 256x704 -> 16x44)  # noqa
-        img_backbone_conf=dict(
-            type='VoVNet',
-            # model_type="vovnet57",
-            # out_indices=[4, 8],
-            model_type="vovnet39",
-            out_indices=[2, 5],
-            # init_cfg=dict(type='Pretrained', checkpoint="./work_dirs/backbone_checkpoint/vovnet57_match.pth")
-            ),
-        img_neck_conf=dict(
-            type='SECONDFPN',
-            in_channels=[256, 512],
-            upsample_strides=[1, 2],
-            out_channels=[128, 128],
-            ),
+        fish_img_backbone_neck_conf=dict(type='ImgBackboneNeck',
+                                         img_backbone_conf=img_backbone_conf,
+                                         img_neck_conf=img_neck_conf),
+        pv_img_backbone_neck_conf=dict(type='ImgBackboneNeck',
+                                         img_backbone_conf=img_backbone_conf,
+                                         img_neck_conf=img_neck_conf),
+        front_img_backbone_neck_conf=dict(type='ImgBackboneNeck',
+                                         img_backbone_conf=img_backbone_conf,
+                                         img_neck_conf=img_neck_conf),                                                                                 
         depth_net_fish_conf=dict(type='DepthNet', 
                             in_channels=256, 
                             mid_channels=256, 
@@ -317,9 +368,9 @@ model = dict(
             upsample_strides=[1, 2, 4, 8],
             out_channels=[64, 64, 64, 64]),
         tasks=[
-            dict(label_type='bbox_3d', num_class=len(Bbox3d['branch_0']['classes']), class_names=Bbox3d['branch_0']['classes']),
-            dict(label_type='bbox_bev', num_class=len(BboxBev['branch_0']['classes']), class_names=BboxBev['branch_0']['classes']),
-            dict(label_type='square_3d', num_class=len(Square3D['branch_0']['classes']), class_names=Square3D['branch_0']['classes']),
+            dict(label_type='bbox_3d', num_class=len(Bbox3d['classes']), class_names=Bbox3d['classes']),
+            dict(label_type='bbox_bev', num_class=len(BboxBev['classes']), class_names=BboxBev['classes']),
+            dict(label_type='square_3d', num_class=len(Square3D['classes']), class_names=Square3D['classes']),
             ],
         common_heads=dict(reg=(2, 2),
                           height=(1, 2),
@@ -349,7 +400,8 @@ model = dict(
             type='mmdet.L1Loss', reduction='mean', loss_weight=0.25),
     ),
     is_train_depth=True,
-    depth_weight=0.25
+    depth_weight=0.25,
+    eval_only=False
 )
 
 val_evaluator = [
@@ -413,5 +465,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = None
+load_from = "work_dirs/mv_4d_fastbev_3dbox/20241006_223808/epoch_24.pth"
 resume=False

@@ -86,6 +86,7 @@ def test_planar_bbox_3d_generation_and_reverse():
     )
 
     box3d = Bbox3D(
+        "bbox_3d",
         elements=[
             {
                 'class': 'bus',
@@ -120,26 +121,19 @@ def test_planar_bbox_3d_generation_and_reverse():
                 ]),
             },
         ],
-        dictionary={
-            'branch_0': {
-                'classes': ['car', 'bus']
-            },
-            'branch_1': {
-                'classes': ['car'],
-            }
-        },
+        dictionary={'classes': ['car', 'bus']},
         tensor_smith=pbox3d
     )
     box3d.to_tensor()
     tensor_dict = box3d.tensor
-    assert tensor_dict['branch_0']['seg'][0].max() == 1
+    assert tensor_dict['seg'][0].max() == 1
     pred_bboxes_3d = pbox3d.reverse(tensor_dict)
     np.testing.assert_almost_equal(
-        pred_bboxes_3d['branch_0'][0]['size'],
+        pred_bboxes_3d[0]['size'],
         box3d.elements[0]['size'],
     decimal=3)
     np.testing.assert_almost_equal(
-        pred_bboxes_3d['branch_1'][0]['rotation'],
+        pred_bboxes_3d[1]['rotation'],
         box3d.elements[1]['rotation'],
     decimal=3)
     
@@ -152,6 +146,7 @@ def test_planar_squre_pillars_generation_and_reverse():
         use_bottom_center=True
     )
     box3d = Bbox3D(
+        "bbox_3d",
         elements=[
             {
                 'class': 'pillar',
@@ -175,23 +170,19 @@ def test_planar_squre_pillars_generation_and_reverse():
                 ]),
             },
         ],
-        dictionary={
-            'branch_0': {
-                'classes': ['pillar']
-            }
-        },
+        dictionary={'classes': ['pillar']},
         tensor_smith=psp
     )
     box3d.to_tensor()
     tensor_dict = box3d.tensor
-    assert tensor_dict['branch_0']['seg'][0].max() == 1
+    assert tensor_dict['seg'][0].max() == 1
     pred_bboxes_3d = psp.reverse(tensor_dict)
     np.testing.assert_almost_equal(
-        pred_bboxes_3d['branch_0'][0]['size'],
+        pred_bboxes_3d[0]['size'],
         box3d.elements[0]['size'],
     decimal=3)
     np.testing.assert_almost_equal(
-        pred_bboxes_3d['branch_0'][0]['rotation'],
+        pred_bboxes_3d[0]['rotation'],
         box3d.elements[0]['rotation'],
     decimal=3)
 
@@ -204,6 +195,7 @@ def test_planar_cylinder3d_generation_and_reverse():
         use_bottom_center=True
     )
     box3d = Bbox3D(
+        "bbox_3d",
         elements=[
             {
                 'class': 'cylinder_pillar',
@@ -222,23 +214,19 @@ def test_planar_cylinder3d_generation_and_reverse():
                 ]),
             },
         ],
-        dictionary={
-            'branch_0': {
-                'classes': ['cylinder_pillar']
-            }
-        },
+        dictionary={'classes': ['cylinder_pillar']},
         tensor_smith=pc
     )
     box3d.to_tensor()
     tensor_dict = box3d.tensor
-    assert tensor_dict['branch_0']['seg'][0].max() == 1
+    assert tensor_dict['seg'][0].max() == 1
     pred_bboxes_3d = pc.reverse(tensor_dict)
     np.testing.assert_almost_equal(
-        pred_bboxes_3d['branch_0'][0]['height'],
+        pred_bboxes_3d[0]['height'],
         box3d.elements[0]['size'][2],
     decimal=3)
     np.testing.assert_almost_equal(
-        pred_bboxes_3d['branch_0'][0]['zvec'],
+        pred_bboxes_3d[0]['zvec'],
         box3d.elements[0]['rotation'][:, 2],
     decimal=3)
 
@@ -251,6 +239,7 @@ def test_planar_oriented_cylinder3d_generation_and_reverse():
         use_bottom_center=True
     )
     box3d = Bbox3D(
+        "bbox_3d",
         elements=[
             {
                 'class': 'pedestrain',
@@ -269,23 +258,19 @@ def test_planar_oriented_cylinder3d_generation_and_reverse():
                 ]),
             },
         ],
-        dictionary={
-            'branch_0': {
-                'classes': ['pedestrain']
-            }
-        },
+        dictionary={'classes': ['pedestrain']},
         tensor_smith=poc
     )
     box3d.to_tensor()
     tensor_dict = box3d.tensor
-    assert tensor_dict['branch_0']['seg'][0].max() == 1
+    assert tensor_dict['seg'][0].max() == 1
     pred_bboxes_3d = poc.reverse(tensor_dict)
     np.testing.assert_almost_equal(
-        pred_bboxes_3d['branch_0'][0]['size'],
+        pred_bboxes_3d[0]['size'],
         box3d.elements[0]['size'],
     decimal=3)
     np.testing.assert_almost_equal(
-        pred_bboxes_3d['branch_0'][0]['rotation'],
+        pred_bboxes_3d[0]['rotation'],
         box3d.elements[0]['rotation'],
     decimal=3)
 
@@ -298,6 +283,7 @@ def test_planar_parkingslot_3d_generation_and_reverse():
         voxel_range=([-0.5, 2.5], [24, -8], [8, -8])
     )
     slots = ParkingSlot3D(
+        "parkingslot_3d",
         elements=[{
             'class': 'class.parking.paring_slot',
             'attr': {},
@@ -308,9 +294,9 @@ def test_planar_parkingslot_3d_generation_and_reverse():
                 [-0.2, 6.4, 0.9]
             ])
         }],
-        dictionary=dict(branch=dict(
+        dictionary=dict(
             classes=['class.parking.paring_slot']
-        )),
+        ),
         tensor_smith=pslot
     )
     slots.to_tensor()
