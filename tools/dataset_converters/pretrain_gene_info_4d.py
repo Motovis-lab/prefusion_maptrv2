@@ -93,7 +93,7 @@ def lidar_point2depth(v_cam_rmatrix, v_cam_t, src_image, real_cam_model, vcamera
 def single_lidar_process(lidar1_filename, save_root):
     cams_lidar_point = np.asarray(o3d.io.read_point_cloud(str(lidar1_filename)).points).T
     cams_lidar_point_ = np.ones((4, cams_lidar_point.shape[1]))
-    # cams_lidar_point[1, :] += (3.816862089990445 - 2.436862089990445)
+    cams_lidar_point[1, :] += (3.816862089990445 - 2.436862089990445)
     cams_lidar_point_[:3, :] = cams_lidar_point
     R_nus = np.eye(4)
     R_nus[:3, :3] = Rotation.from_euler("XYZ", angles=(0,0,90), degrees=True).as_matrix()
