@@ -136,7 +136,7 @@ Cylinder3D = dict(
 
 Square3D = dict(classes=['class.pedestiran.pedestiran'], attrs=[[]])
 
-collection_info_type = ['camera_images','camera_depths', 'bbox_3d', 'bbox_bev', 'square_3d']
+transformable_name = ['camera_images','camera_depths', 'bbox_3d', 'bbox_bev', 'square_3d']
 
 dictionary=dict(
         bbox_3d=Bbox3d,
@@ -284,11 +284,11 @@ model = dict(
         mean=[128, 128, 128],
         std=[255, 255, 255],
         IMG_KEYS=IMG_KEYS, 
-        label_type=collection_info_type,
+        label_type=transformable_name,
         predict_elements=['heatmap', 'anno_boxes', 'gridzs', 'class_maps'],
         batch_size=batch_size,
         group_size=group_size,
-        label_start_idx=2, # process labels info start index of collection_info_type
+        label_start_idx=2, # process labels info start index of transformable_name
     ),
     backbone_conf=dict(
         type='FastRay',
