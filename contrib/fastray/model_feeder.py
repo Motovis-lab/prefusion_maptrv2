@@ -134,14 +134,15 @@ class FastRayModelFeeder(BaseModelFeeder):
                         annotation_tensor = transformable.tensor
                         anno_ts = transformable.tensor_smith
                         match anno_ts:
-                            case PlanarBbox3D() | PlanarSquarePillar() | \
-                                PlanarCylinder3D() | PlanarOrientedCylinder3D() | PlanarParkingSlot3D():
-                                anno_batch_dict[transformable.name]['cen'].append( annotation_tensor['cen'])
-                                anno_batch_dict[transformable.name]['seg'].append( annotation_tensor['seg'])
-                                anno_batch_dict[transformable.name]['reg'].append( annotation_tensor['reg'])
+                            case (PlanarBbox3D() | PlanarSquarePillar() 
+                                  | PlanarCylinder3D() | PlanarOrientedCylinder3D() 
+                                  | PlanarParkingSlot3D()):
+                                anno_batch_dict[transformable.name]['cen'].append(annotation_tensor['cen'])
+                                anno_batch_dict[transformable.name]['seg'].append(annotation_tensor['seg'])
+                                anno_batch_dict[transformable.name]['reg'].append(annotation_tensor['reg'])
                             case PlanarPolyline3D() | PlanarPolygon3D():
-                                anno_batch_dict[transformable.name]['seg'].append( annotation_tensor['seg'])
-                                anno_batch_dict[transformable.name]['reg'].append( annotation_tensor['reg'])
+                                anno_batch_dict[transformable.name]['seg'].append(annotation_tensor['seg'])
+                                anno_batch_dict[transformable.name]['reg'].append(annotation_tensor['reg'])
                             case _:
                                 anno_batch_dict[transformable.name].append(annotation_tensor)
         # tensorize batches
@@ -154,7 +155,13 @@ class FastRayModelFeeder(BaseModelFeeder):
                     np.float32(processed_frame_batch['camera_lookups'][cam_id][lut_key])
                 )
         processed_frame_batch['delta_poses'] = torch.stack(processed_frame_batch['delta_poses'])
-        for transformable_name, tensor_data in anno_batch_dict.items():
-            for task_name, task_tensor_data in tensor_data.items():
-                anno_batch_dict[transformable_name][task_name] = torch.stack(task_tensor_data)
+        for transformable_name, data_batch in anno_batch_dict.items():
+            # stack known one-sub-layer tensor_dict
+            if isinstance(data_batch, dict):
+                for task_name, task_data_batch in data_batch.items():
+                    if all(isinstance(data, torch.Tensor) for data in task_data_batch):
+                        anno_batch_dict[transformable_name][task_name] = torch.stack(task_data_batch)
+            # stack tensor batches
+            elif all(isinstance(data, torch.Tensor) for data in data_batch):
+                anno_batch_dict[transformable_name] = torch.stack(data_batch)
         return processed_frame_batch
