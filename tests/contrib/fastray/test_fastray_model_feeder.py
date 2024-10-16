@@ -36,8 +36,9 @@ def test_fastray_model_feeder():
             prev=IndexInfo("20231101_160337", "1698825817764")
         ),
     ]
-    camera_images = CameraImageSet(dict(
+    camera_images = CameraImageSet("camera_images", dict(
         cam_6=CameraImage(
+            name="camera_images:cam_6",
             cam_id='cam_6',
             cam_type='PerspectiveCamera',
             img=np.array(np.random.randint(256, size=(720, 1280, 3)), dtype=np.uint8),
@@ -48,16 +49,19 @@ def test_fastray_model_feeder():
         )
     ))
     camera_images.to_tensor()
-    ego_poses = EgoPoseSet({
-        '0':EgoPose(index_infos[0].scene_frame_id, translation=np.zeros((3, 1)), rotation=np.eye(3)),
-        '1':EgoPose(index_infos[1].scene_frame_id, translation=np.zeros((3, 1)), rotation=np.eye(3)),
-    })
+    ego_poses = EgoPoseSet(
+        "ego_pose_set",
+        {
+            '0':EgoPose("ego_poses:0:1698825817764", index_infos[0].scene_frame_id, translation=np.zeros((3, 1)), rotation=np.eye(3)),
+            '1':EgoPose("ego_poses:0:1698825817864", index_infos[1].scene_frame_id, translation=np.zeros((3, 1)), rotation=np.eye(3)),}
+        )
     ego_poses.to_tensor()
     pbox3d = PlanarBbox3D(
         voxel_shape=voxel_feature_config['voxel_shape'],
         voxel_range=voxel_feature_config['voxel_range'],
     )
     bbox3d = Bbox3D(
+        "bbox_3d_0",
         elements=[
             {
                 'class': 'car',
@@ -76,26 +80,18 @@ def test_fastray_model_feeder():
                 ]),
             },
         ],
-        dictionary={'branch_0': {'classes': ['car']}},
+        dictionary={'classes': ['car']},
         tensor_smith=pbox3d
     )
     bbox3d.to_tensor()
     frame_batch = [
         dict(
             index_info = index_infos[0],
-            transformables = dict(
-                camera_images=camera_images,
-                ego_poses=ego_poses,
-                bbox_3d=bbox3d
-            )
+            transformables = [camera_images, ego_poses, bbox3d]
         ), 
         dict(
             index_info = index_infos[1],
-            transformables = dict(
-                camera_images=camera_images,
-                ego_poses=ego_poses,
-                bbox_3d=bbox3d
-            )
+            transformables = [camera_images, ego_poses, bbox3d]
         )
     ]
     model_feeder = FastRayModelFeeder(
@@ -104,4 +100,4 @@ def test_fastray_model_feeder():
     processed_frame_batch = model_feeder.process(frame_batch)
     assert processed_frame_batch['camera_tensors']['cam_6'].shape == (2, 3, 720, 1280)
     assert processed_frame_batch['camera_lookups']['cam_6']['uu'].shape == (2, 6*320*160)
-    assert processed_frame_batch['annotations']['bbox_3d']['branch_0']['reg'].shape == (2, 20, 320, 160)
+    assert processed_frame_batch['annotations']['bbox_3d_0']['reg'].shape == (2, 20, 320, 160)

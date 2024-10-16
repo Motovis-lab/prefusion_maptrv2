@@ -107,21 +107,15 @@ CLASSES = ['class.vehicle.passenger_car', 'class.traffic_facility.box', 'class.t
            'class.road_marker.arrow', 'class.traffic_facility.speed_bump', 'class.parking.wheel_stopper',\
            'class.parking.indoor_column']
 
-bbox3d = dict(
-    branch_0=dict(classes=['class.vehicle.passenger_car', 'class.traffic_facility.box', 'class.traffic_facility.soft_barrier', 'class.traffic_facility.hard_barrier'], attrs=[['attr.vehicle.is_door_open', 'attr.vehicle.is_trunk_open'], [], [], []])
-)
+bbox3d = dict(classes=['class.vehicle.passenger_car', 'class.traffic_facility.box', 'class.traffic_facility.soft_barrier', 'class.traffic_facility.hard_barrier'], attrs=[['attr.vehicle.is_door_open', 'attr.vehicle.is_trunk_open'], [], [], []])
 
-BboxBev = dict(
-    branch_0=dict(classes=['class.road_marker.arrow', 'class.traffic_facility.speed_bump', 'class.parking.wheel_stopper'], attrs=[[], [], []]),
-)
+BboxBev = dict(classes=['class.road_marker.arrow', 'class.traffic_facility.speed_bump', 'class.parking.wheel_stopper'], attrs=[[], [], []])
 
 Cylinder3D = dict(
 
 )
 
-Square3D = dict(
-    branch_0=dict(classes=['class.parking.indoor_column'], attrs=[['attr.parking.indoor_column.shape']])
-)
+Square3D = dict(classes=['class.parking.indoor_column'], attrs=[['attr.parking.indoor_column.shape']])
 
 collection_info_type = ['camera_images','camera_depths', 'bbox_3d', 'bbox_bev', 'square_3d']
 
@@ -142,8 +136,31 @@ train_dataloader = dict(
         name="mv_4d",
         data_root=data_root,
         info_path=data_root + 'mv_4d_infos.pkl',
-        dictionary=dictionary,
-        transformable_keys=collection_info_type,
+        transformables=[
+            dict(
+                name="camera_images",
+                transformable_key="camera_images",
+            ),
+            dict(
+                name="camera_depths",
+                transformable_key="camera_depths",
+            ),
+            dict(
+                name="bbox_3d",
+                transformable_key="bbox_3d",
+                dictionary=bbox3d,
+            ),
+            dict(
+                name="bbox_bev",
+                transformable_key="bbox_bev",
+                dictionary=BboxBev,
+            ),
+            dict(
+                name="square_3d",
+                transformable_key="square_3d",
+                dictionary=Square3D,
+            ),
+        ],
         transforms=train_pipeline,
         phase='train',
         batch_size=batch_size, 
@@ -161,8 +178,31 @@ val_dataloader = dict(
         name="mv_4d",
         data_root=data_root,
         info_path=data_root + 'mv_4d_infos.pkl',
-        dictionary=dictionary, 
-        transformable_keys=collection_info_type,
+        transformables=[
+            dict(
+                name="camera_images",
+                transformable_key="camera_images",
+            ),
+            dict(
+                name="camera_depths",
+                transformable_key="camera_depths",
+            ),
+            dict(
+                name="bbox_3d",
+                transformable_key="bbox_3d",
+                dictionary=bbox3d,
+            ),
+            dict(
+                name="bbox_bev",
+                transformable_key="bbox_bev",
+                dictionary=BboxBev,
+            ),
+            dict(
+                name="square_3d",
+                transformable_key="square_3d",
+                dictionary=Square3D,
+            ),
+        ],
         transforms=train_pipeline,
         phase='val',
         batch_size=batch_size, 

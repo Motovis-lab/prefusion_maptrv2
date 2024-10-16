@@ -2,10 +2,16 @@ import torch
 import numpy as np
 
 from typing import List, Union, TYPE_CHECKING
+from collections import defaultdict
 from prefusion.dataset.model_feeder import BaseModelFeeder
 from prefusion.registry import MODEL_FEEDERS
 
 from .voxel_lut import VoxelLookUpTableGenerator
+
+from prefusion.dataset import (
+    CameraImageSet, EgoPoseSet, LidarPoints,
+    Bbox3D, Polyline3D, ParkingSlot3D
+)
 
 from prefusion.dataset.tensor_smith import (
     PlanarBbox3D, PlanarSquarePillar,
@@ -57,9 +63,7 @@ class FastRayModelFeeder(BaseModelFeeder):
         ```
         input_dict = {
             'index_info': index_info,
-            'transformables': {
-                <key>: <values>,
-            }
+            'transformables': []
         }
         processed_frame_batch = {
             'index_infos': [index_info, index_info, ...],
@@ -77,13 +81,10 @@ class FastRayModelFeeder(BaseModelFeeder):
             },
             'delta_poses': [],
             'annotations': {
-                'bbox_3d': {
-                    'branch_0': {
-                        'cen': (N, 1, X, Y)
-                        'seg': (N, C, X, Y)
-                        'reg': (N, C, X, Y)
-                    },
-                    ...
+                'bbox_3d_0': {
+                    'cen': (N, 1, X, Y)
+                    'seg': (N, C, X, Y)
+                    'reg': (N, C, X, Y)
                 },
                 ...
             },
@@ -93,93 +94,56 @@ class FastRayModelFeeder(BaseModelFeeder):
         """
         processed_frame_batch = {
             'index_infos': [],
-            'camera_tensors': {},
-            'camera_lookups': {},
+            'camera_tensors': defaultdict(list),
+            'camera_lookups': defaultdict(lambda: defaultdict(list)),
             'lidar_points': [],
             'delta_poses': [],
-            'annotations': {},
+            'annotations': defaultdict(lambda: defaultdict(list)),
         }
         anno_batch_dict = processed_frame_batch['annotations']
         # rearange input_dict into batches
         for input_dict in frame_batch:
             # batching index info
             processed_frame_batch['index_infos'].append(input_dict['index_info'])
-            # batching camera tensors and lookups
-            camera_image_set = input_dict['transformables']['camera_images']
-            LUT = self.voxel_lut_gen.generate(camera_image_set)
-            for cam_id in camera_image_set.transformables:
-                if cam_id not in processed_frame_batch['camera_tensors']:
-                    processed_frame_batch['camera_tensors'][cam_id] = []
-                if cam_id not in processed_frame_batch['camera_lookups']:
-                    processed_frame_batch['camera_lookups'][cam_id] = {}
-                camera_tensor = camera_image_set.transformables[cam_id].tensor['img']
-                processed_frame_batch['camera_tensors'][cam_id].append(camera_tensor)
-                camera_lookup = LUT[cam_id]
-                camera_lookup_batch = processed_frame_batch['camera_lookups'][cam_id]
-                for lut_key in camera_lookup:
-                    if lut_key not in camera_lookup_batch:
-                        camera_lookup_batch[lut_key] = []
-                    camera_lookup_batch[lut_key].append(camera_lookup[lut_key])
-            # batching lidar points
-            if 'lidar_points' in input_dict['transformables']:
-                raise NotImplementedError
-            # batching delta poses
-            pose_set = input_dict['transformables']['ego_poses']
-            cur_pose = pose_set.transformables['0']
-            if '-1' not in pose_set.transformables:
-                pre_pose = pose_set.transformables['0']
-            else:
-                pre_pose = pose_set.transformables['-1']
-            delta_rotation = pre_pose.rotation.T @ cur_pose.rotation
-            delta_translation = pre_pose.rotation.T @ (cur_pose.translation - pre_pose.translation)
-            delta_T = torch.eye(4)
-            delta_T[:3, :3] = torch.tensor(delta_rotation)
-            delta_T[:3, 3:] = torch.tensor(delta_translation)
-            processed_frame_batch['delta_poses'].append(delta_T)
-            # batching annotations
-            for transformable_key in input_dict['transformables']:
-                if transformable_key in ['camera_images', 'camera_poses', 'lidar_points', 'ego_poses']:
-                    continue
-                annotation_tensor = input_dict['transformables'][transformable_key].tensor
-                anno_ts = input_dict['transformables'][transformable_key].tensor_smith
-                # init placeholder for various annotation types
-                if transformable_key not in anno_batch_dict:
-                    if isinstance(anno_ts, PlanarParkingSlot3D):
-                        anno_batch_dict[transformable_key] = dict(cen=[], seg=[], reg=[])
-                    elif isinstance(anno_ts, (
-                        PlanarBbox3D, PlanarSquarePillar, PlanarCylinder3D, PlanarOrientedCylinder3D
-                    )):
-                        anno_batch_dict[transformable_key] = dict()
-                        for branch_key in annotation_tensor:
-                            anno_batch_dict[transformable_key][branch_key] = dict(cen=[], seg=[], reg=[])
-                    elif isinstance(anno_ts, (PlanarPolyline3D, PlanarPolygon3D)):
-                        anno_batch_dict[transformable_key] = dict()
-                        for branch_key in annotation_tensor:
-                            anno_batch_dict[transformable_key][branch_key] = dict(seg=[], reg=[])
-                    else:
-                        anno_batch_dict[transformable_key] = []
-                if isinstance(anno_ts, PlanarParkingSlot3D):
-                    anno_batch_dict[transformable_key]['cen'].append(annotation_tensor['cen'])
-                    anno_batch_dict[transformable_key]['seg'].append(annotation_tensor['seg'])
-                    anno_batch_dict[transformable_key]['reg'].append(annotation_tensor['reg'])
-                elif isinstance(anno_ts, (
-                    PlanarBbox3D, PlanarSquarePillar, PlanarCylinder3D, PlanarOrientedCylinder3D
-                )):
-                    for branch_key in annotation_tensor:
-                        anno_batch_dict[transformable_key][branch_key]['cen'].append(
-                            annotation_tensor[branch_key]['cen'])
-                        anno_batch_dict[transformable_key][branch_key]['seg'].append(
-                            annotation_tensor[branch_key]['seg'])
-                        anno_batch_dict[transformable_key][branch_key]['reg'].append(
-                            annotation_tensor[branch_key]['reg'])
-                elif isinstance(anno_ts, (PlanarPolyline3D, PlanarPolygon3D)):
-                    for branch_key in annotation_tensor:
-                        anno_batch_dict[transformable_key][branch_key]['seg'].append(
-                            annotation_tensor[branch_key]['seg'])
-                        anno_batch_dict[transformable_key][branch_key]['reg'].append(
-                            annotation_tensor[branch_key]['reg'])
-                else:
-                    anno_batch_dict[transformable_key].append(annotation_tensor)
+            for transformable in input_dict['transformables']:
+                match transformable:
+                    case CameraImageSet():
+                        LUT = self.voxel_lut_gen.generate(transformable)
+                        for cam_id in transformable.transformables:
+                            camera_tensor = transformable.transformables[cam_id].tensor['img']
+                            processed_frame_batch['camera_tensors'][cam_id].append(camera_tensor)
+                            camera_lookup = LUT[cam_id]
+                            camera_lookup_batch = processed_frame_batch['camera_lookups'][cam_id]
+                            for lut_key in camera_lookup:
+                                camera_lookup_batch[lut_key].append(camera_lookup[lut_key])
+                    case LidarPoints():
+                        raise NotImplementedError
+                    case EgoPoseSet():
+                        cur_pose = transformable.transformables['0']
+                        if '-1' not in transformable.transformables:
+                            pre_pose = transformable.transformables['0']
+                        else:
+                            pre_pose = transformable.transformables['-1']
+                        delta_rotation = pre_pose.rotation.T @ cur_pose.rotation
+                        delta_translation = pre_pose.rotation.T @ (cur_pose.translation - pre_pose.translation)
+                        delta_T = torch.eye(4)
+                        delta_T[:3, :3] = torch.tensor(delta_rotation)
+                        delta_T[:3, 3:] = torch.tensor(delta_translation)
+                        processed_frame_batch['delta_poses'].append(delta_T)
+                    case Bbox3D() | Polyline3D() | ParkingSlot3D():
+                        annotation_tensor = transformable.tensor
+                        anno_ts = transformable.tensor_smith
+                        match anno_ts:
+                            case PlanarBbox3D() | PlanarSquarePillar() | \
+                                PlanarCylinder3D() | PlanarOrientedCylinder3D() | PlanarParkingSlot3D():
+                                anno_batch_dict[transformable.name]['cen'].append( annotation_tensor['cen'])
+                                anno_batch_dict[transformable.name]['seg'].append( annotation_tensor['seg'])
+                                anno_batch_dict[transformable.name]['reg'].append( annotation_tensor['reg'])
+                            case PlanarPolyline3D() | PlanarPolygon3D():
+                                anno_batch_dict[transformable.name]['seg'].append( annotation_tensor['seg'])
+                                anno_batch_dict[transformable.name]['reg'].append( annotation_tensor['reg'])
+                            case _:
+                                anno_batch_dict[transformable.name].append(annotation_tensor)
         # tensorize batches
         for cam_id in processed_frame_batch['camera_tensors']:
             processed_frame_batch['camera_tensors'][cam_id] = torch.stack(
@@ -190,27 +154,7 @@ class FastRayModelFeeder(BaseModelFeeder):
                     np.float32(processed_frame_batch['camera_lookups'][cam_id][lut_key])
                 )
         processed_frame_batch['delta_poses'] = torch.stack(processed_frame_batch['delta_poses'])
-        for transformable_key in anno_batch_dict:
-            if transformable_key in ['bbox_3d', 'square_3d', 'cylinder_3d', 'oriented_cylinder_3d']:
-                for branch_key in anno_batch_dict[transformable_key]:
-                    anno_batch_dict[transformable_key][branch_key]['cen'] = torch.stack(
-                        anno_batch_dict[transformable_key][branch_key]['cen'])
-                    anno_batch_dict[transformable_key][branch_key]['seg'] = torch.stack(
-                        anno_batch_dict[transformable_key][branch_key]['seg'])
-                    anno_batch_dict[transformable_key][branch_key]['reg'] = torch.stack(
-                        anno_batch_dict[transformable_key][branch_key]['reg'])
-            if transformable_key in ['polyline_3d', 'polygon_3d']:
-                for branch_key in anno_batch_dict[transformable_key]:
-                    anno_batch_dict[transformable_key][branch_key]['seg'] = torch.stack(
-                        anno_batch_dict[transformable_key][branch_key]['seg'])
-                    anno_batch_dict[transformable_key][branch_key]['reg'] = torch.stack(
-                        anno_batch_dict[transformable_key][branch_key]['reg'])
-            if transformable_key == 'parking_slot_3d':
-                anno_batch_dict[transformable_key]['cen'] = torch.stack(
-                    anno_batch_dict[transformable_key]['cen'])
-                anno_batch_dict[transformable_key]['seg'] = torch.stack(
-                    anno_batch_dict[transformable_key]['seg'])
-                anno_batch_dict[transformable_key]['reg'] = torch.stack(
-                    anno_batch_dict[transformable_key]['reg'])
-        
+        for transformable_name, tensor_data in anno_batch_dict.items():
+            for task_name, task_tensor_data in tensor_data.items():
+                anno_batch_dict[transformable_name][task_name] = torch.stack(task_tensor_data)
         return processed_frame_batch

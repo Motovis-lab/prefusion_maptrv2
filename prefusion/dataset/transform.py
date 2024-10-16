@@ -36,8 +36,8 @@ class Transformable:
     It is not a abstract class, because it on one hand provides the full set of transform methods and provide default implementation on the other hand.
     The only purpose of its direct subclasses CameraTransformable and SpatialTransformable is to ensure some transform methods must be implemented.
     """
-    def __init__(self, *args, **kwargs):
-        pass
+    def __init__(self, name, *args, **kwargs):
+        self.name = name
 
     @transform_method
     def at_transform(self, func_name, **kwargs):
@@ -243,7 +243,8 @@ class TransformableSet(Transformable):
     """A set of transformables of the same type. A TransformableSet is also a Transformable."""
     transformable_cls = Transformable  # each subclass of TransformableSet should have its own transformable_cls for protection purpose.
 
-    def __init__(self, transformables: dict):
+    def __init__(self, name, transformables: dict):
+        super().__init__(name)
         self.transformables = transformables
         self.validate_transformable_class()
     
@@ -276,6 +277,7 @@ class TransformableSet(Transformable):
 
 class CameraImage(CameraTransformable):
     def __init__(self, 
+        name: str,
         cam_id: str, 
         cam_type: str, 
         img: np.ndarray, 
@@ -288,6 +290,8 @@ class CameraImage(CameraTransformable):
 
         Parameters
         ----------
+        name: str
+            arbitrary string, will be set to each Transformable object to distinguish it with others
         cam_id : str
             camera id
         cam_type : str
@@ -304,7 +308,7 @@ class CameraImage(CameraTransformable):
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
-        super().__init__()
+        super().__init__(name)
         assert cam_type in ['FisheyeCamera', 'PerspectiveCamera']
         self.cam_id = cam_id
         self.cam_type = cam_type
@@ -446,6 +450,7 @@ class CameraImageSet(TransformableSet):
 class CameraSegMask(CameraTransformable):
 
     def __init__(self, 
+        name: str,
         cam_id: str,
         cam_type: str, 
         img: np.ndarray, 
@@ -459,6 +464,8 @@ class CameraSegMask(CameraTransformable):
 
         Parameters
         ----------
+        name : str
+            arbitrary string, will be set to each Transformable object to distinguish it with others
         cam_id : str
             camera id
         cam_type : str
@@ -477,7 +484,7 @@ class CameraSegMask(CameraTransformable):
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
-        super().__init__()
+        super().__init__(name)
         assert cam_type in ["FisheyeCamera", "PerspectiveCamera"]
         self.cam_id = cam_id
         self.cam_type = cam_type
@@ -578,6 +585,7 @@ class CameraSegMaskSet(TransformableSet):
 
 class CameraDepth(CameraTransformable):
     def __init__(self, 
+        name: str,
         cam_id: str,
         cam_type: str, 
         img: np.ndarray, 
@@ -591,6 +599,8 @@ class CameraDepth(CameraTransformable):
 
         Parameters
         ----------
+        name : str
+            arbitrary string, will be set to each Transformable object to distinguish it with others
         cam_id : str
             camera id
         cam_type : str
@@ -610,7 +620,7 @@ class CameraDepth(CameraTransformable):
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
-        super().__init__()
+        super().__init__(name)
         assert cam_type in ["FisheyeCamera", "PerspectiveCamera"]
         assert depth_mode in ["z", "d"]
         self.cam_id = cam_id
@@ -716,11 +726,13 @@ class CameraDepthSet(TransformableSet):
 
 
 class LidarPoints(SpatialTransformable):
-    def __init__(self, positions: np.ndarray, intensity: np.ndarray, tensor_smith: "TensorSmith" = None): 
+    def __init__(self, name: str, positions: np.ndarray, intensity: np.ndarray, tensor_smith: "TensorSmith" = None): 
         """Lidar points
 
         Parameters
         ----------
+        name : str
+            arbitrary string, will be set to each Transformable object to distinguish it with others
         positions : np.ndarray
             of shape (N, 3), usually in ego-system
         intensity : np.ndarray
@@ -728,7 +740,7 @@ class LidarPoints(SpatialTransformable):
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
-        super().__init__()
+        super().__init__(name)
         self.positions = positions.copy()
         self.intensity = intensity.copy()
         self.tensor_smith = tensor_smith
@@ -750,10 +762,12 @@ class LidarPoints(SpatialTransformable):
 
 
 class Bbox3D(SpatialTransformable):
-    def __init__(self, elements: List[dict], dictionary: dict, flip_aware_class_pairs: List[tuple] = [], tensor_smith: "TensorSmith" = None):
+    def __init__(self, name: str, elements: List[dict], dictionary: dict, flip_aware_class_pairs: List[tuple] = [], tensor_smith: "TensorSmith" = None):
         """
         Parameters
         ----------
+        name : str
+            arbitrary string, will be set to each Transformable object to distinguish it with others
         elements : List[dict]
             a list of boxes. Each element is a dict of box having the following format:
             elements[0] = {
@@ -771,15 +785,8 @@ class Bbox3D(SpatialTransformable):
             }
         dictionary : dict
             dictionary = {
-                'branch_0': {
-                    'classes': ['car', 'bus', 'pedestrain', ...],
-                    'attrs': []
-                }
-                'branch_1': {
-                    'classes': [],
-                    'attrs': []
-                }
-                ...
+                'classes': ['car', 'bus', 'pedestrain', ...],
+                'attrs': []
             }
         flip_aware_class_pairs : List[tuple]
             list of class pairs that are flip-aware
@@ -787,7 +794,7 @@ class Bbox3D(SpatialTransformable):
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
-        super().__init__()
+        super().__init__(name)
         self.elements = elements.copy()
         self.dictionary = dictionary.copy()
         self.remove_elements_not_recognized_by_dictionary()
@@ -795,7 +802,7 @@ class Bbox3D(SpatialTransformable):
         self.tensor_smith = tensor_smith
 
     def remove_elements_not_recognized_by_dictionary(self, **kwargs):
-        full_set_of_classes = {c for branch in self.dictionary.values() for c in branch['classes']}
+        full_set_of_classes = {c for c in self.dictionary['classes']}
         for i in range(len(self.elements) - 1, -1, -1):
             if self.elements[i]['class'] not in full_set_of_classes:
                 del self.elements[i]
@@ -861,11 +868,13 @@ class Bbox3D(SpatialTransformable):
 
 
 class Polyline3D(SpatialTransformable):
-    def __init__(self, elements: List[dict], dictionary: dict, flip_aware_class_pairs: List[tuple] = [], tensor_smith: "TensorSmith" = None):
+    def __init__(self, name: str, elements: List[dict], dictionary: dict, flip_aware_class_pairs: List[tuple] = [], tensor_smith: "TensorSmith" = None):
         """
 
         Parameters
         ----------
+        name : str
+            arbitrary string, will be set to each Transformable object to distinguish it with others
         elements : List[dict]
             a list of polylines. Each element is a dict of polyline having the following format:
             ```python
@@ -878,14 +887,8 @@ class Polyline3D(SpatialTransformable):
         dictionary : dict
             ```python
             dictionary = {
-                'branch_0': {
-                    'classes': ['car', 'bus', 'pedestrain', ...],
-                    'attrs': []
-                'branch_1': {
-                    'classes': [],
-                    'attrs': []
-                }
-                ...
+                'classes': ['car', 'bus', 'pedestrain', ...],
+                'attrs': []
             }
             ```
         flip_aware_class_pairs : List[tuple], default []
@@ -894,7 +897,7 @@ class Polyline3D(SpatialTransformable):
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
-        super().__init__()
+        super().__init__(name)
         self.elements = elements.copy()
         self.dictionary = dictionary.copy()
         self.remove_elements_not_recognized_by_dictionary()
@@ -902,7 +905,7 @@ class Polyline3D(SpatialTransformable):
         self.tensor_smith = tensor_smith
 
     def remove_elements_not_recognized_by_dictionary(self, **kwargs):
-        full_set_of_classes = {c for branch in self.dictionary.values() for c in branch['classes']}
+        full_set_of_classes = {c for c in self.dictionary['classes']}
         for i in range(len(self.elements) - 1, -1, -1):
             if self.elements[i]['class'] not in full_set_of_classes:
                 del self.elements[i]
@@ -935,10 +938,12 @@ class Polygon3D(Polyline3D):
 
 
 class ParkingSlot3D(SpatialTransformable):
-    def __init__(self, elements: List[dict], dictionary: dict, tensor_smith: "TensorSmith" = None):
+    def __init__(self, name: str, elements: List[dict], dictionary: dict, tensor_smith: "TensorSmith" = None):
         """
         Parameters
         ----------
+        name : str
+            arbitrary string, will be set to each Transformable object to distinguish it with others
         elements : List[dict]
             a list of polylines. Each element is a dict of polyline having the following format:
             ```python
@@ -952,23 +957,21 @@ class ParkingSlot3D(SpatialTransformable):
         dictionary : dict
             ```python
             dictionary = {
-                'branch': {
-                    'classes': ['class.parking.parking_slot'],
-                    'attrs': []
-                ...
+                'classes': ['class.parking.parking_slot'],
+                'attrs': []
             }
 
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
-        super().__init__()
+        super().__init__(name)
         self.elements = elements.copy()
         self.dictionary = dictionary.copy()
         self.tensor_smith = tensor_smith
         self.remove_elements_not_recognized_by_dictionary()
     
     def remove_elements_not_recognized_by_dictionary(self, **kwargs):
-        full_set_of_classes = {c for branch in self.dictionary.values() for c in branch['classes']}
+        full_set_of_classes = {c for c in self.dictionary['classes']}
         for i in range(len(self.elements) - 1, -1, -1):
             if self.elements[i]['class'] not in full_set_of_classes:
                 del self.elements[i]
@@ -997,11 +1000,13 @@ class ParkingSlot3D(SpatialTransformable):
 
 
 class EgoPose(SpatialTransformable):
-    def __init__(self, timestamp: str, rotation: np.ndarray, translation: np.ndarray, tensor_smith: "TensorSmith" = None):
+    def __init__(self, name: str, timestamp: str, rotation: np.ndarray, translation: np.ndarray, tensor_smith: "TensorSmith" = None):
         """The pose in 3D space of a given timestamp. 
 
         Parameters
         ----------
+        name : str
+            arbitrary string, will be set to each Transformable object to distinguish it with others
         timestamp : str
             corresponding timestamp of the pose
         rotation : np.ndarray
@@ -1011,7 +1016,7 @@ class EgoPose(SpatialTransformable):
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
-        super().__init__()
+        super().__init__(name)
         self.timestamp = timestamp
         self.rotation = rotation
         self.translation = translation.flatten()[:, None] # unify it to column vector
@@ -1045,30 +1050,6 @@ class EgoPoseSet(TransformableSet):
     transformable_cls = EgoPose
 
 
-
-class Trajectory(SpatialTransformable):
-    def __init__(self, trajectories: List[List[Tuple[np.ndarray, np.ndarray]]], tensor_smith: "TensorSmith" = None):
-        """Trajectory
-
-        Parameters
-        ----------
-        trajectories : List[List[Tuple[np.ndarray, np.ndarray]]]
-            Each trajectory is a list of poses, each pose is a tuple of (R, t), where R is of shape (3, 3) and t is of shape (3, 1)
-        tensor_smith : TensorSmith, optional
-            a tensor smith object, providing ToTensor for the transformable, by default None
-        """
-        super().__init__()
-        self.trajectories = trajectories
-        self.tensor_smith = tensor_smith
-
-    def flip_3d(self, **kwargs):
-        raise NotImplementedError
-    
-    def rotate_3d(self, **kwargs):
-        raise NotImplementedError
-
-
-
 class SegBev(SpatialTransformable):
     def flip_3d(self, **kwargs):
         raise NotImplementedError
@@ -1080,6 +1061,7 @@ class SegBev(SpatialTransformable):
 class OccSdfBev(SpatialTransformable):
     def __init__(
         self,
+        name: str, 
         src_view_range: dict,
         occ: np.ndarray,
         sdf: np.ndarray,
@@ -1099,6 +1081,8 @@ class OccSdfBev(SpatialTransformable):
 
         Parameters
         ----------
+        name : str
+            arbitrary string, will be set to each Transformable object to distinguish it with others
         src_view_range : dict
             view range of the bev view: [back, front, right, left, bottom, up], # in ego system
         occ : np.ndarray
@@ -1116,7 +1100,7 @@ class OccSdfBev(SpatialTransformable):
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
-        super().__init__()
+        super().__init__(name)
         self.src_view_range = src_view_range
         self.occ = occ
         self.sdf = sdf
@@ -1709,6 +1693,44 @@ class ScaleTime(Transform):
     pass
 
 
+# TODO: Implement this function for the model that relies on or need to predict objects' trajectory.
+def extract_trajectory_from_bbox3d(bbox3d_list: List[Bbox3D], ego_poses: EgoPoseSet) -> List[Dict[str, List[Tuple[np.ndarray, np.ndarray]]]]:
+    """Extract trajectory of each distinct obj_track_id from a list of Bbox3D. 
+
+    Parameters
+    ----------
+    bbox3d_list : List[Bbox3D]
+        a list of input Bbox3D in current group
+    ego_poses: EgoPoseSet
+        the ego-poses of current group
+    Returns
+    -------
+    List[Dict[str, List[Tuple[np.ndarray, np.ndarray]]]]
+        Trajectories of each object (i.e. obj_track_id) in each frame of the group. 
+        The return is of the same length as `bbox3d_list` and `ego_poses`.
+        Say we have 3 frames in current group, below is an examplar return: 
+            [
+                {
+                    "10000_0": [(R0, t0), (R1, t1), (R2, t2)],
+                    "10001_0": [(R0, t0), (R1, t1)],
+                },
+                {
+                    "10000_0": [(R0, t0), (R1, t1), (R2, t2)],
+                    "10001_0": [(R0, t0), (R1, t1)],
+                    "10002_0": [(R1, t1), (R2, t2)],
+                },
+                {
+                    "10000_0": [(R0, t0), (R1, t1), (R2, t2)],
+                    "10002_0": [(R1, t1), (R2, t2)],
+                },
+            ]
+    """
+    # Some initial thoughts and notes:
+    # 1. we have to traverse through all the bbox3d in `bbox3d_list` to created object_track_id centric representation
+    # 2. determine which trajectories to expose for each frame based on what object it has.
+    # 3. all poses of the same obj_track_id should be converted to current frame's ego-coordsys.
+    # 4. any one who want to use this function should overwrite __call__ in the model feeder class, because it needs cross-time info
+    pass
 
 
 available_transforms = [
@@ -1732,13 +1754,18 @@ available_transforms = [
     RandomSetExtrinsicParam, 
 ]
 
+available_transformables = [
+    CameraImage, CameraImageSet, CameraSegMask, CameraSegMaskSet,
+    CameraDepth, CameraDepthSet, LidarPoints, Bbox3D,
+    Polyline3D, Polygon3D, ParkingSlot3D, EgoPose,
+    EgoPoseSet, SegBev, OccSdfBev, OccSdf3D,
+]
+
 for transform in available_transforms:
     TRANSFORMS.register_module(module=transform)
 
+for transformable in available_transformables:
+    TRANSFORMABLES.register_module(module=transformable)
 
-__all__ = [t.__name__ for t in available_transforms] + [
-    "CameraImage", "CameraImageSet", "CameraSegMask", "CameraSegMaskSet",
-    "CameraDepth", "CameraDepthSet", "LidarPoints", "Bbox3D",
-    "Polyline3D", "Polygon3D", "ParkingSlot3D", "EgoPose",
-    "EgoPoseSet", "Trajectory", "SegBev", "OccSdfBev", "OccSdf3D",
-]
+
+__all__ = [t.__name__ for t in available_transforms] + [t.__name__ for t in available_transformables]

@@ -103,18 +103,6 @@ def build_transforms(transforms: List[Union[dict, "Transform"]]) -> List["Transf
     return built_transforms
 
 
-def build_tensor_smiths(tensor_smiths: Dict[str, Union[dict, "TensorSmith"]]) -> Dict[str, "TensorSmith"]: 
-    if tensor_smiths is None:
-        return {}
-    built_tensor_smiths = {}
-    for transformabel_key, tensor_smith in tensor_smiths.items():
-        tensor_smith = copy.deepcopy(tensor_smith)
-        if isinstance(tensor_smith, dict):
-            tensor_smith = TENSOR_SMITHS.build(tensor_smith)
-        built_tensor_smiths[transformabel_key] = tensor_smith
-    return built_tensor_smiths
-
-
 def build_model_feeder(model_feeder: Union["BaseModelFeeder", dict]) -> "BaseModelFeeder":
     if model_feeder is None:
         return MODEL_FEEDERS.build(dict(type='BaseModelFeeder'))

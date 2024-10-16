@@ -44,7 +44,7 @@ def test_transformableset_getattr():
     trb1, trb2 = Transformable([1, 2, 33]), Transformable([7, 8, -1])
     trb1.img = [1, 2, 33]
     trb2.img = [7, 8, -1]
-    ts = TransformableSet({"front": trb1, "back": trb2})
+    ts = TransformableSet("transformable_set", {"front": trb1, "back": trb2})
     assert ts.transformables["front"].img == [1, 2, 33]
     assert ts.transformables["back"].img == [7, 8, -1]
     ts.adjust_saturation(saturation=0.5)
@@ -57,7 +57,7 @@ def test_transformableset_wrong_transformable_type():
         pass
 
     with pytest.raises(TypeError):
-        _ = TransformableSet({"t1": T(), "t2": T()})
+        _ = TransformableSet("transformable_set", {"t1": T(), "t2": T()})
 
 
 @pytest.fixture
@@ -180,21 +180,21 @@ def get_image_related_data(dataset_info, cam_id, transformable_key):
 
 
 def test_camera_image_creation(dataset_info, img324, img325):
-    im1 = CameraImage("front", *get_image_related_data(dataset_info, "front", "camera_image"))
+    im1 = CameraImage("camera_image_front", "front", *get_image_related_data(dataset_info, "front", "camera_image"))
     assert im1.cam_id == "front"
     assert im1.cam_type == "PerspectiveCamera"
     np.testing.assert_almost_equal(im1.img, cv2.imread(img324))
 
-    im2 = CameraImage("back", *get_image_related_data(dataset_info, "back", "camera_image"))
+    im2 = CameraImage("camera_image_back", "back", *get_image_related_data(dataset_info, "back", "camera_image"))
     assert im2.cam_id == "back"
     assert im2.cam_type == "FisheyeCamera"
     np.testing.assert_almost_equal(im2.img, cv2.imread(img325))
 
 
 def test_camera_image_set(dataset_info, img324, img325):
-    im1 = CameraImage("front", *get_image_related_data(dataset_info, "front", "camera_image"))
-    im2 = CameraImage("back", *get_image_related_data(dataset_info, "back", "camera_image"))
-    im_set = CameraImageSet({"front": im1, "back": im2})
+    im1 = CameraImage("camera_image_front", "front", *get_image_related_data(dataset_info, "front", "camera_image"))
+    im2 = CameraImage("camera_image_back", "back", *get_image_related_data(dataset_info, "back", "camera_image"))
+    im_set = CameraImageSet("camera_image_set", {"front": im1, "back": im2})
     im_set.adjust_brightness(brightness=0.5)
     np.testing.assert_almost_equal(im_set.transformables["front"].img, (cv2.imread(img324) * 0.5).astype(np.uint8))
     np.testing.assert_almost_equal(im_set.transformables["back"].img, (cv2.imread(img325) * 0.5).astype(np.uint8))
@@ -202,9 +202,17 @@ def test_camera_image_set(dataset_info, img324, img325):
 
 def test_camera_image_seg_mask(dataset_info, seg324, seg325):
     seg1 = CameraSegMask(
-        "front", *get_image_related_data(dataset_info, "front", "camera_image_seg"), {"seg": ["a", "b"]}
+        "camera_seg_mask_front", 
+        "front", 
+        *get_image_related_data(dataset_info, "front", "camera_image_seg"), 
+        {"seg": ["a", "b"]}
     )
-    seg2 = CameraSegMask("back", *get_image_related_data(dataset_info, "back", "camera_image_seg"), {"seg": ["a", "b"]})
+    seg2 = CameraSegMask(
+        "camera_seg_mask_back", 
+        "back", 
+        *get_image_related_data(dataset_info, "back", "camera_image_seg"), 
+        {"seg": ["a", "b"]}
+    )
     np.testing.assert_almost_equal(seg1.img, cv2.imread(seg324))
     np.testing.assert_almost_equal(seg2.img, cv2.imread(seg325))
     assert seg1.dictionary == seg2.dictionary == {"seg": ["a", "b"]}
@@ -212,10 +220,18 @@ def test_camera_image_seg_mask(dataset_info, seg324, seg325):
 
 def test_camera_image_seg_mask_set(dataset_info):
     seg1 = CameraSegMask(
-        "front", *get_image_related_data(dataset_info, "front", "camera_image_seg"), {"seg": ["a", "b"]}
+        "camera_seg_mask_front", 
+        "front", 
+        *get_image_related_data(dataset_info, "front", "camera_image_seg"), 
+        {"seg": ["a", "b"]}
     )
-    seg2 = CameraSegMask("back", *get_image_related_data(dataset_info, "back", "camera_image_seg"), {"seg": ["a", "b"]})
-    seg_set = CameraSegMaskSet({"front": seg1, "back": seg2})
+    seg2 = CameraSegMask(
+        "camera_seg_mask_back", 
+        "back", 
+        *get_image_related_data(dataset_info, "back", "camera_image_seg"), 
+        {"seg": ["a", "b"]}
+    )
+    seg_set = CameraSegMaskSet("camera_seg_mask_set", {"front": seg1, "back": seg2})
     rotmat = np.array(
         [
             [0.5, 0.5, 0],
@@ -228,8 +244,8 @@ def test_camera_image_seg_mask_set(dataset_info):
 
 
 def test_camera_image_depth(dataset_info, img324, img325):
-    depth1 = CameraDepth("front", *get_image_related_data(dataset_info, "front", "camera_image_depth"), "d")
-    depth2 = CameraDepth("back", *get_image_related_data(dataset_info, "back", "camera_image_depth"), "z")
+    depth1 = CameraDepth("camera_depth_front", "front", *get_image_related_data(dataset_info, "front", "camera_image_depth"), "d")
+    depth2 = CameraDepth("camera_depth_back", "back", *get_image_related_data(dataset_info, "back", "camera_image_depth"), "z")
     np.testing.assert_almost_equal(depth1.img, cv2.imread(img324))
     np.testing.assert_almost_equal(depth2.img, cv2.imread(img325))
     assert depth1.depth_mode == "d"
@@ -237,9 +253,9 @@ def test_camera_image_depth(dataset_info, img324, img325):
 
 
 def test_camera_image_depth_set(dataset_info):
-    depth1 = CameraDepth("front", *get_image_related_data(dataset_info, "front", "camera_image_depth"), "d")
-    depth2 = CameraDepth("back", *get_image_related_data(dataset_info, "back", "camera_image_depth"), "z")
-    depth_set = CameraDepthSet({"front": depth1, "back": depth2})
+    depth1 = CameraDepth("camera_depth_front", "front", *get_image_related_data(dataset_info, "front", "camera_image_depth"), "d")
+    depth2 = CameraDepth("camera_depth_back", "back", *get_image_related_data(dataset_info, "back", "camera_image_depth"), "z")
+    depth_set = CameraDepthSet("camera_depth_set", {"front": depth1, "back": depth2})
     rotmat = np.array(
         [
             [0.5, 0.5, 0],
@@ -252,7 +268,7 @@ def test_camera_image_depth_set(dataset_info):
 
 
 def test_lidar_points_creation(dataset_info):
-    lidar_points = LidarPoints(np.array([[0, 0, 0], [1, 0, 1], [-1, -1, 0], [2, 3, 5]]), np.array([10, 20, 15, 5]))
+    lidar_points = LidarPoints("lidar_points", np.array([[0, 0, 0], [1, 0, 1], [-1, -1, 0], [2, 3, 5]]), np.array([10, 20, 15, 5]))
     flip_mat = np.array(
         [
             [-1, 0, 0],
@@ -359,7 +375,7 @@ def boxes_data2():
 
 
 def test_bbox3d_creation(boxes_data, dictionary):
-    bbox3d = Bbox3D(boxes_data, dictionary)
+    bbox3d = Bbox3D("bbox3d", boxes_data, dictionary['det'])
     bbox3d.rotate_3d(np.array([[0.5, 0.5, 0], [-0.5, 0.5, 1], [0, 0, 1]]))
     assert [ele["class"] for ele in bbox3d.elements] == ["class.vehicle.passenger_car", "class.pedestrian.pedestrian"]
     np.testing.assert_almost_equal(
@@ -368,7 +384,7 @@ def test_bbox3d_creation(boxes_data, dictionary):
 
 
 def test_bbox3d_get_corners(boxes_data2, dictionary):
-    bbox3d = Bbox3D(boxes_data2, dictionary)
+    bbox3d = Bbox3D("bbox3d", boxes_data2, dictionary['det'])
     np.testing.assert_almost_equal(bbox3d.corners, np.array([[
         [2.87867966, 3.29289322, -0.05],
         [4.29289322, 1.87867966, -0.05],
@@ -383,7 +399,7 @@ def test_bbox3d_get_corners(boxes_data2, dictionary):
 
 def test_bbox3d_flip_with_flip_aware_class_pairs(boxes_data, dictionary):
     flip_aware_class_pairs = [('class.pedestrian.pedestrian', 'class.pedestrian.flipped_pedestrian')]
-    bbox3d = Bbox3D(boxes_data, dictionary, flip_aware_class_pairs=flip_aware_class_pairs)
+    bbox3d = Bbox3D("bbox3d", boxes_data, dictionary['det'], flip_aware_class_pairs=flip_aware_class_pairs)
     flip_mat = np.eye(3)
     flip_mat[1, 1] = -1
     bbox3d.flip_3d(flip_mat)
@@ -436,7 +452,7 @@ def polyline_data():
 
 
 def test_polyline3d_creation(polyline_data, dictionary):
-    pl = Polyline3D(polyline_data, dictionary)
+    pl = Polyline3D("polyline_3d", polyline_data, dictionary['arrow'])
     pl.rotate_3d(np.array([[0.5, 0.5, 0], [-0.5, 0.5, 1], [0, 0, 1]]))
     assert [ele["class"] for ele in pl.elements] == ["class.parking.parking_slot"] * 2
     np.testing.assert_almost_equal(
@@ -454,7 +470,7 @@ def test_polyline3d_creation(polyline_data, dictionary):
 
 def test_polyline3d_flip_with_flip_aware_class_pairs(polyline_data, dictionary):
     flip_aware_class_pairs = [('class.parking.parking_slot', 'class.parking.parking_slot.flipped')]
-    pl = Polyline3D(polyline_data, dictionary, flip_aware_class_pairs=flip_aware_class_pairs)
+    pl = Polyline3D("polyline_3d", polyline_data, dictionary['arrow'], flip_aware_class_pairs=flip_aware_class_pairs)
     flip_mat = np.eye(3)
     flip_mat[1, 1] = -1
     pl.flip_3d(flip_mat)
@@ -511,13 +527,13 @@ def horizontal_parkslot():
 
 
 def test_parking_slot_3d_creation(vertical_parkslot, horizontal_parkslot, dictionary):
-    parking_slots = ParkingSlot3D(vertical_parkslot + horizontal_parkslot, dictionary)
+    parking_slots = ParkingSlot3D("parkingslot_3d", vertical_parkslot + horizontal_parkslot, dictionary['arrow'])
     assert [slot["class"] for slot in parking_slots.elements] == ["class.parking.parking_slot"] * 2
 
 
 
 def test_parking_slot_3d_flip_y_horizontal_slot(horizontal_parkslot, dictionary):
-    parking_slots = ParkingSlot3D(horizontal_parkslot, dictionary)
+    parking_slots = ParkingSlot3D("parkingslot_3d", horizontal_parkslot, dictionary['arrow'])
     assert [ele["class"] for ele in parking_slots.elements] == ["class.parking.parking_slot"]
     parking_slots.flip_3d(np.array(
         [[1, 0, 0], 
@@ -529,7 +545,7 @@ def test_parking_slot_3d_flip_y_horizontal_slot(horizontal_parkslot, dictionary)
 
 
 def test_parking_slot_3d_flip_x_horizontal_slot(horizontal_parkslot, dictionary):
-    parking_slots = ParkingSlot3D(horizontal_parkslot, dictionary)
+    parking_slots = ParkingSlot3D("parkingslot_3d", horizontal_parkslot, dictionary['arrow'])
     assert [ele["class"] for ele in parking_slots.elements] == ["class.parking.parking_slot"]
     parking_slots.flip_3d(np.array(
         [[-1, 0, 0], 
@@ -542,7 +558,7 @@ def test_parking_slot_3d_flip_x_horizontal_slot(horizontal_parkslot, dictionary)
 
 
 def test_parking_slot_3d_flip_y_vertical_slot(vertical_parkslot, dictionary):
-    parking_slots = ParkingSlot3D(vertical_parkslot, dictionary)
+    parking_slots = ParkingSlot3D("parkingslot_3d", vertical_parkslot, dictionary["arrow"])
     assert [ele["class"] for ele in parking_slots.elements] == ["class.parking.parking_slot"]
     parking_slots.flip_3d(np.array(
         [[1, 0, 0], 
@@ -555,7 +571,7 @@ def test_parking_slot_3d_flip_y_vertical_slot(vertical_parkslot, dictionary):
 
 
 def test_parking_slot_3d_flip_x_vertical_slot(vertical_parkslot, dictionary):
-    parking_slots = ParkingSlot3D(vertical_parkslot, dictionary)
+    parking_slots = ParkingSlot3D("parkingslot_3d", vertical_parkslot, dictionary["arrow"])
     assert [ele["class"] for ele in parking_slots.elements] == ["class.parking.parking_slot"]
     parking_slots.flip_3d(np.array(
         [[-1, 0, 0], 
@@ -567,7 +583,7 @@ def test_parking_slot_3d_flip_x_vertical_slot(vertical_parkslot, dictionary):
 
 
 def test_parking_slot_3d_flip_y_multiple_slots(vertical_parkslot, horizontal_parkslot, dictionary):
-    parking_slots = ParkingSlot3D(vertical_parkslot + horizontal_parkslot, dictionary)
+    parking_slots = ParkingSlot3D("parkingslot_3d", vertical_parkslot + horizontal_parkslot, dictionary["arrow"])
     assert [ele["class"] for ele in parking_slots.elements] == ["class.parking.parking_slot"] * 2
     parking_slots.flip_3d(np.array(
         [[1, 0, 0], 
@@ -582,6 +598,7 @@ def test_parking_slot_3d_flip_y_multiple_slots(vertical_parkslot, horizontal_par
 @pytest.fixture
 def occ_sdf_bev():
     return OccSdfBev(
+        "occ_sdf_bev",
         src_view_range=[-50, 50, -50, 50, -2, 2],
         occ=np.array([
             [[1, 1, 1, 0],
@@ -637,12 +654,12 @@ def test_occ_sdf_bev_flip_y(occ_sdf_bev):
 
 @pytest.fixture()
 def pose0():
-    return EgoPose(1, np.eye(3), np.array([[1, -1, -1.9]]))
+    return EgoPose("ego_pose", 1, np.eye(3), np.array([[1, -1, -1.9]]))
 
 
 @pytest.fixture()
 def pose1():
-    return EgoPose(2, np.array(
+    return EgoPose("ego_pose", 2, np.array(
         [[0.8660254,       0.5, 0], 
          [     -0.5, 0.8660254, 0], 
          [        0,         0, 1]]), 

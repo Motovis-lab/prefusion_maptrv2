@@ -36,7 +36,7 @@ class StreamPETRModelFeeder(BaseModelFeeder):
         """
         processed_frame_batch = []
         for frame in frame_batch:
-            processed_frame = dict(index_info=frame["index_info"], **frame["transformables"])
+            processed_frame = dict(index_info=frame["index_info"], **{t.name: t for t in frame["transformables"]})
             processed_frame["meta_info"] = {}
             for k, trnsfmb in processed_frame.items():
                 if isinstance(trnsfmb, CameraImageSet):
