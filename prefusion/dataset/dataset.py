@@ -557,7 +557,7 @@ class GroupBatchDataset(Dataset):
             return points_output
 
         points = read_pcd(self.data_root / frame["lidar_points"]["lidar1"])
-        Twe = Rt2T(frame["ego_pose"][0], frame['ego_pose'][1])
+        Twe = Rt2T(frame["ego_pose"]["rotation"], frame['ego_pose']["translation"])
         Tew = np.linalg.inv(Twe)
         ts = float(Path(frame["lidar_points"]["lidar1"]).stem) / 1000
         output_points = [points]

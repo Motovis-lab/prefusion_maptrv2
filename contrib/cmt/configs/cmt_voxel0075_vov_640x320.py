@@ -71,27 +71,42 @@ train_dataloader = dict(
         data_root="/ssd1/data/4d",
         # info_path="/ssd1/data/4d/mv4d_infos_mini_lidar.pkl",
         info_path="/ssd1/data/4d/mv4d_infos_tmp_mini.pkl",
-        dictionaries={
-            "camera_images": {},
-            "bbox_3d": {"det": {"classes": det_classes}},
-            "lidar_points": {},
-        },
-        tensor_smiths=dict(
-            camera_images=dict(
-                type="CameraImageTensor",
-                # means=[123.675, 116.280, 103.530],
-                # stds=[58.395, 57.120, 57.375],
-                means=[103.530, 116.280, 123.675],
-                stds=[57.375, 57.120, 58.395]
+        transformables=[
+            dict(
+                name="camera_images",
+                # arbitrary string, will be set to each Transformable object to distinguish it with others
+                transformable_key="camera_images",
+                # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
+                tensor_smith=dict(
+                    type="CameraImageTensor",
+                    means=[123.675, 116.280, 103.530],
+                    stds=[58.395, 57.120, 57.375],
+                )
             ),
-            bbox_3d=dict(type="Bbox3D_XYZ_LWH_Yaw_VxVy", classes=det_classes),
-            lidar_points=dict(type="PointsToVoxelsTensor", voxel_size=voxel_size,
+            dict(
+                name="bbox_3d",
+                # arbitrary string, will be set to each Transformable object to distinguish it with others
+                transformable_key="bbox_3d",
+                # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
+                dictionary={"classes": det_classes},
+                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes),
+            ),
+            dict(
+                name="ego_poses",
+                # arbitrary string, will be set to each Transformable object to distinguish it with others
+                transformable_key="ego_poses",
+                # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
+            ),
+            dict(
+                name="lidar_points",
+                transformable_key="lidar_points",
+                tensor_smith=dict(type="PointsToVoxelsTensor", voxel_size=voxel_size,
                               max_point_per_voxel=10, max_voxels=120000,
                               max_input_points=1200000,
                               point_cloud_range=[-54.0, -54.0, -5.0, 54.0, 54.0, 3.0]),
-        ), # TODO different num in train/val phase in tensor smith
+            ),
+        ],
         model_feeder=dict(type="CMTModelFeeder"),
-        transformable_keys=["camera_images", "bbox_3d", "ego_poses", 'lidar_points'],
         transforms=[
             dict(type="RenderIntrinsic", resolutions=resolutions),
             dict(type="RandomMirrorSpace", prob=0.5, scope="group"),
@@ -99,7 +114,6 @@ train_dataloader = dict(
                 type="RandomImageISP",
                 prob=0.5,
             ),
-
         ],
         phase="train",
         batch_size=2,
