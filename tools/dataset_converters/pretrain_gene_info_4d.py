@@ -24,6 +24,8 @@ from contrib.fastbev_det.models.utils.virtual_camera import render_image, Perspe
     pcd_lidar_point, read_pcd_lidar, load_point_cloud, render_image_with_src_camera_points
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import shutil
+
 
 
 def convert_virtual_camera(src_camear_root, save_img_root, save_mask_root, real_cam_model, v_cam_paramter, calib_back, W=1280, H=960):
@@ -175,7 +177,7 @@ if __name__ == "__main__":
         cam11_timestamps = list(sorted((P(scene_root) / P("camera/camera11")).glob("*.jpg")))
         all_timestamps = sorted(list(set([x.stem for x in lidar_timestamps]) & set([x.stem for x in cam1_timestamps]) 
                               & set([x.stem for x in cam5_timestamps]) & set([x.stem for x in cam8_timestamps]) & set([x.stem for x in cam11_timestamps])))
-        all_timestamps = ['1693298281964']
+        # all_timestamps = ['1693298281964']
         scene_info = {}
         scene_info["scene_info"] = {}
         scene_info["scene_info"]['camera_mask'] = {
@@ -240,7 +242,7 @@ if __name__ == "__main__":
                 "camera_image_seg": camera_img_seg, 
                 "camera_image_depth": camera_image_depth
             }
-            break
+            
         scene_info.update({'frame_info': frame_info})
     scene_infos[scene_name] = scene_info
     mmengine.dump(scene_infos, f"{dump_root}/mv_4d_infos_{scene_names[0]}.pkl")
