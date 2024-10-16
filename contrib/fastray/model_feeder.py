@@ -155,6 +155,12 @@ class FastRayModelFeeder(BaseModelFeeder):
                 )
         processed_frame_batch['delta_poses'] = torch.stack(processed_frame_batch['delta_poses'])
         for transformable_name, tensor_data in anno_batch_dict.items():
-            for task_name, task_tensor_data in tensor_data.items():
-                anno_batch_dict[transformable_name][task_name] = torch.stack(task_tensor_data)
+            # stack known one-sub-layer tensor_dict
+            if isinstance(tensor_data, dict):
+                for task_name, task_tensor_data in tensor_data.items():
+                    if isinstance(task_tensor_data, torch.Tensor):
+                        anno_batch_dict[transformable_name][task_name] = torch.stack(task_tensor_data)
+            # stack tensor batches
+            elif isinstance(tensor_data, torch.Tensor):
+                anno_batch_dict[transformable_name] = torch.stack(tensor_data)
         return processed_frame_batch
