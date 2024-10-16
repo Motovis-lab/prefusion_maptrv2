@@ -61,7 +61,7 @@ train_dataloader = dict(
             dict(
                 name="bbox_3d", # arbitrary string, will be set to each Transformable object to distinguish it with others
                 transformable_key="bbox_3d",  # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
-                dictionary={"det": {"classes": det_classes}},
+                dictionary={"classes": det_classes},
                 tensor_smith=dict(type="Bbox3DBasic", classes=det_classes),
             ),
             dict(

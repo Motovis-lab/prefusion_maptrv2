@@ -114,21 +114,15 @@ CLASSES = ['class.vehicle.passenger_car', 'class.traffic_facility.box', 'class.t
            'class.road_marker.arrow', 'class.traffic_facility.speed_bump', 'class.parking.wheel_stopper',\
            'class.parking.indoor_column']
 
-bbox3d = dict(
-    branch_0=dict(classes=['class.vehicle.passenger_car', 'class.traffic_facility.box', 'class.traffic_facility.soft_barrier', 'class.traffic_facility.hard_barrier'], attrs=[['attr.vehicle.is_door_open', 'attr.vehicle.is_trunk_open'], [], [], []])
-)
+bbox3d = dict(classes=['class.vehicle.passenger_car', 'class.traffic_facility.box', 'class.traffic_facility.soft_barrier', 'class.traffic_facility.hard_barrier'], attrs=[['attr.vehicle.is_door_open', 'attr.vehicle.is_trunk_open'], [], [], []])
 
-BboxBev = dict(
-    branch_0=dict(classes=['class.road_marker.arrow', 'class.traffic_facility.speed_bump', 'class.parking.wheel_stopper'], attrs=[[], [], []]),
-)
+BboxBev = dict(classes=['class.road_marker.arrow', 'class.traffic_facility.speed_bump', 'class.parking.wheel_stopper'], attrs=[[], [], []])
 
 Cylinder3D = dict(
 
 )
 
-Square3D = dict(
-    branch_0=dict(classes=['class.parking.indoor_column'], attrs=[['attr.parking.indoor_column.shape']])
-)
+Square3D = dict(classes=['class.parking.indoor_column'], attrs=[['attr.parking.indoor_column.shape']])
 
 # collection_info_type = ['camera_images','camera_depths', 'mono_input_data', 'bbox_3d', 'bbox_bev', 'square_3d']
 collection_info_type = ['camera_images','camera_depths', 'bbox_3d', 'bbox_bev', 'square_3d']

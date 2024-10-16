@@ -61,7 +61,7 @@ def test_fastray_model_feeder():
         voxel_range=voxel_feature_config['voxel_range'],
     )
     bbox3d = Bbox3D(
-        "bbox_3d",
+        "bbox_3d_0",
         elements=[
             {
                 'class': 'car',
@@ -80,26 +80,18 @@ def test_fastray_model_feeder():
                 ]),
             },
         ],
-        dictionary={'branch_0': {'classes': ['car']}},
+        dictionary={'classes': ['car']},
         tensor_smith=pbox3d
     )
     bbox3d.to_tensor()
     frame_batch = [
         dict(
             index_info = index_infos[0],
-            transformables = dict(
-                camera_images=camera_images,
-                ego_poses=ego_poses,
-                bbox_3d=bbox3d
-            )
+            transformables = [camera_images, ego_poses, bbox3d]
         ), 
         dict(
             index_info = index_infos[1],
-            transformables = dict(
-                camera_images=camera_images,
-                ego_poses=ego_poses,
-                bbox_3d=bbox3d
-            )
+            transformables = [camera_images, ego_poses, bbox3d]
         )
     ]
     model_feeder = FastRayModelFeeder(
@@ -108,4 +100,4 @@ def test_fastray_model_feeder():
     processed_frame_batch = model_feeder.process(frame_batch)
     assert processed_frame_batch['camera_tensors']['cam_6'].shape == (2, 3, 720, 1280)
     assert processed_frame_batch['camera_lookups']['cam_6']['uu'].shape == (2, 6*320*160)
-    assert processed_frame_batch['annotations']['bbox_3d']['branch_0']['reg'].shape == (2, 20, 320, 160)
+    assert processed_frame_batch['annotations']['bbox_3d_0']['reg'].shape == (2, 20, 320, 160)

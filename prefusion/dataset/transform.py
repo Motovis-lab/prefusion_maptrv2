@@ -785,15 +785,8 @@ class Bbox3D(SpatialTransformable):
             }
         dictionary : dict
             dictionary = {
-                'branch_0': {
-                    'classes': ['car', 'bus', 'pedestrain', ...],
-                    'attrs': []
-                }
-                'branch_1': {
-                    'classes': [],
-                    'attrs': []
-                }
-                ...
+                'classes': ['car', 'bus', 'pedestrain', ...],
+                'attrs': []
             }
         flip_aware_class_pairs : List[tuple]
             list of class pairs that are flip-aware
@@ -809,7 +802,7 @@ class Bbox3D(SpatialTransformable):
         self.tensor_smith = tensor_smith
 
     def remove_elements_not_recognized_by_dictionary(self, **kwargs):
-        full_set_of_classes = {c for branch in self.dictionary.values() for c in branch['classes']}
+        full_set_of_classes = {c for c in self.dictionary['classes']}
         for i in range(len(self.elements) - 1, -1, -1):
             if self.elements[i]['class'] not in full_set_of_classes:
                 del self.elements[i]
@@ -894,14 +887,8 @@ class Polyline3D(SpatialTransformable):
         dictionary : dict
             ```python
             dictionary = {
-                'branch_0': {
-                    'classes': ['car', 'bus', 'pedestrain', ...],
-                    'attrs': []
-                'branch_1': {
-                    'classes': [],
-                    'attrs': []
-                }
-                ...
+                'classes': ['car', 'bus', 'pedestrain', ...],
+                'attrs': []
             }
             ```
         flip_aware_class_pairs : List[tuple], default []
@@ -918,7 +905,7 @@ class Polyline3D(SpatialTransformable):
         self.tensor_smith = tensor_smith
 
     def remove_elements_not_recognized_by_dictionary(self, **kwargs):
-        full_set_of_classes = {c for branch in self.dictionary.values() for c in branch['classes']}
+        full_set_of_classes = {c for c in self.dictionary['classes']}
         for i in range(len(self.elements) - 1, -1, -1):
             if self.elements[i]['class'] not in full_set_of_classes:
                 del self.elements[i]
@@ -970,10 +957,8 @@ class ParkingSlot3D(SpatialTransformable):
         dictionary : dict
             ```python
             dictionary = {
-                'branch': {
-                    'classes': ['class.parking.parking_slot'],
-                    'attrs': []
-                ...
+                'classes': ['class.parking.parking_slot'],
+                'attrs': []
             }
 
         tensor_smith : TensorSmith, optional
@@ -986,7 +971,7 @@ class ParkingSlot3D(SpatialTransformable):
         self.remove_elements_not_recognized_by_dictionary()
     
     def remove_elements_not_recognized_by_dictionary(self, **kwargs):
-        full_set_of_classes = {c for branch in self.dictionary.values() for c in branch['classes']}
+        full_set_of_classes = {c for c in self.dictionary['classes']}
         for i in range(len(self.elements) - 1, -1, -1):
             if self.elements[i]['class'] not in full_set_of_classes:
                 del self.elements[i]
