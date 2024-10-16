@@ -57,9 +57,13 @@ class CameraImageTensor(TensorSmith):
         self.stds = stds
 
     def __call__(self, transformable: CameraImage):
+        ego_mask = torch.tensor(transformable.ego_mask)
+        if ego_mask.max() == 255:
+            ego_mask /= 255
+
         tensor_dict = dict(
             img=torch.tensor((np.float32(transformable.img.transpose(2, 0, 1)) - self.means) / self.stds),
-            ego_mask=torch.tensor(transformable.ego_mask),
+            ego_mask=ego_mask,
         )
         return tensor_dict
 

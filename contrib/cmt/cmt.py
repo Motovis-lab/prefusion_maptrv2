@@ -239,6 +239,7 @@ class CmtDetector(MVXTwoStageDetector):
         if self.training:
             return self.forward_train(*args, **kwargs)
         else:
+            # return self.forward_test(*args, **kwargs['inputs'][0][0])
             return self.forward_test(*args, **kwargs)
 
     def init_weights(self):
@@ -445,10 +446,10 @@ class CmtDetector(MVXTwoStageDetector):
             loss += v.sum()
         return {'easy_loss': loss}
 
-    def forward_test(self,
-                     points=None,
-                     img_metas=None,
-                     img=None, **kwargs):
+    def forward_test(self, *,
+                     index_info=None, camera_images=None, bbox_3d=None, ego_poses=None, meta_info=None,
+                     lidar_points=None,
+                     **kwargs):
         """
         Args:
             points (list[torch.Tensor]): the outer list indicates test-time
@@ -462,16 +463,23 @@ class CmtDetector(MVXTwoStageDetector):
                 torch.Tensor should have a shape NxCxHxW, which contains
                 all images in the batch. Defaults to None.
         """
-        if points is None:
-            points = [None]
-        if img is None:
-            img = [None]
-        for var, name in [(points, 'points'), (img, 'img'), (img_metas, 'img_metas')]:
-            if not isinstance(var, list):
-                raise TypeError('{} must be a list, but got {}'.format(
-                    name, type(var)))
 
-        return self.simple_test(points[0], img_metas[0], img[0], **kwargs)
+        # lidar_points = lidar_points
+        # camera_images = camera_images
+        # bbox_3d = bbox_3d
+        # meta_info = meta_info
+        # lidar_points = [lidar_poitns]
+        imgs = torch.stack(camera_images)
+        img_metas = [i for i in meta_info]
+        for meta, bbox, img in zip(img_metas, bbox_3d, imgs):
+            meta['gt_bboxes_3d'] = BaseInstance3DBoxes(bbox[:, :9], box_dim=9)
+            meta['gt_labels_3d'] = meta['bbox_3d']['classes']
+            meta['pad_shape'] = [[img.shape[-2], img.shape[-1], 3]]
+            meta['cam_inv_poly'] = meta['camera_images']['cam_inv_poly']
+            meta['cam_intrinsic'] = meta['camera_images']['intrinsic']
+            meta['lidar2cam'] = meta['camera_images']['extrinsic']
+
+        return self.simple_test(lidar_points, img_metas, imgs, **kwargs)
 
     # @force_fp32(apply_to=('x', 'x_img'))
     def simple_test_pts(self, x, x_img, img_metas, rescale=False):
@@ -488,7 +496,7 @@ class CmtDetector(MVXTwoStageDetector):
         return bbox_results
 
     def simple_test(self, points, img_metas, img=None, rescale=False, **kwargs):
-        img_feats, pts_feats = self.extract_feat({'points': points, 'imgs': img}, img_metas)
+        img_feats, pts_feats = self.extract_feat( points,img, img_metas)
         if pts_feats is None:
             pts_feats = [None]
         if img_feats is None:

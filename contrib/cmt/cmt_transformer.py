@@ -90,7 +90,7 @@ class CmtTransformer(BaseModule):
         rv_memory = rearrange(x_img, "(bs v) c h w -> (v h w) bs c", bs=bs)
         bev_pos_embed = bev_pos_embed.unsqueeze(1).repeat(1, bs, 1)  # [bs, n, c, h, w] -> [n*h*w, bs, c]
         rv_pos_embed = rearrange(rv_pos_embed, "(bs v) h w c -> (v h w) bs c", bs=bs)
-
+        # why the two different shape.
         memory, pos_embed = torch.cat([bev_memory, rv_memory], dim=0), torch.cat([bev_pos_embed, rv_pos_embed], dim=0)
         query_embed = query_embed.transpose(0, 1)  # [num_query, dim] -> [num_query, bs, dim]
         mask = memory.new_zeros(bs, memory.shape[0])  # [bs, n, h, w] -> [bs, n*h*w]
@@ -106,7 +106,7 @@ class CmtTransformer(BaseModule):
             key_padding_mask=mask,
             attn_masks=[attn_masks, None],
             reg_branch=reg_branch,
-        )
+        )  # memory, pos_embed
         out_dec = out_dec.transpose(1, 2)
         return out_dec, memory
 
