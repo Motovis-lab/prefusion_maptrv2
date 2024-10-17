@@ -295,16 +295,13 @@ class GroupBatchDataset(Dataset):
     """
 
     # TODO: implement visualization?
+    # mapping of transformable keys to their corresponding transformable_cls
     AVAILABLE_TRANSFORMABLE_KEYS = (
         "camera_images",
         "camera_segs",
         "camera_depths",
         "lidar_points",
         "bbox_3d",
-        "bbox_bev",
-        "square_3d",
-        "cylinder_3d",
-        "oriented_cylinder_3d",
         "polyline_3d",
         "polygon_3d",
         "parkingslot_3d",
@@ -319,7 +316,7 @@ class GroupBatchDataset(Dataset):
         name,
         data_root: Union[str, Path],
         info_path: Union[str, Path],
-        transformables: List[dict],
+        transformables: dict,
         transforms: List[Union[dict, "Transform"]] = None,
         model_feeder: Union["BaseModelFeeder", dict] = None,
         phase: str = "train",
@@ -338,7 +335,7 @@ class GroupBatchDataset(Dataset):
         - name (str): Name of the dataset.
         - data_root (str): Root directory of the dataset.
         - info_path (str): Path to the information file.
-        - transformables (list): List of transformable definitions, in which, each element's transformable_key must be in AVAILABLE_TRANSFORMABLE_KEYS.
+        - transformables (dict): Dict of transformable definitions, in which, each element's type must be in AVAILABLE_TRANSFORMABLE_KEYS.
         - transforms (list): Transform classes for preprocessing transformables. Build by TRANSFORMS.
         - phase (str): Specifies the phase ('train', 'val', 'test' or 'test_scene_by_scene') of the dataset; default is 'train'.
         - indices_path (str, optional): Specified file of indices to load; if None, all frames are automatically fetched from the info_path.
@@ -363,7 +360,7 @@ class GroupBatchDataset(Dataset):
         self.phase = phase.lower()
         self.info = mmengine.load(str(info_path))
         self.transformables = transformables
-        self._assert_availability([t.transformable_key for t in self.transformables])
+        self._assert_availability([self.transformables[name]['type'] for name in self.transformables])
         self.transforms = build_transforms(transforms)
         self.model_feeder = build_model_feeder(model_feeder)
 
@@ -429,13 +426,12 @@ class GroupBatchDataset(Dataset):
         )
 
     def load_all_transformables(self, index_info: IndexInfo) -> dict:
-        all_transformables = []
-        for transformable_cfg in self.transformables:
-            _t_cfg = copy.deepcopy(transformable_cfg) # transformable_cfg is the raw dict (no mmengine build is applied)
-            key = _t_cfg.pop("transformable_key")
-            name = _t_cfg.pop("name")
+        all_transformables = {}
+        for name in self.transformables:
+            _t_cfg = copy.deepcopy(self.transformables[name])
+            key = _t_cfg.pop("type")
             tensor_smith = self._build_tensor_smith(_t_cfg.pop("tensor_smith")) if "tensor_smith" in _t_cfg else None
-            all_transformables.append(eval(f"self.load_{key}")(name, index_info, tensor_smith=tensor_smith, **_t_cfg))
+            all_transformables[name] = eval(f"self.load_{key}")(name, index_info, tensor_smith=tensor_smith, **_t_cfg)
         return all_transformables
 
     @staticmethod
@@ -489,7 +485,7 @@ class GroupBatchDataset(Dataset):
             group_seed = int.from_bytes(os.urandom(2), byteorder="big")
             for input_dict in group_of_inputs:
                 frame_seed = int.from_bytes(os.urandom(2), byteorder="big")
-                transformables = input_dict["transformables"]
+                transformables = input_dict["transformables"].values()
                 for transform in self.transforms:
                     transform(*transformables, seeds={"group": group_seed, "batch": batch_seed, "frame": frame_seed})
 
@@ -569,30 +565,6 @@ class GroupBatchDataset(Dataset):
         return CameraDepthSet(name, camera_depths)
 
     def load_bbox_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> Bbox3D:
-        scene = self.info[index_info.scene_id]
-        frame = scene["frame_info"][index_info.frame_id]
-        elements = frame["3d_boxes"]
-        return Bbox3D(name, elements, dictionary, tensor_smith=tensor_smith)
-
-    def load_bbox_bev(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> Bbox3D:
-        scene = self.info[index_info.scene_id]
-        frame = scene["frame_info"][index_info.frame_id]
-        elements = frame["3d_boxes"]
-        return Bbox3D(name, elements, dictionary, tensor_smith=tensor_smith)
-
-    def load_square_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> Bbox3D:
-        scene = self.info[index_info.scene_id]
-        frame = scene["frame_info"][index_info.frame_id]
-        elements = frame["3d_boxes"]
-        return Bbox3D(name, elements, dictionary, tensor_smith=tensor_smith)
-
-    def load_cylinder_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> Bbox3D:
-        scene = self.info[index_info.scene_id]
-        frame = scene["frame_info"][index_info.frame_id]
-        elements = frame["3d_boxes"]
-        return Bbox3D(name, elements, dictionary, tensor_smith=tensor_smith)
-
-    def load_oriented_cylinder_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> Bbox3D:
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         elements = frame["3d_boxes"]

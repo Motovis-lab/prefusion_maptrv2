@@ -87,11 +87,19 @@ def test_fastray_model_feeder():
     frame_batch = [
         dict(
             index_info = index_infos[0],
-            transformables = [camera_images, ego_poses, bbox3d]
+            transformables = {
+                'camera_images': camera_images, 
+                'ego_poses': ego_poses, 
+                'bbox_3d_0': bbox3d
+            }
         ), 
         dict(
             index_info = index_infos[1],
-            transformables = [camera_images, ego_poses, bbox3d]
+            transformables = {
+                'camera_images': camera_images, 
+                'ego_poses': ego_poses, 
+                'bbox_3d_0': bbox3d
+            }
         )
     ]
     model_feeder = FastRayModelFeeder(
