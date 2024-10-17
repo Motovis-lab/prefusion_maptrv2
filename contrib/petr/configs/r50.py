@@ -48,27 +48,18 @@ train_dataloader = dict(
             type="StreamPETRModelFeeder",
             visible_range=point_cloud_range,
         ),
-        transformables=[
-            dict(
-                name="camera_images",  # arbitrary string, will be set to each Transformable object to distinguish it with others
-                transformable_key="camera_images",  # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
+        transformables=dict(
+            camera_images=dict(
+                type="camera_images", 
                 tensor_smith=dict(
                     type="CameraImageTensor",
                     means=[123.675, 116.280, 103.530],
-                    stds=[58.395, 57.120, 57.375],
-                )
-            ),
-            dict(
-                name="bbox_3d", # arbitrary string, will be set to each Transformable object to distinguish it with others
-                transformable_key="bbox_3d",  # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
-                dictionary={"classes": det_classes},
-                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes),
-            ),
-            dict(
-                name="ego_poses", # arbitrary string, will be set to each Transformable object to distinguish it with others
-                transformable_key="ego_poses", # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
-            ),
-        ],
+                    stds=[58.395, 57.120, 57.375])),
+            bbox_3d=dict(type="bbox_3d", 
+                         dictionary={"classes": det_classes},
+                         tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
+            ego_poses=dict(type="ego_poses")
+        ),
         transforms=[
             # dict(type="RandomMirrorSpace", prob=0.5, scope="group"),
             dict(
