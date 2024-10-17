@@ -119,13 +119,13 @@ CLASSES = [
 ]
 
 Bbox3d = dict(
-        classes=[
-        'class.vehicle.passenger_car', 'class.vehicle.bus', 'class.vehicle.truck', 'class.vehicle.ambulance', 'class.vehicle.fire_engine', 'class.cycle.tricycle', \
-        'class.cycle.motorcycle', 'class.cycle.bicycle', 'class.wheeled_push_device.cleaning_cart', 'class.wheeled_push_device.stroller', 'class.wheeled_push_device.shopping_cart', \
-        'class.wheeled_push_device.scooter', 'class.animal.animal', 'class.traffic_facility.bollard', 'class.traffic_facility.box', 'class.traffic_facility.cone',  'class.traffic_facility.soft_barrier',\
-        'class.traffic_facility.hard_barrier', 'class.traffic_facility.speed_bump', 'class.traffic_facility.gate_barrier', 'class.sign.traffic_sign', 'class.parking.indoor_column',\
-        'class.parking.parking_guide', 'class.parking.charging_infra', 'class.parking.parking_lock', 'class.parking.wheel_stopper'], 
-        attrs=[['attr.vehicle.is_door_open', 'attr.vehicle.is_trunk_open'], [], [], []]
+    classes=[
+    'class.vehicle.passenger_car', 'class.vehicle.bus', 'class.vehicle.truck', 'class.vehicle.ambulance', 'class.vehicle.fire_engine', 'class.cycle.tricycle', \
+    'class.cycle.motorcycle', 'class.cycle.bicycle', 'class.wheeled_push_device.cleaning_cart', 'class.wheeled_push_device.stroller', 'class.wheeled_push_device.shopping_cart', \
+    'class.wheeled_push_device.scooter', 'class.animal.animal', 'class.traffic_facility.bollard', 'class.traffic_facility.box', 'class.traffic_facility.cone',  'class.traffic_facility.soft_barrier',\
+    'class.traffic_facility.hard_barrier', 'class.traffic_facility.speed_bump', 'class.traffic_facility.gate_barrier', 'class.sign.traffic_sign', 'class.parking.indoor_column',\
+    'class.parking.parking_guide', 'class.parking.charging_infra', 'class.parking.parking_lock', 'class.parking.wheel_stopper'], 
+    attrs=[['attr.vehicle.is_door_open', 'attr.vehicle.is_trunk_open'], [], [], []]
 )
 
 BboxBev = dict(classes=['class.road_marker.arrow', 'class.parking.access_aisle', 'class.road_marker.text', 'class.parking.text_icon'], attrs=[[], [], [], []])
@@ -136,7 +136,7 @@ Cylinder3D = dict(
 
 Square3D = dict(classes=['class.pedestiran.pedestiran'], attrs=[[]])
 
-collection_info_type = ['camera_images','camera_depths', 'bbox_3d', 'bbox_bev', 'square_3d']
+transformable_name = ['camera_images','camera_depths', 'bbox_3d', 'bbox_bev', 'square_3d']
 
 dictionary=dict(
         bbox_3d=Bbox3d,
@@ -156,8 +156,13 @@ train_dataloader = dict(
         name="mv_4d",
         data_root=data_root,
         info_path=data_root + 'mv_4d_infos_val.pkl',
-        dictionaries=dictionary,
-        transformable_keys=collection_info_type,
+        transformables={
+            "camera_images": dict(type="camera_images"),
+            "camera_depths": dict(type="camera_depths"),
+            "bbox_3d": dict(type="bbox_3d", dictionary=Bbox3d),
+            "bbox_bev": dict(type="bbox_3d", dictionary=BboxBev),
+            "square_3d": dict(type="bbox_3d", dictionary=Square3D),
+        },
         transforms=train_pipeline,
         phase='train',
         batch_size=batch_size, 
@@ -177,8 +182,13 @@ val_dataloader = dict(
         name="mv_4d",
         data_root=data_root,
         info_path=data_root + 'mv_4d_infos_val.pkl',
-        dictionaries=dictionary,
-        transformable_keys=collection_info_type,
+        transformables={
+            "camera_images": dict(type="camera_images"),
+            "camera_depths": dict(type="camera_depths"),
+            "bbox_3d": dict(type="bbox_3d", dictionary=Bbox3d),
+            "bbox_bev": dict(type="bbox_3d", dictionary=BboxBev),
+            "square_3d": dict(type="bbox_3d", dictionary=Square3D),
+        },
         transforms=val_pipeline,
         phase='val',
         batch_size=batch_size, 
@@ -217,19 +227,20 @@ model_test_cfg = dict(
 )
 
 img_backbone_conf=dict(
-                type='VoVNet',
-                # model_type="vovnet57",
-                # out_indices=[4, 8],
-                model_type="vovnet39",
-                out_indices=[2, 5],
-                # init_cfg=dict(type='Pretrained', checkpoint="./work_dirs/backbone_checkpoint/vovnet57_match.pth")
-                )
+        type='VoVNet',
+        # model_type="vovnet57",
+        # out_indices=[4, 8],
+        model_type="vovnet39",
+        out_indices=[2, 3, 4, 5],
+        base_channels=32,
+        # init_cfg=dict(type='Pretrained', checkpoint="./work_dirs/backbone_checkpoint/vovnet57_match.pth")
+    )
 img_neck_conf=dict(
     type='SECONDFPN',
-    in_channels=[256, 512],
-    upsample_strides=[1, 2],
-    out_channels=[128, 128],
-    )
+    in_channels=[128, 128, 128, 256],
+    upsample_strides=[1, 1, 1, 2],
+    out_channels=[64, 64, 64, 64],
+)
 
 model = dict(
     type='FastBEV_Det',
@@ -238,11 +249,11 @@ model = dict(
         mean=[128, 128, 128],
         std=[255, 255, 255],
         IMG_KEYS=IMG_KEYS, 
-        label_type=collection_info_type,
+        label_type=transformable_name,
         predict_elements=['heatmap', 'anno_boxes', 'gridzs', 'class_maps'],
         batch_size=batch_size,
         group_size=group_size,
-        label_start_idx=2, # process labels info start index of collection_info_type
+        label_start_idx=2, # process labels info start index of transformable_name
     ),
     backbone_conf=dict(
         type='FastRay',

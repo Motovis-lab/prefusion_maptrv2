@@ -377,9 +377,10 @@ if __name__ == "__main__":
                     P(v_camera_root).parent.mkdir(parents=True, exist_ok=True)
                     P(v_camera_mask_root).parent.mkdir(parents=True, exist_ok=True)
                     v_camera_rmatrix, v_camera_t, v_camera_intrinsic, d_src_image, d_real_cam_model, d_vcamera = convert_virtual_camera(src_camera_root, v_camera_root, v_camera_mask_root, camera_model, cameras_v[V_CAM], calib_back.rig[real_cam_name])
-                    scene_info["scene_info"]['calibration'][V_CAM] = {"extrinsic":(v_camera_rmatrix, v_camera_t), "intrinsic": v_camera_intrinsic}
-                    # if "FISHEYE" in V_CAM:
-                    #     scene_info["scene_info"]['camera_mask'][V_CAM] = f"{scene_name}/fisheye_ego_mask/{V_CAM}_MASK/{timestamp}_ego_mask.jpg"
+                    if "FISHEYE" in V_CAM:
+                        scene_info["scene_info"]['calibration'][V_CAM] = {"extrinsic":(v_camera_rmatrix, v_camera_t), "intrinsic": v_camera_intrinsic, 'camera_type': 'FisheyeCamera'}
+                    elif "PERSPECTIVE" in V_CAM:
+                        scene_info["scene_info"]['calibration'][V_CAM] = {"extrinsic":(v_camera_rmatrix, v_camera_t), "intrinsic": v_camera_intrinsic, 'camera_type': 'PERSPECTIVECamera'}
                     camera_image[V_CAM] = f"{scene_name}/camera/{V_CAM}/{camera_filename}"
                     if V_CAM in timestamp_window:
                         if len(timestamp_window[V_CAM])<=max_sweeps:
