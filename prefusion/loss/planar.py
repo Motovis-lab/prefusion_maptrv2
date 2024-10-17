@@ -179,11 +179,11 @@ class PlanarPolyline3DLoss(nn.Module):
             return _weight * (fg_mask * l1).sum() / mask_sum / n_channels
 
         loss_dict = {
-            L("reg_center_xy"): _calc_sub_loss(dist_weight, slice(0, 1)),
-            L("reg_center_z"): _calc_sub_loss(vert_vec_weight, slice(1, 3)),
-            L("reg_size"): _calc_sub_loss(abs_dir_weight, slice(3, 5)),
-            L("reg_unit_xvec"): _calc_sub_loss(dir_product_weight, slice(5, 6)),
-            L("reg_abs_xvec"): _calc_sub_loss(height_weight, slice(6, 7)),
+            L("reg_dist"): _calc_sub_loss(dist_weight, slice(0, 1)),
+            L("reg_vert_vec"): _calc_sub_loss(vert_vec_weight, slice(1, 3)),
+            L("reg_abs_dir"): _calc_sub_loss(abs_dir_weight, slice(3, 5)),
+            L("reg_dir_product"): _calc_sub_loss(dir_product_weight, slice(5, 6)),
+            L("reg_height"): _calc_sub_loss(height_weight, slice(6, 7)),
         }
         loss_dict[L("reg")] = sum(loss_dict.values()) * self.loss_weights["reg"]
         return loss_dict

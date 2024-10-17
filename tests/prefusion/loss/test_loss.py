@@ -250,52 +250,111 @@ def test_planar_bbox3d_loss(bx_seg_pred, bx_cen_pred, bx_reg_pred, bx_seg_label,
 
 
 @pytest.fixture
+def plyl_seg_pred():
+    return torch.tensor([[
+        [[0.0, 0.0, 0.9, 0.0, 0.3],
+         [0.0, 0.0, 0.3, 1.0, 0.0],
+         [0.2, 1.0, 1.0, 1.0, 0.0],
+         [0.0, 0.9, 0.0, 0.2, 0.0],],
+
+        [[0.0, 0.0, 0.0, 0.0, 0.3],
+         [0.0, 0.0, 0.2, 1.0, 0.0],
+         [0.0, 0.2, 1.0, 0.2, 0.0],
+         [0.0, 0.9, 0.2, 0.0, 0.0],],
+         
+        [[0.0, 0.0, 0.8, 0.0, 0.0],
+         [0.0, 0.0, 0.2, 0.0, 0.0],
+         [0.2, 1.0, 0.0, 1.0, 0.0],
+         [0.0, 0.0, 0.0, 0.2, 0.0],],
+    ]])
+
+
+@pytest.fixture
+def plyl_seg_label():
+    return torch.tensor([[
+        [[0.0, 0.0, 1.0, 0.0, 0.0],
+         [0.0, 0.0, 0.0, 1.0, 0.0],
+         [0.0, 1.0, 1.0, 1.0, 0.0],
+         [0.0, 1.0, 0.0, 0.0, 0.0],],
+
+        [[0.0, 0.0, 0.0, 0.0, 0.0],
+         [0.0, 0.0, 0.0, 1.0, 0.0],
+         [0.0, 0.0, 1.0, 0.0, 0.0],
+         [0.0, 1.0, 0.0, 0.0, 0.0],],
+         
+        [[0.0, 0.0, 1.0, 0.0, 0.0],
+         [0.0, 0.0, 0.0, 0.0, 0.0],
+         [0.0, 1.0, 0.0, 1.0, 0.0],
+         [0.0, 0.0, 0.0, 0.0, 0.0],],
+    ]])
+
+
+@pytest.fixture
 def plyl_reg_pred():
-    pass
+    return torch.tensor([[
+        [[0, 0.0, 0.3, 0.0, 0],
+         [0, 0.0, 0.0, 0.1, 0],
+         [0, 0.2, 0.1, 0.1, 0],
+         [0, 0.1, 0.0, 0.0, 0],],
+
+        [[0, 0.0, -0.1, 0.0, 0],
+         [0, 0.0,  0.0, 0.1, 0],
+         [0, 0.3,  0.1, 0.2, 0],
+         [0, 0.1,  0.0, 0.0, 0],],
+    ]]).repeat((1, 4, 1, 1))[:, :7, ...]
 
 
 @pytest.fixture
 def plyl_reg_label():
-    pass
+    return torch.tensor([[
+        [[0, 0.0, 0.2, 0.0, 0],
+         [0, 0.0, 0.0, 0.1, 0],
+         [0, 0.2, 0.1, 0.2, 0],
+         [0, 0.1, 0.0, 0.0, 0],],
+
+        [[0, 0.0, -0.2, 0.0, 0],
+         [0, 0.0,  0.0, 0.1, 0],
+         [0, 0.2,  0.1, 0.2, 0],
+         [0, 0.1,  0.0, 0.0, 0],],
+    ]]).repeat((1, 4, 1, 1))[:, :7, ...]
 
 
 @pytest.fixture
 def plyl_reg_channel_weights():
     return {
         "dist_weight": 1.0,
-        "vert_vec_weight": 0.0,
+        "vert_vec_weight": 2.0,
         "abs_dir_weight": 0.0,
         "dir_product_weight": 0.0,
         "height_weight": 0.0,
     }
 
 
-def test_planar_polyline3d_reg_loss(plyl_reg_pred, plyl_reg_label, plyl_reg_channel_weights):
+def test_planar_polyline3d_seg_loss_with_mask(plyl_seg_pred, plyl_seg_label):
     planar_polyline3d_loss = PlanarPolyline3DLoss(loss_name_prefix="plnrplyln3d")
-    reg_mask = torch.ones((1, 1, 4, 5))
-    reg_loss = planar_polyline3d_loss._reg_loss(plyl_reg_pred, plyl_reg_label, reg_mask, **plyl_reg_channel_weights)
-    assert set(reg_loss.keys()) == {
-        "plnrplyln3d_reg_center_xy_loss",
-        "plnrplyln3d_reg_center_z_loss",
-        "plnrplyln3d_reg_size_loss",
-        "plnrplyln3d_reg_unit_xvec_loss",
-        "plnrplyln3d_reg_abs_xvec_loss",
-        "plnrplyln3d_reg_xvec_product_loss",
-        "plnrplyln3d_reg_abs_roll_angle_loss",
-        "plnrplyln3d_reg_roll_angle_product_loss",
-        "plnrplyln3d_reg_velo_loss",
-        "plnrplyln3d_reg_loss",
+    seg_loss = planar_polyline3d_loss._seg_loss(plyl_seg_pred, plyl_seg_label)
+    assert set(seg_loss.keys()) == {
+        "plnrplyln3d_seg_iou_0_loss", "plnrplyln3d_seg_iou_1_loss", "plnrplyln3d_seg_iou_2_loss",
+        "plnrplyln3d_seg_iou_loss", "plnrplyln3d_seg_dual_focal_0_loss", "plnrplyln3d_seg_dual_focal_1_loss", 
+        "plnrplyln3d_seg_dual_focal_2_loss", "plnrplyln3d_seg_dual_focal_loss", "plnrplyln3d_seg_loss"
     }
-    assert reg_loss["plnrplyln3d_reg_center_xy_loss"] == _approx(0.0425)
-    assert reg_loss["plnrplyln3d_reg_xvec_product_loss"] == _approx(0.085)
-    assert reg_loss["plnrplyln3d_reg_loss"] == _approx(0.1275)
+    assert seg_loss["plnrplyln3d_seg_iou_0_loss"] == _approx(0.980281949)
+    assert seg_loss["plnrplyln3d_seg_loss"] == _approx(2.3641901)
 
 
 def test_planar_polyline3d_reg_loss_with_mask(plyl_reg_pred, plyl_reg_label, plyl_reg_channel_weights):
-    planar_bbox3d_loss = PlanarPolyline3DLoss(loss_name_prefix="plnrplyln3d")
+    planar_polyline3d_loss = PlanarPolyline3DLoss(loss_name_prefix="plnrplyln3d")
     reg_mask = torch.zeros((1, 1, 4, 5))
-    reg_mask[:, :, 2:, :] = 1
-    reg_loss = planar_bbox3d_loss._reg_loss(plyl_reg_pred, plyl_reg_label, reg_mask, **plyl_reg_channel_weights)
-    assert reg_loss["plnrplyln3d_reg_center_xy_loss"] == _approx(0.04)
-    assert reg_loss["plnrplyln3d_reg_xvec_product_loss"] == _approx(0.08)
-    assert reg_loss["plnrplyln3d_reg_loss"] == _approx(0.12)
+    reg_mask[:, :, :, 1:4] = 1
+    reg_loss = planar_polyline3d_loss._reg_loss(plyl_reg_pred, plyl_reg_label, reg_mask, **plyl_reg_channel_weights)
+    assert set(reg_loss.keys()) == {
+        "plnrplyln3d_reg_dist_loss",
+        "plnrplyln3d_reg_vert_vec_loss",
+        "plnrplyln3d_reg_abs_dir_loss",
+        "plnrplyln3d_reg_dir_product_loss",
+        "plnrplyln3d_reg_height_loss",
+        "plnrplyln3d_reg_loss",
+    }
+    assert reg_loss["plnrplyln3d_reg_dist_loss"] == _approx(0.0166666)
+    assert reg_loss["plnrplyln3d_reg_vert_vec_loss"] == _approx(0.0333333)
+    assert reg_loss["plnrplyln3d_reg_loss"] == _approx(0.05)
