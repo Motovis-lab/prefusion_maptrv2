@@ -243,7 +243,7 @@ class GroupDataPreprocess(DetDataPreprocessor):
         for num in range(batch_num):
             single_data = data[num]
             for cam_id in camera_types:
-                cam_id_transformable = single_data['transformables']["camera_image"].transformables[cam_id]
+                cam_id_transformable = single_data['transformables']["camera_images"].transformables[cam_id]
                 tmp_extrinsic = np.eye(4,4)
                 tmp_extrinsic[:3, :3] = cam_id_transformable.extrinsic[0]
                 tmp_extrinsic[:3, 3] = cam_id_transformable.extrinsic[1]

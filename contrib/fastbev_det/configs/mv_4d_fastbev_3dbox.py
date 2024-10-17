@@ -227,19 +227,20 @@ model_test_cfg = dict(
 )
 
 img_backbone_conf=dict(
-                type='VoVNet',
-                # model_type="vovnet57",
-                # out_indices=[4, 8],
-                model_type="vovnet39",
-                out_indices=[2, 5],
-                # init_cfg=dict(type='Pretrained', checkpoint="./work_dirs/backbone_checkpoint/vovnet57_match.pth")
-                )
+        type='VoVNet',
+        # model_type="vovnet57",
+        # out_indices=[4, 8],
+        model_type="vovnet39",
+        out_indices=[2, 3, 4, 5],
+        base_channels=32,
+        # init_cfg=dict(type='Pretrained', checkpoint="./work_dirs/backbone_checkpoint/vovnet57_match.pth")
+    )
 img_neck_conf=dict(
     type='SECONDFPN',
-    in_channels=[256, 512],
-    upsample_strides=[1, 2],
-    out_channels=[128, 128],
-    )
+    in_channels=[128, 128, 128, 256],
+    upsample_strides=[1, 1, 1, 2],
+    out_channels=[64, 64, 64, 64],
+)
 
 model = dict(
     type='FastBEV_Det',

@@ -19,7 +19,7 @@ def test_vovnet():
     )
     img_neck_conf=dict(
         type='SECONDFPN',
-        in_channels=[256, 256, 256, 512],
+        in_channels=[128, 128, 128, 256],
         upsample_strides=[1, 1, 1, 2],
         out_channels=[64, 64, 64, 64],
     )
@@ -29,7 +29,7 @@ def test_vovnet():
 
     model = MODELS.build(front_img_backbone_neck_conf).cuda()
 
-    out = model(torch.rand(1, 3, 768, 384).cuda())
+    out = model(torch.rand(2, 3, 768, 384).cuda())
     print(out)
 
 
