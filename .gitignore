@@ -172,5 +172,5 @@ log
 logs
 ipynb
 
-tests/contrib/fastbev_det
+
 convert_model_key.py
