@@ -3,10 +3,17 @@ import numpy as np
 import torch
 from easydict import EasyDict as edict
 
-from prefusion.dataset.tensor_smith import get_bev_intrinsics, CameraImageTensor
-from prefusion.dataset.transform import Bbox3D, ParkingSlot3D
-from prefusion.dataset.tensor_smith import PlanarBbox3D, PlanarParkingSlot3D, PlanarSquarePillar
-from prefusion.dataset.tensor_smith import PlanarCylinder3D, PlanarOrientedCylinder3D
+from prefusion.dataset.transform import Bbox3D, ParkingSlot3D, Polyline3D
+from prefusion.dataset.tensor_smith import (
+    get_bev_intrinsics, 
+    CameraImageTensor,
+    PlanarBbox3D,
+    PlanarParkingSlot3D,
+    PlanarSquarePillar,
+    PlanarCylinder3D,
+    PlanarOrientedCylinder3D,
+    PlanarPolyline3D,
+)
 
 def test_get_bev_intrinsics():
     voxel_shape=(6, 200, 160)
@@ -307,4 +314,55 @@ def test_planar_parkingslot_3d_generation_and_reverse():
         pred_slots[0][:, :3],
         slots.elements[0]['points'],
     decimal=3)
-    
+
+
+def test_planar_polyline_3d_generation_and_reverse():
+    pplyl = PlanarPolyline3D(
+        voxel_shape=(6, 160, 80),
+        voxel_range=([-0.5, 2.5], [24, -8], [8, -8])
+    )
+    plyl = Polyline3D(
+        "polyline_3d",
+        elements=[
+            {
+                'class': 'class.road_marker.lane_line',
+                'attr': {},
+                'points': np.float32([
+                    [-1,  2, -0.1],
+                    [ 0,  1,  0.0],
+                    [ 1,  0,  0.1]])
+                ###################### 
+                #           .
+                #         /
+                #       .
+                #     /
+                #   .
+                ######################
+            },
+            {
+                'class': 'class.road_marker.arrow_heading_triangle',
+                'attr': {},
+                'points': np.float32([
+                    [ 0,     0,  0.0],
+                    [ 1,  -0.9,  0.2],
+                    [ 1,  -1.1,  0.2],
+                    [ 0,    -2,  0.0]])
+                ###################### 
+                #       . - .
+                #      /     \
+                #     .       .
+                ######################
+            },
+        ],
+        dictionary=dict(
+            classes=['class.road_marker.lane_line', 'class.road_marker.arrow_heading_triangle']
+        ),
+        tensor_smith=pplyl
+    )
+    plyl.to_tensor()
+    tensor_dict = plyl.tensor
+    assert tensor_dict['seg'].shape == (3, 160, 80)
+    assert tensor_dict['seg'][0].max() == 1
+    pred_plyl = pplyl.reverse(tensor_dict)
+    np.testing.assert_almost_equal(pred_plyl[0][[0, -1], :3], plyl.elements[0]['points'][[0, -1], :], decimal=3)
+    np.testing.assert_almost_equal(pred_plyl[1][[0, -1], :3], plyl.elements[1]['points'][[0, -1], :], decimal=3)

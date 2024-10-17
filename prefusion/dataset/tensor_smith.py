@@ -1641,7 +1641,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
                             fused_heights[g]]),
                 fused_classes[:, g],
             ], axis=0)
-            polylines_3d.append(polyline_3d)
+            polylines_3d.append(polyline_3d.T)
         return polylines_3d
 
 
