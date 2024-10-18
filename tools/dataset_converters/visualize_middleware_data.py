@@ -17,6 +17,7 @@ import sys
 import mmengine
 from virtual_camera import FisheyeCamera
 import pdb
+import ipdb
 
 def parse_list(arg):
     # 去掉输入字符串的空格，并去掉前后的方括号
@@ -279,7 +280,7 @@ def demo(
             lidar_data = o3d.t.io.read_point_cloud(os.path.join('data/av2/sensor', lidar_path))
         elif mv_4d:
             lidar_data = o3d.io.read_point_cloud(os.path.join('data/mv_4d_data', lidar_path))
-        lidar_points_positions = np.asarray(lidar_data.points)  # N * 3
+        lidar_points_positions = np.asarray(lidar_data.points)  # N * 3 # type: ignore
         lidar_points_intensity = np.zeros_like(lidar_points_positions[:, 0:1])  # N * 1
         lidar_points = np.concatenate([lidar_points_positions, lidar_points_intensity], axis=1)  # N * 4
         # Get point cloud
@@ -292,6 +293,8 @@ def demo(
             #         info['ann_infos'][i]['category_name']] in show_classes:
                 box = np.array(frame_info['3d_boxes'][i]['translation'].reshape(-1).tolist() + frame_info['3d_boxes'][i]['size'] + [Quaternion(matrix=frame_info['3d_boxes'][i]['rotation']).yaw_pitch_roll[0]] + [0, 0])
                 if np.linalg.norm(box[:2]) <= show_range:
+                    ipdb.set_trace()
+                    t_box = np.zeros_like(box)
                     corners = get_corners_with_angles(box[None], frame_info['3d_boxes'][i]['rotation'].T)[0]
                     gt_corners.append(corners)
                     gt_labels.append(frame_info['3d_boxes'][i]['class'])
@@ -449,7 +452,7 @@ def demo(
             plt.figure(figsize=(24, 8))
             row = 5 
 
-            for i, k in enumerate(IMG_KEYS):
+            for i, k in enumerate(IMG_KEYS): # type: ignore
                 # Draw camera views
                 fig_idx = i + 1 if i < row else i + 2
                 plt.subplot(2, 6, fig_idx)
@@ -543,8 +546,8 @@ def demo(
 
             # Save figure
             plt.tight_layout(w_pad=0, h_pad=2)
-            plt.savefig(dump_file)
-            # plt.show()
+            # plt.savefig(dump_file)
+            plt.show()
 
 if __name__ == '__main__':
     args = parse_args()
