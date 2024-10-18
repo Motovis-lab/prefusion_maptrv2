@@ -59,11 +59,11 @@ GroupBatch = List[List[Dict]]
 
 
 def generate_groups(
-    total_num_frames: int,
-    group_size: int,
-    frame_interval: int,
-    start_ind: int = 0,
-    random_start_ind: bool = False,
+    total_num_frames: int, 
+    group_size: int, 
+    frame_interval: int, 
+    start_ind: int = 0, 
+    random_start_ind: bool = False, 
     pad_mode: str = 'both',
     seed: int = None,
 ) -> List[Tuple[int]]:
@@ -93,7 +93,7 @@ def generate_groups(
     Notes
     -----
     - `group_interval = group_size * frame_interval`
-    - `group_interval <= total_num_frames`
+    - `group_interval <= total_num_frames` 
     - `start_ind` should be assigned between `[0, group_interval - 1]`
     - When the `start_ind > 0`, we should insert a group including `[0, start_ind)`
     - If the tail of the group, aka `end_ind`, is bigger than `total_num_frames - 1`, we should append a group including `(end_ind, total_num_frames]`
@@ -197,7 +197,7 @@ class GroupSampler:
         Parameters
         ----------
         scene_frame_inds : Dict[str, List[str]]
-            e.g.
+            e.g.  
             ```
             {
               "20231101_160337": [ "20231101_160337/1698825817664", "20231101_160337/1698825817764"],
@@ -264,14 +264,14 @@ class GroupSampler:
 
     def sample_groups_by_meta_info(self):
         raise NotImplementedError
-
+    
     def _generate_groups(
-        self,
-        group_size: int,
-        frame_interval: int = None,
-        start_ind: int = 0,
-        random_start_ind: bool = False,
-        shuffle: bool = False,
+        self, 
+        group_size: int, 
+        frame_interval: int = None, 
+        start_ind: int = 0, 
+        random_start_ind: bool = False, 
+        shuffle: bool = False, 
         seed: int = None
     ) -> List[List[str]]:
         all_groups = []
@@ -406,7 +406,7 @@ class GroupBatchDataset(Dataset):
             available_indices[scene_id] = sorted(available_indices[scene_id])
 
         return available_indices
-
+    
     @property
     def group_size(self):
         return self.group_sampler.group_size
@@ -446,7 +446,7 @@ class GroupBatchDataset(Dataset):
             return len(self.groups) // self.batch_size
         else:
             return int(np.ceil(len(self.groups) / self.batch_size))
-
+    
 
     @staticmethod
     def _batch_groups(group_batch_ind, groups, batch_size):
@@ -594,9 +594,9 @@ class GroupBatchDataset(Dataset):
         def _create_pose(frame_id, rel_pos):
             return EgoPose(
                 f"{name}:{rel_pos}:{frame_id}",
-                frame_id,
-                scene[frame_id]["ego_pose"]["rotation"],
-                scene[frame_id]["ego_pose"]["translation"],
+                frame_id, 
+                scene[frame_id]["ego_pose"]["rotation"], 
+                scene[frame_id]["ego_pose"]["translation"], 
                 tensor_smith=tensor_smith
             )
 
