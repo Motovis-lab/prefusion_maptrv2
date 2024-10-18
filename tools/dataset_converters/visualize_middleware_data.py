@@ -304,7 +304,7 @@ def demo(
             plt.figure(figsize=(24, 8))
             row = 3 
 
-            for i, k in enumerate(IMG_KEYS):
+            for i, k in enumerate(IMG_KEYS): # type: ignore
                 # Draw camera views
                 fig_idx = i + 1 if i < row else i + 2
                 plt.subplot(2, 4, fig_idx)
@@ -378,7 +378,7 @@ def demo(
             plt.figure(figsize=(24, 8))
             row = 4 
 
-            for i, k in enumerate(IMG_KEYS):
+            for i, k in enumerate(IMG_KEYS): #  type: ignore
                 # Draw camera views
                 fig_idx = i + 1 if i < row else i + 2
                 plt.subplot(2, 5, fig_idx)
