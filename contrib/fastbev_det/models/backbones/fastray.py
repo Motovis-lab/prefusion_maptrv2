@@ -105,12 +105,12 @@ class FastRay(BaseModule):
             C, H, W = img_depth_feats_pv.shape[-3:]
             img_bev_feats_pv = self.fastray_vt_pv(sweep_infos['pv_data']['uu'], sweep_infos['pv_data']['vv'], 
                                                  sweep_infos['pv_data']['valid_map'], sweep_infos['pv_data']['norm_density_map'].float(), img_depth_feats_pv.reshape(B, -1, C, H, W),
-                                                 # img=sweep_infos['pv_data']['imgs']
+                                                #  img=sweep_infos['pv_data']['imgs']
                                                  )
             C, H, W = img_depth_feats_front.shape[-3:]
             img_bev_feats_front = self.fastray_vt_front(sweep_infos['front_data']['uu'], sweep_infos['front_data']['vv'], 
                                                  sweep_infos['front_data']['valid_map'], sweep_infos['front_data']['norm_density_map'].float(), img_depth_feats_front.reshape(B, -1, C, H, W),
-                                                 # img=sweep_infos['front_data']['imgs']
+                                                #  img=sweep_infos['front_data']['imgs']
                                                  )
             
             img_bev_feats = img_bev_feats_fish + img_bev_feats_pv + img_bev_feats_front
