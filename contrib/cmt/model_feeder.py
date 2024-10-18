@@ -1,24 +1,25 @@
 import torch
 import numpy as np
 
+from prefusion import LidarPoints
 from prefusion.registry import MODEL_FEEDERS
 from prefusion.dataset import BaseModelFeeder
 from prefusion.dataset.transform import CameraImageSet, Bbox3D
 
-__all__ = ["StreamPETRModelFeeder"]
+__all__ = ["CMTModelFeeder"]
 
 
 @MODEL_FEEDERS.register_module()
-class StreamPETRModelFeeder(BaseModelFeeder):
+class CMTModelFeeder(BaseModelFeeder):
     """StreamPETRModelFeeder.
 
     Args
     ----
     Any: Any parameter or keyword arguments.
+
     """
-    def __init__(self, *, visible_range=(-25.6, -25.6, -2, 25.6, 25.6, 2), **kwargs) -> None:
-        super().__init__(**kwargs)
-        self.visible_range = visible_range
+    def __init__(self, *args, **kwargs):
+        self.key_list = kwargs['key_list']
 
     def process(self, frame_batch: list) -> dict | list:
         """
@@ -36,14 +37,16 @@ class StreamPETRModelFeeder(BaseModelFeeder):
         """
         processed_frame_batch = []
         for frame in frame_batch:
-            processed_frame = dict(index_info=frame["index_info"], **{t.name: t for t in frame["transformables"].values()})
+            transformable_dict ={k: v for k, v in zip(self.key_list, frame["transformables"])}
+            processed_frame = dict(index_info=frame["index_info"], **transformable_dict)
             processed_frame["meta_info"] = {}
             for k, trnsfmb in processed_frame.items():
                 if isinstance(trnsfmb, CameraImageSet):
                     cam_ids, camera_images = zip(*trnsfmb.transformables.items())
-                    img_tensor = torch.vstack(
-                        [(t.tensor["img"] * t.tensor["ego_mask"]).unsqueeze(0) for t in camera_images]
-                    )
+                    data = [(t.tensor["img"] * t.tensor["ego_mask"]).unsqueeze(0) for t in camera_images]
+                    # import torch.nn.functional as F
+                    # data = [i if i.shape[2] == 1080 else F.upsample(i, (1080, 1920))for i in data]  # why not in configs
+                    img_tensor = torch.vstack(data)
                     processed_frame[k] = img_tensor
                     processed_frame["meta_info"][k] = {
                         "camera_ids": cam_ids,
@@ -53,13 +56,14 @@ class StreamPETRModelFeeder(BaseModelFeeder):
                             np.linalg.inv(self._extrinsic_param_to_4x4_mat(*cam_im.extrinsic))
                             for cam_im in camera_images
                         ],
+                        'cam_inv_poly' : [cam_im.intrinsic[4:] for cam_im in camera_images],
                     }
                     continue
                 if isinstance(trnsfmb, Bbox3D):
-                    visible_boxes = self.get_boxes_within_visible_range(trnsfmb.tensor)
-                    processed_frame[k] = visible_boxes["xyz_lwh_yaw_vx_vy"]
-                    processed_frame["meta_info"][k] = {"classes": visible_boxes["classes"]}
-                    processed_frame["meta_info"][k].update(bbox3d_corners=visible_boxes["corners"])
+                    processed_frame[k] = trnsfmb.tensor["xyz_lwh_yaw_vxvy"]
+                    processed_frame["meta_info"][k] = {"classes": trnsfmb.tensor["classes"]}
+                if isinstance(trnsfmb, LidarPoints):
+                    processed_frame[k] = trnsfmb.tensor
             processed_frame_batch.append(processed_frame)
         return processed_frame_batch
 
@@ -69,7 +73,7 @@ class StreamPETRModelFeeder(BaseModelFeeder):
         mat[0, 0] = param[2]
         mat[1, 1] = param[3]
         mat[0, 2] = param[0]
-        mat[2, 2] = param[1]
+        mat[1, 2] = param[1]
         return mat
 
     @staticmethod
@@ -78,12 +82,3 @@ class StreamPETRModelFeeder(BaseModelFeeder):
         mat[:3, :3] = rotation
         mat[:3, 3] = translation
         return mat
-
-    def get_boxes_within_visible_range(self, box3d_tensor_dict: dict):
-        box_centers = box3d_tensor_dict["xyz_lwh_yaw_vx_vy"][:, :3]
-        visible_mask = (
-            (box_centers[:, 0] >= self.visible_range[0]) & (box_centers[:, 0] <= self.visible_range[3])
-            & (box_centers[:, 1] >= self.visible_range[1]) & (box_centers[:, 1] <= self.visible_range[4])
-            & (box_centers[:, 2] >= self.visible_range[2]) & (box_centers[:, 2] <= self.visible_range[5])
-        )
-        return {k: v[visible_mask] for k, v in box3d_tensor_dict.items()}
