@@ -293,8 +293,6 @@ def demo(
             #         info['ann_infos'][i]['category_name']] in show_classes:
                 box = np.array(frame_info['3d_boxes'][i]['translation'].reshape(-1).tolist() + frame_info['3d_boxes'][i]['size'] + [Quaternion(matrix=frame_info['3d_boxes'][i]['rotation']).yaw_pitch_roll[0]] + [0, 0])
                 if np.linalg.norm(box[:2]) <= show_range:
-                    ipdb.set_trace()
-                    t_box = np.zeros_like(box)
                     corners = get_corners_with_angles(box[None], frame_info['3d_boxes'][i]['rotation'].T)[0]
                     gt_corners.append(corners)
                     gt_labels.append(frame_info['3d_boxes'][i]['class'])
