@@ -10,6 +10,8 @@ from prefusion.registry import MODELS
 from prefusion.loss.basic import dual_focal_loss, SegIouLoss
 
 
+__all__ = ["PlanarLoss"]
+
 def complete_loss_name(loss_name_prefix, sub_item_name: str = ""):
     if sub_item_name:
         return f"{loss_name_prefix}_{sub_item_name}_loss"
@@ -32,7 +34,7 @@ class PlanarLoss(nn.Module):
             e.g.: {
                 "seg": {
                     "loss_weight": 1.0,  # most superior loss weight for seg
-                    "class_weights": {
+                    "channel_weights": {
                         "all": {"weight": 0.5}, # user must add this special channel manually
                         "passengar_car": {"weight": 0.7},
                         "pedestrian": {"weight": 0.3},
@@ -106,18 +108,18 @@ class PlanarLoss(nn.Module):
         pred: torch.Tensor,
         label: torch.Tensor,
         loss_weight: float = 1.0,
-        class_weights: dict = None,
+        channel_weights: dict = None,
         iou_loss_weight: float = 1.0,
         dual_focal_loss_weight: float = 1.0,
         **kwargs,
     ):
         num_cls = pred.shape[1]
-        _class_weights = (
+        _channel_weights = (
             torch.ones(num_cls)
-            if class_weights is None
-            else torch.tensor([c["weight"] for _, c in class_weights.items()])
+            if channel_weights is None
+            else torch.tensor([c["weight"] for _, c in channel_weights.items()])
         )
-        _class_names = [f"{i}" for i in range(num_cls)] if class_weights is None else list(class_weights.keys())
+        _class_names = [f"{i}" for i in range(num_cls)] if channel_weights is None else list(channel_weights.keys())
 
         dual_loss = dual_focal_loss(pred, label, reduction="none").mean(dim=self.reduction_dim)
         iou_loss = self.iou_loss(pred, label)
@@ -125,17 +127,17 @@ class PlanarLoss(nn.Module):
         loss_dict = {}
         L = partial(complete_loss_name, self.loss_name_prefix)
 
-        seg_iou_loss_by_channel = {L(f"seg_iou_{c}"): l * w for c, w, l in zip(_class_names, _class_weights, iou_loss)}
+        seg_iou_loss_by_channel = {L(f"seg_iou_{c}"): l * w for c, w, l in zip(_class_names, _channel_weights, iou_loss)}
         seg_dual_focal_loss_by_channel = {
-            L(f"seg_dual_focal_{c}"): l * w for c, w, l in zip(_class_names, _class_weights, dual_loss)
+            L(f"seg_dual_focal_{c}"): l * w for c, w, l in zip(_class_names, _channel_weights, dual_loss)
         }
         loss_dict.update(seg_iou_loss_by_channel)
         loss_dict.update(seg_dual_focal_loss_by_channel)
         loss_dict[L("seg_iou")] = (
-            iou_loss_weight * sum(seg_iou_loss_by_channel.values()) / _class_weights.sum()
+            iou_loss_weight * sum(seg_iou_loss_by_channel.values()) / _channel_weights.sum()
         )  # functools.reduce(lambda x, y: x + y, seg_iou_loss_by_channel.values())
         loss_dict[L("seg_dual_focal")] = (
-            dual_focal_loss_weight * sum(seg_dual_focal_loss_by_channel.values()) / _class_weights.sum()
+            dual_focal_loss_weight * sum(seg_dual_focal_loss_by_channel.values()) / _channel_weights.sum()
         )
         loss_dict[L("seg")] = (loss_dict[L("seg_dual_focal")] + loss_dict[L("seg_iou")]) * loss_weight
         return loss_dict
