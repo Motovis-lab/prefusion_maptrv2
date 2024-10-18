@@ -41,7 +41,6 @@ def test_camera_image_tensor():
     ]), decimal=6)
 
 
-
 def test_planar_bbox_3d_get_roll_from_xyvecs():
     a = [1, 1, 0]
     b = [-1, 1, 1]
@@ -52,7 +51,7 @@ def test_planar_bbox_3d_get_roll_from_xyvecs():
 
 def test_planar_bbox_3d_get_yzvec_from_xvec_and_roll():
     xvecs = np.float32([
-        [1, 1], 
+        [1, 1],
         [1, 1],
         [0, 0]
     ])
@@ -79,7 +78,7 @@ def test_planar_bbox_3d_get_yzvec_from_xvec_and_roll_single():
 def test_planar_bbox_3d_is_in_bbox3d():
     delta_ij = np.float32([0.7, 0.2, 0])
     sizes = np.float32([2, 1, 0.5])
-    xvec = np.float32([1, 0, 0]) 
+    xvec = np.float32([1, 0, 0])
     yvec = np.float32([0, 1, 0])
     zvec = np.float32([0, 0, 1])
     assert PlanarBbox3D._is_in_bbox3d(delta_ij, sizes, xvec, yvec, zvec) is True
@@ -143,7 +142,7 @@ def test_planar_bbox_3d_generation_and_reverse():
         pred_bboxes_3d[1]['rotation'],
         box3d.elements[1]['rotation'],
     decimal=3)
-    
+
 
 
 def test_planar_squre_pillars_generation_and_reverse():

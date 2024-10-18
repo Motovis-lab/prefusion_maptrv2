@@ -1,11 +1,14 @@
 from pathlib import Path
 from typing import Any
 
+import cv2
 import numpy as np
 import pytest
+from copious.io.fs import mktmpdir
 from mmengine.config.config import ConfigDict
+from numpy.ma.testutils import assert_almost_equal, assert_array_almost_equal
 
-from prefusion.dataset.dataset import GroupBatchDataset, GroupSampler, IndexInfo, generate_groups
+from prefusion.dataset.dataset import GroupBatchDataset, GroupSampler, IndexInfo, generate_groups, read_ego_mask
 from prefusion.dataset.model_feeder import BaseModelFeeder
 
 
@@ -366,9 +369,9 @@ def test_load_ego_poses():
     assert ego_pose_set.transformables['+1'].timestamp == "1698825817964"
 
     index_info3 = IndexInfo(
-        prev=IndexInfo("20231101_160337", "1698825817764", prev=IndexInfo("20231101_160337", "1698825817664")), 
-        scene_id="20231101_160337", 
-        frame_id="1698825817864", 
+        prev=IndexInfo("20231101_160337", "1698825817764", prev=IndexInfo("20231101_160337", "1698825817664")),
+        scene_id="20231101_160337",
+        frame_id="1698825817864",
         next=IndexInfo("20231101_160337", "1698825817964", next=IndexInfo("20231101_160337", "1698825818064"))
     )
     ego_pose_set = dataset.load_ego_poses('ego_poses', index_info3)
@@ -474,6 +477,7 @@ def test_batch_groups_2():
     answer = [4, 3, 2]
     assert batched_groups == answer
 
+
 def test_batch_groups_3():
     batched_groups = GroupBatchDataset._batch_groups(
         group_batch_ind=0, 
@@ -482,3 +486,16 @@ def test_batch_groups_3():
     )
     answer = [1, 2, 3]
     assert batched_groups == answer
+
+
+def test_read_ego_mask():
+    tmpdir = mktmpdir()
+    img = np.ones([2,4], dtype=np.uint8)
+    save_path = str(tmpdir / "mask243.png")
+    cv2.imwrite(save_path, img)
+    assert_array_almost_equal(read_ego_mask(save_path), img)
+
+    img255 = np.ones([2,4], dtype=np.uint8) * 255
+    save_path = str(tmpdir / "mask255.png")
+    cv2.imwrite(save_path, img255)
+    assert_array_almost_equal(read_ego_mask(save_path),  img)

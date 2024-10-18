@@ -726,7 +726,7 @@ class CameraDepthSet(TransformableSet):
 
 
 class LidarPoints(SpatialTransformable):
-    def __init__(self, name: str, positions: np.ndarray, intensity: np.ndarray, tensor_smith: "TensorSmith" = None): 
+    def __init__(self, name: str, positions: np.ndarray, attributes: np.ndarray, tensor_smith: "TensorSmith" = None):
         """Lidar points
 
         Parameters
@@ -735,30 +735,28 @@ class LidarPoints(SpatialTransformable):
             arbitrary string, will be set to each Transformable object to distinguish it with others
         positions : np.ndarray
             of shape (N, 3), usually in ego-system
-        intensity : np.ndarray
-            of shape (N, 1)
+        attributes : np.ndarray
+            of shape (N, x)
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
         self.positions = positions.copy()
-        self.intensity = intensity.copy()
+        self.intensity = attributes.copy()
         self.tensor_smith = tensor_smith
 
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
         # here points is a row array
         self.positions = self.positions @ flip_mat.T
-        
         return self
-    
+
     def rotate_3d(self, rmat, **kwargs):
         # rmat = R_e'e = R_ee'.T
         # R_c = R_ec
         # R_c' = R_e'c = R_e'e @ R_ec
         self.positions = self.positions @ rmat.T
         return self
-
 
 
 class Bbox3D(SpatialTransformable):

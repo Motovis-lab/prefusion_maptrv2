@@ -44,10 +44,18 @@ __all__ = [
     "GroupBatchDataset"
 ]
 
+
 def get_frame_index(sequence, timestamp):
     for t in sequence:
         if timestamp <= t:
             return t
+
+
+def read_ego_mask(path):
+    ego_mask = mmcv.imread(path, flag="grayscale")
+    if ego_mask.max() == 255:
+        ego_mask = ego_mask / 255
+    return ego_mask
 
 
 @MMENGINE_FUNCTIONS.register_module()
@@ -507,7 +515,7 @@ class GroupBatchDataset(Dataset):
                 cam_id=cam_id,
                 cam_type=calib[cam_id]["camera_type"],
                 img=mmcv.imread(self.data_root / frame_info["camera_image"][cam_id]),
-                ego_mask=mmcv.imread(self.data_root / scene_info["camera_mask"][cam_id], flag="grayscale"),
+                ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id]),
                 extrinsic=calib[cam_id]["extrinsic"],
                 intrinsic=calib[cam_id]["intrinsic"],
                 tensor_smith=tensor_smith,
@@ -520,7 +528,54 @@ class GroupBatchDataset(Dataset):
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         points = read_pcd(self.data_root / frame["lidar_points"]["lidar1"])
-        return LidarPoints(name, points[:, :3], points[:, 3], tensor_smith)
+        points = np.pad(points, [[0, 0], [0, 1]], constant_values=0)
+        return LidarPoints(name, points[:, :3], points[:, 3:], tensor_smith=tensor_smith)
+
+    def load_lidar_sweeps(self, name: str, index_info: IndexInfo, tensor_smith: "TensorSmith" = None, **kwargs):
+        scene = self.info[index_info.scene_id]
+        frame = scene["frame_info"][index_info.frame_id]
+        sweep_infos = frame['lidar_points']['lidar1_sweeps']
+
+        def Rt2T(R, t):
+            T = np.ones(4)
+            T[:3, :3] = R
+            t[:3, 3] = t
+            return T
+
+        def to_homo(points: np.array) -> np.array:
+            if points.ndim == 1:
+                points = points[None, :]
+            ones = np.ones((len(points), 1), dtype=np.float32)
+            return np.concatenate((points, ones), axis=1)
+
+        def transform_pts_with_T(points, T):
+            # from pts3d to lidar 3d
+            points = np.array(points)
+            shape = points.shape
+            points = points.reshape(-1, 3)
+            points_output = (to_homo(points) @ T.T)[:, :3].reshape(*shape)
+            return points_output
+
+        points = read_pcd(self.data_root / frame["lidar_points"]["lidar1"])
+        Twe = Rt2T(frame["ego_pose"]["rotation"], frame['ego_pose']["translation"])
+        Tew = np.linalg.inv(Twe)
+        ts = float(Path(frame["lidar_points"]["lidar1"]).stem) / 1000
+        output_points = [points]
+        for sweep in sweep_infos:
+            path = sweep['path']  # input points in ego coord
+            Twei = sweep['Twe']
+            sweep_ts = sweep['timestamps'] / 1000  # use as s
+            Te0ei = Tew @ Twei
+            points = read_pcd(self.data_root / path)
+            points = np.concatenate([
+                transform_pts_with_T(points[:, :3], Te0ei),
+                points[:, 3:],
+                np.zeros_like(points[:, :1]) + ts - sweep_ts
+            ])
+            output_points += [points]
+        output_points = np.concatenate(output_points, axis=0)
+        return LidarPoints(name, output_points[:, :3], output_points[:, 3:], tensor_smith=tensor_smith)
+
 
     def load_camera_segs(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> CameraSegMaskSet:
         scene_info = self.info[index_info.scene_id]["scene_info"]
@@ -533,7 +588,7 @@ class GroupBatchDataset(Dataset):
                 cam_id=cam_id,
                 cam_type=calib[cam_id]["camera_type"],
                 img=mmcv.imread(self.data_root / frame_info["camera_image_seg"][cam_id], flag="unchanged"),
-                ego_mask=mmcv.imread(self.data_root / scene_info["camera_mask"][cam_id], flag="grayscale"),
+                ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id]),
                 extrinsic=calib[cam_id]["extrinsic"],
                 intrinsic=calib[cam_id]["intrinsic"],
                 dictionary=dictionary,
@@ -554,7 +609,7 @@ class GroupBatchDataset(Dataset):
                 cam_id=cam_id,
                 cam_type=calib[cam_id]["camera_type"],
                 img=np.load(self.data_root / frame_info['camera_image_depth'][cam_id])['depth'][..., None].astype(np.float32),
-                ego_mask=mmcv.imread(self.data_root / scene_info["camera_mask"][cam_id], flag="grayscale"),
+                ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id]),
                 extrinsic=calib[cam_id]["extrinsic"],
                 intrinsic=calib[cam_id]["intrinsic"],
                 depth_mode="d",
@@ -651,3 +706,4 @@ class GroupBatchDataset(Dataset):
         frame = scene["frame_info"][index_info.frame_id]
         file_path = frame["occ_sdf"]["occ_sdf_3d"]
         raise NotImplementedError
+
