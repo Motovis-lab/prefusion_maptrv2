@@ -289,14 +289,46 @@ def demo(
         gt_corners = []
         gt_labels = []
         for i in range(len(frame_info['3d_boxes'])):
-            # if map_name_from_general_to_detection[
-            #         info['ann_infos'][i]['category_name']] in show_classes:
-                box = np.array(frame_info['3d_boxes'][i]['translation'].reshape(-1).tolist() + frame_info['3d_boxes'][i]['size'] + [Quaternion(matrix=frame_info['3d_boxes'][i]['rotation']).yaw_pitch_roll[0]] + [0, 0])
-                if np.linalg.norm(box[:2]) <= show_range:
-                    corners = get_corners_with_angles(box[None], frame_info['3d_boxes'][i]['rotation'].T)[0]
-                    gt_corners.append(corners)
-                    gt_labels.append(frame_info['3d_boxes'][i]['class'])
-
+            # debug width is lengther than length
+            # box = np.array(frame_info['3d_boxes'][i]['translation'].reshape(-1).tolist() + frame_info['3d_boxes'][i]['size'] + [Rotation.from_matrix(frame_info['3d_boxes'][i]['rotation']).as_euler("xyz", degrees=False).tolist()[-1]] + [0, 0])
+            # box[3] = 1.2
+            # box[4] = 3.8
+            # if np.linalg.norm(box[:2]) <= show_range:
+            #     # corners = get_corners_with_angles(box[None], frame_info['3d_boxes'][i]['rotation'].T)[0]
+            #     yaw_matrix = Rotation.from_euler("xyz", angles=(0, 0, box[-3])).as_matrix()
+            #     if box[3] < box[4]:
+            #         box[3], box[4] = box[4], box[3]
+            #         R_nus = Rotation.from_euler("XYZ", angles=(0,0,90), degrees=True).as_matrix()
+            #         box_R = R_nus.T @ yaw_matrix.T
+            #     else:
+            #         box_R = yaw_matrix.T
+                
+            #     corners = get_corners_with_angles(box[None], box_R)[0]
+            #     gt_corners.append(corners)
+            #     gt_labels.append(frame_info['3d_boxes'][i]['class'])
+            #     print("dayu")
+            #     print(Rotation.from_matrix(R_nus @ frame_info['3d_boxes'][i]['rotation']).as_euler("xyz", degrees=True))
+            box = np.array(frame_info['3d_boxes'][i]['translation'].reshape(-1).tolist() + frame_info['3d_boxes'][i]['size'] + [Rotation.from_matrix(frame_info['3d_boxes'][i]['rotation']).as_euler("xyz", degrees=False).tolist()[-1]] + [0, 0])
+            if np.linalg.norm(box[:2]) <= show_range:
+                # corners = get_corners_with_angles(box[None], frame_info['3d_boxes'][i]['rotation'].T)[0]
+                yaw_matrix = Rotation.from_euler("xyz", angles=(0, 0, box[-3])).as_matrix()
+                if box[3] < box[4]:
+                    box[3], box[4] = box[4], box[3]
+                    R_nus = Rotation.from_euler("XYZ", angles=(0,0,90), degrees=True).as_matrix()
+                    box_R = R_nus.T @ yaw_matrix.T
+                    # only yaw angle for disply
+                    # box_R = R_nus.T @ frame_info['3d_boxes'][i]['rotation'].T
+                else:
+                    box_R = yaw_matrix.T
+                    # R for disply
+                    # box_R = frame_info['3d_boxes'][i]['rotation'].T
+                
+                corners = get_corners_with_angles(box[None], box_R)[0]
+                gt_corners.append(corners)
+                gt_labels.append(frame_info['3d_boxes'][i]['class'])
+                # print("xiaoyu")
+                # print(Rotation.from_matrix(frame_info['3d_boxes'][i]['rotation']).as_euler("xyz", degrees=True))
+            
         # Set figure size
         if nus:
             plt.figure(figsize=(24, 8))
@@ -528,6 +560,11 @@ def demo(
             # Draw BEV GT boxes
             for corners in gt_corners:
                 lines = get_bev_lines(corners)
+                front_line = lines.pop(0)
+                plt.plot([-x for x in front_line[1]],
+                            front_line[0],
+                            c='b',
+                            label='ground truth')
                 for line in lines:
                     plt.plot([-x for x in line[1]],
                             line[0],

@@ -203,10 +203,20 @@ class BEVDepthHeadV1(CenterHead):
                 for box_num_id, boxes in enumerate(data['transformables'][task_name['label_type']].elements):
                     labels_3d.append(self.all_classes.index(boxes['class']))
                     tmp_box = [*boxes['translation'].tolist(), *boxes['size'], Rotation.from_matrix(boxes['rotation']).as_euler("xyz", degrees=False).tolist()[-1], *boxes['velocity'].tolist()[:2]]
-                    corners = get_corners_with_angles(np.array(tmp_box)[None], boxes['rotation'].T)[0][:4, :3]
-                    front_center_z = corners[:2, 2].mean(0)
-                    back_center_z = corners[2:, 2].mean(0)
-                    bboxes_3d.append([*boxes['translation'].tolist(), *boxes['size'], Rotation.from_matrix(boxes['rotation']).as_euler("xyz", degrees=False).tolist()[-1], *boxes['velocity'].tolist()[:2], front_center_z, back_center_z])
+                    if tmp_box[3] < tmp_box[4]:
+                        tmp_box[3], tmp_box[4] = tmp_box[4], tmp_box[3]
+                        R_nus = Rotation.from_euler("XYZ", angles=(0,0,90), degrees=True).as_matrix()
+                        box_R = R_nus.T @ boxes['rotation'].T
+                        corners = get_corners_with_angles(np.array(tmp_box)[None], box_R)[0][:4, :3]
+                        front_center_z = corners[:2, 2].mean(0)
+                        back_center_z = corners[2:, 2].mean(0)
+                        bboxes_3d.append([*boxes['translation'].tolist(), *boxes['size'], Rotation.from_matrix(R_nus @ boxes['rotation']).as_euler("xyz", degrees=False).tolist()[-1], *boxes['velocity'].tolist()[:2], front_center_z, back_center_z])
+                    else:
+                        box_R = boxes['rotation'].T
+                        corners = get_corners_with_angles(np.array(tmp_box)[None], box_R)[0][:4, :3]
+                        front_center_z = corners[:2, 2].mean(0)
+                        back_center_z = corners[2:, 2].mean(0)
+                        bboxes_3d.append([*boxes['translation'].tolist(), *boxes['size'], Rotation.from_matrix(boxes['rotation']).as_euler("xyz", degrees=False).tolist()[-1], *boxes['velocity'].tolist()[:2], front_center_z, back_center_z])
             bboxes_3d = torch.as_tensor(bboxes_3d, device='cuda')
             labels_3d = torch.as_tensor(labels_3d, device='cuda')
             gt_bboxes_3d.append(bboxes_3d)
