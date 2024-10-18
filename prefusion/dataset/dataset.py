@@ -574,6 +574,7 @@ class GroupBatchDataset(Dataset):
         output_points = np.concatenate(output_points, axis=0)
         return LidarPoints(name, output_points[:, :3], output_points[:, 3:], tensor_smith=tensor_smith)
 
+
     def load_camera_segs(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None,
                          **kwargs) -> CameraSegMaskSet:
         scene_info = self.info[index_info.scene_id]["scene_info"]

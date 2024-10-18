@@ -412,7 +412,7 @@ def test_load_camera_depth():
         name="gbd",
         data_root=Path(tmpdir),
         info_path=depth_path,
-        transformables=[],
+        transformables={},
         transforms=[DummyTransform(scope="group")],
         model_feeder=BaseModelFeeder(),
         phase="val",

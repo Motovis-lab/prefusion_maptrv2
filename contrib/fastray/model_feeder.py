@@ -105,7 +105,7 @@ class FastRayModelFeeder(BaseModelFeeder):
         for input_dict in frame_batch:
             # batching index info
             processed_frame_batch['index_infos'].append(input_dict['index_info'])
-            for transformable in input_dict['transformables']:
+            for transformable in input_dict['transformables'].values():
                 match transformable:
                     case CameraImageSet():
                         LUT = self.voxel_lut_gen.generate(transformable)

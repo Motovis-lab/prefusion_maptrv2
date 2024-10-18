@@ -39,6 +39,9 @@ RUN apt-get update \
    && apt-get clean \
    && rm -rf /var/lib/apt/lists/*
 
+# install extra python packages
+RUN pip install --no-cache-dir copious==0.1.22
+
 WORKDIR /workspace
 
 CMD [ "/bin/bash"  ]
