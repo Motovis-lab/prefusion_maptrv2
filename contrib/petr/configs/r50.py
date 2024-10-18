@@ -50,14 +50,16 @@ train_dataloader = dict(
         ),
         transformables=dict(
             camera_images=dict(
-                type="camera_images", 
+                type="CameraImageSet",
+                loader=dict(type="CameraImageSetLoader"),
                 tensor_smith=dict(
                     type="CameraImageTensor",
                     means=[123.675, 116.280, 103.530],
                     stds=[58.395, 57.120, 57.375])),
-            bbox_3d=dict(type="bbox_3d", 
-                         dictionary={"classes": det_classes},
-                         tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
+            bbox_3d=dict(
+                type="bbox_3d", 
+                dictionary={"classes": det_classes},
+                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
             ego_poses=dict(type="ego_poses")
         ),
         transforms=[

@@ -11,9 +11,15 @@ import mmcv
 import mmengine
 import numpy as np
 from torch.utils.data import Dataset
-from prefusion.registry import DATASETS, MMENGINE_FUNCTIONS, TENSOR_SMITHS
+from prefusion.registry import DATASETS, MMENGINE_FUNCTIONS, TENSOR_SMITHS, TRANSFORMABLE_LOADERS
+from prefusion.dataset.transformable_loader import (
+    TransformableLoader,
+    CameraImageSetLoader,
+    EgoPoseSetLoader,
+)
 
 from .transform import (
+    Transformable, 
     CameraImage,
     CameraImageSet,
     LidarPoints,
@@ -303,22 +309,10 @@ class GroupBatchDataset(Dataset):
     """
 
     # TODO: implement visualization?
-    # mapping of transformable keys to their corresponding transformable_cls
-    AVAILABLE_TRANSFORMABLE_KEYS = (
-        "camera_images",
-        "camera_segs",
-        "camera_depths",
-        "lidar_points",
-        "lidar_sweeps",
-        "bbox_3d",
-        "polyline_3d",
-        "polygon_3d",
-        "parkingslot_3d",
-        "ego_poses",
-        "seg_bev",
-        "occ_sdf_bev",
-        "occ_sdf_3d",
-    )
+    DEFAULT_LOADERS = {
+        CameraImageSet: CameraImageSetLoader,
+        EgoPoseSet: EgoPoseSetLoader,
+    }
 
     def __init__(
         self,
@@ -344,7 +338,7 @@ class GroupBatchDataset(Dataset):
         - name (str): Name of the dataset.
         - data_root (str): Root directory of the dataset.
         - info_path (str): Path to the information file.
-        - transformables (dict): Dict of transformable definitions, in which, each element's type must be in AVAILABLE_TRANSFORMABLE_KEYS.
+        - transformables (dict): Dict of transformable definitions.
         - transforms (list): Transform classes for preprocessing transformables. Build by TRANSFORMS.
         - phase (str): Specifies the phase ('train', 'val', 'test' or 'test_scene_by_scene') of the dataset; default is 'train'.
         - indices_path (str, optional): Specified file of indices to load; if None, all frames are automatically fetched from the info_path.
@@ -369,7 +363,6 @@ class GroupBatchDataset(Dataset):
         self.phase = phase.lower()
         self.info = mmengine.load(str(info_path))
         self.transformables = transformables
-        self._assert_availability([self.transformables[name]['type'] for name in self.transformables])
         self.transforms = build_transforms(transforms)
         self.model_feeder = build_model_feeder(model_feeder)
 
@@ -387,13 +380,6 @@ class GroupBatchDataset(Dataset):
 
         self.group_sampler = GroupSampler(self.scene_frame_inds, possible_group_sizes, possible_frame_intervals, seed=seed_dataset)
         self.groups = self.group_sampler.sample(self.phase, output_str_index=False)
-
-    @classmethod
-    def _assert_availability(cls, keys: List[str]) -> None:
-        for key in keys:
-            assert (
-                key in cls.AVAILABLE_TRANSFORMABLE_KEYS
-            ), f"{key} is not a valid transformable key from {cls.AVAILABLE_TRANSFORMABLE_KEYS}"
 
     @staticmethod
     def _prepare_scene_frame_inds(info: Dict, indices: List[str] = None) -> Dict[str, List[str]]:
@@ -438,10 +424,19 @@ class GroupBatchDataset(Dataset):
         all_transformables = {}
         for name in self.transformables:
             _t_cfg = copy.deepcopy(self.transformables[name])
-            key = _t_cfg.pop("type")
+            transformable_type = _t_cfg.pop("type")
+            loader_cfg = _t_cfg.pop("loader", None)
+            if loader_cfg:
+                loader = TRANSFORMABLE_LOADERS.build(loader)
+            else:
+                loader = self._get_default_loader(transformable_type)
             tensor_smith = self._build_tensor_smith(_t_cfg.pop("tensor_smith")) if "tensor_smith" in _t_cfg else None
-            all_transformables[name] = eval(f"self.load_{key}")(name, index_info, tensor_smith=tensor_smith, **_t_cfg)
+            all_transformables[name] = self._build_transformable(name, index_info, loader, tensor_smith=tensor_smith, **_t_cfg)
+        
         return all_transformables
+    
+    def _get_default_loader(self, transformable_type):
+        return self.DEFAULT_LOADERS[transformable_type]
 
     @staticmethod
     def _build_tensor_smith(tensor_smith: dict = None):
@@ -505,6 +500,9 @@ class GroupBatchDataset(Dataset):
         model_food = self.model_feeder(group_batch)
 
         return model_food
+
+    def _build_transformable(self, name: str, index_info: IndexInfo, loader: TransformableLoader, tensor_smith: "TensorSmith" = None, **kwargs) -> Transformable:
+        return loader.load(name, index_info, tensor_smith=tensor_smith, **kwargs)
 
     def load_camera_images(self, name: str, index_info: IndexInfo, tensor_smith: "TensorSmith" = None, **kwargs) -> CameraImageSet:
         scene_info = self.info[index_info.scene_id]["scene_info"]
