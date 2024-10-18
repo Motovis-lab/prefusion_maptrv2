@@ -1388,7 +1388,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
         dir_ims = []
         height_ims = []
 
-        linewidth = int(max(0.51, abs(fx * 0.1)))
+        linewidth = int(max(0.51, abs(fx * 0.2)))
 
         for polyline, class_ind, attr_list in zip(polylines, class_inds, attr_lists):
             for line_3d in zip(polyline[:-1], polyline[1:]):
@@ -1474,16 +1474,32 @@ class PlanarPolyline3D(PlanarTensorSmith):
 
 
     @staticmethod
-    def _angle_hook_dist(oriented_point_1, oriented_point_2, angle=45, angle_weight=4):
+    def _angle_hook_dist(oriented_point_1, oriented_point_2, disth_thresh=5, angle_thresh=30, angle_weight=0.5):
         point_1, abs_dir_1 = oriented_point_1
         point_2, abs_dir_2 = oriented_point_2
+        
         vec_1 = np.float32([abs_dir_1[0], abs_dir_1[1] * abs_dir_1[2]])
         vec_2 = np.float32([abs_dir_2[0], abs_dir_2[1] * abs_dir_2[2]])
-        cross_thresh = np.sin(np.abs(angle / 2) * np.pi / 180)
-        dist_12 = np.linalg.norm(point_2 - point_1)
-        cross_12 = np.abs(np.cross(vec_1, vec_2))
-        cross_weight = (angle_weight + 1) if cross_12 > cross_thresh else (angle_weight * cross_12 + 1)
-        return dist_12 * cross_weight
+        vec_1 /= np.linalg.norm(vec_1)
+        vec_2 /= np.linalg.norm(vec_2)
+        vec_2v = vec_2[::-1] * [1, -1]
+        
+        dir_12 = point_2 - point_1
+        dist_12 = np.linalg.norm(dir_12)
+
+        if dist_12 < disth_thresh:
+            dist_l = np.abs(np.sum(dir_12 * vec_2))
+            dist_v = np.abs(np.sum(dir_12 * vec_2v))
+            dist = np.sqrt(0.25 * dist_l ** 2 + dist_v ** 2)
+            cross_thresh = np.sin(np.abs(angle_thresh / 2) * np.pi / 180)
+            cross_12 = np.abs(np.cross(vec_1, vec_2))
+            cross = 1 if cross_12 > cross_thresh else cross_12
+            dist += angle_weight * (cross - 1)
+        else:
+            dist = dist_12
+        
+        return dist_12
+        
 
     def _link_line_points(self, fused_points, fused_vecs, max_adist=5):
         points_ind = np.arange(fused_points.shape[1])
@@ -1512,7 +1528,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
                             point_vec = point_j - point_i_forward
                             ward = np.sum(point_vec * vec_i_forward)
                             if ward > 0:
-                                adist_ij = self._angle_hook_dist(oriented_point_i_forward, oriented_point_j)
+                                adist_ij = self._angle_hook_dist(oriented_point_i_forward, oriented_point_j, disth_thresh=max_adist)
                                 if adist_ij < adist_forward_max:
                                     adist_forward_max = adist_ij
                                     adist_forward_max_ind = j
@@ -1544,7 +1560,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
                             point_vec = point_j - point_i_backward
                             ward = np.sum(point_vec * vec_i_backward)
                             if ward <= 0:
-                                adist_ij = self._angle_hook_dist(oriented_point_i_backward, oriented_point_j)
+                                adist_ij = self._angle_hook_dist(oriented_point_i_backward, oriented_point_j, disth_thresh=max_adist)
                                 if adist_ij < adist_backward_max:
                                     adist_backward_max = adist_ij
                                     adist_backward_max_ind = j
@@ -1563,7 +1579,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
         return line_segments
 
 
-    def reverse(self, tensor_dict, pre_conf=0.1):
+    def reverse(self, tensor_dict, pre_conf=0.1, max_adist=10):
         """
         Parameters
         ----------
@@ -1631,7 +1647,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
         fused_heights = np.float32(fused_heights)
         
         ## link all points and get 3d polylines
-        line_segments = self._link_line_points(fused_points, fused_vecs)
+        line_segments = self._link_line_points(fused_points, fused_vecs, max_adist)
         cx, cy, fx, fy = self.bev_intrinsics
         polylines_3d = []
         for g in line_segments:
