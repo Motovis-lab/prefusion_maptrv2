@@ -18,6 +18,8 @@ class CMTModelFeeder(BaseModelFeeder):
     Any: Any parameter or keyword arguments.
 
     """
+    def __init__(self, *args, **kwargs):
+        self.key_list = kwargs['key_list']
 
     def process(self, frame_batch: list) -> dict | list:
         """
@@ -35,7 +37,8 @@ class CMTModelFeeder(BaseModelFeeder):
         """
         processed_frame_batch = []
         for frame in frame_batch:
-            processed_frame = dict(index_info=frame["index_info"], **frame["transformables"])
+            transformable_dict ={k: v for k, v in zip(self.key_list, frame["transformables"])}
+            processed_frame = dict(index_info=frame["index_info"], **transformable_dict)
             processed_frame["meta_info"] = {}
             for k, trnsfmb in processed_frame.items():
                 if isinstance(trnsfmb, CameraImageSet):
@@ -70,7 +73,7 @@ class CMTModelFeeder(BaseModelFeeder):
         mat[0, 0] = param[2]
         mat[1, 1] = param[3]
         mat[0, 2] = param[0]
-        mat[2, 2] = param[1]
+        mat[1, 2] = param[1]
         return mat
 
     @staticmethod

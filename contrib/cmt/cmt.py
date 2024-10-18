@@ -400,7 +400,7 @@ class CmtDetector(MVXTwoStageDetector):
                 meta['pad_shape'] = [[img.shape[-2], img.shape[-1], 3]]
                 meta['cam_inv_poly'] = meta['camera_images']['cam_inv_poly']
                 meta['cam_intrinsic'] = meta['camera_images']['intrinsic']
-                meta['lidar2cam'] = meta['camera_images']['extrinsic']
+                meta['lidar2cam'] = meta['camera_images']['extrinsic_inv']
             losses_pts = self.forward_pts_train(pts_feats, img_feats, None, None, img_metas)
             losses.update(losses_pts)
         return losses
@@ -477,7 +477,7 @@ class CmtDetector(MVXTwoStageDetector):
             meta['pad_shape'] = [[img.shape[-2], img.shape[-1], 3]]
             meta['cam_inv_poly'] = meta['camera_images']['cam_inv_poly']
             meta['cam_intrinsic'] = meta['camera_images']['intrinsic']
-            meta['lidar2cam'] = meta['camera_images']['extrinsic']
+            meta['lidar2cam'] = meta['camera_images']['extrinsic_inv']
 
         return self.simple_test(lidar_points, img_metas, imgs, **kwargs)
 

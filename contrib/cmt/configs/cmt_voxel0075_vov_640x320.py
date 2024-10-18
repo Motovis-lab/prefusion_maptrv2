@@ -34,7 +34,7 @@ class_names = det_classes  = [
     'class.traffic_facility.soft_barrier',
     'class.traffic_facility.speed_bump',
     'class.vehicle.env_protect',
-    'class.vehicle.passenger_car',
+    'class.vehicle.passenger_car',   # 21
     'class.vehicle.truck'
 ]
 
@@ -63,14 +63,14 @@ resolutions = {
 train_dataloader = dict(
     num_workers=1,
     persistent_workers=True,
-    sampler=dict(type="DefaultSampler"),
+    sampler=dict(type="DefaultSampler", shuffle=False),
     collate_fn=dict(type="collate_dict"),
     dataset=dict(
         type="GroupBatchDataset",
         name="MvParkingTest",
         data_root="/ssd1/data/4d",
         # info_path="/ssd1/data/4d/mv4d_infos_mini_lidar.pkl",
-        info_path="/ssd1/data/4d/mv4d_infos_tmp_mini.pkl",
+        info_path="/ssd1/data/4d/mv4d_infos_tmp_mini1.pkl",
         transformables=[
             dict(
                 name="camera_images",
@@ -89,7 +89,8 @@ train_dataloader = dict(
                 transformable_key="bbox_3d",
                 # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
                 dictionary={"classes": det_classes},
-                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes),
+                # tensor_smith=dict(type="Bbox3DBasic", classes=det_classes),
+                tensor_smith=dict(type="Bbox3D_XYZ_LWH_Yaw_VxVy", classes=det_classes),
             ),
             dict(
                 name="ego_poses",
@@ -98,7 +99,7 @@ train_dataloader = dict(
                 # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
             ),
             dict(
-                name="lidar_points",
+                name="lidar_sweeps",
                 transformable_key="lidar_points",
                 tensor_smith=dict(type="PointsToVoxelsTensor", voxel_size=voxel_size,
                               max_point_per_voxel=10, max_voxels=120000,
@@ -106,60 +107,14 @@ train_dataloader = dict(
                               point_cloud_range=[-54.0, -54.0, -5.0, 54.0, 54.0, 3.0]),
             ),
         ],
-        model_feeder=dict(type="CMTModelFeeder"),
+        model_feeder=dict(type="CMTModelFeeder", key_list=["camera_images", "bbox_3d", "ego_poses", "lidar_points"]),
         transforms=[
             dict(type="RenderIntrinsic", resolutions=resolutions),
-            dict(type="RandomMirrorSpace", prob=0.5, scope="group"),
-            dict(
-                type="RandomImageISP",
-                prob=0.5,
-            ),
-        ],
-        phase="train",
-        batch_size=2,
-        possible_group_sizes=[3, 4, 5],
-        possible_frame_intervals=[1, 2],
-    ),
-)
-val_dataloader = dict(
-    num_workers=1,
-    persistent_workers=True,
-    sampler=dict(type="DefaultSampler"),
-    collate_fn=dict(type="collate_dict"),
-    dataset=dict(
-        type="GroupBatchDataset",
-        name="MvParkingTest",
-        data_root="/ssd1/data/4d",
-        info_path="/ssd1/data/4d/mv4d_infos_tmp_mini.pkl",
-        dictionaries={
-            "camera_images": {},
-            "bbox_3d": {"det": {"classes": det_classes}},
-            "lidar_points": {},
-        },
-        tensor_smiths=dict(
-            camera_images=dict(
-                type="CameraImageTensor",
-                # means=[123.675, 116.280, 103.530],
-                # stds=[58.395, 57.120, 57.375],
-                means=[103.530, 116.280, 123.675],
-                stds=[57.375, 57.120, 58.395]
-            ),
-            bbox_3d=dict(type="Bbox3D_XYZ_LWH_Yaw_VxVy", classes=det_classes),
-            lidar_points=dict(type="PointsToVoxelsTensor", voxel_size=voxel_size,
-                              max_point_per_voxel=10, max_voxels=120000,
-                              max_input_points=1200000,
-                              point_cloud_range=[-54.0, -54.0, -5.0, 54.0, 54.0, 3.0]),
-        ), # TODO different num in train/val phase in tensor smith
-        model_feeder=dict(type="CMTModelFeeder"),
-        transformable_keys=["camera_images", "bbox_3d", "ego_poses", 'lidar_points'],
-        transforms=[
-            dict(type="RenderIntrinsic", resolutions=resolutions),
-            dict(type="RandomMirrorSpace", prob=0.5, scope="group"),
-            dict(
-                type="RandomImageISP",
-                prob=0.5,
-            ),
-
+            # dict(type="RandomMirrorSpace", prob=0.5, scope="group"),
+            # dict(
+            #     type="RandomImageISP",
+            #     prob=0.5,
+            # ),
         ],
         phase="val",
         batch_size=2,
@@ -167,8 +122,9 @@ val_dataloader = dict(
         possible_frame_intervals=[1, 2],
     ),
 )
+val_dataloader = train_dataloader
 test_dataloader = val_dataloader
-# --
+
 train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=24, val_interval=-1)  # -1 note don't eval
 val_cfg = dict(type="GroupValLoop")
 test_cfg = dict(type="GroupTestLoop")
