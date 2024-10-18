@@ -1451,7 +1451,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
 
     @staticmethod
     @numba.njit
-    def _group_points(dst_points, seg_scores, dist_thresh=0.1):
+    def _group_points(dst_points, seg_scores, dist_thresh=0.2):
         ranked_ind = np.argsort(seg_scores)[::-1]
         kept_groups = []
         kept_inds = []
@@ -1474,7 +1474,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
 
 
     @staticmethod
-    def _angle_hook_dist(oriented_point_1, oriented_point_2, disth_thresh=5, angle_thresh=30, angle_weight=0.5):
+    def _angle_hook_dist(oriented_point_1, oriented_point_2, disth_thresh=2, z_weight=10):
         point_1, abs_dir_1 = oriented_point_1
         point_2, abs_dir_2 = oriented_point_2
         
@@ -1482,26 +1482,29 @@ class PlanarPolyline3D(PlanarTensorSmith):
         vec_2 = np.float32([abs_dir_2[0], abs_dir_2[1] * abs_dir_2[2]])
         vec_1 /= np.linalg.norm(vec_1)
         vec_2 /= np.linalg.norm(vec_2)
-        vec_2v = vec_2[::-1] * [1, -1]
+        # vec_mean = 0.5 * (vec_1 + vec_2)
         
         dir_12 = point_2 - point_1
         dist_12 = np.linalg.norm(dir_12)
+        unit_12 = dir_12 / dist_12
 
         if dist_12 < disth_thresh:
-            dist_l = np.abs(np.sum(dir_12 * vec_2))
-            dist_v = np.abs(np.sum(dir_12 * vec_2v))
-            dist = np.sqrt(0.25 * dist_l ** 2 + dist_v ** 2)
-            cross_thresh = np.sin(np.abs(angle_thresh / 2) * np.pi / 180)
-            cross_12 = np.abs(np.cross(vec_1, vec_2))
-            cross = 1 if cross_12 > cross_thresh else cross_12
-            dist += angle_weight * (cross - 1)
+            # calc link_dir vs vec similarity
+            link_12 = dir_12[:2] / max(1e-5, np.linalg.norm(dir_12[:2]))
+            cos_link = np.sum(link_12 * vec_1)
+            # calc vec_1 vs vec_2 similarity
+            cos_12 = np.sum(vec_1 * vec_2)
+            # z distance
+            dist_z = np.abs(unit_12[2])
+            dir_gain = 0.5 * disth_thresh * (cos_link + cos_12)
+            dist = dist_12 + z_weight * dist_z - dir_gain
         else:
             dist = dist_12
         
-        return dist_12
+        return dist
         
 
-    def _link_line_points(self, fused_points, fused_vecs, max_adist=5):
+    def _link_line_points(self, fused_points, fused_vecs, max_adist):
         points_ind = np.arange(fused_points.shape[1])
         # get groups of line segments
         line_segments = []
@@ -1516,7 +1519,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
                 point_i_forward = fused_points[:, i]
                 abs_vec_i_forward = fused_vecs[:, i]
                 oriented_point_i_forward = [point_i_forward, abs_vec_i_forward]
-                vec_i_forward = np.float32([abs_vec_i_forward[0], abs_vec_i_forward[1] * abs_vec_i_forward[2]])
+                vec_i_forward = np.float32([abs_vec_i_forward[0], abs_vec_i_forward[1] * abs_vec_i_forward[2], 0])
                 adist_forward_max_ind = i
                 while True:
                     adist_forward_max = max_adist
@@ -1540,7 +1543,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
                     point_i_forward = fused_points[:, adist_forward_max_ind]
                     abs_vec_i_forward = fused_vecs[:, adist_forward_max_ind]
                     oriented_point_i_forward = [point_i_forward, abs_vec_i_forward]
-                    vec_i_forward = np.float32([abs_vec_i_forward[0], abs_vec_i_forward[1] * abs_vec_i_forward[2]])
+                    vec_i_forward = np.float32([abs_vec_i_forward[0], abs_vec_i_forward[1] * abs_vec_i_forward[2], 0])
                     if np.sum(vec_i_forward * (point_i_forward - point_i_forward_old)) <= 0:
                         vec_i_forward *= -1
                     
@@ -1548,7 +1551,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
                 point_i_backward = fused_points[:, i]
                 abs_vec_i_backward = fused_vecs[:, i]
                 oriented_point_i_backward = [point_i_backward, abs_vec_i_backward]
-                vec_i_backward = np.float32([abs_vec_i_backward[0], abs_vec_i_backward[1] * abs_vec_i_backward[2]])
+                vec_i_backward = np.float32([abs_vec_i_backward[0], abs_vec_i_backward[1] * abs_vec_i_backward[2], 0])
                 adist_backward_max_ind = i
                 while True:
                     adist_backward_max = max_adist
@@ -1572,14 +1575,20 @@ class PlanarPolyline3D(PlanarTensorSmith):
                     point_i_backward = fused_points[:, adist_backward_max_ind]
                     abs_vec_i_backward = fused_vecs[:, adist_backward_max_ind]
                     oriented_point_i_backward = [point_i_backward, abs_vec_i_backward]
-                    vec_i_backward = np.float32([abs_vec_i_backward[0], abs_vec_i_backward[1] * abs_vec_i_backward[2]])
+                    vec_i_backward = np.float32([abs_vec_i_backward[0], abs_vec_i_backward[1] * abs_vec_i_backward[2], 0])
                     if np.sum(vec_i_backward * (point_i_backward - point_i_backward_old)) > 0:
                         vec_i_backward *= -1
         
+        # remove isolated points
+        selected_line_segments = []
+        for segment in line_segments:
+            if len(segment) > 2:
+                selected_line_segments.append(segment)
+
         return line_segments
 
 
-    def reverse(self, tensor_dict, pre_conf=0.1, max_adist=10):
+    def reverse(self, tensor_dict, pre_conf=0.1, max_adist=1.5):
         """
         Parameters
         ----------
@@ -1615,9 +1624,12 @@ class PlanarPolyline3D(PlanarTensorSmith):
         vert_vecs = np.float32([reg_values[4], - reg_values[3] * _sign(reg_values[5])])
         vert_vecs *= _sign(np.sum(vert_vecs * reg_values[1:3], axis=0))
         # get precise points, vector of directions, and heights of line
-        dst_points = valid_points_bev + reg_values[0] * vert_vecs
+        # dst_points = valid_points_bev + reg_values[0] * vert_vecs
+        dst_points = np.concatenate([
+            valid_points_bev + reg_values[0] * vert_vecs,
+            reg_values[6][None]
+        ])
         dst_vecs =  reg_values[3:6]
-        dst_heights = reg_values[6]
         
         ## fuse points, group nms
         # group points
@@ -1626,25 +1638,18 @@ class PlanarPolyline3D(PlanarTensorSmith):
         fused_classes = []
         fused_points = []
         fused_vecs = []
-        fused_heights = []
         for g in kept_groups:
             weights = seg_scores[g]
             total_weight = weights.sum()
             mean_classes = (seg_classes[:, g] * weights[None]).sum(axis=-1) / total_weight
             mean_point = (dst_points[:, g] * weights[None]).sum(axis=-1) / total_weight
             mean_vec = (dst_vecs[:, g] * weights[None]).sum(axis=-1) / total_weight
-            mean_height = (dst_heights[g] * weights).sum(axis=-1) / total_weight
-            # mean_point = dst_points[:, g].mean(axis=-1)
-            # mean_vec = dst_vecs[:, g].mean(axis=-1)
-            # mean_height = dst_heights[g].mean(axis=-1)
             fused_classes.append(mean_classes)
             fused_points.append(mean_point)
             fused_vecs.append(mean_vec)
-            fused_heights.append(mean_height)
         fused_classes = np.float32(fused_classes).T
         fused_points = np.float32(fused_points).T
         fused_vecs = np.float32(fused_vecs).T
-        fused_heights = np.float32(fused_heights)
         
         ## link all points and get 3d polylines
         line_segments = self._link_line_points(fused_points, fused_vecs, max_adist)
@@ -1653,8 +1658,8 @@ class PlanarPolyline3D(PlanarTensorSmith):
         for g in line_segments:
             polyline_3d = np.concatenate([
                 np.stack([(fused_points[1, g] - cx) / fx,
-                            (fused_points[0, g] - cy) / fy,
-                            fused_heights[g]]),
+                          (fused_points[0, g] - cy) / fy,
+                          fused_points[2, g]]),
                 fused_classes[:, g],
             ], axis=0)
             polylines_3d.append(polyline_3d.T)
