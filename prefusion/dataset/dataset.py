@@ -44,7 +44,6 @@ __all__ = [
     "GroupBatchDataset"
 ]
 
-
 def get_frame_index(sequence, timestamp):
     for t in sequence:
         if timestamp <= t:
@@ -60,13 +59,13 @@ GroupBatch = List[List[Dict]]
 
 
 def generate_groups(
-        total_num_frames: int,
-        group_size: int,
-        frame_interval: int,
-        start_ind: int = 0,
-        random_start_ind: bool = False,
-        pad_mode: str = 'both',
-        seed: int = None,
+    total_num_frames: int,
+    group_size: int,
+    frame_interval: int,
+    start_ind: int = 0,
+    random_start_ind: bool = False,
+    pad_mode: str = 'both',
+    seed: int = None,
 ) -> List[Tuple[int]]:
     """
     Generate groups of frames from a single scene.
@@ -192,8 +191,7 @@ class IndexInfo:
 
 
 class GroupSampler:
-    def __init__(self, scene_frame_inds: Dict[str, List[str]], possible_group_sizes: Union[int, Tuple[int]],
-                 possible_frame_intervals: Union[int, Tuple[int]] = 1, seed: int = None):
+    def __init__(self, scene_frame_inds: Dict[str, List[str]], possible_group_sizes: Union[int, Tuple[int]], possible_frame_intervals: Union[int, Tuple[int]] = 1, seed: int = None):
         """Sample groups
 
         Parameters
@@ -216,10 +214,8 @@ class GroupSampler:
             Random seed for randomization operations. It's usually for testing and debugging purpose.
         """
         self.scene_frame_inds = scene_frame_inds
-        self.possible_group_sizes = [possible_group_sizes] if isinstance(possible_group_sizes,
-                                                                         int) else possible_group_sizes
-        self.possible_frame_intervals = [possible_frame_intervals] if isinstance(possible_frame_intervals,
-                                                                                 int) else possible_frame_intervals
+        self.possible_group_sizes = [possible_group_sizes] if isinstance(possible_group_sizes, int) else possible_group_sizes
+        self.possible_frame_intervals = [possible_frame_intervals] if isinstance(possible_frame_intervals, int) else possible_frame_intervals
         self._cur_train_group_size = self.possible_group_sizes[0]  # train group size of current epoch
         self.seed = seed
 
@@ -234,7 +230,7 @@ class GroupSampler:
                 groups = self.sample_train_groups()
             case "val" | "test":
                 groups = self.sample_val_groups()
-            case "test_scene_by_scene":
+            case "test_scene_by_scene" :
                 groups = self.sample_scene_groups()
         if not output_str_index:
             return self._convert_groups_to_info(groups)
@@ -258,8 +254,7 @@ class GroupSampler:
         return self._generate_groups(self._cur_train_group_size, random_start_ind=True, shuffle=True, seed=self.seed)
 
     def sample_val_groups(self) -> List[List[str]]:
-        return self._generate_groups(self.possible_group_sizes[0], frame_interval=self.possible_frame_intervals[0],
-                                     start_ind=0, random_start_ind=False, shuffle=False)
+        return self._generate_groups(self.possible_group_sizes[0], frame_interval=self.possible_frame_intervals[0], start_ind=0, random_start_ind=False, shuffle=False)
 
     def sample_scene_groups(self) -> List[List[str]]:
         return list(self.scene_frame_inds.values())
@@ -271,21 +266,20 @@ class GroupSampler:
         raise NotImplementedError
 
     def _generate_groups(
-            self,
-            group_size: int,
-            frame_interval: int = None,
-            start_ind: int = 0,
-            random_start_ind: bool = False,
-            shuffle: bool = False,
-            seed: int = None
+        self,
+        group_size: int,
+        frame_interval: int = None,
+        start_ind: int = 0,
+        random_start_ind: bool = False,
+        shuffle: bool = False,
+        seed: int = None
     ) -> List[List[str]]:
         all_groups = []
         for _, frame_ids in self.scene_frame_inds.items():
             if not frame_interval:
                 if self.seed: random.seed(self.seed)
                 frame_interval = random.choice(self.possible_frame_intervals)
-            inds_list = generate_groups(len(frame_ids), group_size, frame_interval, start_ind=start_ind,
-                                        random_start_ind=random_start_ind, seed=seed)
+            inds_list = generate_groups(len(frame_ids), group_size, frame_interval, start_ind=start_ind, random_start_ind=random_start_ind, seed=seed)
             groups = [[frame_ids[i] for i in inds] for inds in inds_list]
             all_groups.extend(groups)
         if shuffle:
@@ -318,21 +312,21 @@ class GroupBatchDataset(Dataset):
     )
 
     def __init__(
-            self,
-            name,
-            data_root: Union[str, Path],
-            info_path: Union[str, Path],
-            transformables: dict,
-            transforms: List[Union[dict, "Transform"]] = None,
-            model_feeder: Union["BaseModelFeeder", dict] = None,
-            phase: str = "train",
-            indices_path: Union[str, Path] = None,
-            batch_size: int = 1,
-            drop_last: bool = False,
-            possible_group_sizes: Union[int, Tuple[int]] = 3,
-            possible_frame_intervals: Union[int, Tuple[int]] = 1,  # TODO: redefine it by time, like seconds
-            group_backtime_prob: float = 0.0,
-            seed_dataset: int = None,
+        self,
+        name,
+        data_root: Union[str, Path],
+        info_path: Union[str, Path],
+        transformables: dict,
+        transforms: List[Union[dict, "Transform"]] = None,
+        model_feeder: Union["BaseModelFeeder", dict] = None,
+        phase: str = "train",
+        indices_path: Union[str, Path] = None,
+        batch_size: int = 1,
+        drop_last: bool = False,
+        possible_group_sizes: Union[int, Tuple[int]] = 3,
+        possible_frame_intervals: Union[int, Tuple[int]] = 1,  # TODO: redefine it by time, like seconds
+        group_backtime_prob: float = 0.0,
+        seed_dataset: int = None,
     ):
         """
         Initializes the dataset instance.
@@ -382,15 +376,14 @@ class GroupBatchDataset(Dataset):
 
         self.seed_dataset = seed_dataset
 
-        self.group_sampler = GroupSampler(self.scene_frame_inds, possible_group_sizes, possible_frame_intervals,
-                                          seed=seed_dataset)
+        self.group_sampler = GroupSampler(self.scene_frame_inds, possible_group_sizes, possible_frame_intervals, seed=seed_dataset)
         self.groups = self.group_sampler.sample(self.phase, output_str_index=False)
 
     @classmethod
     def _assert_availability(cls, keys: List[str]) -> None:
         for key in keys:
             assert (
-                    key in cls.AVAILABLE_TRANSFORMABLE_KEYS
+                key in cls.AVAILABLE_TRANSFORMABLE_KEYS
             ), f"{key} is not a valid transformable key from {cls.AVAILABLE_TRANSFORMABLE_KEYS}"
 
     @staticmethod
@@ -454,6 +447,7 @@ class GroupBatchDataset(Dataset):
         else:
             return int(np.ceil(len(self.groups) / self.batch_size))
 
+
     @staticmethod
     def _batch_groups(group_batch_ind, groups, batch_size):
         batched_groups = []
@@ -463,6 +457,7 @@ class GroupBatchDataset(Dataset):
                 group_idx = max(0, 2 * (len(groups) - 1) - group_idx)
             batched_groups.append(groups[group_idx])
         return batched_groups
+
 
     def __getitem__(self, idx) -> GroupBatch:
 
@@ -502,8 +497,7 @@ class GroupBatchDataset(Dataset):
 
         return model_food
 
-    def load_camera_images(self, name: str, index_info: IndexInfo, tensor_smith: "TensorSmith" = None,
-                           **kwargs) -> CameraImageSet:
+    def load_camera_images(self, name: str, index_info: IndexInfo, tensor_smith: "TensorSmith" = None, **kwargs) -> CameraImageSet:
         scene_info = self.info[index_info.scene_id]["scene_info"]
         frame_info = self.info[index_info.scene_id]["frame_info"][index_info.frame_id]
         calib = self.info[index_info.scene_id]["scene_info"]["calibration"]
@@ -526,57 +520,9 @@ class GroupBatchDataset(Dataset):
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         points = read_pcd(self.data_root / frame["lidar_points"]["lidar1"])
-        points = np.pad(points, [[0, 0], [0, 1]], constant_values=0)
-        return LidarPoints(name, points[:, :3], points[:, 3:], tensor_smith=tensor_smith)
+        return LidarPoints(name, points[:, :3], points[:, 3], tensor_smith)
 
-    def load_lidar_sweeps(self, name: str, index_info: IndexInfo, tensor_smith: "TensorSmith" = None, **kwargs):
-        scene = self.info[index_info.scene_id]
-        frame = scene["frame_info"][index_info.frame_id]
-        sweep_infos = frame['lidar_points']['lidar1_sweeps']
-
-        def Rt2T(R, t):
-            T = np.ones(4)
-            T[:3, :3] = R
-            t[:3, 3] = t
-            return T
-
-        def to_homo(points: np.array) -> np.array:
-            if points.ndim == 1:
-                points = points[None, :]
-            ones = np.ones((len(points), 1), dtype=np.float32)
-            return np.concatenate((points, ones), axis=1)
-
-        def transform_pts_with_T(points, T):
-            # from pts3d to lidar 3d
-            points = np.array(points)
-            shape = points.shape
-            points = points.reshape(-1, 3)
-            points_output = (to_homo(points) @ T.T)[:, :3].reshape(*shape)
-            return points_output
-
-        points = read_pcd(self.data_root / frame["lidar_points"]["lidar1"])
-        Twe = Rt2T(frame["ego_pose"]["rotation"], frame['ego_pose']["translation"])
-        Tew = np.linalg.inv(Twe)
-        ts = float(Path(frame["lidar_points"]["lidar1"]).stem) / 1000
-        output_points = [points]
-        for sweep in sweep_infos:
-            path = sweep['path']  # input points in ego coord
-            Twei = sweep['Twe']
-            sweep_ts = sweep['timestamps'] / 1000  # use as s
-            Te0ei = Tew @ Twei
-            points = read_pcd(self.data_root / path)
-            points = np.concatenate([
-                transform_pts_with_T(points[:, :3], Te0ei),
-                points[:, 3:],
-                np.zeros_like(points[:, :1]) + ts - sweep_ts
-            ])
-            output_points += [points]
-        output_points = np.concatenate(output_points, axis=0)
-        return LidarPoints(name, output_points[:, :3], output_points[:, 3:], tensor_smith=tensor_smith)
-
-
-    def load_camera_segs(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None,
-                         **kwargs) -> CameraSegMaskSet:
+    def load_camera_segs(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> CameraSegMaskSet:
         scene_info = self.info[index_info.scene_id]["scene_info"]
         frame_info = self.info[index_info.scene_id]["frame_info"][index_info.frame_id]
         calib = self.info[index_info.scene_id]["scene_info"]["calibration"]
@@ -597,8 +543,7 @@ class GroupBatchDataset(Dataset):
         }
         return CameraSegMaskSet(name, camera_segs)
 
-    def load_camera_depths(self, name: str, index_info: IndexInfo, tensor_smith: "TensorSmith" = None,
-                           **kwargs) -> CameraDepthSet:
+    def load_camera_depths(self, name: str, index_info: IndexInfo, tensor_smith: "TensorSmith" = None, **kwargs) -> CameraDepthSet:
         scene_info = self.info[index_info.scene_id]["scene_info"]
         frame_info = self.info[index_info.scene_id]["frame_info"][index_info.frame_id]
         calib = self.info[index_info.scene_id]["scene_info"]["calibration"]
@@ -608,8 +553,7 @@ class GroupBatchDataset(Dataset):
                 name=f"{name}:{cam_id}",
                 cam_id=cam_id,
                 cam_type=calib[cam_id]["camera_type"],
-                img=np.load(self.data_root / frame_info['camera_image_depth'][cam_id])['depth'][..., None].astype(
-                    np.float32),
+                img=np.load(self.data_root / frame_info['camera_image_depth'][cam_id])['depth'][..., None].astype(np.float32),
                 ego_mask=mmcv.imread(self.data_root / scene_info["camera_mask"][cam_id], flag="grayscale"),
                 extrinsic=calib[cam_id]["extrinsic"],
                 intrinsic=calib[cam_id]["intrinsic"],
@@ -620,36 +564,31 @@ class GroupBatchDataset(Dataset):
         }
         return CameraDepthSet(name, camera_depths)
 
-    def load_bbox_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None,
-                     **kwargs) -> Bbox3D:
+    def load_bbox_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> Bbox3D:
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         elements = frame["3d_boxes"]
         return Bbox3D(name, elements, dictionary, tensor_smith=tensor_smith)
 
-    def load_polyline_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None,
-                         **kwargs) -> Polyline3D:
+    def load_polyline_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> Polyline3D:
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         elements = frame["3d_polylines"]
         return Polyline3D(name, elements, dictionary, tensor_smith=tensor_smith)
 
-    def load_polygon_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None,
-                        **kwargs) -> Polygon3D:
+    def load_polygon_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> Polygon3D:
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         elements = frame["3d_polylines"]
         return Polygon3D(name, elements, dictionary, tensor_smith=tensor_smith)
 
-    def load_parkingslot_3d(self, name: str, index_info: IndexInfo, dictionary: dict,
-                            tensor_smith: "TensorSmith" = None, **kwargs) -> ParkingSlot3D:
+    def load_parkingslot_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> ParkingSlot3D:
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         elements = frame["3d_polylines"]
         return ParkingSlot3D(name, elements, dictionary, tensor_smith=tensor_smith)
 
-    def load_ego_poses(self, name: str, index_info: IndexInfo, tensor_smith: "TensorSmith" = None,
-                       **kwargs) -> EgoPoseSet:
+    def load_ego_poses(self, name: str, index_info: IndexInfo, tensor_smith: "TensorSmith" = None, **kwargs) -> EgoPoseSet:
         scene = self.info[index_info.scene_id]['frame_info']
 
         def _create_pose(frame_id, rel_pos):
@@ -666,7 +605,7 @@ class GroupBatchDataset(Dataset):
         cnt = 0
         cur = index_info
         while cur.prev is not None:
-            rel_pos = f"-{cnt + 1}"  # relative position
+            rel_pos = f"-{cnt+1}" # relative position
             poses[rel_pos] = _create_pose(cur.prev.frame_id, rel_pos)
             cur = cur.prev
             cnt += 1
@@ -676,7 +615,7 @@ class GroupBatchDataset(Dataset):
 
         cnt = 0
         while cur.next is not None:
-            rel_pos = f"+{cnt + 1}"  # relative position
+            rel_pos = f"+{cnt+1}" # relative position
             poses[rel_pos] = _create_pose(cur.next.frame_id, rel_pos)
             cur = cur.next
             cnt += 1
@@ -685,14 +624,12 @@ class GroupBatchDataset(Dataset):
 
         return EgoPoseSet(name, transformables=sorted_poses)
 
-    def load_seg_bev(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None,
-                     **kwargs) -> SegBev:
+    def load_seg_bev(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> SegBev:
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         raise NotImplementedError
 
-    def load_occ_sdf_bev(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None,
-                         **kwargs) -> OccSdfBev:
+    def load_occ_sdf_bev(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> OccSdfBev:
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         occ_path = frame["occ_sdf"]["occ_bev"]
@@ -709,8 +646,7 @@ class GroupBatchDataset(Dataset):
             tensor_smith=tensor_smith,
         )
 
-    def load_occ_sdf_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None,
-                        **kwargs) -> OccSdf3D:
+    def load_occ_sdf_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> OccSdf3D:
         scene = self.info[index_info.scene_id]
         frame = scene["frame_info"][index_info.frame_id]
         file_path = frame["occ_sdf"]["occ_sdf_3d"]

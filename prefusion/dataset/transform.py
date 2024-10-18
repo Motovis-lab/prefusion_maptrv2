@@ -20,6 +20,7 @@ from copious.cv.geometry import Box3d as CopiousBox3d
 from prefusion.registry import TRANSFORMS, TRANSFORMABLES
 from prefusion.dataset.utils import make_seed
 
+
 if TYPE_CHECKING:
     from .tensor_smith import TensorSmith
 
@@ -35,7 +36,6 @@ class Transformable:
     It is not a abstract class, because it on one hand provides the full set of transform methods and provide default implementation on the other hand.
     The only purpose of its direct subclasses CameraTransformable and SpatialTransformable is to ensure some transform methods must be implemented.
     """
-
     def __init__(self, name, *args, **kwargs):
         self.name = name
 
@@ -143,6 +143,7 @@ class Transformable:
         return self
 
 
+
 class CameraTransformable(Transformable, metaclass=abc.ABCMeta):
     @transform_method
     @abc.abstractmethod
@@ -238,7 +239,6 @@ UnsharpMask
 ZoomBlur
 '''
 
-
 class TransformableSet(Transformable):
     """A set of transformables of the same type. A TransformableSet is also a Transformable."""
     transformable_cls = Transformable  # each subclass of TransformableSet should have its own transformable_cls for protection purpose.
@@ -250,8 +250,7 @@ class TransformableSet(Transformable):
 
     def validate_transformable_class(self):
         if not all([isinstance(t, self.transformable_cls) for tid, t in self.transformables.items()]):
-            raise TypeError(
-                f"transformables of {self.__class__.__name__} should all be of type {self.transformable_cls.__class__.__name__}, but got {[type(t) for t in self.transformables]}")
+            raise TypeError(f"transformables of {self.__class__.__name__} should all be of type {self.transformable_cls.__class__.__name__}, but got {[type(t) for t in self.transformables]}")
 
     def __repr__(self):
         return f"{self.__class__.__name__}(transformables={self.transformables})"
@@ -259,8 +258,7 @@ class TransformableSet(Transformable):
     def _apply_transform(self, method_name, *args, **kwargs):
         for t_id, transformable in self.transformables.items():
             transformable_concerned_args = [arg[t_id] if isinstance(arg, dict) and t_id in arg else arg for arg in args]
-            transformable_concerned_kwargs = {
-                k: kwargs[k][t_id] if isinstance(kwargs[k], dict) and t_id in kwargs[k] else kwargs[k] for k in kwargs}
+            transformable_concerned_kwargs = {k: kwargs[k][t_id] if isinstance(kwargs[k], dict) and t_id in kwargs[k] else kwargs[k] for k in kwargs}
             getattr(transformable, method_name)(*transformable_concerned_args, **transformable_concerned_kwargs)
         return self
 
@@ -276,17 +274,18 @@ class TransformableSet(Transformable):
         return {tid: t.to_tensor() for tid, t in self.transformables.items()}
 
 
+
 class CameraImage(CameraTransformable):
     def __init__(self,
-                 name: str,
-                 cam_id: str,
-                 cam_type: str,
-                 img: np.ndarray,
-                 ego_mask: np.ndarray,
-                 extrinsic: Tuple[np.ndarray, np.ndarray],
-                 intrinsic: Union[np.ndarray, list, tuple],
-                 tensor_smith: "TensorSmith" = None
-                 ):
+        name: str,
+        cam_id: str,
+        cam_type: str,
+        img: np.ndarray,
+        ego_mask: np.ndarray,
+        extrinsic: Tuple[np.ndarray, np.ndarray],
+        intrinsic: Union[np.ndarray, list, tuple],
+        tensor_smith: "TensorSmith" = None
+    ):
         """Image data modeled by specific camera model.
 
         Parameters
@@ -318,6 +317,7 @@ class CameraImage(CameraTransformable):
         self.extrinsic = list(p.copy() for p in extrinsic)
         self.intrinsic = np.array(intrinsic)
         self.tensor_smith = tensor_smith
+
 
     # def at_transform(self, func_name, **kwargs):
     #     func = getattr(AT, func_name)(**kwargs)
@@ -364,7 +364,6 @@ class CameraImage(CameraTransformable):
         assert len(order) == self.img.shape[2]
         self.img = self.img[..., order]
         return self
-
     def set_intrinsic_param(self, intrinsic: Sequence, **kwargs):
         self.intrinsic = intrinsic
         return self
@@ -419,6 +418,7 @@ class CameraImage(CameraTransformable):
 
         return self
 
+
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
         # in the mirror world, assume that a object is left-right symmetrical
@@ -433,6 +433,7 @@ class CameraImage(CameraTransformable):
         self.ego_mask = np.array(self.ego_mask[:, ::-1])
 
         return self
+
 
     def rotate_3d(self, rmat, **kwargs):
         R, t = self.extrinsic
@@ -449,16 +450,16 @@ class CameraImageSet(TransformableSet):
 class CameraSegMask(CameraTransformable):
 
     def __init__(self,
-                 name: str,
-                 cam_id: str,
-                 cam_type: str,
-                 img: np.ndarray,
-                 ego_mask: np.ndarray,
-                 extrinsic: Tuple[np.ndarray, np.ndarray],
-                 intrinsic: Union[np.ndarray, list, tuple],
-                 dictionary: dict,
-                 tensor_smith: "TensorSmith" = None
-                 ):
+        name: str,
+        cam_id: str,
+        cam_type: str,
+        img: np.ndarray,
+        ego_mask: np.ndarray,
+        extrinsic: Tuple[np.ndarray, np.ndarray],
+        intrinsic: Union[np.ndarray, list, tuple],
+        dictionary: dict,
+        tensor_smith: "TensorSmith" = None
+    ):
         """Segmentation Mask data modeled by specific camera model.
 
         Parameters
@@ -502,6 +503,7 @@ class CameraSegMask(CameraTransformable):
         self.extrinsic = extrinsic
         return self
 
+
     def render_intrinsic(self, resolution, intrinsic, **kwargs):
         assert len(intrinsic) <= len(self.intrinsic), 'invalid intrinsic params'
         resolution_old = self.img.shape[:2][::-1]
@@ -552,6 +554,7 @@ class CameraSegMask(CameraTransformable):
 
         return self
 
+
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
         # in the mirror world, assume that a object is left-right symmetrical
@@ -567,6 +570,7 @@ class CameraSegMask(CameraTransformable):
 
         return self
 
+
     def rotate_3d(self, rmat, **kwargs):
         R, t = self.extrinsic
         R_new = rmat @ R
@@ -581,16 +585,16 @@ class CameraSegMaskSet(TransformableSet):
 
 class CameraDepth(CameraTransformable):
     def __init__(self,
-                 name: str,
-                 cam_id: str,
-                 cam_type: str,
-                 img: np.ndarray,
-                 ego_mask: np.ndarray,
-                 extrinsic: Tuple[np.ndarray, np.ndarray],
-                 intrinsic: Union[np.ndarray, list, tuple],
-                 depth_mode: str,
-                 tensor_smith: "TensorSmith" = None
-                 ):
+        name: str,
+        cam_id: str,
+        cam_type: str,
+        img: np.ndarray,
+        ego_mask: np.ndarray,
+        extrinsic: Tuple[np.ndarray, np.ndarray],
+        intrinsic: Union[np.ndarray, list, tuple],
+        depth_mode: str,
+        tensor_smith: "TensorSmith" = None
+    ):
         """Depth data modeled by specific camera model.
 
         Parameters
@@ -628,6 +632,7 @@ class CameraDepth(CameraTransformable):
         self.depth_mode = depth_mode
         self.tensor_smith = tensor_smith
 
+
     def set_intrinsic_param(self, intrinsic: Sequence, **kwargs):
         self.intrinsic = intrinsic
         return self
@@ -635,6 +640,7 @@ class CameraDepth(CameraTransformable):
     def set_extrinsic_param(self, extrinsic: Tuple[np.ndarray, np.ndarray], **kwargs):
         self.extrinsic = extrinsic
         return self
+
 
     def render_intrinsic(self, resolution, intrinsic, **kwargs):
         assert len(intrinsic) <= len(self.intrinsic), 'invalid intrinsic params'
@@ -690,6 +696,7 @@ class CameraDepth(CameraTransformable):
 
         return self
 
+
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
         # in the mirror world, assume that a object is left-right symmetrical
@@ -705,6 +712,7 @@ class CameraDepth(CameraTransformable):
 
         return self
 
+
     def rotate_3d(self, rmat, **kwargs):
         R, t = self.extrinsic
         R_new = rmat @ R
@@ -718,7 +726,7 @@ class CameraDepthSet(TransformableSet):
 
 
 class LidarPoints(SpatialTransformable):
-    def __init__(self, name: str, positions: np.ndarray, attributes: np.ndarray, tensor_smith: "TensorSmith" = None):
+    def __init__(self, name: str, positions: np.ndarray, intensity: np.ndarray, tensor_smith: "TensorSmith" = None):
         """Lidar points
 
         Parameters
@@ -727,14 +735,14 @@ class LidarPoints(SpatialTransformable):
             arbitrary string, will be set to each Transformable object to distinguish it with others
         positions : np.ndarray
             of shape (N, 3), usually in ego-system
-        attributes : np.ndarray
-            of shape (N, x)
+        intensity : np.ndarray
+            of shape (N, 1)
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
         self.positions = positions.copy()
-        self.attributes = attributes.copy()
+        self.intensity = intensity.copy()
         self.tensor_smith = tensor_smith
 
     def flip_3d(self, flip_mat, **kwargs):
@@ -752,9 +760,9 @@ class LidarPoints(SpatialTransformable):
         return self
 
 
+
 class Bbox3D(SpatialTransformable):
-    def __init__(self, name: str, elements: List[dict], dictionary: dict, flip_aware_class_pairs: List[tuple] = [],
-                 tensor_smith: "TensorSmith" = None):
+    def __init__(self, name: str, elements: List[dict], dictionary: dict, flip_aware_class_pairs: List[tuple] = [], tensor_smith: "TensorSmith" = None):
         """
         Parameters
         ----------
@@ -847,6 +855,7 @@ class Bbox3D(SpatialTransformable):
 
         return self
 
+
     def rotate_3d(self, rmat, **kwargs):
         # rmat = R_e'e = R_ee'.T
         # R_c = R_ec
@@ -859,8 +868,7 @@ class Bbox3D(SpatialTransformable):
 
 
 class Polyline3D(SpatialTransformable):
-    def __init__(self, name: str, elements: List[dict], dictionary: dict, flip_aware_class_pairs: List[tuple] = [],
-                 tensor_smith: "TensorSmith" = None):
+    def __init__(self, name: str, elements: List[dict], dictionary: dict, flip_aware_class_pairs: List[tuple] = [], tensor_smith: "TensorSmith" = None):
         """
 
         Parameters
@@ -968,6 +976,7 @@ class ParkingSlot3D(SpatialTransformable):
             if self.elements[i]['class'] not in full_set_of_classes:
                 del self.elements[i]
 
+
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
 
@@ -991,8 +1000,7 @@ class ParkingSlot3D(SpatialTransformable):
 
 
 class EgoPose(SpatialTransformable):
-    def __init__(self, name: str, timestamp: str, rotation: np.ndarray, translation: np.ndarray,
-                 tensor_smith: "TensorSmith" = None):
+    def __init__(self, name: str, timestamp: str, rotation: np.ndarray, translation: np.ndarray, tensor_smith: "TensorSmith" = None):
         """The pose in 3D space of a given timestamp.
 
         Parameters
@@ -1011,7 +1019,7 @@ class EgoPose(SpatialTransformable):
         super().__init__(name)
         self.timestamp = timestamp
         self.rotation = rotation
-        self.translation = translation.flatten()[:, None]  # unify it to column vector
+        self.translation = translation.flatten()[:, None] # unify it to column vector
         self.tensor_smith = tensor_smith
 
     def flip_3d(self, flip_mat, **kwargs):
@@ -1052,15 +1060,15 @@ class SegBev(SpatialTransformable):
 
 class OccSdfBev(SpatialTransformable):
     def __init__(
-            self,
-            name: str,
-            src_view_range: dict,
-            occ: np.ndarray,
-            sdf: np.ndarray,
-            height: np.ndarray,
-            dictionary: dict,
-            mask: np.ndarray = None,
-            tensor_smith: "TensorSmith" = None
+        self,
+        name: str,
+        src_view_range: dict,
+        occ: np.ndarray,
+        sdf: np.ndarray,
+        height: np.ndarray,
+        dictionary: dict,
+        mask: np.ndarray = None,
+        tensor_smith: "TensorSmith" = None
     ):
         """OccSdfBev is a transformable contains occ, sdf and ground height info in a BEV view (a 2D spatial view).
 
@@ -1122,12 +1130,14 @@ class OccSdfBev(SpatialTransformable):
         # column points
         return np.stack([xx, yy, zz], axis=0).reshape(3, -1)
 
+
     def _project_ego_to_bev(self, ego_points):
         xx, yy, _ = ego_points
         cx, cy, fx, fy = self._bev_intrinsic
         vv_ = xx * fx + cx
         uu_ = yy * fy + cy
         return uu_.astype(np.float32), vv_.astype(np.float32)
+
 
     def flip_3d(self, flip_mat, **kwargs):
         # 1. get ego coordinates from bev
@@ -1163,6 +1173,7 @@ class OccSdfBev(SpatialTransformable):
             interpolation=cv2.INTER_NEAREST
         )
         return self
+
 
     def rotate_3d(self, rmat, **kwargs):
         # 1. get ego coordinates from bev
@@ -1205,15 +1216,15 @@ class OccSdf3D(SpatialTransformable):
     def rotate_3d(self, **kwargs):
         raise NotImplementedError
 
+#--------------------------------#
 
-# --------------------------------#
+
 
 
 class Transform:
     '''
     Basic class for Transform.
     '''
-
     def __init__(self, *, scope="frame", **kwargs):
         assert scope.lower() in ["frame", "batch", "group", "transformable"]
         self.scope = scope.lower()
@@ -1224,7 +1235,7 @@ class Transform:
 
 class RandomTransform(Transform, metaclass=abc.ABCMeta):
     def __call__(self, *transformables, seeds=None, **kwargs):
-        if seeds:  # IMPORTANT: To make sure every thing is synchonized when scope in ['batch', 'group']
+        if seeds: # IMPORTANT: To make sure every thing is synchonized when scope in ['batch', 'group']
             _scope = "frame" if self.scope == 'transformable' else self.scope
             random.seed(seeds[_scope])
         if random.random() > self.prob:
@@ -1281,18 +1292,16 @@ def random_transform_class_factory(cls_name, transform_func):
         assert isinstance(
             self.param_randomization_rules, dict
         ), f"param_randomization_rules should be a dict. But {self.param_randomization_rules} is given."
-        valid_rule_types = ["float", "int", "enum", ]
+        valid_rule_types = [ "float", "int", "enum", ]
         for _, rule in self.param_randomization_rules.items():
-            assert rule[
-                       "type"] in valid_rule_types, f"Only 'float', 'int' and 'enum' are valid types for a rule. But {rule['type']} is given."
+            assert rule["type"] in valid_rule_types, f"Only 'float', 'int' and 'enum' are valid types for a rule. But {rule['type']} is given."
             if rule["type"] == "enum":
                 assert "choices" in rule, "choices should be used along with type: enum."
             else:
                 assert "range" in rule, "range should be used along with type: float or int."
 
     def random_pick_param(self, rule: dict, seeds):
-        random.seed(seeds[
-                        self.scope])  # why set seed inside? we want the same random results no matter what order of params it is.
+        random.seed(seeds[self.scope])  # why set seed inside? we want the same random results no matter what order of params it is.
         if rule["type"] == "float":
             return random.uniform(*rule["range"])
         elif rule["type"] == "int":
@@ -1333,6 +1342,7 @@ def deterministic_transform_class_factory(cls_name, transform_func):
     return type(cls_name, (Transform,), {"__init__": __init__, "__call__": __call__})
 
 
+
 RandomBrightness = random_transform_class_factory("RandomBrightness", "adjust_brightness")
 RandomSaturation = random_transform_class_factory("RandomSaturation", "adjust_saturation")
 RandomContrast = random_transform_class_factory("RandomContrast", "adjust_contrast")
@@ -1345,7 +1355,6 @@ RandomSolarize = random_transform_class_factory("RandomSolarize", "solarize")
 RandomImEqualize = random_transform_class_factory("RandomImEqualize", "imequalize")
 
 ToTensor = deterministic_transform_class_factory("ToTensor", "to_tensor")
-
 
 #######################
 # Customed Transforms #
@@ -1384,8 +1393,7 @@ class RandomSetIntrinsicParam(RandomTransform):
 
 
 class RandomSetExtrinsicParam(RandomTransform):
-    def __init__(self, *, prob: float = 0.0, angle: float = 0.0, translation: float = 0.0, scope: str = "frame",
-                 **kwargs):
+    def __init__(self, *, prob: float = 0.0, angle: float = 0.0, translation: float = 0.0, scope: str = "frame", **kwargs):
         """This transform random jitters the rotation angle and translation of CameraTransformable's extrinsic params.
 
         Parameters
@@ -1422,7 +1430,7 @@ class RandomSetExtrinsicParam(RandomTransform):
         def _get_random_delta_translation():
             return np.array([_get_random_value(self.translation) for _ in range(3)])
 
-        return _get_random_delta_rotation(), _get_random_delta_translation()
+        return _get_random_delta_rotation(),  _get_random_delta_translation()
 
     def _apply(self, *transformables, seeds=None, **kwargs):
         for i, transformable in enumerate(transformables):
@@ -1461,11 +1469,9 @@ class RandomChooseKTransform(RandomTransform):
 class RandomImageISP(Transform):
     def __init__(self, prob=0.5, transform_probs=None, scope='frame'):
         super().__init__(scope=scope)
-        self.transforms = [
-            RandomBrightness(prob=0.5,
-                             param_randomization_rules={"brightness": {"type": "float", "range": [0.5, 2.0]}}),
-            RandomSaturation(prob=0.5,
-                             param_randomization_rules={"saturation": {"type": "float", "range": [0.0, 2.0]}}),
+        self.transforms=[
+            RandomBrightness(prob=0.5, param_randomization_rules={"brightness": {"type": "float", "range": [0.5, 2.0]}}),
+            RandomSaturation(prob=0.5, param_randomization_rules={"saturation": {"type": "float", "range": [0.0, 2.0]}}),
             RandomContrast(prob=0.5, param_randomization_rules={"contrast": {"type": "float", "range": [0.5, 2.0]}}),
             RandomHue(prob=0.5, param_randomization_rules={"hue": {"type": "float", "range": [-0.5, 0.5]}}),
             RandomSharpness(prob=0.5, param_randomization_rules={"sharpness": {"type": "float", "range": [0.0, 2.0]}}),
@@ -1488,6 +1494,7 @@ class RandomImageISP(Transform):
 
 class RandomImageTransformAT(Transform):
     pass
+
 
 
 class RandomImageOmit(Transform):
@@ -1681,13 +1688,13 @@ class MirrorTime(Transform):
     pass
 
 
+
 class ScaleTime(Transform):
     pass
 
 
 # TODO: Implement this function for the model that relies on or need to predict objects' trajectory.
-def extract_trajectory_from_bbox3d(bbox3d_list: List[Bbox3D], ego_poses: EgoPoseSet) -> List[
-    Dict[str, List[Tuple[np.ndarray, np.ndarray]]]]:
+def extract_trajectory_from_bbox3d(bbox3d_list: List[Bbox3D], ego_poses: EgoPoseSet) -> List[Dict[str, List[Tuple[np.ndarray, np.ndarray]]]]:
     """Extract trajectory of each distinct obj_track_id from a list of Bbox3D.
 
     Parameters
@@ -1759,5 +1766,6 @@ for transform in available_transforms:
 
 for transformable in available_transformables:
     TRANSFORMABLES.register_module(module=transformable)
+
 
 __all__ = [t.__name__ for t in available_transforms] + [t.__name__ for t in available_transformables]
