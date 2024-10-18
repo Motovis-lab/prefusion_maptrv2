@@ -37,6 +37,7 @@ class fastray_vt(BaseModule):
                     vv_ = vv[i][k][valid_map_sampled[i][k]]
                     if img is not None:
                         img_feats = F.interpolate(((img[i][k] - img[i][k].min())).unsqueeze(0), scale_factor=1/4, mode='bilinear', align_corners=False)[0]
+                        img_feats = torch.ones_like(img_feats).to(img_feats.device).to(torch.float32)
                         voxel_feature[i][..., valid_map_sampled[i][k]] += img_feats[..., vv_, uu_] * norm_density_map[i][k][norm_density_map[i][k]!=0]
                         # import matplotlib.pyplot as plt
                         # plt.imshow(img_feats[0].cpu().numpy().transpose(1,2,0))
