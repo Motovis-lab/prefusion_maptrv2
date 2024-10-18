@@ -34,6 +34,24 @@ def test_camera_image_tensor():
     ]), decimal=6)
 
 
+def test_camera_image_tensor_egomask255():
+    camera_image = edict(
+        img=np.arange(2 * 4 * 3).reshape(2, 4, 3).astype(np.uint8),
+        ego_mask=np.ones((2, 4, 3), dtype=np.uint8) * 255
+    )
+    tensor_smith = CameraImageTensor(means=[1, 2, 3], stds=[0.1, 0.2, 0.3])
+    tensor_dict = tensor_smith(camera_image)
+    np.testing.assert_almost_equal(tensor_dict["img"].numpy(), np.array([
+        [[-10.,  20.,  50.,  80.],
+         [110., 140., 170., 200.]],
+
+        [[ -5.,  10.,  25.,  40.],
+         [ 55.,  70.,  85., 100.]],
+
+        [[-3.33333333,  6.66666667, 16.66666667, 26.66666667],
+         [36.66666667, 46.66666667, 56.66666667, 66.66666667]]
+    ]), decimal=6)
+
 
 def test_planar_bbox_3d_get_roll_from_xyvecs():
     a = [1, 1, 0]
@@ -45,7 +63,7 @@ def test_planar_bbox_3d_get_roll_from_xyvecs():
 
 def test_planar_bbox_3d_get_yzvec_from_xvec_and_roll():
     xvecs = np.float32([
-        [1, 1], 
+        [1, 1],
         [1, 1],
         [0, 0]
     ])
@@ -72,7 +90,7 @@ def test_planar_bbox_3d_get_yzvec_from_xvec_and_roll_single():
 def test_planar_bbox_3d_is_in_bbox3d():
     delta_ij = np.float32([0.7, 0.2, 0])
     sizes = np.float32([2, 1, 0.5])
-    xvec = np.float32([1, 0, 0]) 
+    xvec = np.float32([1, 0, 0])
     yvec = np.float32([0, 1, 0])
     zvec = np.float32([0, 0, 1])
     assert PlanarBbox3D._is_in_bbox3d(delta_ij, sizes, xvec, yvec, zvec) is True
@@ -136,7 +154,7 @@ def test_planar_bbox_3d_generation_and_reverse():
         pred_bboxes_3d[1]['rotation'],
         box3d.elements[1]['rotation'],
     decimal=3)
-    
+
 
 
 def test_planar_squre_pillars_generation_and_reverse():
@@ -307,4 +325,3 @@ def test_planar_parkingslot_3d_generation_and_reverse():
         pred_slots[0][:, :3],
         slots.elements[0]['points'],
     decimal=3)
-    

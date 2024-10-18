@@ -339,7 +339,7 @@ def test_load_ego_poses():
         name="gbd",
         data_root=Path("tests/prefusion/dataset"),
         info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl"),
-        transformables=[ConfigDict(name="my_ego_poses", transformable_key="ego_poses")],
+        transformables=dict(my_ego_poses=dict(type="ego_poses")),
         transforms=[DummyTransform(scope="group")],
         model_feeder=BaseModelFeeder(),
         phase="val",
@@ -366,9 +366,9 @@ def test_load_ego_poses():
     assert ego_pose_set.transformables['+1'].timestamp == "1698825817964"
 
     index_info3 = IndexInfo(
-        prev=IndexInfo("20231101_160337", "1698825817764", prev=IndexInfo("20231101_160337", "1698825817664")), 
-        scene_id="20231101_160337", 
-        frame_id="1698825817864", 
+        prev=IndexInfo("20231101_160337", "1698825817764", prev=IndexInfo("20231101_160337", "1698825817664")),
+        scene_id="20231101_160337",
+        frame_id="1698825817864",
         next=IndexInfo("20231101_160337", "1698825817964", next=IndexInfo("20231101_160337", "1698825818064"))
     )
     ego_pose_set = dataset.load_ego_poses('ego_poses', index_info3)
