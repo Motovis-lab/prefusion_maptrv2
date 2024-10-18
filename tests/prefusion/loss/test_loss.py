@@ -15,7 +15,7 @@ def planar_bbox3d_loss():
     return PlanarLoss(loss_name_prefix="plnrbox3d", weight_scheme={
         "seg": {
             "loss_weight": 1.0,
-            "class_weights": {
+            "channel_weights": {
                 "0": {"weight": 0.3},
                 "1": {"weight": 0.7},
             },
@@ -49,7 +49,7 @@ def planar_polyline3d_loss():
     return PlanarLoss(loss_name_prefix="plnrplyl3d", weight_scheme={
         "seg": {
             "loss_weight": 1.0,
-            "class_weights": {
+            "channel_weights": {
                 "0": {"weight": 1.0},
                 "1": {"weight": 1.0},
             },
@@ -64,14 +64,49 @@ def planar_polyline3d_loss():
         "reg": {
             "loss_weight": 1.0,
             "partition_weights": {
-                "dist": {"weight": 1.0, "slice": (0, 1)},
+                "dist": {"weight": 1.0, "slice": 0},
                 "vert_vec": {"weight": 2.0, "slice": (1, 3)},
                 "abs_dir": {"weight": 0.0, "slice": (3, 5)},
-                "dir_product": {"weight": 0.0, "slice": (5, 6)},
-                "height": {"weight": 0.0, "slice": (6, 7)},
+                "dir_product": {"weight": 0.0, "slice": 5},
+                "height": {"weight": 0.0, "slice": 6},
             }
         }
     })
+
+
+@pytest.fixture
+def planar_parkingslot3d_loss():
+    return PlanarLoss(loss_name_prefix="plnrpkslot3d", weight_scheme={
+        "seg": {
+            "loss_weight": 1.0,
+            "channel_weights": {
+                "space": {"weight": 1.0},
+                "line": {"weight": 1.0},
+                "corner": {"weight": 1.0},
+                "entry": {"weight": 1.0},
+            },
+            "iou_loss_weight": 1.0,
+            "dual_focal_loss_weight": 1.0,
+        },
+        "cen": {
+            "loss_weight": 1.0,
+            "fg_weight": 1.0,
+            "bg_weight": 1.0,
+        },
+        "reg": {
+            "loss_weight": 1.0,
+            "partition_weights": {
+                "dist_to_side": {"weight": 1.0, "slice": (0, 4)},
+                "abs_l_dir_xy": {"weight": 1.0, "slice": (4, 6)},
+                "abs_l_dir_product": {"weight": 1.0, "slice": 6},
+                "abs_s_dir_xy": {"weight": 1.0, "slice": (7, 9)},
+                "abs_s_dir_product": {"weight": 1.0, "slice": 9},
+                "dist_to_center": {"weight": 1.0, "slice": (10, 14)},
+                "height": {"weight": 1.0, "slice": 14},
+            }
+        }
+    })
+
 
 @pytest.fixture
 def bx_seg_pred():
@@ -85,7 +120,22 @@ def bx_seg_pred():
          [0.1, 0.0, 0.0, 0.0, 0.2],
          [0.1, 0.0, 0.0, 0.0, 0.3],
          [0.9, 0.1, 0.0, 0.2, 0.8],],
-    ]])
+    ]], dtype=torch.float32)
+
+
+@pytest.fixture
+def bx_seg_pred_with_grad_fn():
+    return torch.tensor([[
+        [[0.0, 0.1,  0.2, 0.3, 0.1],
+         [0.0, 0.2,  0.8, 0.1, 0.1],
+         [0.0, 0.15, 0.5, 0.7, 0.2],
+         [0.1, 0.15, 0.1, 0.0, 0.0],],
+         
+        [[0.7, 0.2, 0.0, 1.0, 0.5],
+         [0.1, 0.0, 0.0, 0.0, 0.2],
+         [0.1, 0.0, 0.0, 0.0, 0.3],
+         [0.9, 0.1, 0.0, 0.2, 0.8],],
+    ]], dtype=torch.float32, requires_grad=True)
 
 
 @pytest.fixture
@@ -100,7 +150,7 @@ def bx_seg_label():
          [0, 0, 0, 0, 0],
          [0, 0, 0, 0, 0],
          [1, 0, 0, 0, 1],],
-    ]])
+    ]], dtype=torch.float32)
 
 
 @pytest.fixture
@@ -201,8 +251,8 @@ def test_seg_iou_loss_with_mask(bx_seg_pred, bx_seg_label, bx_seg_mask):
 
 
 def test_planar_bbox3d_seg_loss(bx_seg_pred, bx_seg_label, planar_bbox3d_loss):
-    _class_weights = planar_bbox3d_loss.weight_scheme.seg.class_weights
-    seg_loss = planar_bbox3d_loss._seg_loss(bx_seg_pred, bx_seg_label, class_weights=_class_weights)
+    _channel_weights = planar_bbox3d_loss.weight_scheme.seg.channel_weights
+    seg_loss = planar_bbox3d_loss._seg_loss(bx_seg_pred, bx_seg_label, channel_weights=_channel_weights)
     assert set(seg_loss.keys()) == {
         "plnrbox3d_seg_iou_0_loss", "plnrbox3d_seg_iou_1_loss", "plnrbox3d_seg_iou_loss",
         "plnrbox3d_seg_dual_focal_0_loss", "plnrbox3d_seg_dual_focal_1_loss", "plnrbox3d_seg_dual_focal_loss",
@@ -217,6 +267,13 @@ def test_planar_bbox3d_seg_loss(bx_seg_pred, bx_seg_label, planar_bbox3d_loss):
     assert seg_loss["plnrbox3d_seg_loss"] == _approx(2.5408336)
 
 
+def test_planar_bbox3d_seg_loss_backward(bx_seg_pred_with_grad_fn, bx_seg_label, planar_bbox3d_loss):
+    _channel_weights = planar_bbox3d_loss.weight_scheme.seg.channel_weights
+    seg_loss = planar_bbox3d_loss._seg_loss(bx_seg_pred_with_grad_fn, bx_seg_label, channel_weights=_channel_weights)
+    seg_loss["plnrbox3d_seg_loss"].backward()
+    assert list(bx_seg_pred_with_grad_fn.grad.shape) == [1, 2, 4, 5]
+
+
 def test_planar_bbox3d_cen_loss(bx_cen_pred, bx_cen_label, planar_bbox3d_loss):
     cen_mask = torch.zeros((1, 1, 4, 5))
     cen_mask[:, :, :, 1:4] = 1
@@ -225,6 +282,7 @@ def test_planar_bbox3d_cen_loss(bx_cen_pred, bx_cen_label, planar_bbox3d_loss):
     assert cen_loss["plnrbox3d_cen_dual_focal_loss"] == _approx(0.430634)
     assert cen_loss["plnrbox3d_cen_fg_dual_focal_loss"] == _approx(0.7132555)
     assert cen_loss["plnrbox3d_cen_loss"] == _approx(1.1438895)
+
 
 def test_planar_bbox3d_reg_loss(bx_reg_pred, bx_reg_label, planar_bbox3d_loss):
     _partition_weights = planar_bbox3d_loss.weight_scheme.reg.partition_weights
@@ -368,7 +426,7 @@ def plyl_reg_label():
     ]]).repeat((1, 4, 1, 1))[:, :7, ...]
 
 
-def test_planar_polyline3d_seg_loss_with_mask(plyl_seg_pred, plyl_seg_label, planar_polyline3d_loss):
+def test_planar_polyline3d_seg_loss(plyl_seg_pred, plyl_seg_label, planar_polyline3d_loss):
     seg_loss = planar_polyline3d_loss._seg_loss(plyl_seg_pred, plyl_seg_label)
     assert set(seg_loss.keys()) == {
         "plnrplyl3d_seg_iou_0_loss", "plnrplyl3d_seg_iou_1_loss", "plnrplyl3d_seg_iou_2_loss",
@@ -379,7 +437,7 @@ def test_planar_polyline3d_seg_loss_with_mask(plyl_seg_pred, plyl_seg_label, pla
     assert seg_loss["plnrplyl3d_seg_loss"] == _approx(2.3641901)
 
 
-def test_planar_polyline3d_reg_loss_with_mask(plyl_reg_pred, plyl_reg_label, planar_polyline3d_loss):
+def test_planar_polyline3d_reg_loss(plyl_reg_pred, plyl_reg_label, planar_polyline3d_loss):
     reg_mask = torch.zeros((1, 1, 4, 5))
     reg_mask[:, :, :, 1:4] = 1
     _partition_weights = planar_polyline3d_loss.weight_scheme.reg.partition_weights
@@ -418,3 +476,132 @@ def test_enumerate_slices_2():
 def test_enumerate_slices_3():
     slices = [slice(3, 6), slice(1, 3), slice(2, 5)]
     assert PlanarLoss.enumerate_slices(slices) == [1, 2, 2, 3, 3, 4, 4, 5]
+
+
+@pytest.fixture
+def pkslot_seg_pred():
+    return torch.tensor([[
+        [[-15, 100, 100, 100, -15],
+         [-15, 100, 100, 100, -15],
+         [-15, 100, 100, 100, -15],
+         [-15, 100, 100, 100, -15],],
+
+        [[-15, 100, 100, 100, -15],
+         [-15, 100, -15, 100, -15],
+         [-15, 100, -15, 100, -15],
+         [-15, 100, 100, 100, -15],],
+         
+        [[-15, 100, -15, 100, -15],
+         [-15, -15, -15, -15, -15],
+         [-15, -15, -15, -15, -15],
+         [-15, 100, -15, 100, -15],],
+         
+        [[-15, 100, 100, 100, -15],
+         [-15, -15, -15, -15, -15],
+         [-15, -15, -15, -15, -15],
+         [-15, -15, -15, -15, -15],],
+    ]], dtype=torch.float32)
+
+
+@pytest.fixture
+def pkslot_seg_label():
+    return torch.tensor([[
+        [[0.0, 1.0, 1.0, 1.0, 0.0],
+         [0.0, 1.0, 1.0, 1.0, 0.0],
+         [0.0, 1.0, 1.0, 1.0, 0.0],
+         [0.0, 1.0, 1.0, 1.0, 0.0],],
+
+        [[0.0, 1.0, 1.0, 1.0, 0.0],
+         [0.0, 1.0, 0.0, 1.0, 0.0],
+         [0.0, 1.0, 0.0, 1.0, 0.0],
+         [0.0, 1.0, 1.0, 1.0, 0.0],],
+         
+        [[0.0, 1.0, 0.0, 1.0, 0.0],
+         [0.0, 0.0, 0.0, 0.0, 0.0],
+         [0.0, 0.0, 0.0, 0.0, 0.0],
+         [0.0, 1.0, 0.0, 1.0, 0.0],],
+         
+        [[0.0, 1.0, 1.0, 1.0, 0.0],
+         [0.0, 0.0, 0.0, 0.0, 0.0],
+         [0.0, 0.0, 0.0, 0.0, 0.0],
+         [0.0, 0.0, 0.0, 0.0, 0.0],],
+    ]])
+
+
+@pytest.fixture
+def pkslot_cen_pred():
+    pass
+
+
+@pytest.fixture
+def pkslot_cen_label():
+    pass
+
+
+@pytest.fixture
+def pkslot_reg_pred():
+    return torch.tensor([[
+        [[0, 0.5, 0.8, 1.0, 0],
+         [0, 0.5, 0.0, 1.0, 0],
+         [0, 0.5, 0.0, 1.0, 0],
+         [0, 0.5, 0.8, 1.0, 0],],
+
+        [[0.0, 0.1, 0.3, 1.0, 0.0],
+         [0.0, 0.9, 0.0, 1.9, 0.0],
+         [0.0, 0.9, 0.0, 1.8, 0.0],
+         [0.0, 0.1, 0.4, 1.0, 0.0],],
+    ]]).repeat((1, 8, 1, 1))[:, :15, ...]
+
+
+@pytest.fixture
+def pkslot_reg_label():
+    return torch.tensor([[
+        [[0, 0.5, 0.8, 1.0, 0],
+         [0, 0.5, 0.0, 1.0, 0],
+         [0, 0.5, 0.0, 1.0, 0],
+         [0, 0.5, 0.8, 1.0, 0],],
+
+        [[0.0, 0.1, 0.3, 1.0, 0.0],
+         [0.0, 0.9, 0.0, 1.9, 0.0],
+         [0.0, 0.9, 0.0, 1.8, 0.0],
+         [0.0, 0.1, 0.4, 1.0, 0.0],],
+    ]]).repeat((1, 8, 1, 1))[:, :15, ...]
+
+
+
+def test_planar_parkingslot3d_seg_loss(pkslot_seg_pred, pkslot_seg_label, planar_parkingslot3d_loss):
+    seg_loss = planar_parkingslot3d_loss._seg_loss(pkslot_seg_pred, pkslot_seg_label)
+    assert set(seg_loss.keys()) == {
+        "plnrpkslot3d_seg_iou_0_loss", "plnrpkslot3d_seg_iou_1_loss", "plnrpkslot3d_seg_iou_2_loss", "plnrpkslot3d_seg_iou_3_loss",
+        "plnrpkslot3d_seg_iou_loss", "plnrpkslot3d_seg_dual_focal_0_loss", "plnrpkslot3d_seg_dual_focal_1_loss", 
+        "plnrpkslot3d_seg_dual_focal_2_loss", "plnrpkslot3d_seg_dual_focal_3_loss", 
+        "plnrpkslot3d_seg_dual_focal_loss", "plnrpkslot3d_seg_loss"
+    }
+    assert seg_loss["plnrpkslot3d_seg_iou_0_loss"] < 1e-5
+    assert seg_loss["plnrpkslot3d_seg_iou_3_loss"] < 1e-5
+    assert seg_loss["plnrpkslot3d_seg_iou_loss"] < 1e-5
+    assert seg_loss["plnrpkslot3d_seg_dual_focal_0_loss"] < 1e-5
+    assert seg_loss["plnrpkslot3d_seg_dual_focal_3_loss"] < 1e-5
+    assert seg_loss["plnrpkslot3d_seg_dual_focal_loss"] < 1e-5
+    assert seg_loss["plnrpkslot3d_seg_loss"] < 1e-5
+
+
+def test_planar_parkingslot3d_reg_loss(pkslot_reg_pred, pkslot_reg_label, planar_parkingslot3d_loss):
+    reg_mask = torch.zeros((1, 1, 4, 5))
+    reg_mask[:, :, :, 1:4] = 1
+    _partition_weights = planar_parkingslot3d_loss.weight_scheme.reg.partition_weights
+    reg_loss = planar_parkingslot3d_loss._reg_loss(pkslot_reg_pred, pkslot_reg_label, fg_mask=reg_mask, partition_weights=_partition_weights)
+    assert set(reg_loss.keys()) == {
+        "plnrpkslot3d_reg_dist_to_side_loss",
+        "plnrpkslot3d_reg_abs_l_dir_xy_loss",
+        "plnrpkslot3d_reg_abs_l_dir_product_loss",
+        "plnrpkslot3d_reg_abs_s_dir_xy_loss",
+        "plnrpkslot3d_reg_abs_s_dir_product_loss",
+        "plnrpkslot3d_reg_dist_to_center_loss",
+        "plnrpkslot3d_reg_height_loss",
+        "plnrpkslot3d_reg_loss",
+    }
+    assert reg_loss["plnrpkslot3d_reg_dist_to_side_loss"] < 1e-5
+    assert reg_loss["plnrpkslot3d_reg_abs_s_dir_product_loss"] < 1e-5
+    assert reg_loss["plnrpkslot3d_reg_height_loss"] < 1e-5
+    assert reg_loss["plnrpkslot3d_reg_loss"] < 1e-5
