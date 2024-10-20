@@ -146,7 +146,7 @@ def test_planar_bbox_3d_generation_and_reverse():
 
 
 
-def test_planar_rectanglular_cuboid_generation_and_reverse():
+def test_planar_rectangular_cuboid_generation_and_reverse():
     prect = PlanarRectangularCuboid(
         voxel_shape=(6, 160, 80),
         voxel_range=([-0.5, 2.5], [24, -8], [8, -8])
@@ -185,7 +185,7 @@ def test_planar_rectanglular_cuboid_generation_and_reverse():
 
 
 
-def test_planar_squre_pillars_generation_and_reverse():
+def test_planar_square_pillars_generation_and_reverse():
     psp = PlanarSquarePillar(
         voxel_shape=(6, 160, 80),
         voxel_range=([-0.5, 2.5], [24, -8], [8, -8]),
