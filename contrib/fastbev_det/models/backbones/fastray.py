@@ -146,21 +146,6 @@ class FastRay_DP(FastRay):
         self.plugin_pv = VoxelProjection_pv()
         self.plugin_front = VoxelProjection_front()
 
-        # self.fish_uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_uu.npy")), requires_grad=False)
-        # self.fish_vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_vv.npy")), requires_grad=False)
-        # self.fish_valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_valid_map.npy")), requires_grad=False)
-        # self.fish_norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_norm_density_map.npy")), requires_grad=False)
-        
-        # self.pv_uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_uu.npy")), requires_grad=False)
-        # self.pv_vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_vv.npy")), requires_grad=False)
-        # self.pv_valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_valid_map.npy")), requires_grad=False)
-        # self.pv_norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_norm_density_map.npy")), requires_grad=False)
-        
-        # self.front_uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_uu.npy")), requires_grad=False)
-        # self.front_vv = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_vv.npy")), requires_grad=False)
-        # self.front_valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_valid_map.npy")), requires_grad=False)
-        # self.front_norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_norm_density_map.npy")), requires_grad=False)
-
     def forward(self, fish_data_imgs, pv_data_imgs, front_data_imgs,
                 fish_intrinsic, fish_extrinsic,
                 pv_intrinsic, pv_extrinsic,
@@ -188,5 +173,18 @@ class FastRay_DP(FastRay):
         
         img_bev_feats = img_bev_feats_fish + img_bev_feats_pv + img_bev_feats_front
         img_bev_feats = self.bev_feat_reducer(img_bev_feats)
+        
+        return img_bev_feats
+    
+    def pure_forward(self, img_feats_fish, img_feats_pv, img_feats_front
+        ):
+        img_bev_feats_fish = self.plugin_fish(img_feats_fish
+                                                )
+        img_bev_feats_pv = self.plugin_pv(img_feats_pv
+                                                )
+        img_bev_feats_front = self.plugin_front(img_feats_front
+                                                )
+        
+        img_bev_feats = img_bev_feats_fish + img_bev_feats_pv + img_bev_feats_front
         
         return img_bev_feats
