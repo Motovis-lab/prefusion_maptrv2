@@ -8,6 +8,7 @@ from prefusion.dataset.tensor_smith import (
     get_bev_intrinsics, 
     CameraImageTensor,
     PlanarBbox3D,
+    PlanarRectangularCuboid,
     PlanarParkingSlot3D,
     PlanarSquarePillar,
     PlanarCylinder3D,
@@ -142,6 +143,45 @@ def test_planar_bbox_3d_generation_and_reverse():
         pred_bboxes_3d[1]['rotation'],
         box3d.elements[1]['rotation'],
     decimal=3)
+
+
+
+def test_planar_rectanglular_cuboid_generation_and_reverse():
+    prect = PlanarRectangularCuboid(
+        voxel_shape=(6, 160, 80),
+        voxel_range=([-0.5, 2.5], [24, -8], [8, -8])
+    )
+
+    box3d = Bbox3D(
+        "cuboid",
+        elements=[
+            {
+                'class': 'speedbump',
+                'attr': {},
+                'size': [5, 0.5, 0.1],
+                'rotation': np.float32([
+                    [1, 0, 0],
+                    [0, 1, 0],
+                    [0, 0, 1]
+                ]),
+                'translation': np.float32([
+                    [8], [4], [0]
+                ]),
+            }
+        ],
+        dictionary={'classes': ['speedbump']},
+        tensor_smith=prect
+    )
+    box3d.to_tensor()
+    tensor_dict = box3d.tensor
+    assert tensor_dict['seg'][0].max() == 1
+    pred_bboxes_3d = prect.reverse(tensor_dict)
+    np.testing.assert_almost_equal(
+        pred_bboxes_3d[0]['size'],
+        box3d.elements[0]['size'],
+    decimal=3)
+    del_R = pred_bboxes_3d[0]['rotation'].T @ box3d.elements[0]['rotation']
+    np.testing.assert_almost_equal(abs(del_R[0, 0]), 1, decimal=3)
 
 
 
