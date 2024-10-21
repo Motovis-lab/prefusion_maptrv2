@@ -71,10 +71,11 @@ train_dataloader = dict(
         data_root="/ssd1/data/4d",
         # info_path="/ssd1/data/4d/mv4d_infos_mini_lidar.pkl",
         info_path="/ssd1/data/4d/mv4d_infos_tmp_mini1.pkl",
-        transformables=[
-            dict(
-                name="camera_images",
+        transformables=dict(
+            camera_images=dict(
+                # name="camera_images",
                 # arbitrary string, will be set to each Transformable object to distinguish it with others
+                type="camera_images",
                 transformable_key="camera_images",
                 # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
                 tensor_smith=dict(
@@ -83,30 +84,30 @@ train_dataloader = dict(
                     stds=[58.395, 57.120, 57.375],
                 )
             ),
-            dict(
-                name="bbox_3d",
+            bbox_3d =dict(
+                # name="bbox_3d",
                 # arbitrary string, will be set to each Transformable object to distinguish it with others
-                transformable_key="bbox_3d",
+                type="bbox_3d",
                 # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
                 dictionary={"classes": det_classes},
                 # tensor_smith=dict(type="Bbox3DBasic", classes=det_classes),
                 tensor_smith=dict(type="Bbox3D_XYZ_LWH_Yaw_VxVy", classes=det_classes),
             ),
-            dict(
-                name="ego_poses",
+            ego_poses=dict(
+                # name="ego_poses",
                 # arbitrary string, will be set to each Transformable object to distinguish it with others
-                transformable_key="ego_poses",
+                type="ego_poses",
                 # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
             ),
-            dict(
-                name="lidar_sweeps",
-                transformable_key="lidar_points",
+            lidar_points=dict(
+                # name="lidar_sweeps",
+                type="lidar_sweeps",
                 tensor_smith=dict(type="PointsToVoxelsTensor", voxel_size=voxel_size,
                               max_point_per_voxel=10, max_voxels=120000,
                               max_input_points=1200000,
                               point_cloud_range=[-54.0, -54.0, -5.0, 54.0, 54.0, 3.0]),
             ),
-        ],
+        ),
         model_feeder=dict(type="CMTModelFeeder", key_list=["camera_images", "bbox_3d", "ego_poses", "lidar_points"]),
         transforms=[
             dict(type="RenderIntrinsic", resolutions=resolutions),
