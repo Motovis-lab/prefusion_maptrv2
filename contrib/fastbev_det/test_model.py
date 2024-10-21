@@ -30,7 +30,7 @@ def test_vovnet():
     model = MODELS.build(front_img_backbone_neck_conf).cuda()
 
     out = model(torch.rand(2, 3, 768, 384).cuda())
-    print(out)
+    # print(out)
 
 
 def test_resnet():
@@ -56,4 +56,5 @@ def test_resnet():
                                          img_neck_conf=img_neck_conf)
     model = MODELS.build(front_img_backbone_neck_conf).cuda()
     out = model(torch.rand(1,3,768, 384).cuda())
-    print(out)
+    assert True
+    # print(out)
