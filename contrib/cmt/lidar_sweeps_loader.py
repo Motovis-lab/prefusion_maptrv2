@@ -1,0 +1,61 @@
+from pathlib import Path
+from typing import TYPE_CHECKING, Dict
+
+import numpy as np
+
+from prefusion.registry import TRANSFORMABLE_LOADERS
+from prefusion.dataset.tensor_smith import TensorSmith
+from prefusion.dataset.utils import read_pcd
+from prefusion.dataset.transform import LidarPoints
+from prefusion.dataset.transformable_loader import TransformableLoader
+
+
+if TYPE_CHECKING:
+    from prefusion.dataset import IndexInfo
+
+
+@TRANSFORMABLE_LOADERS.register_module()
+class LidarSweepsLoader(TransformableLoader):
+    def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> LidarPoints:
+        frame = scene_data["frame_info"][index_info.frame_id]
+        sweep_infos = frame['lidar_points']['lidar1_sweeps']
+
+        def Rt2T(R, t):
+            T = np.ones(4)
+            T[:3, :3] = R
+            t[:3, 3] = t
+            return T
+
+        def to_homo(points: np.array) -> np.array:
+            if points.ndim == 1:
+                points = points[None, :]
+            ones = np.ones((len(points), 1), dtype=np.float32)
+            return np.concatenate((points, ones), axis=1)
+
+        def transform_pts_with_T(points, T):
+            # from pts3d to lidar 3d
+            points = np.array(points)
+            shape = points.shape
+            points = points.reshape(-1, 3)
+            points_output = (to_homo(points) @ T.T)[:, :3].reshape(*shape)
+            return points_output
+
+        points = read_pcd(self.data_root / frame["lidar_points"]["lidar1"])
+        Twe = Rt2T(frame["ego_pose"]["rotation"], frame['ego_pose']["translation"])
+        Tew = np.linalg.inv(Twe)
+        ts = float(Path(frame["lidar_points"]["lidar1"]).stem) / 1000
+        output_points = [points]
+        for sweep in sweep_infos:
+            path = sweep['path']  # input points in ego coord
+            Twei = sweep['Twe']
+            sweep_ts = sweep['timestamps'] / 1000  # use as s
+            Te0ei = Tew @ Twei
+            points = read_pcd(self.data_root / path)
+            points = np.concatenate([
+                transform_pts_with_T(points[:, :3], Te0ei),
+                points[:, 3:],
+                np.zeros_like(points[:, :1]) + ts - sweep_ts
+            ])
+            output_points += [points]
+        output_points = np.concatenate(output_points, axis=0)
+        return LidarPoints(name, output_points[:, :3], output_points[:, 3:], tensor_smith=tensor_smith)

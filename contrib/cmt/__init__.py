@@ -12,3 +12,4 @@ from .tensor_smith import *
 from .model_feeder import *
 from .metrics import *
 from .bbox.assigners.sampler import PseudoSampler
+from .lidar_sweeps_loader import LidarSweepsLoader

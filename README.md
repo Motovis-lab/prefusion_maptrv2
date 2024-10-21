@@ -258,6 +258,7 @@ train.txt
   - camera_images: CameraImageSet
   - camera_segs: CameraSegMaskSet
   - camera_depths: CameraDepthSet
+  - ego_poses: EgoPoseSet
   - lidar_points: LidarPoints
   - bbox3d: Bbox3D
   - bboxbev: BboxBev

@@ -1,4 +1,4 @@
-from typing import Tuple, Union, List, Dict, Sequence
+from typing import Tuple, Union, List, Dict
 from functools import partial
 from itertools import chain
 
@@ -30,38 +30,43 @@ class PlanarLoss(nn.Module):
         ----------
         loss_name_prefix : str
             the name prefix of the loss (used to distinguish between different losses)
+        
         weight_scheme : dict, optional
-            e.g.: {
-                "seg": {
-                    "loss_weight": 1.0,  # most superior loss weight for seg
-                    "channel_weights": {
-                        "all": {"weight": 0.5}, # user must add this special channel manually
-                        "passengar_car": {"weight": 0.7},
-                        "pedestrian": {"weight": 0.3},
+            the weight scheme for different losses, e.g. seg, cen, reg
+
+            Example
+            ---
+                ```{
+                    "seg": {
+                        "loss_weight": 1.0,  # most superior loss weight for seg
+                        "channel_weights": {
+                            "all": {"weight": 0.5}, # user must add this special channel manually
+                            "passenger_car": {"weight": 0.7},
+                            "pedestrian": {"weight": 0.3},
+                        },
+                        "iou_loss_weight": 1.0,
+                        "dual_focal_loss_weight": 1.0,
                     },
-                    "iou_loss_weight": 1.0,
-                    "dual_focal_loss_weight": 1.0,
-                },
-                "cen": {
-                    "loss_weight": 1.0, # most superior loss weight for cen
-                    "fg_weight": 1.0,
-                    "bg_weight": 1.0,
-                },
-                "reg": {
-                    "loss_weight": 1.0, # most superior loss weight for reg
-                    "partition_weights": {
-                        "center_xy": {"weight": 1.0, "slice": (0, 2)},
-                        "center_z": {"weight": 1.0, "slice": 2},
-                        "size": {"weight": 1.0, "slice": (3, 6)},
-                        "unit_xvec": {"weight": 1.0, "slice": (6, 9)},
-                        "abs_xvec": {"weight": 1.0, "slice": (9, 12)},
-                        "xvec_product": {"weight": 1.0, "slice": (12, 14)},
-                        "abs_roll_angle": {"weight": 1.0, "slice": (14, 16)},
-                        "roll_angle_product": {"weight": 1.0, "slice": 16},
-                        "velo": {"weight": 1.0, "slice": (17, 20)},
+                    "cen": {
+                        "loss_weight": 1.0, # most superior loss weight for cen
+                        "fg_weight": 1.0,
+                        "bg_weight": 1.0,
+                    },
+                    "reg": {
+                        "loss_weight": 1.0, # most superior loss weight for reg
+                        "partition_weights": {
+                            "center_xy": {"weight": 1.0, "slice": (0, 2)},
+                            "center_z": {"weight": 1.0, "slice": 2},
+                            "size": {"weight": 1.0, "slice": (3, 6)},
+                            "unit_xvec": {"weight": 1.0, "slice": (6, 9)},
+                            "abs_xvec": {"weight": 1.0, "slice": (9, 12)},
+                            "xvec_product": {"weight": 1.0, "slice": (12, 14)},
+                            "abs_roll_angle": {"weight": 1.0, "slice": (14, 16)},
+                            "roll_angle_product": {"weight": 1.0, "slice": 16},
+                            "velo": {"weight": 1.0, "slice": (17, 20)},
+                        }
                     }
                 }
-            }
         """
         super().__init__(*args, **kwargs)
         self.loss_name_prefix = loss_name_prefix
