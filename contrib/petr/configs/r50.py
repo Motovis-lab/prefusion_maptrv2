@@ -2,15 +2,7 @@ experiment_name = "stream_petr_r50_demo_grpsize1_bs4_lr6e-5"
 
 _base_ = "../../../configs/default_runtime.py"
 
-# custom_imports = dict(
-#     imports=['models', 'datasets', 'hooks', 'runner', 'utils', 'evaluator', 'losses'],
-#     allow_failed_imports=False
-# )
 custom_imports = dict(imports=["prefusion", "contrib.petr"], allow_failed_imports=False)
-# custom_imports = dict(
-#     imports=['prefusion', 'contrib'],
-#     allow_failed_imports=False
-# )
 
 backend_args = None
 
@@ -57,10 +49,10 @@ train_dataloader = dict(
                     means=[123.675, 116.280, 103.530],
                     stds=[58.395, 57.120, 57.375])),
             bbox_3d=dict(
-                type="bbox_3d", 
+                type="Bbox3D", 
                 dictionary={"classes": det_classes},
                 tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
-            ego_poses=dict(type="ego_poses")
+            ego_poses=dict(type="EgoPoseSet")
         ),
         transforms=[
             # dict(type="RandomMirrorSpace", prob=0.5, scope="group"),

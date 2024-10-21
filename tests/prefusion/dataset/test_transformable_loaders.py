@@ -11,14 +11,6 @@ from prefusion.dataset.dataset import IndexInfo
 from prefusion.dataset.transformable_loader import CameraImageSetLoader, CameraDepthSetLoader, CameraSegMaskSetLoader, EgoPoseSetLoader, Bbox3DLoader
 
 
-class DummyTransform:
-    def __init__(self, scope="frame") -> None:
-        self.scope = scope
-
-    def __call__(self, *transformables, **kwargs):
-        return transformables
-
-
 class DummyImgTensorSmith:
     def __call__(self, transformable, **kwds: Any) -> Any:
         return {"img": transformable.img}

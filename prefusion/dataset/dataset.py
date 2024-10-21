@@ -7,11 +7,10 @@ from pathlib import Path
 from typing import List, Tuple, Dict, Union, TYPE_CHECKING
 from collections import defaultdict
 
-import mmcv
 import mmengine
 import numpy as np
 from torch.utils.data import Dataset
-from prefusion.registry import DATASETS, MMENGINE_FUNCTIONS, TENSOR_SMITHS, TRANSFORMABLE_LOADERS
+from prefusion.registry import DATASETS, MMENGINE_FUNCTIONS, TENSOR_SMITHS
 from prefusion.dataset.transformable_loader import (
     TransformableLoader,
     CameraImageSetLoader,
@@ -28,27 +27,7 @@ from prefusion.dataset.transformable_loader import (
     OccSdf3DLoader,
 )
 
-from .transform import (
-    Transformable, 
-    CameraImage,
-    CameraImageSet,
-    LidarPoints,
-    CameraSegMask,
-    CameraSegMaskSet,
-    CameraDepth,
-    CameraDepthSet,
-    Bbox3D,
-    Polyline3D,
-    Polygon3D,
-    ParkingSlot3D,
-    EgoPose,
-    EgoPoseSet,
-    SegBev,
-    OccSdfBev,
-    OccSdf3D,
-)
-
-from .utils import build_transforms, build_model_feeder, build_tensor_smith, build_transformable_loader, read_pcd, read_ego_mask
+from .utils import build_transforms, build_model_feeder, build_tensor_smith, build_transformable_loader
 
 if TYPE_CHECKING:
     from .tensor_smith import TensorSmith
@@ -435,16 +414,17 @@ class GroupBatchDataset(Dataset):
         )
 
     def load_all_transformables(self, index_info: IndexInfo) -> dict:
-        all_transformables = {}
+        transformables = {}
         for name in self.transformables:
             _t_cfg = copy.deepcopy(self.transformables[name])
             transformable_type = _t_cfg.pop("type")
             loader_cfg = _t_cfg.pop("loader", None)
             loader = self._build_transformable_loader(loader_cfg, transformable_type)
             tensor_smith = build_tensor_smith(_t_cfg.pop("tensor_smith")) if "tensor_smith" in _t_cfg else None
-            all_transformables[name] = self._build_transformable(name, index_info, loader, tensor_smith=tensor_smith, **_t_cfg)
+            scene_data = self.info[index_info.scene_id]
+            transformables[name] = self._build_transformable(name, scene_data, index_info, loader, tensor_smith=tensor_smith, **_t_cfg)
         
-        return all_transformables
+        return transformables
     
 
     def _build_transformable_loader(self, loader_cfg, transformable_type: str) -> TransformableLoader:
@@ -527,5 +507,5 @@ class GroupBatchDataset(Dataset):
 
         return model_food
 
-    def _build_transformable(self, name: str, scene_data: Dict, index_info: IndexInfo, loader: "TransformableLoader", tensor_smith: "TensorSmith" = None, **kwargs) -> Transformable:
+    def _build_transformable(self, name: str, scene_data: Dict, index_info: IndexInfo, loader: "TransformableLoader", tensor_smith: "TensorSmith" = None, **kwargs) -> "Transformable":
         return loader.load(name, scene_data, index_info, tensor_smith=tensor_smith, **kwargs)

@@ -1,10 +1,10 @@
-import cv2
+from pathlib import Path
+
 import numpy as np
 import pytest
-from copious.io.fs import mktmpdir
-from numpy.ma.testutils import assert_array_almost_equal
 
-from prefusion.dataset.dataset import GroupBatchDataset, GroupSampler, IndexInfo, generate_groups, read_ego_mask
+from prefusion.dataset.dataset import GroupBatchDataset, GroupSampler, IndexInfo, generate_groups
+from prefusion.dataset.model_feeder import BaseModelFeeder
 
 
 @pytest.fixture
@@ -366,14 +366,46 @@ def test_batch_groups_3():
     assert batched_groups == answer
 
 
-def test_read_ego_mask():
-    tmpdir = mktmpdir()
-    img = np.ones([2,4], dtype=np.uint8)
-    save_path = str(tmpdir / "mask243.png")
-    cv2.imwrite(save_path, img)
-    assert_array_almost_equal(read_ego_mask(save_path), img)
+class DummyTransform:
+    def __init__(self, scope="frame") -> None:
+        self.scope = scope
 
-    img255 = np.ones([2,4], dtype=np.uint8) * 255
-    save_path = str(tmpdir / "mask255.png")
-    cv2.imwrite(save_path, img255)
-    assert_array_almost_equal(read_ego_mask(save_path),  img)
+    def __call__(self, *transformables, **kwargs):
+        return transformables
+
+
+def test_load_all_transformables():
+    index_info = IndexInfo("20231101_160337", "1698825817864", prev=IndexInfo("20231101_160337", "1698825817764"), next=IndexInfo("20231101_160337", "1698825817964"))
+    dataset = GroupBatchDataset(
+        name="gbd",
+        data_root=Path("tests/prefusion/dataset/example_inputs"),
+        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl"),
+        transformables=dict(
+            my_camera_images=dict(type="CameraImageSet"),
+            my_ego_poses=dict(type="EgoPoseSet")
+        ),
+        transforms=[DummyTransform(scope="group")],
+        model_feeder=BaseModelFeeder(),
+        phase="val",
+        possible_frame_intervals=2,
+        batch_size=2,
+        possible_group_sizes=4,
+    )
+
+    all_transformables = dataset.load_all_transformables(index_info)
+
+    camera_image_set = all_transformables["my_camera_images"]
+    assert camera_image_set.transformables['camera1'].img.sum() == 699534854
+    assert camera_image_set.transformables['camera8'].ego_mask.sum() == 1365268
+    np.testing.assert_almost_equal(
+        camera_image_set.transformables['camera11'].intrinsic, 
+        np.array([967.5516, 516.1143, 469.18085, 468.7578, 0.05346, -0.00585, -0.000539, -0.000161]),
+        decimal=4
+    )
+
+    ego_pose_set = all_transformables["my_ego_poses"]
+    assert len(ego_pose_set.transformables) == 3
+    assert list(ego_pose_set.transformables.keys()) == ['-1', '0', '+1']
+    assert ego_pose_set.transformables['-1'].timestamp == "1698825817764"
+    assert ego_pose_set.transformables['0'].timestamp == "1698825817864"
+    assert ego_pose_set.transformables['+1'].timestamp == "1698825817964"
