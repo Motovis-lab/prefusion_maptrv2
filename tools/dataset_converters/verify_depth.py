@@ -74,8 +74,8 @@ def unproject_points_from_image_to_camera_perspective(resolution, intrinsic, dep
     return camera_points
 
 
-data_root = "/ssd/home/wuhan/prefusion/data/mv_4d_data/"
-data = mmengine.load(f"{data_root}mv_4d_infos.pkl")
+data_root = "data/pretrain_data/"
+data = mmengine.load(f"{data_root}mv_4d_infos_20230829_163801.pkl")
 
 scene_ids = random.choices(list(data.keys()), k=1)
 
@@ -101,5 +101,5 @@ for scene_id in scene_ids:
             # points = points[:, ground]
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(points.T)
-            mmengine.mkdir_or_exist(f"work_dirs/mv_4d_matrix/verify_depth/{cam}/")
-            o3d.io.write_point_cloud(f'work_dirs/mv_4d_matrix/verify_depth/{cam}/{frame_id}.pcd', pcd)
+            mmengine.mkdir_or_exist(f"work_dirs/verify_depth/{cam}/")
+            o3d.io.write_point_cloud(f'work_dirs/verify_depth/{cam}/{frame_id}.pcd', pcd)

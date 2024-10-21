@@ -24,6 +24,8 @@ from contrib.fastbev_det.models.utils.virtual_camera import render_image, Perspe
     pcd_lidar_point, read_pcd_lidar, load_point_cloud, render_image_with_src_camera_points
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import shutil
+
 
 
 def convert_virtual_camera(src_camear_root, save_img_root, save_mask_root, real_cam_model, v_cam_paramter, calib_back, W=1280, H=960):
@@ -168,8 +170,14 @@ if __name__ == "__main__":
             "camera11":FisheyeCamera.init_from_motovis_cfg(calib_back.rig['camera11'])
         }
 
-        timestamps = (P(scene_root) / P("undistort_static_merged_lidar1")).glob("*.pcd")
-        
+        lidar_timestamps = list(sorted((P(scene_root) / P("undistort_static_merged_lidar1")).glob("*.pcd")))
+        cam1_timestamps = list(sorted((P(scene_root) / P("camera/camera1")).glob("*.jpg")))
+        cam5_timestamps = list(sorted((P(scene_root) / P("camera/camera5")).glob("*.jpg")))
+        cam8_timestamps = list(sorted((P(scene_root) / P("camera/camera8")).glob("*.jpg")))
+        cam11_timestamps = list(sorted((P(scene_root) / P("camera/camera11")).glob("*.jpg")))
+        all_timestamps = sorted(list(set([x.stem for x in lidar_timestamps]) & set([x.stem for x in cam1_timestamps]) 
+                              & set([x.stem for x in cam5_timestamps]) & set([x.stem for x in cam8_timestamps]) & set([x.stem for x in cam11_timestamps])))
+        # all_timestamps = ['1693298281964']
         scene_info = {}
         scene_info["scene_info"] = {}
         scene_info["scene_info"]['camera_mask'] = {
@@ -188,8 +196,8 @@ if __name__ == "__main__":
 
         frame_info = {}
         timestamp_window = defaultdict(list)
-        for timestamp in track(timestamps, "Process timestamp ... "):
-            times_id = timestamp.stem
+        for timestamp in track(all_timestamps, "Process timestamp ... "):
+            times_id = timestamp
             frame_info[times_id] = {}
             # convert real_cam to v_cam
             camera_image = {}
@@ -208,25 +216,23 @@ if __name__ == "__main__":
                 
                 for V_CAM in align_real_v[real_cam_name]:
                     v_camera_root = f"{scene_root}/camera/{V_CAM}/{camera_filename}"
-                    v_camera_mask_root = f"{scene_root}/camera/{V_CAM}_MASK/{camera_filename}"
+                    # v_camera_mask_root = f"{scene_root}/camera/{V_CAM}_MASK/{camera_filename}"
                     P(v_camera_root).parent.mkdir(parents=True, exist_ok=True)
-                    P(v_camera_mask_root).parent.mkdir(parents=True, exist_ok=True)
-                    v_camera_rmatrix, v_camera_t, v_camera_intrinsic, d_src_image, d_real_cam_model, d_vcamera = convert_virtual_camera(src_camera_root, v_camera_root, v_camera_mask_root, camera_model, cameras_v[V_CAM], calib_back.rig[real_cam_name])
+                    # P(v_camera_mask_root).parent.mkdir(parents=True, exist_ok=True)
+                    v_camera_rmatrix, v_camera_t, v_camera_intrinsic, d_src_image, d_real_cam_model, d_vcamera = convert_virtual_camera(src_camera_root, v_camera_root, None, camera_model, cameras_v[V_CAM], calib_back.rig[real_cam_name])
                     scene_info["scene_info"]['calibration'][V_CAM] = {"extrinsic":(v_camera_rmatrix, v_camera_t), "intrinsic": v_camera_intrinsic}
                     camera_image[V_CAM] = f"{scene_name}/camera/{V_CAM}/{camera_filename}"
                     
                     v_camera_seg_root = f"{scene_root}/seg/fisheye_semantic_segmentation/{V_CAM}/{times_id}.png"
-                    v_camera_mask_seg_root = f"{scene_root}/seg/fisheye_semantic_segmentation/{V_CAM}_MASK/{times_id}.png"
                     P(v_camera_seg_root).parent.mkdir(parents=True, exist_ok=True)
-                    P(v_camera_mask_seg_root).parent.mkdir(parents=True, exist_ok=True)
-                    v_camera_rmatrix, v_camera_t, v_camera_intrinsic, d_src_image, d_real_cam_model, d_vcamera = convert_virtual_camera(src_seg_root, v_camera_seg_root, v_camera_mask_seg_root, camera_model, cameras_v[V_CAM], calib_back.rig[real_cam_name])
+                    v_camera_rmatrix, v_camera_t, v_camera_intrinsic, d_src_image, d_real_cam_model, d_vcamera = convert_virtual_camera(src_seg_root, v_camera_seg_root, None, camera_model, cameras_v[V_CAM], calib_back.rig[real_cam_name])
                     camera_img_seg[V_CAM] = f"{scene_name}/seg/fisheye_semantic_segmentation/{V_CAM}/{times_id}.png"
                     
                     v_camera_depth_root = f"{scene_root}/depth/{V_CAM}/{times_id}.npz"
                     P(v_camera_depth_root).parent.mkdir(parents=True, exist_ok=True)
                     dst_lidar_hpr = cameras_hpr[V_CAM]
                     lidar_val_mask = scene_info["scene_info"]['camera_mask'][V_CAM]
-                    lidar_point2depth(v_camera_rmatrix, v_camera_t, d_src_image, d_real_cam_model, d_vcamera, src_lidar_root, dst_lidar_hpr, lidar_val_mask, v_camera_depth_root)
+                    lidar_point2depth(v_camera_rmatrix, v_camera_t, d_src_image, d_real_cam_model, d_vcamera, save_lidar_point, dst_lidar_hpr, lidar_val_mask, v_camera_depth_root)
                     camera_image_depth[V_CAM] = f"{scene_name}/depth/{V_CAM}/{times_id}.npz"
 
             R_t = np.eye(4)
@@ -236,7 +242,7 @@ if __name__ == "__main__":
                 "camera_image_seg": camera_img_seg, 
                 "camera_image_depth": camera_image_depth
             }
-            break
+            
         scene_info.update({'frame_info': frame_info})
     scene_infos[scene_name] = scene_info
     mmengine.dump(scene_infos, f"{dump_root}/mv_4d_infos_{scene_names[0]}.pkl")
