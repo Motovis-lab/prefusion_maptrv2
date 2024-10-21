@@ -5,6 +5,7 @@ import pytest
 
 from prefusion.dataset.dataset import GroupBatchDataset, GroupSampler, IndexInfo, generate_groups
 from prefusion.dataset.model_feeder import BaseModelFeeder
+from prefusion.registry import TRANSFORMABLE_LOADERS
 
 
 @pytest.fixture
@@ -409,3 +410,43 @@ def test_load_all_transformables():
     assert ego_pose_set.transformables['-1'].timestamp == "1698825817764"
     assert ego_pose_set.transformables['0'].timestamp == "1698825817864"
     assert ego_pose_set.transformables['+1'].timestamp == "1698825817964"
+
+
+
+@TRANSFORMABLE_LOADERS.register_module()
+class CustomizedEgoPoseLoader:
+    def __init__(self, data_root): self.data_root = data_root
+
+    def load(self, name: str, scene_data, index_info, **kwargs):
+        scene = scene_data['frame_info']
+        return scene[index_info.frame_id]["ego_pose"]["rotation"], scene[index_info.frame_id]["ego_pose"]["translation"]
+
+
+def test_load_all_transformables_customized_loader():
+    index_info = IndexInfo("20231101_160337", "1698825817864", prev=IndexInfo("20231101_160337", "1698825817764"), next=IndexInfo("20231101_160337", "1698825817964"))
+    dataset = GroupBatchDataset(
+        name="gbd",
+        data_root=Path("tests/prefusion/dataset/example_inputs"),
+        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl"),
+        transformables=dict(
+            single_frame_ego_pose=dict(
+                type="EgoPose",
+                loader=dict(type="CustomizedEgoPoseLoader")
+            )
+        ),
+        transforms=[DummyTransform(scope="group")],
+        model_feeder=BaseModelFeeder(),
+        phase="val",
+        possible_frame_intervals=2,
+        batch_size=2,
+        possible_group_sizes=4,
+    )
+
+    all_transformables = dataset.load_all_transformables(index_info)
+
+    ego_pose = all_transformables["single_frame_ego_pose"]
+    np.testing.assert_almost_equal(ego_pose[0], np.array(
+        [[ 9.99999639e-01,  6.82115545e-04,  5.07486245e-04],
+       [-6.78401337e-04,  9.99973246e-01, -7.28335824e-03],
+       [-5.12440759e-04,  7.28301133e-03,  9.99973347e-01]]))
+    np.testing.assert_almost_equal(ego_pose[1], np.array([-0.02978186,  0.7788203 ,  0.01499793]))

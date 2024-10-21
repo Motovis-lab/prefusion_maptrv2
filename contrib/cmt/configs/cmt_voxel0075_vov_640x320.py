@@ -73,10 +73,7 @@ train_dataloader = dict(
         info_path="/ssd1/data/4d/mv4d_infos_tmp_mini1.pkl",
         transformables=dict(
             camera_images=dict(
-                # name="camera_images",
-                # arbitrary string, will be set to each Transformable object to distinguish it with others
                 type="CameraImageSet",
-                # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
                 tensor_smith=dict(
                     type="CameraImageTensor",
                     means=[123.675, 116.280, 103.530],
