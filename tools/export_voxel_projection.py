@@ -2,7 +2,7 @@ import sys
 sys.path.append("/home/wuhan/prefusion/")
 
 
-from contrib.fastbev_det.models.necks.view_transform import VoxelProjection_fish
+from contrib.fastbev_det.models.necks.view_transform import VoxelProjection_fish, VoxelProjection_pv, VoxelProjection_front
 from contrib.fastbev_det.models.backbones import FastRay_DP
 from prefusion.registry import MODELS
 import torch
@@ -50,3 +50,22 @@ onnx.save_model(simplified_model, save_root,)
 print("ONNX file saved in {}".format(save_root))
 
 print('finished')
+
+# sub module test
+# model = VoxelProjection_pv()
+# save_root = "./work_dirs/deploy/voxel_projection.onnx"
+# img_front_left = mmcv.imread("work_dirs/vt_debug/img_pv_feats_0_0.jpg").transpose(2,0,1)
+# img_back_left = mmcv.imread("work_dirs/vt_debug/img_pv_feats_0_0.jpg").transpose(2,0,1)
+# img_back = mmcv.imread("work_dirs/vt_debug/img_pv_feats_0_2.jpg").transpose(2,0,1)
+# img_front_right = mmcv.imread("work_dirs/vt_debug/img_pv_feats_0_3.jpg").transpose(2,0,1)
+# img_back_right = mmcv.imread("work_dirs/vt_debug/img_pv_feats_0_4.jpg").transpose(2,0,1)
+# input_fish = torch.from_numpy(np.stack([img_front_left, img_back_left, img_back, img_front_right, img_back_right], axis=0)).cuda()
+
+# out = model.eval()(input_fish)
+# show_img = torch.stack([out[0], out[6], out[12]], dim=-1).cpu().numpy()
+# plt.imshow(show_img)
+# plt.show()
+# torch.onnx.export(model, input_fish, save_root, opset_version=11,  # input must be tuple type
+#         input_names = ['input_fish'],
+#         output_names = ['output'],
+#         operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK)
