@@ -36,11 +36,12 @@ class fastray_vt(BaseModule):
                     uu_ = uu[i][k][valid_map_sampled[i][k]]
                     vv_ = vv[i][k][valid_map_sampled[i][k]]
                     if img is not None:
-                        img_feats = F.interpolate(((img[i][k] - img[i][k].min())).unsqueeze(0), scale_factor=1/4, mode='bilinear', align_corners=False)
-                        voxel_feature[i][..., valid_map_sampled[i][k]] = img_feats[..., vv_, uu_] * norm_density_map[i][k][norm_density_map[i][k]!=0]
-                        import matplotlib.pyplot as plt
-                        plt.imshow(img_feats[0].cpu().numpy().transpose(1,2,0))
-                        plt.savefig(f"./work_dirs/vt_debug/img_{N}_{i}_{k}.jpg")
+                        img_feats = F.interpolate(((img[i][k] - img[i][k].min())).unsqueeze(0), scale_factor=1/4, mode='bilinear', align_corners=False)[0]
+                        img_feats = torch.ones_like(img_feats).to(img_feats.device).to(torch.float32)
+                        voxel_feature[i][..., valid_map_sampled[i][k]] += img_feats[..., vv_, uu_] * norm_density_map[i][k][norm_density_map[i][k]!=0]
+                        # import matplotlib.pyplot as plt
+                        # plt.imshow(img_feats[0].cpu().numpy().transpose(1,2,0))
+                        # plt.savefig(f"./work_dirs/vt_debug/img_{N}_{i}_{k}.jpg")
 
                         # img_ = (img.cpu().numpy().transpose(1,2,0) - img.cpu().numpy().min()) * 255
                         # mmcv.imwrite(img_, f"./work_dirs/{i}_{key.split('_')[0]}_{k}.jpg")

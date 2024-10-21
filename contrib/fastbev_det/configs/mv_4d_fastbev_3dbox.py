@@ -23,7 +23,7 @@ img_scale = 2
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
 front_perspective_img_size = [768, 384]
-batch_size = 2
+batch_size = 3
 group_size = 1
 bev_range = [-12, 36, -12, 12, -0.5, 2.5]
 
@@ -109,20 +109,22 @@ val_pipeline = [
 CLASSES = [
     'class.vehicle.passenger_car', 'class.vehicle.bus', 'class.vehicle.truck', 'class.vehicle.ambulance', 'class.vehicle.fire_engine', 'class.cycle.tricycle', \
     'class.cycle.motorcycle', 'class.cycle.bicycle', 'class.wheeled_push_device.cleaning_cart', 'class.wheeled_push_device.stroller', 'class.wheeled_push_device.shopping_cart', \
-    'class.wheeled_push_device.scooter', 'class.animal.animal', 'class.traffic_facility.bollard', 'class.traffic_facility.box', 'class.traffic_facility.cone',  'class.traffic_facility.soft_barrier',\
+    'class.wheeled_push_device.scooter', 'class.animal.animal', 'class.traffic_facility.box', 'class.traffic_facility.cone',  'class.traffic_facility.soft_barrier',\
     'class.traffic_facility.hard_barrier', 'class.traffic_facility.speed_bump', 'class.traffic_facility.gate_barrier', 'class.sign.traffic_sign', 'class.parking.indoor_column',\
     'class.parking.parking_guide', 'class.parking.charging_infra', 'class.parking.parking_lock', 'class.parking.wheel_stopper',\
     
     'class.road_marker.arrow', 'class.parking.access_aisle', 'class.road_marker.text', 'class.parking.text_icon',\
     
-    'class.pedestiran.pedestiran'
+    'class.pedestiran.pedestiran',\
+    
+    'class.traffic_facility.bollard'
 ]
 
 Bbox3d = dict(
     classes=[
     'class.vehicle.passenger_car', 'class.vehicle.bus', 'class.vehicle.truck', 'class.vehicle.ambulance', 'class.vehicle.fire_engine', 'class.cycle.tricycle', \
     'class.cycle.motorcycle', 'class.cycle.bicycle', 'class.wheeled_push_device.cleaning_cart', 'class.wheeled_push_device.stroller', 'class.wheeled_push_device.shopping_cart', \
-    'class.wheeled_push_device.scooter', 'class.animal.animal', 'class.traffic_facility.bollard', 'class.traffic_facility.box', 'class.traffic_facility.cone',  'class.traffic_facility.soft_barrier',\
+    'class.wheeled_push_device.scooter', 'class.animal.animal', 'class.traffic_facility.box', 'class.traffic_facility.cone',  'class.traffic_facility.soft_barrier',\
     'class.traffic_facility.hard_barrier', 'class.traffic_facility.speed_bump', 'class.traffic_facility.gate_barrier', 'class.sign.traffic_sign', 'class.parking.indoor_column',\
     'class.parking.parking_guide', 'class.parking.charging_infra', 'class.parking.parking_lock', 'class.parking.wheel_stopper'], 
     attrs=[['attr.vehicle.is_door_open', 'attr.vehicle.is_trunk_open'], [], [], []]
@@ -130,20 +132,27 @@ Bbox3d = dict(
 
 BboxBev = dict(classes=['class.road_marker.arrow', 'class.parking.access_aisle', 'class.road_marker.text', 'class.parking.text_icon'], attrs=[[], [], [], []])
 
-Cylinder3D = dict(
+Cylinder3D = dict(classes=['class.pedestiran.pedestiran'], attrs=[[]])
 
-)
+Square3D = dict(classes=['class.traffic_facility.bollard'], attrs=[[]])
 
-Square3D = dict(classes=['class.pedestiran.pedestiran'], attrs=[[]])
+transformable_name = ['camera_images','camera_depths', 'bbox_3d', 'bbox_bev', 'cylinder3d', 'square_3d']
 
-collection_info_type = ['camera_images','camera_depths', 'bbox_3d', 'bbox_bev', 'square_3d']
+transformables={
+    "camera_images": dict(type="camera_images"),
+    "camera_depths": dict(type="camera_depths"),
+    "bbox_3d": dict(type="bbox_3d", dictionary=Bbox3d),
+    "bbox_bev": dict(type="bbox_3d", dictionary=BboxBev),
+    "cylinder3d": dict(type="bbox_3d", dictionary=Cylinder3D),
+    "square_3d": dict(type="bbox_3d", dictionary=Square3D)
+    }
 
 dictionary=dict(
         bbox_3d=Bbox3d,
         bbox_bev=BboxBev,
-        square_3d=Square3D, 
-        # cylinder_3d=Cylinder3D
-        )
+        cylinder_3d=Cylinder3D,
+        square_3d=Square3D
+    )
 
 train_dataloader = dict(
     num_workers=6,
@@ -156,13 +165,7 @@ train_dataloader = dict(
         name="mv_4d",
         data_root=data_root,
         info_path=data_root + 'mv_4d_infos_val.pkl',
-        transformables={
-            "camera_images": dict(type="camera_images"),
-            "camera_depths": dict(type="camera_depths"),
-            "bbox_3d": dict(type="bbox_3d", dictionary=Bbox3d),
-            "bbox_bev": dict(type="bbox_3d", dictionary=BboxBev),
-            "square_3d": dict(type="bbox_3d", dictionary=Square3D),
-        },
+        transformables=transformables,
         transforms=train_pipeline,
         phase='train',
         batch_size=batch_size, 
@@ -182,13 +185,7 @@ val_dataloader = dict(
         name="mv_4d",
         data_root=data_root,
         info_path=data_root + 'mv_4d_infos_val.pkl',
-        transformables={
-            "camera_images": dict(type="camera_images"),
-            "camera_depths": dict(type="camera_depths"),
-            "bbox_3d": dict(type="bbox_3d", dictionary=Bbox3d),
-            "bbox_bev": dict(type="bbox_3d", dictionary=BboxBev),
-            "square_3d": dict(type="bbox_3d", dictionary=Square3D),
-        },
+        transformables=transformables,
         transforms=val_pipeline,
         phase='val',
         batch_size=batch_size, 
@@ -227,19 +224,20 @@ model_test_cfg = dict(
 )
 
 img_backbone_conf=dict(
-                type='VoVNet',
-                # model_type="vovnet57",
-                # out_indices=[4, 8],
-                model_type="vovnet39",
-                out_indices=[2, 5],
-                # init_cfg=dict(type='Pretrained', checkpoint="./work_dirs/backbone_checkpoint/vovnet57_match.pth")
-                )
+        type='VoVNet',
+        # model_type="vovnet57",
+        # out_indices=[4, 8],
+        model_type="vovnet39",
+        out_indices=[2, 3, 4, 5],
+        base_channels=32,
+        # init_cfg=dict(type='Pretrained', checkpoint="./work_dirs/backbone_checkpoint/vovnet57_match.pth")
+    )
 img_neck_conf=dict(
     type='SECONDFPN',
-    in_channels=[256, 512],
-    upsample_strides=[1, 2],
-    out_channels=[128, 128],
-    )
+    in_channels=[128, 128, 128, 256],
+    upsample_strides=[1, 1, 1, 2],
+    out_channels=[64, 64, 64, 64],
+)
 
 model = dict(
     type='FastBEV_Det',
@@ -248,11 +246,11 @@ model = dict(
         mean=[128, 128, 128],
         std=[255, 255, 255],
         IMG_KEYS=IMG_KEYS, 
-        label_type=collection_info_type,
+        label_type=transformable_name,
         predict_elements=['heatmap', 'anno_boxes', 'gridzs', 'class_maps'],
         batch_size=batch_size,
         group_size=group_size,
-        label_start_idx=2, # process labels info start index of collection_info_type
+        label_start_idx=2, # process labels info start index of transformable_name
     ),
     backbone_conf=dict(
         type='FastRay',
@@ -380,7 +378,7 @@ val_evaluator = [
 ]
 
 
-train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=24, val_interval=1)  # -1 note don't eval
+train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=24, val_interval=2)  # -1 note don't eval
 val_cfg = dict(type='GroupValLoop')
 
 test_dataloader = val_dataloader
@@ -429,5 +427,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = "work_dirs/mv_4d_fastbev_3dbox/20241006_223808/epoch_24.pth"
+load_from = None
 resume=False
