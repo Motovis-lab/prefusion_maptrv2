@@ -742,7 +742,7 @@ class LidarPoints(SpatialTransformable):
         """
         super().__init__(name)
         self.positions = positions.copy()
-        self.intensity = attributes.copy()
+        self.attributes = attributes.copy()
         self.tensor_smith = tensor_smith
 
     def flip_3d(self, flip_mat, **kwargs):

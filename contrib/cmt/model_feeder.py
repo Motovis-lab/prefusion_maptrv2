@@ -37,7 +37,8 @@ class CMTModelFeeder(BaseModelFeeder):
         """
         processed_frame_batch = []
         for frame in frame_batch:
-            transformable_dict ={k: v for k, v in zip(self.key_list, frame["transformables"])}
+            # transformable_dict ={k: v for k, v in zip(self.key_list, frame["transformables"])}
+            transformable_dict = frame["transformables"]
             processed_frame = dict(index_info=frame["index_info"], **transformable_dict)
             processed_frame["meta_info"] = {}
             for k, trnsfmb in processed_frame.items():
