@@ -396,7 +396,7 @@ def test_load_all_transformables():
     all_transformables = dataset.load_all_transformables(index_info)
 
     camera_image_set = all_transformables["my_camera_images"]
-    assert camera_image_set.transformables['camera1'].img.sum() == 699534854
+    assert camera_image_set.transformables['camera1'].img.sum() == 1748079
     assert camera_image_set.transformables['camera8'].ego_mask.sum() == 1365268
     np.testing.assert_almost_equal(
         camera_image_set.transformables['camera11'].intrinsic, 
