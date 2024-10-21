@@ -3,10 +3,18 @@ import numpy as np
 import torch
 from easydict import EasyDict as edict
 
-from prefusion.dataset.tensor_smith import get_bev_intrinsics, CameraImageTensor
-from prefusion.dataset.transform import Bbox3D, ParkingSlot3D
-from prefusion.dataset.tensor_smith import PlanarBbox3D, PlanarParkingSlot3D, PlanarSquarePillar
-from prefusion.dataset.tensor_smith import PlanarCylinder3D, PlanarOrientedCylinder3D
+from prefusion.dataset.transform import Bbox3D, ParkingSlot3D, Polyline3D
+from prefusion.dataset.tensor_smith import (
+    get_bev_intrinsics, 
+    CameraImageTensor,
+    PlanarBbox3D,
+    PlanarRectangularCuboid,
+    PlanarParkingSlot3D,
+    PlanarSquarePillar,
+    PlanarCylinder3D,
+    PlanarOrientedCylinder3D,
+    PlanarPolyline3D,
+)
 
 def test_get_bev_intrinsics():
     voxel_shape=(6, 200, 160)
@@ -34,7 +42,6 @@ def test_camera_image_tensor():
     ]), decimal=6)
 
 
-
 def test_planar_bbox_3d_get_roll_from_xyvecs():
     a = [1, 1, 0]
     b = [-1, 1, 1]
@@ -45,7 +52,7 @@ def test_planar_bbox_3d_get_roll_from_xyvecs():
 
 def test_planar_bbox_3d_get_yzvec_from_xvec_and_roll():
     xvecs = np.float32([
-        [1, 1], 
+        [1, 1],
         [1, 1],
         [0, 0]
     ])
@@ -72,7 +79,7 @@ def test_planar_bbox_3d_get_yzvec_from_xvec_and_roll_single():
 def test_planar_bbox_3d_is_in_bbox3d():
     delta_ij = np.float32([0.7, 0.2, 0])
     sizes = np.float32([2, 1, 0.5])
-    xvec = np.float32([1, 0, 0]) 
+    xvec = np.float32([1, 0, 0])
     yvec = np.float32([0, 1, 0])
     zvec = np.float32([0, 0, 1])
     assert PlanarBbox3D._is_in_bbox3d(delta_ij, sizes, xvec, yvec, zvec) is True
@@ -136,10 +143,49 @@ def test_planar_bbox_3d_generation_and_reverse():
         pred_bboxes_3d[1]['rotation'],
         box3d.elements[1]['rotation'],
     decimal=3)
-    
 
 
-def test_planar_squre_pillars_generation_and_reverse():
+
+def test_planar_rectangular_cuboid_generation_and_reverse():
+    prect = PlanarRectangularCuboid(
+        voxel_shape=(6, 160, 80),
+        voxel_range=([-0.5, 2.5], [24, -8], [8, -8])
+    )
+
+    box3d = Bbox3D(
+        "cuboid",
+        elements=[
+            {
+                'class': 'speedbump',
+                'attr': {},
+                'size': [5, 0.5, 0.1],
+                'rotation': np.float32([
+                    [1, 0, 0],
+                    [0, 1, 0],
+                    [0, 0, 1]
+                ]),
+                'translation': np.float32([
+                    [8], [4], [0]
+                ]),
+            }
+        ],
+        dictionary={'classes': ['speedbump']},
+        tensor_smith=prect
+    )
+    box3d.to_tensor()
+    tensor_dict = box3d.tensor
+    assert tensor_dict['seg'][0].max() == 1
+    pred_bboxes_3d = prect.reverse(tensor_dict)
+    np.testing.assert_almost_equal(
+        pred_bboxes_3d[0]['size'],
+        box3d.elements[0]['size'],
+    decimal=3)
+    del_R = pred_bboxes_3d[0]['rotation'].T @ box3d.elements[0]['rotation']
+    np.testing.assert_almost_equal(abs(del_R[0, 0]), 1, decimal=3)
+
+
+
+def test_planar_square_pillars_generation_and_reverse():
     psp = PlanarSquarePillar(
         voxel_shape=(6, 160, 80),
         voxel_range=([-0.5, 2.5], [24, -8], [8, -8]),
@@ -307,4 +353,55 @@ def test_planar_parkingslot_3d_generation_and_reverse():
         pred_slots[0][:, :3],
         slots.elements[0]['points'],
     decimal=3)
-    
+
+
+def test_planar_polyline_3d_generation_and_reverse():
+    pplyl = PlanarPolyline3D(
+        voxel_shape=(6, 160, 80),
+        voxel_range=([-0.5, 2.5], [24, -8], [8, -8])
+    )
+    plyl = Polyline3D(
+        "polyline_3d",
+        elements=[
+            {
+                'class': 'class.road_marker.lane_line',
+                'attr': {},
+                'points': np.float32([
+                    [-1,  2, -0.1],
+                    [ 0,  1,  0.0],
+                    [ 1,  0,  0.1]])
+                ###################### 
+                #           .
+                #         /
+                #       .
+                #     /
+                #   .
+                ######################
+            },
+            {
+                'class': 'class.road_marker.arrow_heading_triangle',
+                'attr': {},
+                'points': np.float32([
+                    [ 0,     0,  0.0],
+                    [ 1,  -0.9,  0.2],
+                    [ 1,  -1.1,  0.2],
+                    [ 0,    -2,  0.0]])
+                ###################### 
+                #       . - .
+                #      /     \
+                #     .       .
+                ######################
+            },
+        ],
+        dictionary=dict(
+            classes=['class.road_marker.lane_line', 'class.road_marker.arrow_heading_triangle']
+        ),
+        tensor_smith=pplyl
+    )
+    plyl.to_tensor()
+    tensor_dict = plyl.tensor
+    assert tensor_dict['seg'].shape == (3, 160, 80)
+    assert tensor_dict['seg'][0].max() == 1
+    pred_plyl = pplyl.reverse(tensor_dict)
+    np.testing.assert_almost_equal(pred_plyl[0][[0, -1], :3], plyl.elements[0]['points'][[0, -1], :], decimal=3)
+    np.testing.assert_almost_equal(pred_plyl[1][[0, -1], :3], plyl.elements[1]['points'][[0, -1], :], decimal=3)
