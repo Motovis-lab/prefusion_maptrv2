@@ -50,9 +50,13 @@ train_dataloader = dict(
                     stds=[58.395, 57.120, 57.375])),
             bbox_3d=dict(
                 type="Bbox3D", 
+                loader=dict(type="Bbox3DLoader"),
                 dictionary={"classes": det_classes},
                 tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
-            ego_poses=dict(type="EgoPoseSet")
+            ego_poses=dict(
+                type="EgoPoseSet",
+                loader=dict(type="EgoPoseSetLoader")
+            )
         ),
         transforms=[
             # dict(type="RandomMirrorSpace", prob=0.5, scope="group"),

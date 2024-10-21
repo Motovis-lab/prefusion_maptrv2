@@ -26,6 +26,20 @@ from prefusion.dataset.transformable_loader import (
     OccSdfBevLoader,
     OccSdf3DLoader,
 )
+from prefusion.dataset.transform import (
+    CameraImageSet,
+    CameraDepthSet,
+    CameraSegMaskSet,
+    LidarPoints,
+    EgoPoseSet,
+    Bbox3D,
+    Polyline3D,
+    Polygon3D,
+    ParkingSlot3D,
+    OccSdfBev,
+    OccSdf3D,
+    SegBev,
+)
 
 from .utils import build_transforms, build_model_feeder, build_tensor_smith, build_transformable_loader
 
@@ -293,18 +307,18 @@ class GroupBatchDataset(Dataset):
 
     # TODO: implement visualization?
     DEFAULT_LOADERS = {
-        "CameraImageSet": CameraImageSetLoader,
-        "CameraDepthSet": CameraDepthSetLoader,
-        "CameraSegMaskSet": CameraSegMaskSetLoader,
-        "LidarPoints": LidarPointsLoader,
-        "EgoPoseSet": EgoPoseSetLoader,
-        "Bbox3D": Bbox3DLoader,
-        "Polyline3D": Polyline3DLoader,
-        "Polygon3D": Polygon3DLoader,
-        "ParkingSlot3D": ParkingSlot3DLoader,
-        "OccSdfBev": OccSdfBevLoader,
-        "OccSdf3D": OccSdf3DLoader,
-        "SegBev": SegBevLoader,
+        CameraImageSet.__name__: CameraImageSetLoader,
+        CameraDepthSet.__name__: CameraDepthSetLoader,
+        CameraSegMaskSet.__name__: CameraSegMaskSetLoader,
+        LidarPoints.__name__: LidarPointsLoader,
+        EgoPoseSet.__name__: EgoPoseSetLoader,
+        Bbox3D.__name__: Bbox3DLoader,
+        Polyline3D.__name__: Polyline3DLoader,
+        Polygon3D.__name__: Polygon3DLoader,
+        ParkingSlot3D.__name__: ParkingSlot3DLoader,
+        OccSdfBev.__name__: OccSdfBevLoader,
+        OccSdf3D.__name__: OccSdf3DLoader,
+        SegBev.__name__: SegBevLoader,
     }
 
     def __init__(
@@ -429,8 +443,7 @@ class GroupBatchDataset(Dataset):
 
     def _build_transformable_loader(self, loader_cfg, transformable_type: str) -> TransformableLoader:
         if loader_cfg:
-            if "data_root" not in loader_cfg:
-                loader_cfg["data_root"] = self.data_root  # provide default data_root from Dataset
+            loader_cfg.setdefault("data_root", self.data_root)  # fallback with default data_root from Dataset
         else:
             loader_cfg = self._get_default_loader_cfg(transformable_type)
         loader = build_transformable_loader(loader_cfg)

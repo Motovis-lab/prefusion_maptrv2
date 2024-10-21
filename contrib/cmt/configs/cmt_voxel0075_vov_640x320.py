@@ -75,8 +75,7 @@ train_dataloader = dict(
             camera_images=dict(
                 # name="camera_images",
                 # arbitrary string, will be set to each Transformable object to distinguish it with others
-                type="camera_images",
-                transformable_key="camera_images",
+                type="CameraImageSet",
                 # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
                 tensor_smith=dict(
                     type="CameraImageTensor",
@@ -84,24 +83,18 @@ train_dataloader = dict(
                     stds=[58.395, 57.120, 57.375],
                 )
             ),
-            bbox_3d =dict(
-                # name="bbox_3d",
-                # arbitrary string, will be set to each Transformable object to distinguish it with others
-                type="bbox_3d",
-                # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
+            bbox_3d=dict(
+                type="Bbox3D",
                 dictionary={"classes": det_classes},
                 # tensor_smith=dict(type="Bbox3DBasic", classes=det_classes),
                 tensor_smith=dict(type="Bbox3D_XYZ_LWH_Yaw_VxVy", classes=det_classes),
             ),
             ego_poses=dict(
-                # name="ego_poses",
-                # arbitrary string, will be set to each Transformable object to distinguish it with others
-                type="ego_poses",
-                # only effective in GroupBatchDataset, must be one of AVAILABLE_TRANSFORMABLE_KEYS
+                type="EgoPoseSet",
             ),
-            lidar_points=dict(
-                # name="lidar_sweeps",
-                type="lidar_sweeps",
+            lidar_sweeps=dict(
+                type="LidarPoints",
+                loader=dict(type="LidarSweepsLoader"),
                 tensor_smith=dict(type="PointsToVoxelsTensor", voxel_size=voxel_size,
                               max_point_per_voxel=10, max_voxels=120000,
                               max_input_points=1200000,
