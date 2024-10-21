@@ -24,12 +24,12 @@ from prefusion.dataset.tensor_smith import (
 # TODO: occ2d, should merge multiple frames to one
 
 
-__all__ = ["FastRayModelFeeder"]
+__all__ = ["FastRayPlanarModelFeeder"]
 
 
 
 @MODEL_FEEDERS.register_module()
-class FastRayModelFeeder(BaseModelFeeder):
+class FastRayPlanarModelFeeder(BaseModelFeeder):
     # TODO: for sdf_2d, we should mix tensor across frames
 
     def __init__(self, 

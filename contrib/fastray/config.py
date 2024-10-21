@@ -34,8 +34,8 @@ camera_feature_configs=dict(
 )
 
 # TODO:
-# classes and attrs needs to be verified in info.pkl
-# or redefine classes in tensor_smith
+# classes and attrs needs to be redefined in info.pkl
+# or in transformable_loader or in tensor_smith
 dictionary_heading_objects = dict(
     classes=['class.vehicle.passenger_car', 
              'class.vehicle.bus', 
@@ -54,6 +54,11 @@ dictionary_heading_objects = dict(
 
 dictionary_plane_objects = dict(
     classes=[],
+    attrs=[]
+)
+
+dictionary_no_heading_objects = dict(
+    classes=['speed_bump'],
     attrs=[]
 )
 
@@ -94,61 +99,50 @@ dictionary_polygons = dict(
 train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='/home/alpha/Projects/MV4D-PARKING/20231028_150815',
-    info_path='/home/alpha/Projects/MV4D-PARKING/info_pkls/mv_4d_infos_20231028_150815.pkl',
+    data_root='../MV4D-PARKING/20231028_150815',
+    info_path='../MV4D-PARKING/info_pkls/mv_4d_infos_20231028_150815.pkl',
     model_feeder=dict(
-        type="FastRayModelFeeder",
+        type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
         camera_feature_configs=camera_feature_configs,
     ),
     transformables=dict(
         camera_images=dict(type='camera_images', tensor_smith=dict(type='CameraImageTensor')),
         ego_poses=dict(type='ego_poses'),
-        bbox_3d=dict(type='bbox_3d', dictionary=dictionary_heading_objects),
-    )
+        bbox_3d=dict(
+            type='bbox_3d', 
+            dictionary=dictionary_heading_objects,
+            tensor_smith=dict(type='PlanarBbox3D', 
+                              voxel_shape=voxel_feature_config['voxel_shape'],
+                              voxel_range=voxel_feature_config['voxel_range'])
+        ),
+        polyline_3d=dict(
+            type='polyline_3d',
+            dictionary=dictionary_polylines,
+            tensor_smith=dict(type='PlanarPolyline3D', 
+                              voxel_shape=voxel_feature_config['voxel_shape'],
+                              voxel_range=voxel_feature_config['voxel_range'])
+        ),
+        parkingslot_3d=dict(
+            type='parkingslot_3d',
+            tensor_smith=dict(type='PlanarParkingSlot3D', 
+                              voxel_shape=voxel_feature_config['voxel_shape'],
+                              voxel_range=voxel_feature_config['voxel_range'])
+        )
+    ),
+    phase="train",
+    batch_size=4,
+    possible_group_sizes=4,
+    possible_frame_intervals=5,
 )
 
 
-
-
-# train_dataloader = dict(
-#     num_workers=1,
-#     persistent_workers=True,
-#     collate_fn=dict(type="collate_dict"),
-#     dataset=dict(
-#         type="GroupBatchDataset",
-#         name="ParkingDataset",
-#         data_root="/data/datasets/mv4d",
-#         info_path="/data/datasets/mv4d/mv4d_infos_dbg_246_noalign.pkl",
-#         model_feeder=dict(
-#             type="StreamPETRModelFeeder",
-#             visible_range=point_cloud_range,
-#         ),
-#         transformables=dict(
-#             camera_images=dict(
-#                 type='camera_images', 
-#                 tensor_smith=dict(
-#                     type='CameraImageTensor',
-#                     means=[123.675, 116.280, 103.530],
-#                     stds=[58.395, 57.120, 57.375],
-#                 )
-#             ),
-#             bbox_3d_0=dict(type='bbox_3d', dictionary={'classes': det_classes}),
-#             bbox_3d_1=dict(type='bbox_3d', dictionary={'classes': det_classes})
-#         )
-#         transforms=[
-#             # dict(type="RandomMirrorSpace", prob=0.5, scope="group"),
-#             dict(
-#                 type="RandomImageISP",
-#                 prob=0.0001,
-#             ),
-#         ],
-#         phase="train",
-#         batch_size=batch_size,
-#         possible_group_sizes=[1],
-#         possible_frame_intervals=[1],
-#     ),
-# )
+train_dataloader = dict(
+    num_workers=4,
+    persistent_workers=True,
+    collate_fn=dict(type="collate_dict"),
+    dataset=train_dataset
+)
 
 val_dataloader = train_dataloader
 test_dataloader = train_dataloader
