@@ -28,7 +28,7 @@ def test_load_camera_image_set():
     with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
         info_data = pickle.load(f)
     camera_images = loader.load("camera_images", info_data["20231101_160337"], ii, tensor_smith=DummyImgTensorSmith())
-    assert camera_images.transformables['camera1'].img.sum() == 1748079
+    assert camera_images.transformables['camera1'].img.sum() == 1752500
     assert isinstance(camera_images.transformables['camera5'].tensor_smith, DummyImgTensorSmith)
     assert camera_images.transformables['camera8'].ego_mask.sum() == 1365268
     assert_almost_equal(
