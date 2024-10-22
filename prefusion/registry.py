@@ -166,7 +166,7 @@ TRANSFORMABLES = Registry(
 )
 
 TRANSFORMABLE_LOADERS = Registry(
-    'transformable_loaders',
+    'transformable_loader',
     locations=['prefusion']
 )
 
