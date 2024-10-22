@@ -1,9 +1,11 @@
+import cv2
 import numpy as np
+from numpy.ma.testutils import assert_array_almost_equal
 import pytest
 from copious.io.fs import mktmpdir
 from pypcd_imp import pypcd
 
-from prefusion.dataset.utils import read_pcd, make_seed
+from prefusion.dataset.utils import read_pcd, make_seed, read_ego_mask
 
 
 @pytest.fixture
@@ -60,3 +62,16 @@ def test_make_seed_3():
 def test_make_seed_4():
     seeds = [make_seed(2, i, j, k, base=10) for i in range(2) for j in range(2) for k in range(2)]
     assert seeds == [113, 114, 123, 124, 213, 214, 223, 224]
+
+
+def test_read_ego_mask():
+    tmpdir = mktmpdir()
+    img = np.ones([2,4], dtype=np.uint8)
+    save_path = str(tmpdir / "mask243.png")
+    cv2.imwrite(save_path, img)
+    assert_array_almost_equal(read_ego_mask(save_path), img)
+
+    img255 = np.ones([2,4], dtype=np.uint8) * 255
+    save_path = str(tmpdir / "mask255.png")
+    cv2.imwrite(save_path, img255)
+    assert_array_almost_equal(read_ego_mask(save_path),  img)

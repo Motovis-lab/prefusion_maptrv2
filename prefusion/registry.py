@@ -165,6 +165,11 @@ TRANSFORMABLES = Registry(
     locations=['prefusion']
 )
 
+TRANSFORMABLE_LOADERS = Registry(
+    'transformable_loaders',
+    locations=['prefusion']
+)
+
 
 TENSOR_SMITHS = Registry(
     'tensor_smith',

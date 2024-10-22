@@ -32,7 +32,7 @@ def to_cmt_pkl(src_path, dst_path):
             v['lidar_points']['lidar1_sweeps'] = [
                 {'path': P(f'{scene_id}/lidar/undistort_static_lidar1') / f'{ts}.pcd',
                  'Twe': Twes[ts],
-                 'timestamps': ts}
+                 'timestamp': ts}
                 for ts in get_sweep_timestamps(k)]
     with open(dst_path, 'wb') as f:
         pickle.dump(data, f)
