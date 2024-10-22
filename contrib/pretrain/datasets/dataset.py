@@ -30,6 +30,7 @@ class PretrainDataset(BaseDataset):
                  pipeline,
                  camera_types: List,
                  test_mode=False,
+                 reduce_zero_label=True,
                  lazy_init: bool = False,
                  serialize_data: bool = True,
                  data_prefix: dict = dict(img_path=''),
@@ -52,7 +53,7 @@ class PretrainDataset(BaseDataset):
         self.data_bytes: np.ndarray
         self._indices = indices
         self.max_refetch = max_refetch
-
+        self.reduce_zero_label = reduce_zero_label
         self.pipeline = Compose(pipeline)
         if not lazy_init:
             self.full_init()
@@ -70,6 +71,9 @@ class PretrainDataset(BaseDataset):
                         seg_mask_path=P(self.data_root) / P(self.ann_infos[scene_name]['scene_info']['camera_mask'][camera_type]),
                         scene_name=scene_name,
                         camera_type=camera_type,
-                        frame_id=frame_id)
+                        frame_id=frame_id,
+                        reduce_zero_label=self.reduce_zero_label,
+                        seg_fields=[],
+                        swap_seg_labels=None)
                     data_list.append(data_info)
         return data_list
