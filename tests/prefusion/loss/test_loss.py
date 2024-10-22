@@ -605,3 +605,127 @@ def test_planar_parkingslot3d_reg_loss(pkslot_reg_pred, pkslot_reg_label, planar
     assert reg_loss["plnrpkslot3d_reg_abs_s_dir_product_loss"] < 1e-5
     assert reg_loss["plnrpkslot3d_reg_height_loss"] < 1e-5
     assert reg_loss["plnrpkslot3d_reg_loss"] < 1e-5
+
+
+def test_planar_auto_loss():
+    weight_scheme = {
+        "taskA": {
+            "loss_weight": "auto",
+            "iou_loss_weight": 2.0,
+            "dual_focal_loss_weight": 1.0,
+            "channel_weights": {
+                "ped": {"weight": "auto"},
+                "car": {"weight": 1.0},
+            },
+        },
+        "taskB": {
+            "_weight_": "auto",
+            "partition_weights": {
+                "dist": {"weight": 1.0, "slice": 0},
+                "vert_vec": {"weight": 2.0, "slice": (1, 3)},
+                "abs_dir": {"weight": 0.0, "slice": (3, 5)},
+            }
+        },
+        "taskC": 0.5,
+        "taskD": {"weight": 0.7, "more_weights": {"a": {"weight": "auto"}, "b": {"weight": "auto"}}}
+    }
+    planar_loss = PlanarLoss(loss_name_prefix="any", weight_scheme=weight_scheme, auto_loss_init_value=1e-5)
+    assert planar_loss.weight_scheme == {
+        "taskA": {
+            "loss_weight": 1e-5,
+            "iou_loss_weight": 2.0,
+            "dual_focal_loss_weight": 1.0,
+            "channel_weights": {
+                "ped": {"weight": 1e-5},
+                "car": {"weight": 1.0},
+            },
+        },
+        "taskB": {
+            "_weight_": "auto",
+            "partition_weights": {
+                "dist": {"weight": 1.0, "slice": 0},
+                "vert_vec": {"weight": 2.0, "slice": (1, 3)},
+                "abs_dir": {"weight": 0.0, "slice": (3, 5)},
+            }
+        },
+        "taskC": 0.5,
+        "taskD": {"weight": 0.7, "more_weights": {"a": {"weight": 1e-5}, "b": {"weight": 1e-5}}}
+    }
+    planar_loss.weight_scheme.taskA.loss_weight = torch.nn.Parameter(torch.tensor(2.0))
+    assert planar_loss.weight_scheme.taskA.loss_weight == 2.0
+    assert planar_loss.weight_scheme.taskA.channel_weights.ped.weight == 1e-5
+
+
+def test_planar_auto_loss_backward(bx_seg_pred_with_grad_fn, bx_seg_label):
+    weight_scheme = {
+        "seg": {
+            "loss_weight": "auto",
+            "iou_loss_weight": 2.0,
+            "dual_focal_loss_weight": 1.0,
+            "channel_weights": {
+                "ped": {"weight": "auto"},
+                "car": {"weight": 1.0},
+            },
+        }
+    }
+    planar_loss = PlanarLoss(loss_name_prefix="any", weight_scheme=weight_scheme, auto_loss_init_value=1e-5)
+    seg_loss = planar_loss._seg_loss(bx_seg_pred_with_grad_fn, bx_seg_label, channel_weights=planar_loss.weight_scheme.seg.channel_weights)
+    seg_loss["any_seg_loss"].backward()
+    assert list(bx_seg_pred_with_grad_fn.grad.shape) == [1, 2, 4, 5]
+    assert planar_loss.weight_scheme.seg.channel_weights.ped.weight.grad == _approx(0.1785522)
+
+
+def test_planar_auto_loss_backward_2(bx_seg_pred, bx_cen_pred , bx_reg_pred , bx_seg_label , bx_cen_label , bx_reg_label):
+    weight_scheme = {
+        "seg": {
+            "loss_weight": "auto",
+            "iou_loss_weight": "auto",
+            "dual_focal_loss_weight": "auto",
+            "channel_weights": {
+                "ped": {"weight": "auto"},
+                "car": {"weight": "auto"},
+            },
+        },
+        "cen": {
+            "loss_weight": "auto",
+            "fg_weight": "auto",
+            "bg_weight": "auto",
+        },
+        "reg": {
+            "loss_weight": "auto",
+            "partition_weights": {
+                "center_xy": {"weight": "auto", "slice": (0, 2)},
+                "center_z": {"weight": "auto", "slice": 2},
+                "size": {"weight": "auto", "slice": (3, 6)},
+                "unit_xvec": {"weight": "auto", "slice": (6, 9)},
+                "abs_xvec": {"weight": "auto", "slice": (9, 12)},
+                "xvec_product": {"weight": "auto", "slice": (12, 14)},
+                "abs_roll_angle": {"weight": "auto", "slice": (14, 16)},
+                "roll_angle_product": {"weight": "auto", "slice": 16},
+                "velo": {"weight": "auto", "slice": (17, 20)},
+            }
+        }
+    }
+    pred = {"seg": bx_seg_pred, "cen": bx_cen_pred, "reg": bx_reg_pred}
+    label = {"seg": bx_seg_label, "cen": bx_cen_label, "reg": bx_reg_label}
+    planar_loss = PlanarLoss(loss_name_prefix="any", weight_scheme=weight_scheme, auto_loss_init_value=1)
+    loss = planar_loss(pred, label)
+    loss["any_loss"].backward()
+    assert planar_loss.weight_scheme.seg.loss_weight.grad == _approx(2.576545)
+    assert planar_loss.weight_scheme.seg.iou_loss_weight.grad == _approx(1.383857)
+    assert planar_loss.weight_scheme.seg.dual_focal_loss_weight.grad == _approx(1.1926877)
+    assert planar_loss.weight_scheme.seg.channel_weights.ped.weight.grad == _approx(0.04463893)
+    assert planar_loss.weight_scheme.seg.channel_weights.car.weight.grad == _approx(-0.04463899)
+    assert planar_loss.weight_scheme.cen.loss_weight.grad == _approx(0.6617445)
+    assert planar_loss.weight_scheme.cen.fg_weight.grad == _approx(0.2311096)
+    assert planar_loss.weight_scheme.cen.bg_weight.grad == _approx(0.4306349)
+    assert planar_loss.weight_scheme.reg.loss_weight.grad == _approx(1.55)
+    assert planar_loss.weight_scheme.reg.partition_weights.center_xy.weight.grad == _approx(0.15)
+    assert planar_loss.weight_scheme.reg.partition_weights.center_z.weight.grad == _approx(0.30)
+    assert planar_loss.weight_scheme.reg.partition_weights.size.weight.grad == _approx(0.10)
+    assert planar_loss.weight_scheme.reg.partition_weights.unit_xvec.weight.grad == _approx(0.20)
+    assert planar_loss.weight_scheme.reg.partition_weights.abs_xvec.weight.grad == _approx(0.10)
+    assert planar_loss.weight_scheme.reg.partition_weights.xvec_product.weight.grad == _approx(0.15)
+    assert planar_loss.weight_scheme.reg.partition_weights.abs_roll_angle.weight.grad == _approx(0.15)
+    assert planar_loss.weight_scheme.reg.partition_weights.roll_angle_product.weight.grad == _approx(0.30)
+    assert planar_loss.weight_scheme.reg.partition_weights.velo.weight.grad == _approx(0.10)
