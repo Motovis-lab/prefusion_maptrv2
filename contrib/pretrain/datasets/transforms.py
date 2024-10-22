@@ -9,6 +9,7 @@ from mmcv.transforms import to_tensor
 from mmcv.transforms.base import BaseTransform
 from mmengine.structures import PixelData
 from mmseg.structures import SegDataSample
+from PIL import Image as PILImage   
 import warnings
 
 
@@ -23,22 +24,28 @@ class LoadAnnotationsPretrain(LoadAnnotations):
         self.with_seg_mask = with_seg_mask
 
     def _load_depth(self, results: dict) -> None:
-        results['gt_depth'] = np.load(results['depth_path'])['depth'].astype(np.float32)
-        results['seg_fields'].append('gt_depth')
+        if results.get('depth_path', None) is not None:
+            results['gt_depth'] = np.load(results['depth_path'])['depth'].astype(np.float32)
+        else:
+            results['gt_depth'] = (np.zeros(results['img'].shape[:2])-1).astype(np.float32)
+        results['seg_fields'].append('gt_depth')    
         return results
 
     def _load_seg_mask(self, results: dict) -> None:
-        if self.file_client_args is not None:
-            file_client = fileio.FileClient.infer_client(
-                self.file_client_args, results['seg_mask_path'])
-            img_bytes = file_client.get(results['seg_mask_path'])
-        else:
-            img_bytes = fileio.get(
-                results['seg_mask_path'], backend_args=self.backend_args)
+        if results.get('seg_mask_path', None) is not None:
+            if self.file_client_args is not None:
+                file_client = fileio.FileClient.infer_client(
+                    self.file_client_args, results['seg_mask_path'])
+                img_bytes = file_client.get(results['seg_mask_path'])
+            else:
+                img_bytes = fileio.get(
+                    results['seg_mask_path'], backend_args=self.backend_args)
 
-        results['gt_seg_mask'] = mmcv.imfrombytes(
-            img_bytes, flag='unchanged',
-            backend=self.imdecode_backend).squeeze()[..., 0]
+            results['gt_seg_mask'] = mmcv.imfrombytes(
+                img_bytes, flag='unchanged',
+                backend=self.imdecode_backend).squeeze()[..., 0]
+        else:
+            results['gt_seg_mask'] = np.zeros(results['img'].shape[:2])
         results['seg_fields'].append('gt_seg_mask')
         return results  
     
@@ -51,33 +58,38 @@ class LoadAnnotationsPretrain(LoadAnnotations):
         Returns:
             dict: The dict contains loaded semantic segmentation annotations.
         """
+        if results["scene_name"] != "avp":
+            img_bytes = fileio.get(
+                results['seg_map_path'], backend_args=self.backend_args)
+            gt_semantic_seg = mmcv.imfrombytes(
+                img_bytes, flag='unchanged',
+                backend=self.imdecode_backend).squeeze().astype(np.uint8)[..., 0]
 
-        img_bytes = fileio.get(
-            results['seg_map_path'], backend_args=self.backend_args)
-        gt_semantic_seg = mmcv.imfrombytes(
-            img_bytes, flag='unchanged',
-            backend=self.imdecode_backend).squeeze().astype(np.uint8)[..., 0]
-
-        # reduce zero_label
-        if self.reduce_zero_label is None:
-            self.reduce_zero_label = results['reduce_zero_label']
-        assert self.reduce_zero_label == results['reduce_zero_label'], \
-            'Initialize dataset with `reduce_zero_label` as ' \
-            f'{results["reduce_zero_label"]} but when load annotation ' \
-            f'the `reduce_zero_label` is {self.reduce_zero_label}'
-        if self.reduce_zero_label:
-            # avoid using underflow conversion
-            gt_semantic_seg[gt_semantic_seg == 0] = 255
-            gt_semantic_seg = gt_semantic_seg - 1
-            gt_semantic_seg[gt_semantic_seg == 254] = 255
-        # modify if custom classes
-        if results.get('label_map', None) is not None:
-            # Add deep copy to solve bug of repeatedly
-            # replace `gt_semantic_seg`, which is reported in
-            # https://github.com/open-mmlab/mmsegmentation/pull/1445/
-            gt_semantic_seg_copy = gt_semantic_seg.copy()
-            for old_id, new_id in results['label_map'].items():
-                gt_semantic_seg[gt_semantic_seg_copy == old_id] = new_id
+            # reduce zero_label
+            if self.reduce_zero_label is None:
+                self.reduce_zero_label = results['reduce_zero_label']
+            assert self.reduce_zero_label == results['reduce_zero_label'], \
+                'Initialize dataset with `reduce_zero_label` as ' \
+                f'{results["reduce_zero_label"]} but when load annotation ' \
+                f'the `reduce_zero_label` is {self.reduce_zero_label}'
+            if self.reduce_zero_label:
+                # avoid using underflow conversion
+                gt_semantic_seg[gt_semantic_seg == 0] = 255
+                gt_semantic_seg = gt_semantic_seg - 1
+                gt_semantic_seg[gt_semantic_seg == 254] = 255
+            # modify if custom classes
+            if results.get('label_map', None) is not None:
+                # Add deep copy to solve bug of repeatedly
+                # replace `gt_semantic_seg`, which is reported in
+                # https://github.com/open-mmlab/mmsegmentation/pull/1445/
+                gt_semantic_seg_copy = gt_semantic_seg.copy()
+                for old_id, new_id in results['label_map'].items():
+                    gt_semantic_seg[gt_semantic_seg_copy == old_id] = new_id
+        else:
+            gt_semantic_seg = np.array(PILImage.open(results['seg_map_path'])).astype(np.float32)
+            segmap = gt_semantic_seg.transpose(2,0,1)
+            gt_semantic_seg = segmap.reshape(segmap.shape[0]*9, segmap.shape[1], int(segmap.shape[2]/9)).transpose(1,2,0)
+            gt_semantic_seg[...,-1][gt_semantic_seg[...,-1]==1] = 255
         results['gt_seg_map'] = gt_semantic_seg
         results['seg_fields'].append('gt_seg_map')
     
@@ -255,7 +267,7 @@ class PackSegInputs(BaseTransform):
                               'segmentation map, usually the segmentation '
                               'map is 2D, but got '
                               f'{results["gt_seg_map"].shape}')
-                data = to_tensor(results['gt_seg_map'].astype(np.int64))
+                data = to_tensor(results['gt_seg_map'].astype(np.int64).transpose(2,0,1))
             gt_sem_seg_data = dict(data=data)
             data_sample.gt_sem_seg = PixelData(**gt_sem_seg_data)
 

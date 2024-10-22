@@ -10,7 +10,7 @@ import numpy as np
 from mmengine.dataset import Compose
 
 
-__all__ = ['PretrainDataset']
+__all__ = ['PretrainDataset', 'PretrainDataset_AVP']
 
 @DATASETS.register_module()
 class PretrainDataset(BaseDataset):
@@ -27,8 +27,8 @@ class PretrainDataset(BaseDataset):
     def __init__(self,
                  data_root,
                  ann_file,
-                 pipeline,
-                 camera_types: List,
+                 pipeline=None,
+                 camera_types: List=None,
                  test_mode=False,
                  reduce_zero_label=True,
                  lazy_init: bool = False,
@@ -69,6 +69,62 @@ class PretrainDataset(BaseDataset):
                         seg_map_path=P(self.data_root) / P(self.ann_infos[scene_name]['frame_info'][frame_id]['camera_image_seg'][camera_type]),
                         depth_path=P(self.data_root) / P(self.ann_infos[scene_name]['frame_info'][frame_id]['camera_image_depth'][camera_type]),
                         seg_mask_path=P(self.data_root) / P(self.ann_infos[scene_name]['scene_info']['camera_mask'][camera_type]),
+                        scene_name=scene_name,
+                        camera_type=camera_type,
+                        frame_id=frame_id,
+                        reduce_zero_label=self.reduce_zero_label,
+                        seg_fields=[],
+                        swap_seg_labels=None)
+                    data_list.append(data_info)
+        return data_list
+    def full_init(self):
+        """Load annotation file and set ``BaseDataset._fully_initialized`` to
+        True.
+
+        If ``lazy_init=False``, ``full_init`` will be called during the
+        instantiation and ``self._fully_initialized`` will be set to True. If
+        ``obj._fully_initialized=False``, the class method decorated by
+        ``force_full_init`` will call ``full_init`` automatically.
+
+        Several steps to initialize annotation:
+
+            - load_data_list: Load annotations from annotation file.
+            - filter data information: Filter annotations according to
+              filter_cfg.
+            - slice_data: Slice dataset according to ``self._indices``
+            - serialize_data: Serialize ``self.data_list`` if
+              ``self.serialize_data`` is True.
+        """
+        if self._fully_initialized:
+            return
+        # load data information
+        self.data_list = self.load_data_list()
+        # filter illegal data, such as data that has no annotations.
+        self.data_list = self.filter_data()
+        # Get subset data according to indices.
+        if self._indices is not None:
+            self.data_list = self._get_unserialized_subset(self._indices)
+
+        # serialize data_list
+        if self.serialize_data:
+            self.data_bytes, self.data_address = self._serialize_data()
+
+        self._fully_initialized = True
+
+
+@DATASETS.register_module()
+class PretrainDataset_AVP(PretrainDataset):
+    def load_data_list(self) -> List[dict]:
+        data_list = []
+        for scene_name in ["avp"]:
+            frame_ids = [x for x in self.ann_infos[scene_name]['frame_info']]
+            for frame_id in frame_ids:
+                for camera_type in self.camera_types:
+                    data_info = dict(
+                        img_path=P(self.data_root) / P(self.ann_infos[scene_name]['frame_info'][frame_id]['camera_image'][camera_type]),
+                        seg_map_path=P(self.data_root) / P(self.ann_infos[scene_name]['frame_info'][frame_id]['camera_image_seg'][camera_type]),
+                        depth_path=None,
+                        seg_mask_path=None,
                         scene_name=scene_name,
                         camera_type=camera_type,
                         frame_id=frame_id,

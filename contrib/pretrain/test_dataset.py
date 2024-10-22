@@ -5,6 +5,10 @@ import matplotlib.pyplot as plt
 import ipdb
 from mmengine import Config
 from mmseg.models import EncoderDecoder
+from mmseg.models import DepthwiseSeparableASPPHead
+from mmseg.models import SegDataPreProcessor
+from mmseg.models import CrossEntropyLoss
+from mmengine.dataset import ConcatDataset
 
 cfg = Config.fromfile("contrib/pretrain/configs/mv_4d_fastbev_pretrain.py")
 

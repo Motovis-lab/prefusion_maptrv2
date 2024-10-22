@@ -4,9 +4,11 @@ custom_imports = dict(
     imports=['prefusion', 'contrib.fastbev_det', 'contrib.pretrain'],
     allow_failed_imports=False
 )
-
-dataset_type = 'PretrainDataset'
+dataset_type_wrapper = "ConcatDataset"
+dataset_type_4d = 'PretrainDataset'
+dataset_type_avp = "PretrainDataset_AVP"
 data_root = 'data/pretrain_data/'
+avp_data_root = 'data/avp/'
 # ori_shape=(640, 1024)
 crop_size = (640, 1024)
 train_pipeline = [
@@ -14,7 +16,7 @@ train_pipeline = [
     dict(type='LoadAnnotationsPretrain', with_depth=True, with_seg_mask=True, reduce_zero_label=True),
     dict(
         type='RandomResize',
-        scale=(640, 1024),
+        scale=crop_size,
         ratio_range=(0.5, 2.0),
         keep_ratio=True),
     dict(type='mmseg.RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
@@ -28,34 +30,49 @@ val_pipeline = [
     dict(type='LoadAnnotationsPretrain', with_depth=True, with_seg_mask=True, reduce_zero_label=True),
     dict(
         type='Resize',
-        scale=(2048, 1024),
+        scale=crop_size,
         keep_ratio=True),
     dict(type='PackSegInputs')
 ]
-batch_size = 24
+batch_size = 10
+
+dataset_4d = dict(
+    type=dataset_type_4d,
+    data_root=data_root,
+    ann_file="mv_4d_infos_pretrain_train.pkl",
+    pipeline=train_pipeline,
+    camera_types=["VCAMERA_FISHEYE_BACK", "VCAMERA_FISHEYE_FRONT", "VCAMERA_FISHEYE_LEFT", "VCAMERA_FISHEYE_RIGHT"]
+)
+
+dataset_avp = dict(
+        type=dataset_type_avp,
+        data_root=avp_data_root,
+        ann_file="avp_train",
+        pipeline=train_pipeline,
+        camera_types=["VCAMERA_FISHEYE_FRONT"]
+)
+
 train_dataloader = dict(
     batch_size=batch_size,
     num_workers=6,
     persistent_workers=True,
-    sampler=dict(type='mmseg.InfiniteSampler', shuffle=True),
+    sampler=dict(type='DefaultSampler', shuffle=True),
     dataset=dict(
-        type=dataset_type,
-        data_root=data_root,
-        ann_file="mv_4d_infos_pretrain_train.pkl",
-        pipeline=train_pipeline,
-        camera_types=["VCAMERA_FISHEYE_BACK", "VCAMERA_FISHEYE_FRONT", "VCAMERA_FISHEYE_LEFT", "VCAMERA_FISHEYE_RIGHT"])
+        type=dataset_type_wrapper,
+        datasets=[dataset_4d, dataset_avp]
     )
+)
 
 val_dataloader = dict(
     batch_size=batch_size,
     num_workers=6,
     persistent_workers=True,
-    sampler=dict(type='InfiniteSampler', shuffle=True),
+    sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
-        type=dataset_type,
+        type=dataset_type_4d,
         data_root=data_root,
         ann_file="mv_4d_infos_pretrain_val.pkl",
-        pipeline=train_pipeline,
+        pipeline=val_pipeline,
         camera_types=["VCAMERA_FISHEYE_BACK", "VCAMERA_FISHEYE_FRONT", "VCAMERA_FISHEYE_LEFT", "VCAMERA_FISHEYE_RIGHT"])
     )
 
@@ -101,7 +118,7 @@ model = dict(
         num_classes=26,
         align_corners=False,
         loss_decode=dict(
-            type='mmseg.CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0)),
+            type='mmseg.CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0)),
     auxiliary_head=dict(
         type='mmseg.FCNHead',
         in_channels=256,
@@ -113,7 +130,7 @@ model = dict(
         num_classes=26,
         align_corners=False,
         loss_decode=dict(
-            type='mmseg.CrossEntropyLoss', use_sigmoid=False, loss_weight=0.4)),
+            type='mmseg.CrossEntropyLoss', use_sigmoid=True, loss_weight=0.4)),
     # model training and testing settings
     train_cfg=dict(),
     test_cfg=dict(mode='whole')
