@@ -41,26 +41,9 @@ train_dataloader = dict(
     dataset=dict(
         type=dataset_type,
         data_root=data_root,
-<<<<<<< HEAD
         ann_file="mv_4d_infos_pretrain_train.pkl",
         pipeline=train_pipeline,
         camera_types=["VCAMERA_FISHEYE_BACK", "VCAMERA_FISHEYE_FRONT", "VCAMERA_FISHEYE_LEFT", "VCAMERA_FISHEYE_RIGHT"])
-=======
-        info_path=data_root + 'mv_4d_infos_val.pkl',
-        transformables={
-            "camera_images": dict(type="CameraImageSet"),
-            "camera_depths": dict(type="CameraDepthSet"),
-            "bbox_3d": dict(type="Bbox3D", dictionary=Bbox3d),
-            "bbox_bev": dict(type="Bbox3D", dictionary=BboxBev),
-            "square_3d": dict(type="Bbox3D", dictionary=Square3D),
-        },
-        transforms=train_pipeline,
-        phase='train',
-        batch_size=batch_size, 
-        possible_group_sizes=[1],
-        possible_frame_intervals=[1]
-        ),
->>>>>>> origin/main
     )
 
 val_dataloader = dict(
@@ -71,26 +54,9 @@ val_dataloader = dict(
     dataset=dict(
         type=dataset_type,
         data_root=data_root,
-<<<<<<< HEAD
         ann_file="mv_4d_infos_pretrain_val.pkl",
         pipeline=train_pipeline,
         camera_types=["VCAMERA_FISHEYE_BACK", "VCAMERA_FISHEYE_FRONT", "VCAMERA_FISHEYE_LEFT", "VCAMERA_FISHEYE_RIGHT"])
-=======
-        info_path=data_root + 'mv_4d_infos_val.pkl',
-        transformables={
-            "camera_images": dict(type="CameraImageSet"),
-            "camera_depths": dict(type="CameraDepthSet"),
-            "bbox_3d": dict(type="Bbox3D", dictionary=Bbox3d),
-            "bbox_bev": dict(type="Bbox3D", dictionary=BboxBev),
-            "square_3d": dict(type="Bbox3D", dictionary=Square3D),
-        },
-        transforms=val_pipeline,
-        phase='val',
-        batch_size=batch_size, 
-        possible_group_sizes=[1],
-        possible_frame_intervals=[1]
-        ),
->>>>>>> origin/main
     )
 
 img_backbone_conf=dict(
