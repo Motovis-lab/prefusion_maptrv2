@@ -9,7 +9,7 @@ from prefusion.dataset import (
     Bbox3D, PlanarBbox3D,
     EgoPose, EgoPoseSet
 )
-from contrib.fastray.model_feeder import FastRayModelFeeder
+from contrib.fastray_planar.model_feeder import FastRayPlanarModelFeeder
 
 
 def test_fastray_model_feeder():
@@ -102,7 +102,7 @@ def test_fastray_model_feeder():
             }
         )
     ]
-    model_feeder = FastRayModelFeeder(
+    model_feeder = FastRayPlanarModelFeeder(
         voxel_feature_config, camera_feature_configs
     )
     processed_frame_batch = model_feeder.process(frame_batch)
