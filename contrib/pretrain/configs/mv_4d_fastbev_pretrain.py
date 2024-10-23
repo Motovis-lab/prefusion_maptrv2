@@ -34,7 +34,7 @@ val_pipeline = [
         keep_ratio=True),
     dict(type='PackSegInputs')
 ]
-batch_size = 10
+batch_size = 8
 
 dataset_4d = dict(
     type=dataset_type_4d,
