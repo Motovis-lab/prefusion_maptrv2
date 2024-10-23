@@ -139,12 +139,12 @@ Square3D = dict(classes=['class.traffic_facility.bollard'], attrs=[[]])
 transformable_name = ['camera_images','camera_depths', 'bbox_3d', 'bbox_bev', 'cylinder3d', 'square_3d']
 
 transformables={
-    "camera_images": dict(type="camera_images"),
-    "camera_depths": dict(type="camera_depths"),
-    "bbox_3d": dict(type="bbox_3d", dictionary=Bbox3d),
-    "bbox_bev": dict(type="bbox_3d", dictionary=BboxBev),
-    "cylinder3d": dict(type="bbox_3d", dictionary=Cylinder3D),
-    "square_3d": dict(type="bbox_3d", dictionary=Square3D)
+    "camera_images": dict(type="CameraImageSet"),
+    "camera_depths": dict(type="CameraDepthSet"),
+    "bbox_3d": dict(type="Bbox3D", dictionary=Bbox3d),
+    "bbox_bev": dict(type="Bbox3D", dictionary=BboxBev),
+    "cylinder3d": dict(type="Bbox3D", dictionary=Cylinder3D),
+    "square_3d": dict(type="Bbox3D", dictionary=Square3D)
     }
 
 dictionary=dict(

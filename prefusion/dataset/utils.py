@@ -2,17 +2,16 @@ from typing import List, Union, Dict, TYPE_CHECKING
 from pathlib import Path
 import copy
 
-import cv2
+import mmcv
 import numpy as np
-import virtual_camera as vc
 from pypcd_imp import pypcd
 
-from prefusion.registry import TRANSFORMS, TENSOR_SMITHS, MODEL_FEEDERS
+from prefusion.registry import TRANSFORMS, MODEL_FEEDERS, TRANSFORMABLE_LOADERS, TENSOR_SMITHS
 
 if TYPE_CHECKING:
     from .transform import Transform
-    from .tensor_smith import TensorSmith
     from .model_feeder import BaseModelFeeder
+    from .transformable_loader import TransformableLoader
 
 INF_DIST = 1e8
 
@@ -85,7 +84,19 @@ def get_cam_type(name):
         return 'FisheyeCamera'
     else:
         raise ValueError('Unknown camera type')
-    
+
+
+def build_tensor_smith(tensor_smith: dict = None):
+    tensor_smith = copy.deepcopy(tensor_smith)
+    if isinstance(tensor_smith, dict):
+        tensor_smith = TENSOR_SMITHS.build(tensor_smith)
+    return tensor_smith
+
+
+def build_transformable_loader(loader: Union[Dict, "TransformableLoader"]) -> "TransformableLoader":
+    if isinstance(loader, dict):
+        return TRANSFORMABLE_LOADERS.build(loader)
+    return loader
 
 
 def build_transforms(transforms: List[Union[dict, "Transform"]]) -> List["Transform"]: 
@@ -132,3 +143,10 @@ def read_pcd(path: Union[str, Path], intensity: bool = True) -> np.ndarray:
     if intensity:
         npdata = np.concatenate([npdata, pcd.pc_data['intensity'].reshape(-1, 1)], axis=1)
     return npdata
+
+
+def read_ego_mask(path):
+    ego_mask = mmcv.imread(path, flag="grayscale")
+    if ego_mask.max() == 255:
+        ego_mask = ego_mask / 255
+    return ego_mask

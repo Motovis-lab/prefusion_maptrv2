@@ -7,37 +7,47 @@ from pathlib import Path
 from typing import List, Tuple, Dict, Union, TYPE_CHECKING
 from collections import defaultdict
 
-import mmcv
 import mmengine
 import numpy as np
 from torch.utils.data import Dataset
 from prefusion.registry import DATASETS, MMENGINE_FUNCTIONS, TENSOR_SMITHS
-
-from .transform import (
-    CameraImage,
+from prefusion.dataset.transformable_loader import (
+    TransformableLoader,
+    CameraImageSetLoader,
+    CameraDepthSetLoader,
+    CameraSegMaskSetLoader,
+    LidarPointsLoader,
+    EgoPoseSetLoader,
+    Bbox3DLoader,
+    Polyline3DLoader,
+    Polygon3DLoader,
+    ParkingSlot3DLoader,
+    SegBevLoader,
+    OccSdfBevLoader,
+    OccSdf3DLoader,
+)
+from prefusion.dataset.transform import (
     CameraImageSet,
-    LidarPoints,
-    CameraSegMask,
-    CameraSegMaskSet,
-    CameraDepth,
     CameraDepthSet,
+    CameraSegMaskSet,
+    LidarPoints,
+    EgoPoseSet,
     Bbox3D,
     Polyline3D,
     Polygon3D,
     ParkingSlot3D,
-    EgoPose,
-    EgoPoseSet,
-    SegBev,
     OccSdfBev,
     OccSdf3D,
+    SegBev,
 )
 
-from .utils import build_transforms, build_model_feeder, read_pcd
+from .utils import build_transforms, build_model_feeder, build_tensor_smith, build_transformable_loader
 
 if TYPE_CHECKING:
     from .tensor_smith import TensorSmith
     from .transform import Transform
     from .model_feeder import BaseModelFeeder
+    from .transform import Transformable
 
 __all__ = [
     "IndexInfo",
@@ -49,13 +59,6 @@ def get_frame_index(sequence, timestamp):
     for t in sequence:
         if timestamp <= t:
             return t
-
-
-def read_ego_mask(path):
-    ego_mask = mmcv.imread(path, flag="grayscale")
-    if ego_mask.max() == 255:
-        ego_mask = ego_mask / 255
-    return ego_mask
 
 
 @MMENGINE_FUNCTIONS.register_module()
@@ -303,21 +306,20 @@ class GroupBatchDataset(Dataset):
     """
 
     # TODO: implement visualization?
-    # mapping of transformable keys to their corresponding transformable_cls
-    AVAILABLE_TRANSFORMABLE_KEYS = (
-        "camera_images",
-        "camera_segs",
-        "camera_depths",
-        "lidar_points",
-        "bbox_3d",
-        "polyline_3d",
-        "polygon_3d",
-        "parkingslot_3d",
-        "ego_poses",
-        "seg_bev",
-        "occ_sdf_bev",
-        "occ_sdf_3d",
-    )
+    DEFAULT_LOADERS = {
+        CameraImageSet.__name__: CameraImageSetLoader,
+        CameraDepthSet.__name__: CameraDepthSetLoader,
+        CameraSegMaskSet.__name__: CameraSegMaskSetLoader,
+        LidarPoints.__name__: LidarPointsLoader,
+        EgoPoseSet.__name__: EgoPoseSetLoader,
+        Bbox3D.__name__: Bbox3DLoader,
+        Polyline3D.__name__: Polyline3DLoader,
+        Polygon3D.__name__: Polygon3DLoader,
+        ParkingSlot3D.__name__: ParkingSlot3DLoader,
+        OccSdfBev.__name__: OccSdfBevLoader,
+        OccSdf3D.__name__: OccSdf3DLoader,
+        SegBev.__name__: SegBevLoader,
+    }
 
     def __init__(
         self,
@@ -343,7 +345,7 @@ class GroupBatchDataset(Dataset):
         - name (str): Name of the dataset.
         - data_root (str): Root directory of the dataset.
         - info_path (str): Path to the information file.
-        - transformables (dict): Dict of transformable definitions, in which, each element's type must be in AVAILABLE_TRANSFORMABLE_KEYS.
+        - transformables (dict): Dict of transformable definitions.
         - transforms (list): Transform classes for preprocessing transformables. Build by TRANSFORMS.
         - phase (str): Specifies the phase ('train', 'val', 'test' or 'test_scene_by_scene') of the dataset; default is 'train'.
         - indices_path (str, optional): Specified file of indices to load; if None, all frames are automatically fetched from the info_path.
@@ -368,7 +370,6 @@ class GroupBatchDataset(Dataset):
         self.phase = phase.lower()
         self.info = mmengine.load(str(info_path))
         self.transformables = transformables
-        self._assert_availability([self.transformables[name]['type'] for name in self.transformables])
         self.transforms = build_transforms(transforms)
         self.model_feeder = build_model_feeder(model_feeder)
 
@@ -386,13 +387,6 @@ class GroupBatchDataset(Dataset):
 
         self.group_sampler = GroupSampler(self.scene_frame_inds, possible_group_sizes, possible_frame_intervals, seed=seed_dataset)
         self.groups = self.group_sampler.sample(self.phase, output_str_index=False)
-
-    @classmethod
-    def _assert_availability(cls, keys: List[str]) -> None:
-        for key in keys:
-            assert (
-                key in cls.AVAILABLE_TRANSFORMABLE_KEYS
-            ), f"{key} is not a valid transformable key from {cls.AVAILABLE_TRANSFORMABLE_KEYS}"
 
     @staticmethod
     def _prepare_scene_frame_inds(info: Dict, indices: List[str] = None) -> Dict[str, List[str]]:
@@ -434,13 +428,34 @@ class GroupBatchDataset(Dataset):
         )
 
     def load_all_transformables(self, index_info: IndexInfo) -> dict:
-        all_transformables = {}
+        transformables = {}
         for name in self.transformables:
             _t_cfg = copy.deepcopy(self.transformables[name])
-            key = _t_cfg.pop("type")
-            tensor_smith = self._build_tensor_smith(_t_cfg.pop("tensor_smith")) if "tensor_smith" in _t_cfg else None
-            all_transformables[name] = eval(f"self.load_{key}")(name, index_info, tensor_smith=tensor_smith, **_t_cfg)
-        return all_transformables
+            transformable_type = _t_cfg.pop("type")
+            loader_cfg = _t_cfg.pop("loader", None)
+            loader = self._build_transformable_loader(loader_cfg, transformable_type)
+            tensor_smith = build_tensor_smith(_t_cfg.pop("tensor_smith")) if "tensor_smith" in _t_cfg else None
+            scene_data = self.info[index_info.scene_id]
+            transformables[name] = self._build_transformable(name, scene_data, index_info, loader, tensor_smith=tensor_smith, **_t_cfg)
+        
+        return transformables
+    
+
+    def _build_transformable_loader(self, loader_cfg, transformable_type: str) -> TransformableLoader:
+        if loader_cfg:
+            loader_cfg.setdefault("data_root", self.data_root)  # fallback with default data_root from Dataset
+        else:
+            loader_cfg = self._get_default_loader_cfg(transformable_type)
+        loader = build_transformable_loader(loader_cfg)
+        return loader
+    
+    def _get_default_loader_cfg(self, transformable_type: str) -> Dict:
+        if transformable_type not in self.DEFAULT_LOADERS:
+            raise ValueError(f"No default transformable loader for transformable type: {transformable_type}. Please provide one explicitly.")
+        return {
+            "type": self.DEFAULT_LOADERS[transformable_type],
+            "data_root": self.data_root,
+        }
 
     @staticmethod
     def _build_tensor_smith(tensor_smith: dict = None):
@@ -505,205 +520,5 @@ class GroupBatchDataset(Dataset):
 
         return model_food
 
-    def load_camera_images(self, name: str, index_info: IndexInfo, tensor_smith: "TensorSmith" = None, **kwargs) -> CameraImageSet:
-        scene_info = self.info[index_info.scene_id]["scene_info"]
-        frame_info = self.info[index_info.scene_id]["frame_info"][index_info.frame_id]
-        calib = self.info[index_info.scene_id]["scene_info"]["calibration"]
-        camera_images = {
-            cam_id: CameraImage(
-                name=f"{name}:{cam_id}",
-                cam_id=cam_id,
-                cam_type=calib[cam_id]["camera_type"],
-                img=mmcv.imread(self.data_root / frame_info["camera_image"][cam_id]),
-                ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id]),
-                extrinsic=calib[cam_id]["extrinsic"],
-                intrinsic=calib[cam_id]["intrinsic"],
-                tensor_smith=tensor_smith,
-            )
-            for cam_id in frame_info["camera_image"]
-        }
-        return CameraImageSet(name, camera_images)
-
-    def load_lidar_points(self, name: str, index_info: IndexInfo, tensor_smith: "TensorSmith" = None, **kwargs):
-        scene = self.info[index_info.scene_id]
-        frame = scene["frame_info"][index_info.frame_id]
-        points = read_pcd(self.data_root / frame["lidar_points"]["lidar1"])
-        points = np.pad(points, [[0, 0], [0, 1]], constant_values=0)
-        return LidarPoints(name, points[:, :3], points[:, 3:], tensor_smith=tensor_smith)
-
-    def load_lidar_sweeps(self, name: str, index_info: IndexInfo, tensor_smith: "TensorSmith" = None, **kwargs):
-        scene = self.info[index_info.scene_id]
-        frame = scene["frame_info"][index_info.frame_id]
-        sweep_infos = frame['lidar_points']['lidar1_sweeps']
-
-        def Rt2T(R, t):
-            T = np.ones(4)
-            T[:3, :3] = R
-            t[:3, 3] = t
-            return T
-
-        def to_homo(points: np.array) -> np.array:
-            if points.ndim == 1:
-                points = points[None, :]
-            ones = np.ones((len(points), 1), dtype=np.float32)
-            return np.concatenate((points, ones), axis=1)
-
-        def transform_pts_with_T(points, T):
-            # from pts3d to lidar 3d
-            points = np.array(points)
-            shape = points.shape
-            points = points.reshape(-1, 3)
-            points_output = (to_homo(points) @ T.T)[:, :3].reshape(*shape)
-            return points_output
-
-        points = read_pcd(self.data_root / frame["lidar_points"]["lidar1"])
-        Twe = Rt2T(frame["ego_pose"]["rotation"], frame['ego_pose']["translation"])
-        Tew = np.linalg.inv(Twe)
-        ts = float(Path(frame["lidar_points"]["lidar1"]).stem) / 1000
-        output_points = [points]
-        for sweep in sweep_infos:
-            path = sweep['path']  # input points in ego coord
-            Twei = sweep['Twe']
-            sweep_ts = sweep['timestamps'] / 1000  # use as s
-            Te0ei = Tew @ Twei
-            points = read_pcd(self.data_root / path)
-            points = np.concatenate([
-                transform_pts_with_T(points[:, :3], Te0ei),
-                points[:, 3:],
-                np.zeros_like(points[:, :1]) + ts - sweep_ts
-            ])
-            output_points += [points]
-        output_points = np.concatenate(output_points, axis=0)
-        return LidarPoints(name, output_points[:, :3], output_points[:, 3:], tensor_smith=tensor_smith)
-
-
-    def load_camera_segs(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> CameraSegMaskSet:
-        scene_info = self.info[index_info.scene_id]["scene_info"]
-        frame_info = self.info[index_info.scene_id]["frame_info"][index_info.frame_id]
-        calib = self.info[index_info.scene_id]["scene_info"]["calibration"]
-
-        camera_segs = {
-            cam_id: CameraSegMask(
-                name=f"{name}:{cam_id}",
-                cam_id=cam_id,
-                cam_type=calib[cam_id]["camera_type"],
-                img=mmcv.imread(self.data_root / frame_info["camera_image_seg"][cam_id], flag="unchanged"),
-                ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id]),
-                extrinsic=calib[cam_id]["extrinsic"],
-                intrinsic=calib[cam_id]["intrinsic"],
-                dictionary=dictionary,
-                tensor_smith=tensor_smith,
-            )
-            for cam_id in frame_info["camera_image_seg"]
-        }
-        return CameraSegMaskSet(name, camera_segs)
-
-    def load_camera_depths(self, name: str, index_info: IndexInfo, tensor_smith: "TensorSmith" = None, **kwargs) -> CameraDepthSet:
-        scene_info = self.info[index_info.scene_id]["scene_info"]
-        frame_info = self.info[index_info.scene_id]["frame_info"][index_info.frame_id]
-        calib = self.info[index_info.scene_id]["scene_info"]["calibration"]
-
-        camera_depths = {
-            cam_id: CameraDepth(
-                name=f"{name}:{cam_id}",
-                cam_id=cam_id,
-                cam_type=calib[cam_id]["camera_type"],
-                img=np.load(self.data_root / frame_info['camera_image_depth'][cam_id])['depth'][..., None].astype(np.float32),
-                ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id]),
-                extrinsic=calib[cam_id]["extrinsic"],
-                intrinsic=calib[cam_id]["intrinsic"],
-                depth_mode="d",
-                tensor_smith=tensor_smith,
-            )
-            for cam_id in frame_info["camera_image_depth"]
-        }
-        return CameraDepthSet(name, camera_depths)
-
-    def load_bbox_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> Bbox3D:
-        scene = self.info[index_info.scene_id]
-        frame = scene["frame_info"][index_info.frame_id]
-        elements = frame["3d_boxes"]
-        return Bbox3D(name, elements, dictionary, tensor_smith=tensor_smith)
-
-    def load_polyline_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> Polyline3D:
-        scene = self.info[index_info.scene_id]
-        frame = scene["frame_info"][index_info.frame_id]
-        elements = frame["3d_polylines"]
-        return Polyline3D(name, elements, dictionary, tensor_smith=tensor_smith)
-
-    def load_polygon_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> Polygon3D:
-        scene = self.info[index_info.scene_id]
-        frame = scene["frame_info"][index_info.frame_id]
-        elements = frame["3d_polylines"]
-        return Polygon3D(name, elements, dictionary, tensor_smith=tensor_smith)
-
-    def load_parkingslot_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> ParkingSlot3D:
-        scene = self.info[index_info.scene_id]
-        frame = scene["frame_info"][index_info.frame_id]
-        elements = frame["3d_polylines"]
-        return ParkingSlot3D(name, elements, dictionary, tensor_smith=tensor_smith)
-
-    def load_ego_poses(self, name: str, index_info: IndexInfo, tensor_smith: "TensorSmith" = None, **kwargs) -> EgoPoseSet:
-        scene = self.info[index_info.scene_id]['frame_info']
-
-        def _create_pose(frame_id, rel_pos):
-            return EgoPose(
-                f"{name}:{rel_pos}:{frame_id}",
-                frame_id, 
-                scene[frame_id]["ego_pose"]["rotation"], 
-                scene[frame_id]["ego_pose"]["translation"], 
-                tensor_smith=tensor_smith
-            )
-
-        poses = {}
-
-        cnt = 0
-        cur = index_info
-        while cur.prev is not None:
-            rel_pos = f"-{cnt+1}" # relative position
-            poses[rel_pos] = _create_pose(cur.prev.frame_id, rel_pos)
-            cur = cur.prev
-            cnt += 1
-
-        cur = index_info
-        poses["0"] = _create_pose(cur.frame_id, "0")
-
-        cnt = 0
-        while cur.next is not None:
-            rel_pos = f"+{cnt+1}" # relative position
-            poses[rel_pos] = _create_pose(cur.next.frame_id, rel_pos)
-            cur = cur.next
-            cnt += 1
-
-        sorted_poses = dict(sorted(poses.items(), key=lambda x: int(x[0])))
-
-        return EgoPoseSet(name, transformables=sorted_poses)
-
-    def load_seg_bev(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> SegBev:
-        scene = self.info[index_info.scene_id]
-        frame = scene["frame_info"][index_info.frame_id]
-        raise NotImplementedError
-
-    def load_occ_sdf_bev(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> OccSdfBev:
-        scene = self.info[index_info.scene_id]
-        frame = scene["frame_info"][index_info.frame_id]
-        occ_path = frame["occ_sdf"]["occ_bev"]
-        sdf_path = frame["occ_sdf"]["sdf_bev"]
-        height_path = frame["occ_sdf"]["height_bev"]
-        return OccSdfBev(
-            name=name,
-            src_view_range=scene["meta_info"]["space_range"]["occ"],  # ego system,
-            occ=mmcv.imread(occ_path),
-            sdf=mmcv.imread(sdf_path),
-            height=mmcv.imread(height_path),
-            dictionary=dictionary,
-            mask=None,
-            tensor_smith=tensor_smith,
-        )
-
-    def load_occ_sdf_3d(self, name: str, index_info: IndexInfo, dictionary: dict, tensor_smith: "TensorSmith" = None, **kwargs) -> OccSdf3D:
-        scene = self.info[index_info.scene_id]
-        frame = scene["frame_info"][index_info.frame_id]
-        file_path = frame["occ_sdf"]["occ_sdf_3d"]
-        raise NotImplementedError
-
+    def _build_transformable(self, name: str, scene_data: Dict, index_info: IndexInfo, loader: "TransformableLoader", tensor_smith: "TensorSmith" = None, **kwargs) -> "Transformable":
+        return loader.load(name, scene_data, index_info, tensor_smith=tensor_smith, **kwargs)

@@ -1,4 +1,4 @@
-from typing import Tuple, Union, List, Dict, Sequence
+from typing import Tuple, Union, List, Dict
 from functools import partial
 from itertools import chain
 
@@ -12,6 +12,7 @@ from prefusion.loss.basic import dual_focal_loss, SegIouLoss
 
 __all__ = ["PlanarLoss"]
 
+
 def complete_loss_name(loss_name_prefix, sub_item_name: str = ""):
     if sub_item_name:
         return f"{loss_name_prefix}_{sub_item_name}_loss"
@@ -23,54 +24,82 @@ class PlanarLoss(nn.Module):
 
     reduction_dim: Union[Tuple, List] = (0, 2, 3)
 
-    def __init__(self, *args, loss_name_prefix: str, weight_scheme: Dict[str, Dict], **kwargs) -> None:
+    def __init__(
+        self, *args, loss_name_prefix: str, weight_scheme: Dict[str, Dict], auto_loss_init_value: float = 1e-5, **kwargs
+    ) -> None:
         """Specially designed loss for planar data.
 
         Parameters
         ----------
         loss_name_prefix : str
             the name prefix of the loss (used to distinguish between different losses)
+
         weight_scheme : dict, optional
-            e.g.: {
-                "seg": {
-                    "loss_weight": 1.0,  # most superior loss weight for seg
-                    "channel_weights": {
-                        "all": {"weight": 0.5}, # user must add this special channel manually
-                        "passengar_car": {"weight": 0.7},
-                        "pedestrian": {"weight": 0.3},
+            the weight scheme for different losses, e.g. seg, cen, reg
+
+            Example
+            ---
+                ```{
+                    "seg": {
+                        "loss_weight": 1.0,  # most superior loss weight for seg
+                        "channel_weights": {
+                            "all": {"weight": 0.5}, # user must add this special channel manually
+                            "passenger_car": {"weight": 0.7},
+                            "pedestrian": {"weight": 0.3},
+                        },
+                        "iou_loss_weight": "auto",
+                        "dual_focal_loss_weight": "auto",
                     },
-                    "iou_loss_weight": 1.0,
-                    "dual_focal_loss_weight": 1.0,
-                },
-                "cen": {
-                    "loss_weight": 1.0, # most superior loss weight for cen
-                    "fg_weight": 1.0,
-                    "bg_weight": 1.0,
-                },
-                "reg": {
-                    "loss_weight": 1.0, # most superior loss weight for reg
-                    "partition_weights": {
-                        "center_xy": {"weight": 1.0, "slice": (0, 2)},
-                        "center_z": {"weight": 1.0, "slice": 2},
-                        "size": {"weight": 1.0, "slice": (3, 6)},
-                        "unit_xvec": {"weight": 1.0, "slice": (6, 9)},
-                        "abs_xvec": {"weight": 1.0, "slice": (9, 12)},
-                        "xvec_product": {"weight": 1.0, "slice": (12, 14)},
-                        "abs_roll_angle": {"weight": 1.0, "slice": (14, 16)},
-                        "roll_angle_product": {"weight": 1.0, "slice": 16},
-                        "velo": {"weight": 1.0, "slice": (17, 20)},
+                    "cen": {
+                        "loss_weight": 1.0, # most superior loss weight for cen
+                        "fg_weight": "auto",
+                        "bg_weight": "auto",
+                    },
+                    "reg": {
+                        "loss_weight": 1.0, # most superior loss weight for reg
+                        "partition_weights": {
+                            "center_xy": {"weight": 1.0, "slice": (0, 2)},
+                            "center_z": {"weight": 1.0, "slice": 2},
+                            "size": {"weight": 1.0, "slice": (3, 6)},
+                            "unit_xvec": {"weight": 1.0, "slice": (6, 9)},
+                            "abs_xvec": {"weight": 1.0, "slice": (9, 12)},
+                            "xvec_product": {"weight": 1.0, "slice": (12, 14)},
+                            "abs_roll_angle": {"weight": 1.0, "slice": (14, 16)},
+                            "roll_angle_product": {"weight": 1.0, "slice": 16},
+                            "velo": {"weight": 1.0, "slice": (17, 20)},
+                        }
                     }
                 }
-            }
+
+        auto_loss_init_value : float, optional
+            the initial value for auto weight (torch parameter). Defaults to 1e-5.
+
         """
         super().__init__(*args, **kwargs)
         self.loss_name_prefix = loss_name_prefix
         self.total_loss_name = complete_loss_name(self.loss_name_prefix)
         self.weight_scheme = edict(weight_scheme)
+        self.auto_loss_init_value = float(auto_loss_init_value)
         self.iou_loss = SegIouLoss(pred_logits=True, reduction_dim=self.reduction_dim)
+        self.init_auto_loss_weight_(self.weight_scheme)
         self.unify_reg_partition_weights_()
 
+    def init_auto_loss_weight_(self, weight_scheme: Dict):
+        for k, v in weight_scheme.items():
+            if isinstance(v, dict):
+                weight_scheme[k] = self.init_auto_loss_weight_(v)
+                continue
+
+            if k.endswith("weight") and isinstance(v, str) and v.lower() == "auto":
+                weight_scheme[k] = nn.Parameter(torch.tensor(self.auto_loss_init_value))
+
+        return weight_scheme
+
     def unify_reg_partition_weights_(self):
+        """Unify single value index to standard 2-value slice"""
+        if "reg" not in self.weight_scheme:
+            return
+
         for partition_name, partition_info in self.weight_scheme.reg.partition_weights.items():
             try:
                 _slice = slice(*partition_info.slice)
@@ -114,11 +143,13 @@ class PlanarLoss(nn.Module):
         **kwargs,
     ):
         num_cls = pred.shape[1]
-        _channel_weights = (
-            torch.ones(num_cls)
-            if channel_weights is None
-            else torch.tensor([c["weight"] for _, c in channel_weights.items()])
-        )
+
+        _channel_weights = torch.ones(num_cls)
+        if channel_weights is not None:
+            _channel_weights = [c["weight"] for _, c in channel_weights.items()]
+
+        assert num_cls == len(_channel_weights), f"number of channel weights does not match with number of classes"
+
         _class_names = [f"{i}" for i in range(num_cls)] if channel_weights is None else list(channel_weights.keys())
 
         dual_loss = dual_focal_loss(pred, label, reduction="none").mean(dim=self.reduction_dim)
@@ -127,17 +158,19 @@ class PlanarLoss(nn.Module):
         loss_dict = {}
         L = partial(complete_loss_name, self.loss_name_prefix)
 
-        seg_iou_loss_by_channel = {L(f"seg_iou_{c}"): l * w for c, w, l in zip(_class_names, _channel_weights, iou_loss)}
+        seg_iou_loss_by_channel = {
+            L(f"seg_iou_{c}"): l * w for c, w, l in zip(_class_names, _channel_weights, iou_loss)
+        }
         seg_dual_focal_loss_by_channel = {
             L(f"seg_dual_focal_{c}"): l * w for c, w, l in zip(_class_names, _channel_weights, dual_loss)
         }
         loss_dict.update(seg_iou_loss_by_channel)
         loss_dict.update(seg_dual_focal_loss_by_channel)
         loss_dict[L("seg_iou")] = (
-            iou_loss_weight * sum(seg_iou_loss_by_channel.values()) / _channel_weights.sum()
+            iou_loss_weight * sum(seg_iou_loss_by_channel.values()) / sum(_channel_weights)
         )  # functools.reduce(lambda x, y: x + y, seg_iou_loss_by_channel.values())
         loss_dict[L("seg_dual_focal")] = (
-            dual_focal_loss_weight * sum(seg_dual_focal_loss_by_channel.values()) / _channel_weights.sum()
+            dual_focal_loss_weight * sum(seg_dual_focal_loss_by_channel.values()) / sum(_channel_weights)
         )
         loss_dict[L("seg")] = (loss_dict[L("seg_dual_focal")] + loss_dict[L("seg_iou")]) * loss_weight
         return loss_dict
