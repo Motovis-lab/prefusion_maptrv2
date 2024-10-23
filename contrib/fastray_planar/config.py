@@ -3,17 +3,11 @@ experiment_name = "fastray_planar_demo"
 _base_ = "../../../configs/default_runtime.py"
 
 custom_imports = dict(
-    imports=["prefusion", "contrib.fastray"], 
+    imports=["prefusion", "contrib.fastray_planar"], 
     allow_failed_imports=False
 )
 
 
-voxel_feature_config=dict(
-    voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
-    voxel_range=([-0.5, 2.5], [36, -12], [12, -12]),
-    ego_distance_max=40,
-    ego_distance_step=5
-)
 default_camera_feature_config = dict(
     ray_distance_num_channel=64,
     ray_distance_start=0.25,
@@ -31,6 +25,12 @@ camera_feature_configs=dict(
     VCAMERA_FISHEYE_LEFT=default_camera_feature_config,
     VCAMERA_FISHEYE_BACK=default_camera_feature_config,
     VCAMERA_FISHEYE_RIGHT=default_camera_feature_config,
+)
+voxel_feature_config=dict(
+    voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
+    voxel_range=([-0.5, 2.5], [36, -12], [12, -12]),
+    ego_distance_max=40,
+    ego_distance_step=5
 )
 
 # TODO:

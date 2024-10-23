@@ -220,7 +220,6 @@ class VoxelTemporalAlign(BaseModule):
         self.approx_2d = approx_2d
         self.voxel_intrinsics = self._get_voxel_intrinsics(voxel_shape, voxel_range)
     
-    
     @staticmethod
     def _get_voxel_intrinsics(voxel_shape, voxel_range):
         Z, X, Y = voxel_shape    
@@ -231,8 +230,8 @@ class VoxelTemporalAlign(BaseModule):
         cy = - voxel_range[2][0] * fy - 0.5
         cz = - voxel_range[0][0] * fz - 0.5
         return cx, cy, cz, fx, fy, fz
-        
-        
+
+
     def _unproject_points_from_voxel_to_ego(self):
         Z, X, Y = self.voxel_shape
         cx, cy, cz, fx, fy, fz = self.voxel_intrinsics
@@ -254,7 +253,8 @@ class VoxelTemporalAlign(BaseModule):
                 yy_ego.reshape(-1),
                 zz_ego.reshape(-1),
             ], dim=0)
-    
+
+
     def _project_points_from_ego_to_voxel(self, ego_points, normalize=True):
         """Convert points from ego coords to voxel coords.
 
@@ -307,40 +307,48 @@ class VoxelTemporalAlign(BaseModule):
         
     
     def forward(self, voxel_feats_pre, delta_poses):
-        '''
-        Output a time-aligned voxel tensor from previous hidden voxel features.
+        """
+        Output a time-aligned voxel tensor from previous voxel features.
 
         Parameters
         ----------
         voxel_feats_pre : torch.Tensor
-            in shape of (N, C*Z, X, Y) or (N, C, Z, X, Y)
+            shape should be (N, C*Z, X, Y) or (N, C, Z, X, Y)
         
         delta_poses : torch.Tensor
-            in shape of (N, 4, 4)
-        '''
-        # TODO: USE GRID-SAMPLING TO GET TIME-ALIGNED FEATURES!
-        # gen grids
+            shape should be (N, 4, 4)
+        
+        Return
+        ------
+        output : torch.Tensor
+            shape should be (N, C*Z, X, Y) or (N, C, Z, X, Y)
+        
+        """
+        # gen ego_points from voxel
+        ego_points = self._unproject_points_from_voxel_to_ego()
+        ego_points.to(voxel_feats_pre, non_blocking=True)[None]
+        # get projection matrix
         if self.approx_2d:
             assert len(voxel_feats_pre.shape) == 4, 'must be 4-D Tensor'
-            ego_points = self._unproject_points_from_voxel_to_ego()
-            ego_points.to(voxel_feats_pre, non_blocking=True)
-            rotation_2d = delta_poses[:, :2, :2]
-            translation_2d = delta_poses[:, :2, 3]
-            ego_points_ = rotation_2d @ ego_points[None] + translation_2d
-            grid_2d = self._project_points_from_ego_to_voxel(ego_points_)
-            voxel_feats_pre_aligned = nn.functional.grid_sample(
-                input=voxel_feats_pre, 
-                grid=grid_2d, 
-                mode='bilinear', align_corners=False
-            )
+            rotations = delta_poses[:, :2, :2]
+            translations = delta_poses[:, :2, [3]]
         else:
             assert len(voxel_feats_pre.shape) == 5, 'must be 5-D Tensor'
-            ego_points
+            rotations = delta_poses[:, :3, :3]
+            translations = delta_poses[:, :3, [3]]
+        # project to previous ego coords and get grid
+        ego_points_projected = rotations @ ego_points + translations
+        grid = self._project_points_from_ego_to_voxel(ego_points_projected)
+        # apply grid sampling
+        voxel_feats_pre_aligned = nn.functional.grid_sample(
+            input=voxel_feats_pre, grid=grid, mode='bilinear', align_corners=False
+        )
+        return voxel_feats_pre_aligned
 
 
 
 @MODELS.register_module()
-class VoxelTemporalFusion(BaseModule):
+class VoxelStreamFusion(BaseModule):
     
     def forward(self, voxel_feats_cur, voxel_feats_pre):
         """Temporal fusion of voxel current and previous features.
@@ -376,19 +384,6 @@ class VoxelHead(BaseModule):
         self.voxel_feature_config = voxel_feature_config
     
     def forward(voxel_feats):
-        """_summary_
-
-        Parameters
-        ----------
-        curr_feats : _type_
-            _description_
-        prev_feats : _type_
-            _description_
-        """
-        '''
-        prev_feats: time-aligned history hidden features
-        will output hidden features
-        '''
         pass
         
 
@@ -482,6 +477,7 @@ class FastRayPlanarStreamModel(BaseModel):
             if cam_id in self.camera_groups['fisheyes']:
                 camera_feats[cam_id] = self.backbone_fisheyes(camera_tensors[cam_id])
         # spatial transform
+        # TODO: in shape of 4D or 5D? (N, C*Z, X, Y) or (N, C, Z, X, Y)?
         voxel_feats_cur = self.spatial_transform(camera_feats, camera_lookups)
         # temporal transform
         if batched_input_dict['index_infos'][0].prev is None:
