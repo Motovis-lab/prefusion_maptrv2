@@ -89,7 +89,10 @@ class LoadAnnotationsPretrain(LoadAnnotations):
             gt_semantic_seg = np.array(PILImage.open(results['seg_map_path'])).astype(np.float32)
             segmap = gt_semantic_seg.transpose(2,0,1)
             gt_semantic_seg = segmap.reshape(segmap.shape[0]*9, segmap.shape[1], int(segmap.shape[2]/9)).transpose(1,2,0)
-            gt_semantic_seg[...,-1][gt_semantic_seg[...,-1]==1] = 255
+            ignore = gt_semantic_seg[..., -1]
+            gt_semantic_seg = gt_semantic_seg[..., :-1]
+            for i in range(gt_semantic_seg.shape[-1]):
+                gt_semantic_seg[..., i][ignore==1] = 255
         results['gt_seg_map'] = gt_semantic_seg
         results['seg_fields'].append('gt_seg_map')
     
@@ -263,10 +266,10 @@ class PackSegInputs(BaseTransform):
                 data = to_tensor(results['gt_seg_map'][None,
                                                        ...].astype(np.int64))
             else:
-                warnings.warn('Please pay attention your ground truth '
-                              'segmentation map, usually the segmentation '
-                              'map is 2D, but got '
-                              f'{results["gt_seg_map"].shape}')
+                # warnings.warn('Please pay attention your ground truth '
+                #               'segmentation map, usually the segmentation '
+                #               'map is 2D, but got '
+                #               f'{results["gt_seg_map"].shape}')
                 data = to_tensor(results['gt_seg_map'].astype(np.int64).transpose(2,0,1))
             gt_sem_seg_data = dict(data=data)
             data_sample.gt_sem_seg = PixelData(**gt_sem_seg_data)

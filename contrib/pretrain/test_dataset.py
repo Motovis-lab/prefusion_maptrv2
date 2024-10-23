@@ -9,6 +9,10 @@ from mmseg.models import DepthwiseSeparableASPPHead
 from mmseg.models import SegDataPreProcessor
 from mmseg.models import CrossEntropyLoss
 from mmengine.dataset import ConcatDataset
+from torch.utils.data.dataset import ConcatDataset
+from mmengine.dataset.sampler import DefaultSampler
+from mmseg.models import FCNHead
+
 
 cfg = Config.fromfile("contrib/pretrain/configs/mv_4d_fastbev_pretrain.py")
 

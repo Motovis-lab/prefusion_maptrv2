@@ -57,6 +57,7 @@ train_dataloader = dict(
     num_workers=6,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
+    batch_sampler=dict(type="SameSourceBatchSampler"),
     dataset=dict(
         type=dataset_type_wrapper,
         datasets=[dataset_4d, dataset_avp]
@@ -107,7 +108,7 @@ model = dict(
                   img_backbone_conf=img_backbone_conf,
                   img_neck_conf=img_neck_conf),
     decode_head=dict(
-        type='mmseg.DepthwiseSeparableASPPHead',
+        type='DepthwiseSeparableASPPHead_v2',
         in_channels=256,
         in_index=0,
         channels=128,
@@ -120,7 +121,7 @@ model = dict(
         loss_decode=dict(
             type='mmseg.CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0)),
     auxiliary_head=dict(
-        type='mmseg.FCNHead',
+        type='PrefusionFCNHead',
         in_channels=256,
         in_index=0,
         channels=256,

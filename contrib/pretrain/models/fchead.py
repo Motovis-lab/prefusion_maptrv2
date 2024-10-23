@@ -1,16 +1,14 @@
-from mmseg.models import DepthwiseSeparableASPPHead
-from mmseg.utils import SampleList
-from torch import Tensor
+from mmseg.models import FCNHead
 from prefusion.registry import MODELS
-from mmseg.models.utils import resize
 from .accuracy import accuracy
-from torch import nn as nn
+from mmseg.models.utils import resize
+from torch import nn, Tensor
+from mmseg.utils import ConfigType, SampleList
 
-
-__all__ = ['DepthwiseSeparableASPPHead_v2']
+__all__ = ['PrefusionFCNHead']
 
 @MODELS.register_module()
-class DepthwiseSeparableASPPHead_v2(DepthwiseSeparableASPPHead):
+class PrefusionFCNHead(FCNHead):
     
     def loss_by_feat(self, seg_logits: Tensor,
                      batch_data_samples: SampleList) -> dict:
