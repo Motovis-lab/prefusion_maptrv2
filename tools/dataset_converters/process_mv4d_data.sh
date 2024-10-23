@@ -15,8 +15,6 @@ if [ ! -d "$directory" ]; then
     exit 1
 fi
 
-# 获取当前脚本所在的目录
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 获取可用的 CPU 核心数
 num_cores=$(nproc)
@@ -25,8 +23,8 @@ num_cores=$(nproc)
 process_folder() {
     folder_name="$1"
     echo "处理文件夹: $folder_name"
-    python gene_info_4d.py "$folder_name"
-    # python shutil_file.py "$folder_name"
+    python tools/dataset_converters/gene_info_4d.py "$folder_name"
+    python tools/dataset_converters/shutil_file.py "$folder_name"
 }
 
 # 计数器，用于跟踪当前运行的作业数

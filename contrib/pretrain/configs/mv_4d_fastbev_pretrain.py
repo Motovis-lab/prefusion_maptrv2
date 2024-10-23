@@ -47,7 +47,7 @@ dataset_4d = dict(
 dataset_avp = dict(
         type=dataset_type_avp,
         data_root=avp_data_root,
-        ann_file="avp_train",
+        ann_file="avp_train.pkl",
         pipeline=train_pipeline,
         camera_types=["VCAMERA_FISHEYE_FRONT"]
 )
