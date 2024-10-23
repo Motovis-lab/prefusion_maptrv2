@@ -110,21 +110,21 @@ train_dataset = dict(
         camera_images=dict(type='camera_images', tensor_smith=dict(type='CameraImageTensor')),
         ego_poses=dict(type='ego_poses'),
         bbox_3d=dict(
-            type='bbox_3d', 
+            type='Bbox3D', 
             dictionary=dictionary_heading_objects,
             tensor_smith=dict(type='PlanarBbox3D', 
                               voxel_shape=voxel_feature_config['voxel_shape'],
                               voxel_range=voxel_feature_config['voxel_range'])
         ),
         polyline_3d=dict(
-            type='polyline_3d',
+            type='Polyline3D',
             dictionary=dictionary_polylines,
             tensor_smith=dict(type='PlanarPolyline3D', 
                               voxel_shape=voxel_feature_config['voxel_shape'],
                               voxel_range=voxel_feature_config['voxel_range'])
         ),
         parkingslot_3d=dict(
-            type='parkingslot_3d',
+            type='ParkingSlot3D',
             tensor_smith=dict(type='PlanarParkingSlot3D', 
                               voxel_shape=voxel_feature_config['voxel_shape'],
                               voxel_range=voxel_feature_config['voxel_range'])
