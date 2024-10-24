@@ -1,6 +1,10 @@
 #!/bin/bash
 
 scene_names="
+        20230830_120142
+        20230829_170053
+        20230829_163801
+        20230829_144402
         20230829_134351
         20230829_122655
         20230828_141035
@@ -50,7 +54,7 @@ scene_names="
         "
 fish_camera_ids="camera1 camera5 camera8 camera11"
 perspective_camera_ids="camera6"
-num_cores=$(nproc)
+num_cores=20
 
 process_folder() {
     local scene_name_=$1
@@ -66,8 +70,9 @@ process_folder() {
     done
     s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 32 --retry-count 100 cp --sp s3://mv-4d-annotation/data/multimodel_anno_baidu/$scene_name_/undistort_static_merged_lidar1/* ./data/pretrain_data/$scene_name_/undistort_static_merged_lidar1
     python tools/dataset_converters/pretrain_gene_info_4d.py $scene_name_
-    rm -rf ./data/pretrain_data/$scene_name_/undistort_static_merged_lidar1
-    rm -rf ./data/pretrain_data/$scene_name_/lidar
+    # rm -rf ./data/pretrain_data/$scene_name_/undistort_static_merged_lidar1
+    # rm -rf ./data/pretrain_data/$scene_name_/lidar
+    
     echo "processed $scene_name"
 }
 
