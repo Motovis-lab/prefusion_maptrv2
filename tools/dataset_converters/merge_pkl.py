@@ -54,8 +54,8 @@ def pretrain_merge_data(scene_root):
         else:
             all_val_data.update(data)
 
-    mmengine.dump(all_train_data, f"{scene_root}/mv_4d_infos_train.pkl")
-    mmengine.dump(all_val_data, f"{scene_root}/mv_4d_infos_val.pkl")
+    mmengine.dump(all_train_data, f"{scene_root}/mv_4d_infos_pretrain_train.pkl")
+    mmengine.dump(all_val_data, f"{scene_root}/mv_4d_infos_pretrain_val.pkl")
 
 
 if __name__ == '__main__':

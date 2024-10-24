@@ -86,7 +86,7 @@ def lidar_point2depth(v_cam_rmatrix, v_cam_t, src_image, real_cam_model, vcamera
     dst_image, dst_img_w_point, dst_mask, depth = render_image_with_src_camera_points(src_image, real_cam_model, vcamera, hpr_lidar_point, return_depth=True)
     # plt.imshow(dst_img_w_point[..., ::-1])
     # plt.show()
-    sensor_root_tmp = "/home/wuhan/pretrain_data/"
+    sensor_root_tmp = "./data/pretrain_data/"
     lidar_mask = mmcv.imread(sensor_root_tmp + lidar_val_mask)[..., 0]
     depth[lidar_mask==0] = -1
     np.savez_compressed(v_camera_depth_root, depth=depth.astype(np.float16))
@@ -145,7 +145,7 @@ if __name__ == "__main__":
                     'camera11':["VCAMERA_PERSPECTIVE_FRONT_RIGHT", "VCAMERA_PERSPECTIVE_BACK_RIGHT", "VCAMERA_FISHEYE_RIGHT"],
     }
 
-    scene_root = "/home/wuhan/pretrain_data/"
+    scene_root = "./data/pretrain_data"
     # scene_names = [str(p).split('/')[-1] for p in P(scene_root).rglob("2023*") if p.is_dir()]
     scene_names = [args.scene_name]
     print("=="*60)
@@ -246,3 +246,5 @@ if __name__ == "__main__":
         scene_info.update({'frame_info': frame_info})
     scene_infos[scene_name] = scene_info
     mmengine.dump(scene_infos, f"{dump_root}/mv_4d_infos_{scene_names[0]}.pkl")
+    shutil.rmtree(scene_root / P("lidar"))
+    shutil.rmtree(scene_root / P("undistort_static_merged_lidar1"))
