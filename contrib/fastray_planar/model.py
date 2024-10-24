@@ -186,25 +186,69 @@ class VoVNetFPN(BaseModule):
 @MODELS.register_module()
 class FastRaySpatialTransform(BaseModule):
     
-    def forward(self, camera_feats, camera_lookups):
+    def __init__(self, 
+                 voxel_shape, 
+                 fusion_mode='weighted', 
+                 bev_mode=False, 
+                 init_cfg=None):
+        super().__init__(init_cfg=init_cfg)
+        self.voxel_shape = voxel_shape
+        assert fusion_mode in ['weighted', 'sampled']
+        self.fusion_mode = fusion_mode
+        self.bev_mode = bev_mode
+    
+    def forward(self, camera_feats_dict, camera_lookups):
         '''Output a 3d voxel tensor from 2d image features
         
         Parameters
         ----------
-        camera_feats : Dict[str, torch.Tensor]
-            camera features of shape (N, C, H, W)
-        camera_lookups : Dict[str, torch.Tensor]
-            camera lookup tensors of shape (N, Z*X*Y)
+        camera_feats_dict : Dict[str, torch.Tensor]
+            camera feature tensor of shape (N, C, H, W)
+        camera_lookups : List[Dict[str, torch.Tensor]]
+            camera lookup tensors of shape Z*X*Y
         
         Returns
         -------
         voxel_feats : torch.Tensor
-            voxel features of shape (N, C*Z, X, Y)
+            voxel features of shape (N, C, Z*X*Y)
         
         '''
-        pass
-
-
+        cam_ids = list(camera_feats_dict.keys())
+        # cat camera features
+        camera_feats = []
+        for cam_id in cam_ids:
+            camera_feats.append(camera_feats_dict[cam_id])
+        # get sizes
+        Z, X, Y = self.voxel_shape
+        N, C = camera_feats[0].shape[0:2]
+        # initialize voxel features, (N, C, Z*X*Y)
+        voxel_feats = torch.zeros(N, C, Z*X*Y, 
+                                  dtype=camera_feats[0].dtype,
+                                  device=camera_feats[0].device)
+        # iterate over batch
+        for n in range(N):
+            # iterate over cameras
+            for b, cam_id in enumerate(cam_ids):
+                camera_feat = camera_feats[b][n]  # C, H, W
+                camera_lookup = camera_lookups[n][cam_id]
+                if self.fusion_mode == 'weighted':
+                    valid_map = camera_lookup['valid_map']
+                    valid_uu = camera_lookup['uu'][valid_map]
+                    valid_vv = camera_lookup['vv'][valid_map]
+                    valid_norm_density_map = camera_lookup['norm_density_map'][valid_map]
+                    voxel_feats[n, :, valid_map] += valid_norm_density_map[None] * camera_feat[:, valid_uu, valid_vv]
+                if self.fusion_mode == 'sampled':
+                    valid_map = camera_lookup['valid_map_sampled']
+                    valid_uu = camera_lookup['uu'][valid_map]
+                    valid_vv = camera_lookup['vv'][valid_map]
+                    voxel_feats[n, :, valid_map] = camera_feat[:, valid_uu, valid_vv]
+        # reshape voxel_feats
+        if self.bev_mode:
+            return voxel_feats.reshape(N, C*Z, X, Y)
+        else:
+            return voxel_feats.reshape(N, C, Z, X, Y)
+        
+            
 
 @MODELS.register_module()
 class VoxelTemporalAlign(BaseModule):
@@ -212,13 +256,13 @@ class VoxelTemporalAlign(BaseModule):
     def __init__(self,
                  voxel_shape,
                  voxel_range,
-                 approx_2d=False,
+                 approx_bev=False,
                  interpolation='bilinear',
                  init_cfg=None):
         super().__init__(init_cfg=init_cfg)
         self.voxel_shape = voxel_shape
         self.voxel_range = voxel_range
-        self.approx_2d = approx_2d
+        self.approx_bev = approx_bev
         self.interpolation = interpolation
         self.voxel_intrinsics = self._get_voxel_intrinsics(voxel_shape, voxel_range)
     
@@ -237,7 +281,7 @@ class VoxelTemporalAlign(BaseModule):
     def _unproject_points_from_voxel_to_ego(self):
         Z, X, Y = self.voxel_shape
         cx, cy, cz, fx, fy, fz = self.voxel_intrinsics
-        if self.approx_2d:
+        if self.approx_bev:
             xx, yy = torch.meshgrid(torch.arange(X), torch.arange(Y), indexing='ij')
             xx_ego = (xx - cx) / fx
             yy_ego = (yy - cy) / fy
@@ -277,7 +321,7 @@ class VoxelTemporalAlign(BaseModule):
         Z, X, Y = self.voxel_shape
         N, _, _ = ego_points.shape
         cx, cy, cz, fx, fy, fz = self.voxel_intrinsics
-        if self.approx_2d:
+        if self.approx_bev:
             xx_egos = ego_points[:, 0]
             yy_egos = ego_points[:, 1]
             xx_ = xx_egos * fx + cx
@@ -330,7 +374,7 @@ class VoxelTemporalAlign(BaseModule):
         ego_points = self._unproject_points_from_voxel_to_ego()
         ego_points.to(voxel_feats_pre, non_blocking=True)[None]
         # get projection matrix
-        if self.approx_2d:
+        if self.approx_bev:
             assert len(voxel_feats_pre.shape) == 4, 'must be 4-D Tensor'
             rotations = delta_poses[:, :2, :2]
             translations = delta_poses[:, :2, [3]]
@@ -418,6 +462,8 @@ class FastRayPlanarStreamModel(BaseModel):
         self.temporal_transform = MODELS.build(temporal_transform)
         # voxel fusion
         self.voxel_fusion = MODELS.build(voxel_fusion)
+        # voxel encoder
+        self.voxel_encoder = MODELS.build(heads['voxel_encoder'])
         # voxel heads
         self.head_bbox_3d = MODELS.build(heads['bbox_3d'])
         self.head_polyline_3d = MODELS.build(heads['polyline_3d'])
@@ -446,14 +492,12 @@ class FastRayPlanarStreamModel(BaseModel):
                     'cam_0': (N, 3, H, W),
                     ...
                 },
-                'camera_lookups': {
-                    'cam_0': {
-                        uu:, (N, Z*X*Y),
-                        vv:, (N, Z*X*Y),
-                        dd:, (N, Z*X*Y),
-                        ...
-                    ...
-                },
+                'camera_lookups': [
+                    {'cam_0': {uu:, Z*X*Y, vv:, Z*X*Y, ...},
+                    {'cam_0': {uu:, Z*X*Y, vv:, Z*X*Y, ...},
+                    {'cam_0': {uu:, Z*X*Y, vv:, Z*X*Y, ...},
+                    {'cam_0': {uu:, Z*X*Y, vv:, Z*X*Y, ...},
+                ],
                 'delta_poses': [],
                 'annotations': {
                     'bbox_3d_0': {
@@ -466,21 +510,20 @@ class FastRayPlanarStreamModel(BaseModel):
                 ...
             }
         """
-        camera_tensors = batched_input_dict['camera_tensors']
+        camera_tensors_dict = batched_input_dict['camera_tensors']
         camera_lookups = batched_input_dict['camera_lookups']
         delta_poses = batched_input_dict['delta_poses']
         # backbone
-        camera_feats = {}
-        for cam_id in camera_tensors:
+        camera_feats_dict = {}
+        for cam_id in camera_tensors_dict:
             if cam_id in self.camera_groups['pv_front']:
-                camera_feats[cam_id] = self.backbone_pv_front(camera_tensors[cam_id])
+                camera_feats_dict[cam_id] = self.backbone_pv_front(camera_tensors_dict[cam_id])
             if cam_id in self.camera_groups['pv_sides']:
-                camera_feats[cam_id] = self.backbone_pv_sides(camera_tensors[cam_id])
+                camera_feats_dict[cam_id] = self.backbone_pv_sides(camera_tensors_dict[cam_id])
             if cam_id in self.camera_groups['fisheyes']:
-                camera_feats[cam_id] = self.backbone_fisheyes(camera_tensors[cam_id])
-        # spatial transform
-        # TODO: in shape of 4D or 5D? (N, C*Z, X, Y) or (N, C, Z, X, Y)?
-        voxel_feats_cur = self.spatial_transform(camera_feats, camera_lookups)
+                camera_feats_dict[cam_id] = self.backbone_fisheyes(camera_tensors_dict[cam_id])
+        # spatial transform: output shape can be 4D or 5D (N, C*Z, X, Y) or (N, C, Z, X, Y)
+        voxel_feats_cur = self.spatial_transform(camera_feats_dict, camera_lookups)
         # temporal transform
         if batched_input_dict['index_infos'][0].prev is None:
             self.voxel_feats_pre = voxel_feats_cur
@@ -488,10 +531,15 @@ class FastRayPlanarStreamModel(BaseModel):
         # voxel fusion
         voxel_feats_updated = self.voxel_fusion(voxel_feats_cur, voxel_feats_pre_aligned)
         self.voxel_feats_pre = voxel_feats_updated
+        # voxel encoder
+        if len(voxel_feats_updated.shape) == 5:
+            N, C, Z, X, Y = voxel_feats_updated.shape
+            voxel_feats_updated = voxel_feats_updated.reshape(N, C*Z, X, Y)
+        bev_feats = self.voxel_encoder(voxel_feats_updated)
         # heads
-        pred_bbox_3d = self.head_bbox_3d(voxel_feats_updated)
-        pred_polyline_3d = self.head_polyline_3d(voxel_feats_updated)
-        pred_parkingslot_3d = self.head_parkingslot_3d(voxel_feats_updated)
+        pred_bbox_3d = self.head_bbox_3d(bev_feats)
+        pred_polyline_3d = self.head_polyline_3d(bev_feats)
+        pred_parkingslot_3d = self.head_parkingslot_3d(bev_feats)
         
         if mode == 'tensor':
             return dict(hidden_feats=self.voxel_feats_pre,
