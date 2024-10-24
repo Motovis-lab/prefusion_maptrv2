@@ -107,7 +107,7 @@ train_dataset = dict(
         camera_feature_configs=camera_feature_configs,
     ),
     transformables=dict(
-        camera_images=dict(type='camera_images', tensor_smith=dict(type='CameraImageTensor')),
+        camera_images=dict(type='CameraImageSet', tensor_smith=dict(type='CameraImageTensor')),
         ego_poses=dict(type='ego_poses'),
         bbox_3d=dict(
             type='Bbox3D', 
