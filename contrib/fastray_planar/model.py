@@ -213,11 +213,13 @@ class VoxelTemporalAlign(BaseModule):
                  voxel_shape,
                  voxel_range,
                  approx_2d=False,
+                 interpolation='bilinear',
                  init_cfg=None):
         super().__init__(init_cfg=init_cfg)
         self.voxel_shape = voxel_shape
         self.voxel_range = voxel_range
         self.approx_2d = approx_2d
+        self.interpolation = interpolation
         self.voxel_intrinsics = self._get_voxel_intrinsics(voxel_shape, voxel_range)
     
     @staticmethod
@@ -281,11 +283,11 @@ class VoxelTemporalAlign(BaseModule):
             xx_ = xx_egos * fx + cx
             yy_ = yy_egos * fy + cy
             if normalize:
-                xx_ = 2 * xx_ / X - 1
-                yy_ = 2 * yy_ / Y - 1
+                xx_ = 2 * xx_ / (X - 1) - 1
+                yy_ = 2 * yy_ / (Y - 1) - 1
             grid = torch.stack([
-                xx_.reshape(N, X, Y), 
-                yy_.reshape(N, X, Y)
+                yy_.reshape(N, X, Y),
+                xx_.reshape(N, X, Y) 
             ], dim=-1)
         else:
             xx_egos = ego_points[:, 0]
@@ -295,13 +297,13 @@ class VoxelTemporalAlign(BaseModule):
             yy_ = yy_egos * fy + cy
             zz_ = zz_egos * fz + cz
             if normalize:
-                xx_ = 2 * xx_ / X - 1
-                yy_ = 2 * yy_ / Y - 1
-                zz_ = 2 * zz_ / Z - 1
+                xx_ = 2 * xx_ / (X - 1) - 1
+                yy_ = 2 * yy_ / (Y - 1) - 1
+                zz_ = 2 * zz_ / (Z - 1) - 1
             grid = torch.stack([
-                zz_.reshape(N, Z, X, Y),
+                yy_.reshape(N, Z, X, Y),
                 xx_.reshape(N, Z, X, Y),
-                yy_.reshape(N, Z, X, Y)
+                zz_.reshape(N, Z, X, Y)
             ], dim=-1)
         return grid
         
@@ -341,7 +343,7 @@ class VoxelTemporalAlign(BaseModule):
         grid = self._project_points_from_ego_to_voxel(ego_points_projected)
         # apply grid sampling
         voxel_feats_pre_aligned = nn.functional.grid_sample(
-            input=voxel_feats_pre, grid=grid, mode='bilinear', align_corners=False
+            input=voxel_feats_pre, grid=grid, mode=self.interpolation, align_corners=False
         )
         return voxel_feats_pre_aligned
 
