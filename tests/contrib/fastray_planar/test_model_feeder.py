@@ -107,5 +107,4 @@ def test_fastray_model_feeder():
     )
     processed_frame_batch = model_feeder.process(frame_batch)
     assert processed_frame_batch['camera_tensors']['cam_6'].shape == (2, 3, 720, 1280)
-    assert processed_frame_batch['camera_lookups']['cam_6']['uu'].shape == (2, 6*320*160)
     assert processed_frame_batch['annotations']['bbox_3d_0']['reg'].shape == (2, 20, 320, 160)

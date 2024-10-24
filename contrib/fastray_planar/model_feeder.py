@@ -71,14 +71,12 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
                 'cam_0': (N, 3, H, W),
                 ...
             },
-            'camera_lookups': {
-                'cam_0': {
-                    uu:, (N, Z*X*Y),
-                    vv:, (N, Z*X*Y),
-                    dd:, (N, Z*X*Y),
-                    ...
-                ...
-            },
+            'camera_lookups': [
+                {'cam_0': {uu:, Z*X*Y, vv:, Z*X*Y, ...},
+                {'cam_0': {uu:, Z*X*Y, vv:, Z*X*Y, ...},
+                {'cam_0': {uu:, Z*X*Y, vv:, Z*X*Y, ...},
+                {'cam_0': {uu:, Z*X*Y, vv:, Z*X*Y, ...},
+            ],
             'delta_poses': [],
             'annotations': {
                 'bbox_3d_0': {
@@ -95,7 +93,7 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
         processed_frame_batch = {
             'index_infos': [],
             'camera_tensors': defaultdict(list),
-            'camera_lookups': defaultdict(lambda: defaultdict(list)),
+            'camera_lookups': [],
             'lidar_points': [],
             'delta_poses': [],
             'annotations': defaultdict(lambda: defaultdict(list)),
@@ -108,14 +106,11 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
             for transformable in input_dict['transformables'].values():
                 match transformable:
                     case CameraImageSet():
-                        LUT = self.voxel_lut_gen.generate(transformable)
+                        camera_lookup = self.voxel_lut_gen.generate(transformable)
+                        processed_frame_batch['camera_lookups'].append(camera_lookup)
                         for cam_id in transformable.transformables:
                             camera_tensor = transformable.transformables[cam_id].tensor['img']
                             processed_frame_batch['camera_tensors'][cam_id].append(camera_tensor)
-                            camera_lookup = LUT[cam_id]
-                            camera_lookup_batch = processed_frame_batch['camera_lookups'][cam_id]
-                            for lut_key in camera_lookup:
-                                camera_lookup_batch[lut_key].append(camera_lookup[lut_key])
                     case LidarPoints():
                         raise NotImplementedError
                     case EgoPoseSet():
@@ -149,11 +144,6 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
         for cam_id in processed_frame_batch['camera_tensors']:
             processed_frame_batch['camera_tensors'][cam_id] = torch.stack(
                 processed_frame_batch['camera_tensors'][cam_id])
-        for cam_id in processed_frame_batch['camera_lookups']:
-            for lut_key in processed_frame_batch['camera_lookups'][cam_id]:
-                processed_frame_batch['camera_lookups'][cam_id][lut_key] = torch.tensor(
-                    np.float32(processed_frame_batch['camera_lookups'][cam_id][lut_key])
-                )
         processed_frame_batch['delta_poses'] = torch.stack(processed_frame_batch['delta_poses'])
         for transformable_name, data_batch in anno_batch_dict.items():
             # stack known one-sub-layer tensor_dict
