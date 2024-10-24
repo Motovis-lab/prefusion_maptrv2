@@ -59,9 +59,10 @@ def main():
 
 def prepare_scene(args, scene_root: Path) -> Dict:
     logger.info(f"Generating info pkl for scene {scene_root.name}")
+    calib = prepare_calibration(scene_root)
     return {
         "scene_info": {
-            "calibration": prepare_calibration(scene_root),
+            "calibration": calib,
             "camera_mask": prepare_camera_mask(scene_root),
             "depth_mode": prepare_depth_mode(scene_root),
         },
@@ -74,7 +75,7 @@ def prepare_scene(args, scene_root: Path) -> Dict:
             "time_range": 2,
             "time_unit": 1e-3,
         },
-        "frame_info": prepare_all_frame_infos(args, scene_root),
+        "frame_info": prepare_all_frame_infos(args, scene_root, calib),
     }
 
 
@@ -115,7 +116,7 @@ def prepare_ego_poses(scene_root: Path) -> Dict[int, np.ndarray]:
     return poses
 
 
-def prepare_all_frame_infos(args, scene_root: Path) -> Dict:
+def prepare_all_frame_infos(args, scene_root: Path, calib: dict) -> Dict:
     common_ts = read_common_ts(scene_root)
 
     if args.timestamp_range is not None and len(args.timestamp_range) == 2:
@@ -128,7 +129,7 @@ def prepare_all_frame_infos(args, scene_root: Path) -> Dict:
     ego_poses = prepare_ego_poses(scene_root)
     for ts, boxes, polylines in res:
         frame_infos[str(ts)] = {  # convert to str to make it align with the design
-            "camera_image": prepare_camera_image_paths(scene_root, ts),
+            "camera_image": prepare_camera_image_paths(scene_root, ts, calib),
             "3d_boxes": boxes,
             "3d_polylines": polylines,
             "ego_pose": ego_poses[ts],
@@ -143,10 +144,13 @@ def read_common_ts(scene_root: Path) -> List[int]:
     return [int(i["lidar"]) for i in ts_info]
 
 
-def prepare_camera_image_paths(scene_root: Path, ts: int) -> Dict[str, str]:
-    return {
-        p.parent.name: p.relative_to(scene_root.parent) for p in (scene_root / args.camera_root_name).rglob(f"*{ts}*.jpg")
-    }
+def prepare_camera_image_paths(scene_root: Path, ts: int, calib: dict) -> Dict[str, str]:
+    camera_image_paths = {}
+    for p in (scene_root / args.camera_root_name).rglob(f"*{ts}*.jpg"):
+        cam_id = p.parent.name
+        if cam_id in calib:
+            camera_image_paths[cam_id] = p.relative_to(scene_root.parent)
+    return camera_image_paths
 
 
 def prepare_object_info(scene_root: Path, ts: int) -> Tuple[List[dict], List[dict]]:
@@ -185,7 +189,8 @@ def convert_polyline3d_format(polyline_info: Dict):
     return {
         "class": polyline_info.obj_type,
         "attr": polyline_info.obj_attr,
-        "points": standard_points[:3],
+        "points": standard_points[:, :3],
+        "track_id": polyline_info.obj_track_id,
     }
 
 
