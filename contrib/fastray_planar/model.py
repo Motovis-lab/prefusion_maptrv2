@@ -446,7 +446,7 @@ class VoxelStreamFusion(BaseModule):
         )
         return voxel_feats_updated
             
-        
+
 
 @MODELS.register_module()
 class VoVNetEncoder(BaseModule):
@@ -465,7 +465,8 @@ class VoVNetEncoder(BaseModule):
     
     def forward(self, x):
         return self.enc_tower(x)
-        
+
+
 
 @MODELS.register_module()
 class PlanarHead(BaseModule):
