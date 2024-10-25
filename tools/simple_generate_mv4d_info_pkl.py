@@ -10,6 +10,8 @@ from copious.io.fs import parent_ensured_path, read_yaml, read_json, write_pickl
 from copious.io.parallelism import maybe_multithreading
 from copious.cv.geometry import xyzq2mat, euler2mat, points3d_to_homo
 
+from prefusion.dataset.utils import T4x4
+
 
 class Mat4x4(argparse.Action):
     def __call__(
@@ -128,6 +130,7 @@ def prepare_all_frame_infos(args, scene_root: Path, calib: dict) -> Dict:
     res = maybe_multithreading(prepare_object_info, data_args, num_threads=args.num_workers, use_tqdm=True)
     ego_poses = prepare_ego_poses(scene_root)
     for ts, boxes, polylines in res:
+        transform_velocity_to_ego_(boxes, ego_poses[ts])  # box velo from upstream is assumed to be direction-vector in the world sys, so we need to transform it to ego sys
         frame_infos[str(ts)] = {  # convert to str to make it align with the design
             "camera_image": prepare_camera_image_paths(scene_root, ts, calib),
             "3d_boxes": boxes,
@@ -163,6 +166,28 @@ def prepare_object_info(scene_root: Path, ts: int) -> Tuple[List[dict], List[dic
         elif obj.geometry_type == "polyline3d":
             polylines.append(convert_polyline3d_format(obj))
     return ts, boxes, polylines
+
+
+def transform_velocity_to_ego_(boxes: List[Dict], ego_pose: Dict[str, np.ndarray]) -> None:
+    rot_world_to_ego = np.linalg.inv(ego_pose["rotation"])
+    for bx in boxes:
+        bx["velocity"] = (bx["velocity"][None] @ rot_world_to_ego.T)[0]
+
+
+############################################################################################################################################
+# TODO: put rearrange_object_class_attr_ and unify_longer_shorter_edge_definition_ to Bbox3DLoader, and use config to control the behavior
+# rearrange_object_class_attr_:
+#   attr_translate = {
+#       "attr.traffic_facility.box.type",
+#       "attr.traffic_facility.soft_barrier.type",
+#       "attr.traffic_facility.hard_barrier.type"
+#       "attr.parking.indoor_column.shape"
+#   }
+#
+# unify_longer_shorter_edge_definition_:
+#     standard direction: X-axis perpendicular to the longer edge
+#     steps: check if X-axis not perpendicular to the longer edge, if yes, rotate the box (RotMat) by 90 deg, and switch scale[0] and scale[1]
+############################################################################################################################################
 
 
 def convert_box3d_format(box_info: Dict):

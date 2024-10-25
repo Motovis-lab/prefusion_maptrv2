@@ -95,3 +95,19 @@ python tools/create_virtual_camera.py \
     --virtual-camera-mask-save-path /data/datasets/mv4d/20231101_160337/self_mask/camera/VCAMERA_PERSPECTIVE_RIGHT_FRONT.png \
     --virtual-camera-calibration-save-path /data/datasets/mv4d/20231101_160337/vcamera_calibration/VCAMERA_PERSPECTIVE_RIGHT_FRONT.yml \
     --num-workers 10
+
+python tools/create_virtual_camera.py \
+    --motovis-calibration /data/datasets/mv4d/20231101_160337/calibration_center.yml \
+    --img-suffix jpg \
+    --real-camera-id camera6 \
+    --real-camera-type FisheyeCamera \
+    --real-camera-ego-mask /data/datasets/mv4d/20231101_160337/self_mask/camera/camera6.png \
+    --real-camera-image-dir /data/datasets/mv4d/20231101_160337/camera/camera6 \
+    --rotation-euler-angles -90 0 0 \
+    --virtual-camera-id VCAMERA_PERSPECTIVE_FRONT \
+    --virtual-camera-type PerspectiveCamera \
+    --virtual-camera-size 1024 640 \
+    --virtual-camera-image-save-dir /data/datasets/mv4d/20231101_160337/vcamera/VCAMERA_PERSPECTIVE_FRONT \
+    --virtual-camera-mask-save-path /data/datasets/mv4d/20231101_160337/self_mask/camera/VCAMERA_PERSPECTIVE_FRONT.png \
+    --virtual-camera-calibration-save-path /data/datasets/mv4d/20231101_160337/vcamera_calibration/VCAMERA_PERSPECTIVE_FRONT.yml \
+    --num-workers 10

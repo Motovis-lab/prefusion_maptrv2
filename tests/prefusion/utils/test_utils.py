@@ -5,7 +5,7 @@ import pytest
 from copious.io.fs import mktmpdir
 from pypcd_imp import pypcd
 
-from prefusion.dataset.utils import read_pcd, make_seed, read_ego_mask
+from prefusion.dataset.utils import read_pcd, make_seed, read_ego_mask, T4x4
 
 
 @pytest.fixture
@@ -75,3 +75,11 @@ def test_read_ego_mask():
     save_path = str(tmpdir / "mask255.png")
     cv2.imwrite(save_path, img255)
     assert_array_almost_equal(read_ego_mask(save_path),  img)
+
+
+def test_t4x4():
+    mat = T4x4(np.arange(9).reshape(3, 3), np.array([1, 2, 3]))
+    assert_array_almost_equal(mat, np.array([[0, 1, 2, 1],
+                                             [3, 4, 5, 2],
+                                             [6, 7, 8, 3],
+                                             [0, 0, 0, 1]]))

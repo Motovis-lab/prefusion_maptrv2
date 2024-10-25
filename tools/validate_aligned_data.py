@@ -15,6 +15,8 @@ from copious.cv.geometry import Box3d, points3d_to_homo
 from copious.cv.camera_model import FisheyeCameraModel
 from copious.io.parallelism import maybe_multiprocessing
 
+from prefusion.dataset.utils import T4x4
+
 
 class NotOnImageError(Exception):
     pass
@@ -36,10 +38,11 @@ args = parse_arguments()
 def main():
     with open(args.pickle_path, "rb") as f:
         data = pickle.load(f)[args.scene_id]
-    plot_bbox_bev(data, ensured_path(args.result_save_dir / "bbox_bev"))
-    plot_bbox_2d(data, ensured_path(args.result_save_dir / "bbox_2d"))
-    plot_polyline_bev(data, ensured_path(args.result_save_dir / "polyline_bev"))
-    plot_polyline_2d(data, ensured_path(args.result_save_dir / "polyline_2d"))
+    # plot_bbox_bev(data, ensured_path(args.result_save_dir / "bbox_bev"))
+    # plot_bbox_2d(data, ensured_path(args.result_save_dir / "bbox_2d"))
+    plot_bbox_velo(data, ensured_path(args.result_save_dir / "bbox_velo"))
+    # plot_polyline_bev(data, ensured_path(args.result_save_dir / "polyline_bev"))
+    # plot_polyline_2d(data, ensured_path(args.result_save_dir / "polyline_2d"))
 
 
 def _draw_rect(p0, p1, p5, p4, linewidth=1, color="r", alpha=1):
@@ -117,18 +120,30 @@ def _draw_3d_polyline(img, vertices, color=(0, 255, 0)):
     cv2.circle(img, (int(next_vertex[0]), int(next_vertex[1])), 2, color, -1)
 
 
-def T4x4(rot3x3, translation):
-    mat = np.eye(4)
-    mat[:3, :3] = rot3x3
-    mat[:3, 3] = translation.flatten()
-    return mat
-
-
 def K3x3(cx, cy, fx, fy):
     return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
 
 
 def _plot_bbox_bev_of_single_frame(data_args):
+    bbox_3d, ego_pose, save_path = data_args
+    ego2world = T4x4(ego_pose["rotation"], ego_pose["translation"])
+    _ = plt.figure()
+    _draw_axis(ego2world[:2, 3], *(ego2world[:2, :2].T * 2))  # scale := 2
+    _draw_axis([0, 0], [1, 0], [0, 1])  # global axis
+    for bbox in bbox_3d:
+        _track_id = bbox["track_id"]
+        bbox = Box3d(bbox["translation"], np.array(bbox["size"]), Rotation.from_matrix(bbox["rotation"]))
+        bbox_corners = points3d_to_homo(bbox.corners[[0, 1, 5, 4]]) @ ego2world.T
+        _draw_rect(*bbox_corners.tolist(), color="blue", alpha=0.3)
+        # _draw_text(bbox_corners.mean(axis=0), _track_id)
+    plt.gca().set_aspect("equal")
+    plt.gca().set_xlim([-50, 50])
+    plt.gca().set_ylim([-50, 50])
+    plt.savefig(save_path)
+    plt.close()
+
+
+def _plot_bbox_velo_of_single_frame(data_args):
     bbox_3d, ego_pose, save_path = data_args
     ego2world = T4x4(ego_pose["rotation"], ego_pose["translation"])
     _ = plt.figure()
@@ -166,20 +181,6 @@ def _plot_polyline_bev_of_single_frame(data_args):
     plt.close()
 
 
-def plot_bbox_bev(data, save_dir):
-    data_args = [
-        (frame_info["3d_boxes"], frame_info["ego_pose"], save_dir / f"{frame_id}.png")
-        for frame_id, frame_info in tqdm(data["frame_info"].items())
-    ]
-    maybe_multiprocessing(
-        _plot_bbox_bev_of_single_frame,
-        data_args,
-        num_processes=args.num_workers,
-        use_tqdm=True,
-        tqdm_desc="plotting bbox",
-    )
-
-
 def _plot_bbox_2d_of_single_frame(data_args):
     bbox_3d, calib, im_path, save_path = data_args
     im = cv2.imread(im_path)
@@ -189,10 +190,7 @@ def _plot_bbox_2d_of_single_frame(data_args):
         bbox = Box3d(bbox["translation"], np.array(bbox["size"]), Rotation.from_matrix(bbox["rotation"]))
         bbox_corners = points3d_to_homo(bbox.corners)
         try:
-            if calib["camera_type"] == "PerspectiveCamera":
-                im_coords = pinhole_project(bbox_corners, calib, (w, h))
-            elif calib["camera_type"] == "FisheyeCamera":
-                im_coords = fisheye_project(bbox_corners, calib, (w, h))
+            im_coords = _project_points_to_image(bbox_corners, calib, (w, h))
         except NotOnImageError:
             continue
         _draw_3d_box(im, im_coords)
@@ -208,15 +206,20 @@ def _plot_polyline_2d_of_single_frame(data_args):
     for pl in polylines:
         vertices = points3d_to_homo(pl["points"])
         try:
-            if calib["camera_type"] == "PerspectiveCamera":
-                im_coords = pinhole_project(vertices, calib, (w, h), conservative=False)
-            elif calib["camera_type"] == "FisheyeCamera":
-                im_coords = fisheye_project(vertices, calib, (w, h), conservative=False)
+            im_coords = _project_points_to_image(vertices, calib, (w, h))
         except NotOnImageError:
             continue
         _draw_3d_polyline(im, im_coords)
 
     cv2.imwrite(str(save_path), im)
+
+
+def _project_points_to_image(points, calib, im_size):
+    if calib["camera_type"] == "PerspectiveCamera":
+        im_coords = pinhole_project(points, calib, im_size)
+    elif calib["camera_type"] == "FisheyeCamera":
+        im_coords = fisheye_project(points, calib, im_size)
+    return im_coords
 
 
 def im_pts_within_image(pts, im_size):
@@ -269,41 +272,28 @@ def check_im_coords_visibility_on_image(im_coords, im_size, conservative=True):
     return im_coords
 
 
+def plot_bbox_bev(data, save_dir):
+    data_args = [ (frame_info["3d_boxes"], frame_info["ego_pose"], save_dir / f"{frame_id}.png") for frame_id, frame_info in tqdm(data["frame_info"].items()) ]
+    maybe_multiprocessing(_plot_bbox_bev_of_single_frame, data_args, num_processes=args.num_workers, use_tqdm=True, tqdm_desc="plotting bbox")
+
+
+def plot_bbox_velo(data, save_dir):
+    data_args = [(frame_info["3d_boxes"], frame_info["ego_pose"], save_dir / f"{frame_id}.png") for frame_id, frame_info in tqdm(data["frame_info"].items())]
+    maybe_multiprocessing(_plot_bbox_velo_of_single_frame, data_args, num_processes=args.num_workers, use_tqdm=True, tqdm_desc="plotting bbox")
+
+
 def plot_bbox_2d(data, save_dir):
     calib = data["scene_info"]["calibration"]
     data_args = []
     for frame_id, frame_info in tqdm(data["frame_info"].items()):
         for cam_id, im_rel_path in frame_info["camera_image"].items():
-            data_args.append(
-                (
-                    frame_info["3d_boxes"],
-                    calib[cam_id],
-                    args.data_root / im_rel_path,
-                    ensured_path(save_dir / cam_id) / f"{frame_id}.jpg",
-                )
-            )
-
-    maybe_multiprocessing(
-        _plot_bbox_2d_of_single_frame,
-        data_args,
-        num_processes=args.num_workers,
-        use_tqdm=True,
-        tqdm_desc="plotting bbox 2d",
-    )
+            data_args.append( ( frame_info["3d_boxes"], calib[cam_id], args.data_root / im_rel_path, ensured_path(save_dir / cam_id) / f"{frame_id}.jpg", ) )
+    maybe_multiprocessing(_plot_bbox_2d_of_single_frame, data_args, num_processes=args.num_workers, use_tqdm=True, tqdm_desc="plotting bbox 2d")
 
 
 def plot_polyline_bev(data, save_dir):
-    data_args = [
-        (frame_info["3d_polylines"], frame_info["ego_pose"], save_dir / f"{frame_id}.png")
-        for frame_id, frame_info in tqdm(data["frame_info"].items())
-    ]
-    maybe_multiprocessing(
-        _plot_polyline_bev_of_single_frame,
-        data_args,
-        num_processes=args.num_workers,
-        use_tqdm=True,
-        tqdm_desc="plotting bbox",
-    )
+    data_args = [ (frame_info["3d_polylines"], frame_info["ego_pose"], save_dir / f"{frame_id}.png") for frame_id, frame_info in tqdm(data["frame_info"].items()) ]
+    maybe_multiprocessing(_plot_polyline_bev_of_single_frame, data_args, num_processes=args.num_workers, use_tqdm=True, tqdm_desc="plotting bbox")
 
 
 def plot_polyline_2d(data, save_dir):
@@ -311,22 +301,8 @@ def plot_polyline_2d(data, save_dir):
     data_args = []
     for frame_id, frame_info in tqdm(data["frame_info"].items()):
         for cam_id, im_rel_path in frame_info["camera_image"].items():
-            data_args.append(
-                (
-                    frame_info["3d_polylines"],
-                    calib[cam_id],
-                    args.data_root / im_rel_path,
-                    ensured_path(save_dir / cam_id) / f"{frame_id}.jpg",
-                )
-            )
-
-    maybe_multiprocessing(
-        _plot_polyline_2d_of_single_frame,
-        data_args,
-        num_processes=args.num_workers,
-        use_tqdm=True,
-        tqdm_desc="plotting polyline 2d",
-    )
+            data_args.append( ( frame_info["3d_polylines"], calib[cam_id], args.data_root / im_rel_path, ensured_path(save_dir / cam_id) / f"{frame_id}.jpg", ) )
+    maybe_multiprocessing(_plot_polyline_2d_of_single_frame, data_args, num_processes=args.num_workers, use_tqdm=True, tqdm_desc="plotting polyline 2d")
 
 
 if __name__ == "__main__":
