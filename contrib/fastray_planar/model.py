@@ -210,7 +210,7 @@ class FastRaySpatialTransform(BaseModule):
         Returns
         -------
         voxel_feats : torch.Tensor
-            voxel features of shape (N, C, Z*X*Y)
+            voxel features of shape (N, C*Z, X, Y) or (N, C, Z, X, Y)
         
         '''
         cam_ids = list(camera_feats_dict.keys())
@@ -236,12 +236,12 @@ class FastRaySpatialTransform(BaseModule):
                     valid_uu = camera_lookup['uu'][valid_map]
                     valid_vv = camera_lookup['vv'][valid_map]
                     valid_norm_density_map = camera_lookup['norm_density_map'][valid_map]
-                    voxel_feats[n, :, valid_map] += valid_norm_density_map[None] * camera_feat[:, valid_uu, valid_vv]
+                    voxel_feats[n, :, valid_map] += valid_norm_density_map[None] * camera_feat[:, valid_vv, valid_uu]
                 if self.fusion_mode == 'sampled':
                     valid_map = camera_lookup['valid_map_sampled']
                     valid_uu = camera_lookup['uu'][valid_map]
                     valid_vv = camera_lookup['vv'][valid_map]
-                    voxel_feats[n, :, valid_map] = camera_feat[:, valid_uu, valid_vv]
+                    voxel_feats[n, :, valid_map] = camera_feat[:, valid_vv, valid_uu]
         # reshape voxel_feats
         if self.bev_mode:
             return voxel_feats.reshape(N, C*Z, X, Y)
