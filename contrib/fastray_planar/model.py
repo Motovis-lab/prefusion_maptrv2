@@ -83,7 +83,7 @@ class OSABlock(nn.Module):
     def __init__(self,
                  in_channels,
                  mid_channels,
-                 out_channels,
+                 out_channels=None,
                  stride=2,
                  dilation=1,
                  repeat=5,
@@ -109,6 +109,7 @@ class OSABlock(nn.Module):
 
         self.concat = Concat()
         if with_reduce:
+            assert out_channels is not None
             if has_bn:
                 self.reduce = ConvBN(mid_channels * repeat, out_channels, kernel_size=1, padding=0)
             else:
@@ -133,7 +134,7 @@ class OSABlock(nn.Module):
 
 @MODELS.register_module()
 class VoVNetFPN(BaseModule):
-    def __init__(self, out_stride=8, out_feature_channels=128, init_cfg=None):
+    def __init__(self, out_stride=8, out_channels=128, init_cfg=None):
         super().__init__(init_cfg=init_cfg)
         self.strides = [8, 16, 32]
         assert out_stride in self.strides
@@ -158,7 +159,7 @@ class VoVNetFPN(BaseModule):
         in_channels = {8: 256, 16: 384, 32: 192}
         mid_channels = {8: 96, 16: 128, 32: 192}
         self.out = OSABlock(
-            in_channels[self.out_stride], mid_channels[self.out_stride], out_feature_channels,
+            in_channels[self.out_stride], mid_channels[self.out_stride], out_channels,
             stride=1, repeat=3, has_bn=False
         )
         
@@ -395,6 +396,30 @@ class VoxelTemporalAlign(BaseModule):
 
 @MODELS.register_module()
 class VoxelStreamFusion(BaseModule):
+    def __init__(self, in_channels, mid_channels, bev_mode=False, init_cfg=None):
+        super().__init__(init_cfg=init_cfg)
+        self.bev_mode = bev_mode
+        if bev_mode:
+            self.gain = nn.Sequential(
+                ConvBN(in_channels, mid_channels),
+                ConvBN(mid_channels, mid_channels),
+                nn.Conv2d(mid_channels, 1, kernel_size=3, padding=1),
+                nn.Sigmoid()
+            )
+        else:
+            self.gain = nn.Sequential(
+                nn.Conv3d(in_channels, mid_channels, kernel_size=3, padding=1),
+                nn.BatchNorm3d(mid_channels),
+                nn.ReLU(),
+                nn.Conv3d(mid_channels, mid_channels, kernel_size=3, padding=1),
+                nn.BatchNorm3d(mid_channels),
+                nn.ReLU(),
+                nn.Conv3d(mid_channels, 1, kernel_size=3, padding=1),
+                nn.Sigmoid()
+            )
+        self.add = EltwiseAdd()
+            
+        
     
     def forward(self, voxel_feats_cur, voxel_feats_pre):
         """Temporal fusion of voxel current and previous features.
@@ -411,28 +436,72 @@ class VoxelStreamFusion(BaseModule):
         voxel_feats_updated : torch.Tensor
             updated voxel features
         """
+        assert voxel_feats_cur.shape == voxel_feats_pre.shape
+        # get gain
+        gain = self.gain(voxel_feats_cur)
+        # update feats
+        voxel_feats_updated = self.add(
+            gain * voxel_feats_cur,
+            (1 - gain) * voxel_feats_pre
+        )
+        return voxel_feats_updated
+            
 
+
+@MODELS.register_module()
+class VoVNetEncoder(BaseModule):
+    def __init__(self, 
+                 in_channels, 
+                 mid_channels, 
+                 out_channels,
+                 repeat=4,
+                 init_cfg=None):
+        super().__init__(init_cfg=init_cfg)
+        self.enc_tower = OSABlock(in_channels, 
+                                  mid_channels, 
+                                  out_channels, 
+                                  stride=1, 
+                                  repeat=repeat)
+    
+    def forward(self, x):
+        return self.enc_tower(x)
 
 
 
 @MODELS.register_module()
-class VoxelHead(BaseModule):
-    def __init__(self, voxel_feature_config, init_cfg=None):
-        '''
-        >>> voxel_feature_config = dict(
-            voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
-            voxel_range=([-0.5, 2.5], [36, -12], [12, -12]),
-            ego_distance_max=40,
-            ego_distance_step=2
-        )
-        '''
+class PlanarHead(BaseModule):
+    def __init__(self, 
+                 in_channels, 
+                 mid_channels, 
+                 cen_cls_channels,
+                 reg_channels,
+                 repeat=3,
+                 init_cfg=None):
         super().__init__(init_cfg=init_cfg)
-        self.voxel_feature_config = voxel_feature_config
+        self.cls_tower = OSABlock(in_channels, 
+                                  mid_channels, 
+                                  stride=1, 
+                                  repeat=repeat, 
+                                  with_reduce=False)
+        self.reg_tower = OSABlock(in_channels, 
+                                  mid_channels, 
+                                  stride=1, 
+                                  repeat=repeat, 
+                                  with_reduce=False)
+        self.cen_cls = nn.Conv2d(mid_channels * repeat, 
+                                 cen_cls_channels, 
+                                 kernel_size=1)
+        self.reg = nn.Conv2d(mid_channels * repeat, 
+                             reg_channels, 
+                             kernel_size=1)
     
-    def forward(voxel_feats):
-        pass
+    def forward(self, x):
+        cls_feat = self.cls_tower(x)
+        cen_cls = self.cen_cls(cls_feat)
+        reg_feat = self.reg_tower(x)
+        reg = self.reg(reg_feat)
+        return cen_cls, reg
         
-
 
 
 
@@ -447,8 +516,7 @@ class FastRayPlanarStreamModel(BaseModel):
                  voxel_fusion,
                  heads,
                  loss_cfg=None,
-                 train_cfg=None,
-                 test_cfg=None,
+                 metric_cfg=None,
                  data_preprocessor=None,
                  init_cfg=None):
         super().__init__(data_preprocessor, init_cfg)
