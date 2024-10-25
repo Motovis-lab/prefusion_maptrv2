@@ -44,8 +44,8 @@ default_camera_feature_config = dict(
 class VoxelLookUpTableGenerator:
     '''
     Generate LUTS from <x,y,z> to <img_id,u,v,d>.
-    LUT = {
-        \<cam_id\>: dict(
+    >>> LUT = {
+        <cam_id>: dict(
             uu=uu, 
             vv=vv, 
             dd=dd, 
@@ -55,41 +55,25 @@ class VoxelLookUpTableGenerator:
         )
     }
     '''
-    def __init__(
-            self,
-            voxel_feature_config=dict(
-                voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
-                voxel_range=([-0.5, 2.5], [36, -12], [12, -12]),
-                ego_distance_max=40,
-                ego_distance_step=5
-            ),
-            camera_feature_configs=dict(
-                VCAMERA_FISHEYE_FRONT=default_camera_feature_config,
-                VCAMERA_PERSPECTIVE_FRONT_LEFT=default_camera_feature_config,
-                VCAMERA_PERSPECTIVE_BACK_LEFT=default_camera_feature_config,
-                VCAMERA_FISHEYE_LEFT=default_camera_feature_config,
-                VCAMERA_PERSPECTIVE_BACK=default_camera_feature_config,
-                VCAMERA_FISHEYE_BACK=default_camera_feature_config,
-                VCAMERA_PERSPECTIVE_FRONT_RIGHT=default_camera_feature_config,
-                VCAMERA_PERSPECTIVE_BACK_RIGHT=default_camera_feature_config,
-                VCAMERA_FISHEYE_RIGHT=default_camera_feature_config,
-                VCAMERA_PERSPECTIVE_FRONT=default_camera_feature_config
-            )
-        ):
+    def __init__(self, 
+                 voxel_feature_config : dict, 
+                 camera_feature_configs : Dict[str, dict]):
         '''
-        inputs:
-        - voxel_feature_config: dict
+        Parameters
+        ----------
+        voxel_feature_config : dict
             - voxel_shape: (Z, X, Y) in ego system
             - voxel_range: ([zmin, zmax], [xmin, xmax], [ymin, ymax]) in ego system, in meters
             - ego_distance_max: maximum ego distance in meters
             - ego_distance_step: step size of ego distance
-        - camera_feature_configs: dict
-            - \<cam_id\>: dict
-                - ray_distance_num_channel: number of channels in ray distance
-                - ray_distance_start: start distance of ray in meters
-                - ray_distance_step: step size of ray distance
-                - feature_downscale: downscale of feature map
-            
+        
+        camera_feature_configs: dict
+            >>> <cam_id>: {
+              ray_distance_num_channel: int # number of channels in ray distance
+              ray_distance_start: float # start distance of ray in meters
+              ray_distance_step: float # step size of ray distance
+              feature_downscale: int #downscale of feature map
+            }
         '''
         self.voxel_feature_config = voxel_feature_config
         self.camera_feature_configs = camera_feature_configs
@@ -99,20 +83,7 @@ class VoxelLookUpTableGenerator:
         self.voxel_points = get_voxel_points_in_ego(self.voxel_shape, self.voxel_range)
     
     def generate(self, camera_images: Dict[str, CameraImage] | CameraImageSet, seed=None):
-        """
-        ```python
-        LUT = dict(
-            cam_id=dict(
-                uu=uu, 
-                vv=vv, 
-                dd=dd, 
-                valid_map=valid_map,
-                valid_map_sampled=valid_map_sampled,
-                norm_density_map=norm_density_map
-            )
-        )
-        ```
-
+        """ Generate LUTS from `<x,y,z>` to `<img_id,u,v,d>`.
         Parameters
         ----------
         camera_images : dict | CameraImageSet
@@ -120,9 +91,19 @@ class VoxelLookUpTableGenerator:
         seed : int, optional, by default None
             seed for randomness of sampled valid_map
 
-        Returns
-        -------
-        LUT : dict
+        Return
+        ------
+        LUT : dict, from <x,y,z> to <img_id,u,v,d>.
+            >>> LUT = dict(
+                cam_id=dict(
+                    uu=uu, 
+                    vv=vv, 
+                    dd=dd, 
+                    valid_map=valid_map,
+                    valid_map_sampled=valid_map_sampled,
+                    norm_density_map=norm_density_map
+                )
+            )
         """
 
         ego_distance_max = self.voxel_feature_config['ego_distance_max']
