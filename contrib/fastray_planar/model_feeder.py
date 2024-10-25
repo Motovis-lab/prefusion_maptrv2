@@ -107,8 +107,10 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
                 match transformable:
                     case CameraImageSet():
                         camera_lookup = self.voxel_lut_gen.generate(transformable)
-                        for lut_key in camera_lookup:
-                            camera_lookup[lut_key] = torch.tensor(camera_lookup[lut_key])
+                        for cam_id in camera_lookup:
+                            for lut_key in camera_lookup[cam_id]:
+                                camera_lookup[cam_id][lut_key] = torch.tensor(
+                                    camera_lookup[cam_id][lut_key])
                         processed_frame_batch['camera_lookups'].append(camera_lookup)
                         for cam_id in transformable.transformables:
                             camera_tensor = transformable.transformables[cam_id].tensor['img']
