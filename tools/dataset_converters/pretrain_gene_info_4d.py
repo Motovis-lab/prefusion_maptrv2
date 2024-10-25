@@ -189,7 +189,7 @@ if __name__ == "__main__":
             "VCAMERA_PERSPECTIVE_BACK": "fisheye_ego_mask/VCAMERA_PERSPECTIVE_BACK_MASK/1692759619664.jpg",
             "VCAMERA_PERSPECTIVE_BACK_RIGHT": "fisheye_ego_mask/VCAMERA_PERSPECTIVE_BACK_RIGHT_MASK/1692759619664.jpg",
             "VCAMERA_PERSPECTIVE_FRONT_LEFT": "fisheye_ego_mask/VCAMERA_PERSPECTIVE_FRONT_LEFT_MASK/1692759619664.jpg",
-            "VCAMERA_PERSPECTIVE_FRONT": "fisheye_ego_mask/VCAMERA_PERSPECTIVE_FRONT_MASK/1693298603064.jpg",  # 从鱼眼前视虚拟出来的front，不是原始的camera6
+            "VCAMERA_PERSPECTIVE_FRONT": "fisheye_ego_mask/VCAMERA_PERSPECTIVE_FRONT_MASK/1692759619664.jpg",  # 从鱼眼前视虚拟出来的front，不是原始的camera6
             "VCAMERA_PERSPECTIVE_FRONT_RIGHT": "fisheye_ego_mask/VCAMERA_PERSPECTIVE_FRONT_RIGHT_MASK/1692759619664.jpg",
         }
         scene_info["scene_info"]['calibration'] = {}
