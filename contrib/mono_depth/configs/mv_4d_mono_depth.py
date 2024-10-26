@@ -80,7 +80,7 @@ train_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_20230822_154430.pkl',
+        info_path=data_root + 'mv_4d_infos_train.pkl',
         transformables=transformables,
         transforms=train_pipeline,
         phase='train',
@@ -167,6 +167,7 @@ model = dict(
                         context_channels=80, 
                         d_bound=[0.1, 36.1, 0.2],  # Categorical Depth bounds and division (m)
                         ),
+    
     mono_depth = dict(type='Mono_Depth_Head', 
                       fish_img_size=fish_img_size, 
                       pv_img_size=perspective_img_size, 
@@ -185,7 +186,7 @@ model = dict(
                                               height=fish_img_size[1], 
                                               width=fish_img_size[0],
                                               intrinsic=((fish_img_size[0]-1)/2, (fish_img_size[1]-1)/2, fish_img_size[0]/4, fish_img_size[0]/4, 0.1, 0,0,0)),                      
-                      mono_depth_net_cfg=dict(type='Mono_DepthReducer', img_channels=256, mid_channels=128)
+                      depth_decoder_conf=dict(type='DepthDecoder')
     )
 )    
 

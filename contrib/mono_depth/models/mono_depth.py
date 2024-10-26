@@ -27,8 +27,10 @@ class MonoDepth(BaseModel):
                  depth_net_fish_conf=None,
                  depth_net_pv_conf=None,
                  depth_net_front_conf=None,
+                 depth_decoder_conf=None,
                  mono_depth=None,
                  downsample_factor=4,
+                 split_num=3,
                  each_camera_nums=dict(fish=4, pv=5, front=1),
                  depth_weight=1.,
                  eval_only=False,
@@ -42,12 +44,14 @@ class MonoDepth(BaseModel):
         self.depth_net_fish = MODELS.build(depth_net_fish_conf)
         self.depth_net_pv = MODELS.build(depth_net_pv_conf)
         self.depth_net_front = MODELS.build(depth_net_front_conf)
+        self.frame_ids = [1, 0, 2]
         self.each_camera_nums = each_camera_nums
         if mono_depth is not None:
             self.mono_depth_net = MODELS.build(mono_depth)
             self.mono_depth_net.each_camera_nums = each_camera_nums
-        self.split_num = 0
-        self.frame_ids = [1, 0, 2]
+            self.mono_depth_net.frame_ids = self.frame_ids
+        self.split_num = split_num
+        
         self.dummy_loss = torch.tensor([0.], dtype=torch.float32, requires_grad=True).cuda()
         self.fish_cached = dict(
             
@@ -112,7 +116,7 @@ class MonoDepth(BaseModel):
 
         return gt_depths.float()
 
-    def forward(self, batch_data: dict, frame_ids, frame_exists, delta_pose, ori_data, mode):
+    def forward(self, batch_data: dict, frame_timestamp, frame_exists, delta_pose, ori_data, mode):
         """Forward function for Mono Depth
         
         """
@@ -129,52 +133,33 @@ class MonoDepth(BaseModel):
                 self.pv_cached = dict()
                 self.front_cached = dict()
                 return dict(loss = self.dummy_loss)
-            if len(self.fish_cached) // 3 == 1:
-                self.split_num = 0
+            if len(self.fish_cached) // 3 == 2:
                 fish_mono_depth_features = self.fish_mono_feat(self.fish_cached)
-                pv_mono_depth_features = self.fish_mono_feat(self.pv_cached)
-                front_mono_depth_features = self.fish_mono_feat(self.front_cached)
-
+                pv_mono_depth_features = self.pv_mono_feat(self.pv_cached)
+                front_mono_depth_features = self.front_mono_feat(self.front_cached)
                 
                 losses = dict()
-            
-                mono_losses, mono_total_losses = self.mono_depth_net(fish_mono_depth_features, pv_mono_depth_features, front_mono_depth_features,
-                                                                     batch_data, delta_pose, ori_data)
-                
+                mono_losses = self.mono_depth_net(fish_mono_depth_features, pv_mono_depth_features, front_mono_depth_features,
+                                                                     self.fish_cached, self.pv_cached, self.front_cached, self.split_num + 1)
+                mono_total_losses = mono_losses['mono_loss_fish'] + mono_losses['mono_loss_pv'] + mono_losses['mono_loss_front']
                 supervised_depth_loss = 0
                 
-                for camera_type in batch_data:
-                    depth_label = batch_data[camera_type]['depth']
-                    depth_preds = features['depth_feats'][f"{camera_type.split('_')[0]}_feats"]
-                    depth_loss = self.get_depth_loss(depth_label, depth_preds, camera_type.split('_')[0])
-                    supervised_depth_loss += depth_loss * self.depth_weight
-                losses['supervised_depth_loss'] = supervised_depth_loss
+                # for camera_type in batch_data:
+                #     depth_label = batch_data[camera_type]['depth']
+                #     depth_preds = features['depth_feats'][f"{camera_type.split('_')[0]}_feats"]
+                #     depth_loss = self.get_depth_loss(depth_label, depth_preds, camera_type.split('_')[0])
+                #     supervised_depth_loss += depth_loss * self.depth_weight
+                # losses['supervised_depth_loss'] = supervised_depth_loss
                 
                 losses['loss'] = supervised_depth_loss + mono_total_losses 
                 losses['mono_total_loss'] = mono_total_losses
                 
-                # losses.update(mono_losses)  # only for record
-
+                losses.update(mono_losses)  # only for record
+                self.split_num = 0
                 return losses
         
         elif mode == 'predict':
-            features = self.extract_feat(batch_data)
-            preds = self.head(features['bev_img_feats'])
-            if self.head_conf['type'] != "MVBEVHead":
-                results = self.get_bboxes(preds)
-                for i in range(len(results)):
-                    results[i][0][:, :2] = -results[i][0][:, :2]
-                    results[i][0] = results[i][0].detach().cpu().numpy()
-                    results[i][1] = results[i][1].detach().cpu().numpy()
-                    results[i][2] = results[i][2].detach().cpu().numpy()
-                    
-                if self.eval_only:
-                    self.head.show_results(results, batch_data, frame_ids)
-            else:
-                all_pred, all_classes, all_scores = self.head.get_bboxes(preds, batch_data, targets)
-                self.head.show_results(all_pred, all_classes, batch_data, frame_ids)
-
-            return results
+            pass
 
     def fish_mono_feat(self, fish_data, sweep_infos):
         fish_imgs = torch.cat([fish_data['color', i] for i in self.frame_ids], dim=0)
