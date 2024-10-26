@@ -8,7 +8,7 @@ from contrib.fastbev_det.models.utils import transformation_from_parameters
 import numpy as np
 
 
-__all__ = ["Mono_Depth_Head"]
+__all__ = ["Mono_Depth_Head", "SSIM"]
 
 @MODELS.register_module()
 class Mono_Depth_Head(BaseModel):
@@ -62,8 +62,9 @@ class Mono_Depth_Head(BaseModel):
                 self.front_project_3d = Project3D(self.batch_size * 1, self.front_img_size[1], self.front_img_size[0])
         self.mono_depth_net = MODELS.build(mono_depth_net_cfg)
         self.ssim = MODELS.build(ssim_cfg)
-    def forward(self, inputs):
-        output = self.predict_poses(inputs)
+
+    def forward(self, fish_features, pv_features, front_features):
+        output = self.predict_poses(features)
         for camera_type in self.camera_type:
             inputs[f"{camera_type}_feat", 0] = self.mono_depth_net(inputs[f"{camera_type}_feat", 0])
         self.generate_images_pred(inputs, output)
@@ -76,6 +77,7 @@ class Mono_Depth_Head(BaseModel):
         """
         return_outputs = {}
         for camera_type in self.camera_type:
+            
             outputs = {}
             for f_i in self.frame_start_end_ids[1:]:
                 if f_i != "s":

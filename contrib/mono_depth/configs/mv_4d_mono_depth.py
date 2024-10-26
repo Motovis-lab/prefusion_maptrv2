@@ -20,7 +20,7 @@ img_scale = 2
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
 front_perspective_img_size = [768, 384]
-batch_size = 3
+batch_size = 2
 group_size = 1
 
 base_resolutions = dict(
@@ -59,12 +59,14 @@ val_pipeline = [
 ]
 
 
-transformable_name = ['camera_images','camera_depths', 'mono_depth']
+transformable_name = ['camera_images','camera_depths', 'ego_poses']
 
 transformables={
     "camera_images": dict(type="CameraImageSet"),
     "camera_depths": dict(type="CameraDepthSet"),
-    "mono_depth" :dict(type="MonoDepthSet")
+    "ego_poses":dict(type="EgoPoseSet",
+                loader=dict(type="EgoPoseSetLoader")
+                )
 }
 
 
@@ -78,12 +80,12 @@ train_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_val.pkl',
+        info_path=data_root + 'mv_4d_infos_20230822_154430.pkl',
         transformables=transformables,
         transforms=train_pipeline,
         phase='train',
         batch_size=batch_size, 
-        possible_group_sizes=[1],
+        possible_group_sizes=[3],
         possible_frame_intervals=[1]
         ),
 )
@@ -107,6 +109,7 @@ val_dataloader = dict(
         possible_frame_intervals=[1]
         ),
 )
+val_dataloader = None
 
 img_backbone_conf=dict(
         type='VoVNet',
@@ -127,19 +130,43 @@ img_neck_conf=dict(
 model = dict(
     type='MonoDepth',
     data_preprocessor=dict(
-        type='GroupDataPreprocess',
-        mean=[128, 128, 128],
+        type='MonoDepthDataPreprocess',
+        mean=[0, 0, 0],
         std=[255, 255, 255],
         IMG_KEYS=IMG_KEYS, 
         label_type=transformable_name,
-        predict_elements=['heatmap', 'anno_boxes', 'gridzs', 'class_maps'],
         batch_size=batch_size,
         group_size=group_size,
-        label_start_idx=2, # process labels info start index of transformable_name
+        label_start_idx=3, # process labels info start index of transformable_name
     ),
-    backbone=dict(type='ImgBackboneNeck',
-                  img_backbone_conf=img_backbone_conf,
-                  img_neck_conf=img_neck_conf),
+    downsample_factor=downsample_factor,
+    fish_img_backbone_neck_conf=dict(type='ImgBackboneNeck',
+                                         img_backbone_conf=img_backbone_conf,
+                                         img_neck_conf=img_neck_conf),
+    pv_img_backbone_neck_conf=dict(type='ImgBackboneNeck',
+                                        img_backbone_conf=img_backbone_conf,
+                                        img_neck_conf=img_neck_conf),
+    front_img_backbone_neck_conf=dict(type='ImgBackboneNeck',
+                                        img_backbone_conf=img_backbone_conf,
+                                        img_neck_conf=img_neck_conf),                                                                                 
+    depth_net_fish_conf=dict(type='DepthNet', 
+                        in_channels=256, 
+                        mid_channels=256, 
+                        context_channels=80, 
+                        d_bound=[0.1, 5.1, 0.2],  # Categorical Depth bounds and division (m)
+                        ),
+    depth_net_pv_conf=dict(type='DepthNet', 
+                        in_channels=256, 
+                        mid_channels=256, 
+                        context_channels=80, 
+                        d_bound=[0.1, 12.1, 0.2],   # Categorical Depth bounds and division (m)
+                        ),
+    depth_net_front_conf=dict(type='DepthNet', 
+                        in_channels=256, 
+                        mid_channels=256, 
+                        context_channels=80, 
+                        d_bound=[0.1, 36.1, 0.2],  # Categorical Depth bounds and division (m)
+                        ),
     mono_depth = dict(type='Mono_Depth_Head', 
                       fish_img_size=fish_img_size, 
                       pv_img_size=perspective_img_size, 
@@ -165,8 +192,8 @@ model = dict(
 val_evaluator = None
 
 
-train_cfg = dict(max_epochs=24, val_interval=2)  # -1 note don't eval
-
+train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=24, val_interval=2)  # -1 note don't eval
+# val_cfg = dict(type='GroupValLoop')
 
 env_cfg = dict(
     cudnn_benchmark=False,
