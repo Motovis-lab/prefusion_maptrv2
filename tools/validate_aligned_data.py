@@ -28,6 +28,7 @@ def parse_arguments():
     parser.add_argument("--scene-id", required=True)
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--result-save-dir", type=ensured_path, required=True)
+    parser.add_argument("--plot-range", nargs=4, type=float, default=(-50, 50, -50, 50), help="xlim[0], xlim[1], ylim[0], ylim[1]")
     parser.add_argument("--num-workers", type=int, default=0)
     return edict({k: v for k, v in parser.parse_args()._get_kwargs()})
 
@@ -38,11 +39,11 @@ args = parse_arguments()
 def main():
     with open(args.pickle_path, "rb") as f:
         data = pickle.load(f)[args.scene_id]
-    # plot_bbox_bev(data, ensured_path(args.result_save_dir / "bbox_bev"))
-    # plot_bbox_2d(data, ensured_path(args.result_save_dir / "bbox_2d"))
+    plot_bbox_bev(data, ensured_path(args.result_save_dir / "bbox_bev"))
+    plot_bbox_2d(data, ensured_path(args.result_save_dir / "bbox_2d"))
     plot_bbox_velo(data, ensured_path(args.result_save_dir / "bbox_velo"))
-    # plot_polyline_bev(data, ensured_path(args.result_save_dir / "polyline_bev"))
-    # plot_polyline_2d(data, ensured_path(args.result_save_dir / "polyline_2d"))
+    plot_polyline_bev(data, ensured_path(args.result_save_dir / "polyline_bev"))
+    plot_polyline_2d(data, ensured_path(args.result_save_dir / "polyline_2d"))
 
 
 def _draw_rect(p0, p1, p5, p4, linewidth=1, color="r", alpha=1):
@@ -54,6 +55,11 @@ def _draw_rect(p0, p1, p5, p4, linewidth=1, color="r", alpha=1):
 
 def _draw_polyline(vertices, linewidth=1, color="r", alpha=1):
     plt.plot(vertices[:, 0], vertices[:, 1], marker=".", linewidth=linewidth, color=color, alpha=alpha, markersize=2)
+
+
+def _draw_direction(origin, direction, length=1, linewidth=1, color="k"):
+    u = direction / np.linalg.norm(direction) * length
+    plt.plot([origin[0], origin[0] + u[0]], [origin[1], origin[1] + u[1]], color=color, linewidth=linewidth)
 
 
 def _draw_axis(origin, xaxis, yaxis):
@@ -137,27 +143,45 @@ def _plot_bbox_bev_of_single_frame(data_args):
         _draw_rect(*bbox_corners.tolist(), color="blue", alpha=0.3)
         # _draw_text(bbox_corners.mean(axis=0), _track_id)
     plt.gca().set_aspect("equal")
-    plt.gca().set_xlim([-50, 50])
-    plt.gca().set_ylim([-50, 50])
+    plt.gca().set_xlim([args.plot_range[0], args.plot_range[1]])
+    plt.gca().set_ylim([args.plot_range[2], args.plot_range[3]])
     plt.savefig(save_path)
     plt.close()
 
 
-def _plot_bbox_velo_of_single_frame(data_args):
-    bbox_3d, ego_pose, save_path = data_args
-    ego2world = T4x4(ego_pose["rotation"], ego_pose["translation"])
+def _plot_bbox_velo_of_single_frame(cur_boxes, cur_pose, next_boxes, next_pose, time_diff, save_path):
+    cur_ego2world = T4x4(cur_pose["rotation"], cur_pose["translation"])
+    next_ego2world = T4x4(next_pose["rotation"], next_pose["translation"])
+    
     _ = plt.figure()
-    _draw_axis(ego2world[:2, 3], *(ego2world[:2, :2].T * 2))  # scale := 2
+    
+    _draw_axis(next_ego2world[:2, 3], *(next_ego2world[:2, :2].T * 2))  # scale := 2
     _draw_axis([0, 0], [1, 0], [0, 1])  # global axis
-    for bbox in bbox_3d:
-        _track_id = bbox["track_id"]
+
+    for bbox in cur_boxes:
+        cur_ego_velo = bbox["velocity"] * (time_diff / 1000)  # change time unit to second
+        cur_world_velo = (cur_ego_velo[None, :2] @ cur_ego2world[:2, :2].T)[0]
+
+        ori_box = Box3d(bbox["translation"], np.array(bbox["size"]), Rotation.from_matrix(bbox["rotation"]))
+        ori_corners = points3d_to_homo(ori_box.corners[[0, 1, 5, 4]]) @ cur_ego2world.T
+        
+        predicted_box = Box3d(bbox["translation"] + cur_ego_velo, np.array(bbox["size"]), Rotation.from_matrix(bbox["rotation"]))
+        predicted_corners = points3d_to_homo(predicted_box.corners[[0, 1, 5, 4]]) @ cur_ego2world.T
+        
+        _draw_rect(*ori_corners.tolist(), color="blue", alpha=0.2)
+        _draw_rect(*predicted_corners.tolist(), color="green", alpha=0.2)
+        
+        if np.abs(cur_world_velo[:2]).sum() > 1e-2:
+            _draw_direction(ori_corners.mean(axis=0)[:2], cur_world_velo[:2], length=0.3)
+
+    for bbox in next_boxes:
         bbox = Box3d(bbox["translation"], np.array(bbox["size"]), Rotation.from_matrix(bbox["rotation"]))
-        bbox_corners = points3d_to_homo(bbox.corners[[0, 1, 5, 4]]) @ ego2world.T
-        _draw_rect(*bbox_corners.tolist(), color="blue", alpha=0.3)
-        # _draw_text(bbox_corners.mean(axis=0), _track_id)
+        bbox_corners = points3d_to_homo(bbox.corners[[0, 1, 5, 4]]) @ next_ego2world.T
+        _draw_rect(*bbox_corners.tolist(), color="red", alpha=0.2)
+        
     plt.gca().set_aspect("equal")
-    plt.gca().set_xlim([-50, 50])
-    plt.gca().set_ylim([-50, 50])
+    plt.gca().set_xlim([args.plot_range[0], args.plot_range[1]])
+    plt.gca().set_ylim([args.plot_range[2], args.plot_range[3]])
     plt.savefig(save_path)
     plt.close()
 
@@ -175,8 +199,8 @@ def _plot_polyline_bev_of_single_frame(data_args):
         _draw_polyline(vertices_world, color="blue", alpha=0.3)
         # _draw_text(vertices_on_img[0], _track_id)
     plt.gca().set_aspect("equal")
-    plt.gca().set_xlim([-50, 50])
-    plt.gca().set_ylim([-50, 50])
+    plt.gca().set_xlim([args.plot_range[0], args.plot_range[1]])
+    plt.gca().set_ylim([args.plot_range[2], args.plot_range[3]])
     plt.savefig(save_path)
     plt.close()
 
@@ -278,8 +302,15 @@ def plot_bbox_bev(data, save_dir):
 
 
 def plot_bbox_velo(data, save_dir):
-    data_args = [(frame_info["3d_boxes"], frame_info["ego_pose"], save_dir / f"{frame_id}.png") for frame_id, frame_info in tqdm(data["frame_info"].items())]
-    maybe_multiprocessing(_plot_bbox_velo_of_single_frame, data_args, num_processes=args.num_workers, use_tqdm=True, tqdm_desc="plotting bbox")
+    sorted_data = sorted(data["frame_info"].items(), key=lambda x: x[0])
+    for i in tqdm(range(len(sorted_data) - 1)):
+        cur_boxes = sorted_data[i][1]["3d_boxes"]
+        cur_pose = sorted_data[i][1]["ego_pose"]
+        next_boxes = sorted_data[i + 1][1]["3d_boxes"]
+        next_pose = sorted_data[i + 1][1]["ego_pose"]
+        time_diff = int(sorted_data[i + 1][0]) - int(sorted_data[i][0])
+        save_path = save_dir / f"{sorted_data[i][0]}.png"
+        _plot_bbox_velo_of_single_frame(cur_boxes, cur_pose, next_boxes, next_pose, time_diff, save_path)
 
 
 def plot_bbox_2d(data, save_dir):
