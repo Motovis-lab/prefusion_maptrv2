@@ -45,23 +45,18 @@ class MonoDepth(BaseModel):
         self.depth_net_pv = MODELS.build(depth_net_pv_conf)
         self.depth_net_front = MODELS.build(depth_net_front_conf)
         self.frame_ids = [1, 0, 2]
+        self.frame_nums = 3
         self.each_camera_nums = each_camera_nums
         if mono_depth is not None:
-            self.mono_depth_net = MODELS.build(mono_depth)
-            self.mono_depth_net.each_camera_nums = each_camera_nums
-            self.mono_depth_net.frame_ids = self.frame_ids
-        self.split_num = split_num
-        
-        self.dummy_loss = torch.tensor([0.], dtype=torch.float32, requires_grad=True).cuda()
-        self.fish_cached = dict(
-            
-        )
-        self.pv_cached = dict(
-            
-        )
-        self.front_cached = dict(
-            
-        )
+            self.mono_depth_head = MODELS.build(mono_depth)
+            self.mono_depth_head.each_camera_nums = each_camera_nums
+            self.mono_depth_head.frame_ids = self.frame_ids
+            self.mono_depth_head.frame_nums = self.frame_nums
+        self.split_num = 0
+    
+        self.fish_cached = dict()
+        self.pv_cached = dict()
+        self.front_cached = dict()
     def get_depth_loss(self, depth_labels, depth_preds, camera_type):
         depth_labels = self.get_downsampled_gt_depth(depth_labels, camera_type)
         depth_preds = depth_preds.permute(0, 2, 3, 1).contiguous().view(
@@ -120,27 +115,43 @@ class MonoDepth(BaseModel):
         """Forward function for Mono Depth
         
         """
+        # TODO add supervised_depth_loss and dynamic region mask
+        losses = dict(loss = torch.tensor([0.], dtype=torch.float32, requires_grad=True).cuda())
         if mode == 'tensor':
             return self.extract_feat(batch_data)
         
         elif mode == 'loss':
-            if self.split_num % 3 < 2 and None not in frame_exists['next_exists']:
+            if None not in frame_exists['next_exists'] and None not in frame_exists['prev_exists']:  # 中间帧，前后都有
                 self.prepare_data(batch_data, delta_pose)
                 self.split_num += 1
-                return dict(loss = self.dummy_loss)
-            if None in frame_exists['next_exists']:
-                self.fish_cached = dict()
-                self.pv_cached = dict()
-                self.front_cached = dict()
-                return dict(loss = self.dummy_loss)
-            if len(self.fish_cached) // 3 == 2:
-                fish_mono_depth_features = self.fish_mono_feat(self.fish_cached)
-                pv_mono_depth_features = self.pv_mono_feat(self.pv_cached)
-                front_mono_depth_features = self.front_mono_feat(self.front_cached)
+            elif None in frame_exists['next_exists']:  # 后没有
+                if None not in frame_exists['prev_exists']:  # 如果前有
+                    # group size的最后一帧
+                    self.prepare_data(batch_data, delta_pose)
+                    self.split_num += 1
+                else:  # 前没有
+                    self.fish_cached = dict()
+                    self.pv_cached = dict()
+                    self.front_cached = dict()
+                    self.split_num = 0
+            elif None in frame_exists['prev_exists']:  # 前没有
+                if None not in frame_exists['next_exists']: # 后有
+                    # group size的第一帧
+                    self.prepare_data(batch_data, delta_pose)
+                    self.split_num += 1
+                else:  # 后没有
+                    self.fish_cached = dict()
+                    self.pv_cached = dict()
+                    self.front_cached = dict()
+                    self.split_num = 0
+            
+            if len(self.fish_cached) == 9:
+                fish_mono_depth_features = self.fish_mono_feat(self.fish_cached, batch_data)
+                pv_mono_depth_features = self.pv_mono_feat(self.pv_cached, batch_data)
+                front_mono_depth_features = self.front_mono_feat(self.front_cached, batch_data)
                 
-                losses = dict()
-                mono_losses = self.mono_depth_net(fish_mono_depth_features, pv_mono_depth_features, front_mono_depth_features,
-                                                                     self.fish_cached, self.pv_cached, self.front_cached, self.split_num + 1)
+                mono_losses = self.mono_depth_head(fish_mono_depth_features, pv_mono_depth_features, front_mono_depth_features,
+                                                                    self.fish_cached, self.pv_cached, self.front_cached)
                 mono_total_losses = mono_losses['mono_loss_fish'] + mono_losses['mono_loss_pv'] + mono_losses['mono_loss_front']
                 supervised_depth_loss = 0
                 
@@ -155,8 +166,10 @@ class MonoDepth(BaseModel):
                 losses['mono_total_loss'] = mono_total_losses
                 
                 losses.update(mono_losses)  # only for record
-                self.split_num = 0
-                return losses
+                # self.update_cache_data()
+                # self.split_num -= 1
+
+            return losses
         
         elif mode == 'predict':
             pass
@@ -164,8 +177,8 @@ class MonoDepth(BaseModel):
     def fish_mono_feat(self, fish_data, sweep_infos):
         fish_imgs = torch.cat([fish_data['color', i] for i in self.frame_ids], dim=0)
         img_feats_fish = self.get_cam_feats_fish(fish_imgs)
-        intrinsic=sweep_infos["fish_data"]['intrinsic'].view(-1, 8)
-        extrinsic=sweep_infos["fish_data"]['extrinsic'][:, :3, :].view(-1, 12)
+        intrinsic=sweep_infos["fish_data"]['intrinsic'].view(-1, 8).repeat(self.frame_nums, 1)
+        extrinsic=sweep_infos["fish_data"]['extrinsic'][:, :3, :].view(-1, 12).repeat(self.frame_nums, 1)
         _,_, mono_depth_feats_fish = self.depth_net_fish(img_feats_fish, intrinsic, extrinsic, return_mono_depth=True)
         
         return mono_depth_feats_fish
@@ -175,27 +188,29 @@ class MonoDepth(BaseModel):
         img_feats_pv = self.get_cam_feats_fish(pv_imgs)
         intrinsic = torch.zeros(sweep_infos["pv_data"]['extrinsic'].shape[0], 8).to(sweep_infos["pv_data"]['extrinsic'].device)
         intrinsic[:, :4] = sweep_infos["pv_data"]['intrinsic']
-        extrinsic=sweep_infos["pv_data"]['extrinsic'][:, :3, :].view(-1, 12)
-        _,_, mono_depth_feats_pv = self.depth_net_pv(img_feats_pv, intrinsic, extrinsic, return_mono_depth=True)
+        extrinsic=sweep_infos["pv_data"]['extrinsic'][:, :3, :].view(-1, 12).repeat(self.frame_nums, 1)
+        _,_, mono_depth_feats_pv = self.depth_net_pv(img_feats_pv, intrinsic.repeat(self.frame_nums, 1), extrinsic, return_mono_depth=True)
         
         return mono_depth_feats_pv
 
     def front_mono_feat(self, front_data, sweep_infos):
         front_imgs = torch.cat([front_data['color', i] for i in self.frame_ids], dim=0)
         img_feats_front = self.get_cam_feats_fish(front_imgs)
-        intrinsic = torch.zeros(sweep_infos["pv_data"]['extrinsic'].shape[0], 8).to(sweep_infos["pv_data"]['extrinsic'].device)
-        intrinsic[:, :4] = sweep_infos["pv_data"]['intrinsic']
-        extrinsic=sweep_infos["pv_data"]['extrinsic'][:, :3, :].view(-1, 12)
-        _,_, mono_depth_feats_front = self.depth_net_pv(img_feats_front, intrinsic, extrinsic, return_mono_depth=True)
+        intrinsic = torch.zeros(sweep_infos["front_data"]['extrinsic'].shape[0], 8).to(sweep_infos["front_data"]['extrinsic'].device)
+        intrinsic[:, :4] = sweep_infos["front_data"]['intrinsic']
+        extrinsic=sweep_infos["front_data"]['extrinsic'][:, :3, :].view(-1, 12).repeat(self.frame_nums, 1)
+        _,_, mono_depth_feats_front = self.depth_net_pv(img_feats_front, intrinsic.repeat(self.frame_nums, 1), extrinsic, return_mono_depth=True)
     
         return mono_depth_feats_front
 
     def prepare_data(self, batch_data: dict, delta_pose):
         self.fish_cached[('color', self.split_num % 3)] = batch_data['fish_data']['imgs']
         self.fish_cached[('gt_depth', self.split_num % 3)] = batch_data['fish_data']['depth']
+        self.fish_cached[('delta_pose', self.split_num % 3)] = delta_pose
 
         self.pv_cached[('color', self.split_num % 3)] = batch_data['pv_data']['imgs']
         self.pv_cached[('gt_depth', self.split_num % 3)] = batch_data['pv_data']['depth']
+        self.pv_cached[('delta_pose', self.split_num % 3)] = delta_pose
         pv_intrinsic = batch_data['pv_data']['intrinsic']
         K = torch.eye(4, 4).repeat(pv_intrinsic.shape[0], 1, 1).to(pv_intrinsic.device)
         K[:, 0, 0] = pv_intrinsic[:, 2] # fx
@@ -207,6 +222,7 @@ class MonoDepth(BaseModel):
 
         self.front_cached[('color', self.split_num % 3)] = batch_data['front_data']['imgs']
         self.front_cached[('gt_depth', self.split_num % 3)] = batch_data['front_data']['depth']
+        self.front_cached[('delta_pose', self.split_num % 3)] = delta_pose
         front_intrinsic = batch_data['front_data']['intrinsic']
         K = torch.eye(4, 4).repeat(front_intrinsic.shape[0], 1, 1).to(front_intrinsic.device)
         K[:, 0, 0] = front_intrinsic[:, 2] # fx
@@ -215,6 +231,42 @@ class MonoDepth(BaseModel):
         K[:, 1, 2] = front_intrinsic[:, 1] # cy
         self.front_cached['K', self.split_num % 3] = K
         self.front_cached['inv_K', self.split_num % 3] = K.inverse()
+     
+    def update_cache_data(self):
+        for id in range(self.split_num):
+            if id == 0:
+                self.fish_cached.pop(('color', id))
+                self.fish_cached.pop(('gt_depth', id))
+                self.fish_cached.pop(('delta_pose', id))
+
+                self.pv_cached.pop(('color', id))
+                self.pv_cached.pop(('gt_depth', id))
+                self.pv_cached.pop(('delta_pose', id))
+                self.pv_cached.pop(('K', id))
+                self.pv_cached.pop(('inv_K', id))
+
+                self.front_cached.pop(('color', id))
+                self.front_cached.pop(('gt_depth', id))
+                self.front_cached.pop(('delta_pose', id))
+                self.front_cached.pop(('K', id))
+                self.front_cached.pop(('inv_K', id))
+            else:
+                self.fish_cached[('color', id - 1)] = self.fish_cached[('color', id)]
+                self.fish_cached[('gt_depth', id - 1)] = self.fish_cached[('gt_depth', id)]
+                self.fish_cached[('delta_pose', id - 1)] = self.fish_cached[('delta_pose', id)]
+                
+                self.pv_cached[('color', id - 1)] = self.pv_cached[('color', id)]
+                self.pv_cached[('gt_depth', id - 1)] = self.pv_cached[('gt_depth', id)]
+                self.pv_cached[('delta_pose', id - 1)] = self.pv_cached[('delta_pose', id)]
+                self.pv_cached['K', id - 1] = self.pv_cached['K', id]
+                self.pv_cached['inv_K', id - 1] = self.pv_cached['inv_K', id]
+                
+                self.front_cached[('color', id - 1)] = self.front_cached[('color', id)]
+                self.front_cached[('gt_depth', id - 1)] = self.front_cached[('gt_depth', id)]
+                self.front_cached[('delta_pose', id - 1)] = self.front_cached[('delta_pose', id)]
+                self.front_cached['K', id - 1] = self.front_cached['K', id]
+                self.front_cached['inv_K', id - 1] = self.front_cached['inv_K', id]
+
      
     def loss(self, targets, preds_dicts):
         """Loss function for BEVDepth.

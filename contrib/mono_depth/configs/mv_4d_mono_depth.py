@@ -20,7 +20,7 @@ img_scale = 2
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
 front_perspective_img_size = [768, 384]
-batch_size = 2
+batch_size = 1
 group_size = 1
 
 base_resolutions = dict(
@@ -177,12 +177,12 @@ model = dict(
                       avg_reprojection=True,
                       disparity_smoothness=0.001,
                       fish_unproject_cfg=dict(type='Fish_BackprojectDepth', 
-                                              batch_size=batch_size, 
+                                              batch_size=batch_size * 4, 
                                               height=fish_img_size[1], 
                                               width=fish_img_size[0],
                                               intrinsic=((fish_img_size[0]-1)/2, (fish_img_size[1]-1)/2, fish_img_size[0]/4, fish_img_size[0]/4, 0.1, 0,0,0)),
                       fish_project3d_cfg=dict(type='Fish_Project3D', 
-                                              batch_size=batch_size, 
+                                              batch_size=batch_size * 4, 
                                               height=fish_img_size[1], 
                                               width=fish_img_size[0],
                                               intrinsic=((fish_img_size[0]-1)/2, (fish_img_size[1]-1)/2, fish_img_size[0]/4, fish_img_size[0]/4, 0.1, 0,0,0)),                      
@@ -193,7 +193,7 @@ model = dict(
 val_evaluator = None
 
 
-train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=24, val_interval=2)  # -1 note don't eval
+train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=24, val_interval=-1)  # -1 note don't eval
 # val_cfg = dict(type='GroupValLoop')
 
 env_cfg = dict(

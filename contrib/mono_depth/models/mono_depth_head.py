@@ -22,17 +22,16 @@ class Mono_Depth_Head(BaseModel):
                  batch_size=None,
                  avg_reprojection=False,
                  disparity_smoothness=0.001,
-                 depth_pose_net_cfg=dict(type="PoseDecoder", num_ch_enc=[256], num_input_features=2),
+                 depth_pose_net_cfg=dict(type="PoseDecoder", num_ch_enc=[128], num_input_features=2),
                  fish_unproject_cfg=None,
                  fish_project3d_cfg=None,
                  depth_decoder_conf=None,
                  ssim_cfg=dict(type='SSIM'),
                  init_cfg=None):
         super().__init__(init_cfg=init_cfg)
-        self.camera_type = ['pv', 'front']
-        self.frame_ids = [0, -1, 1]
         self.depth_pose_net = MODELS.build(depth_pose_net_cfg)
-        
+        self.camera_type = ['fish', 'pv', 'front']
+        self.frame_ids = None
         self.fish_img_size = fish_img_size
         self.pv_img_size = pv_img_size
         self.front_img_size = front_img_size
@@ -63,13 +62,13 @@ class Mono_Depth_Head(BaseModel):
                 self.front_project_3d = Project3D(self.batch_size * 1, self.front_img_size[1], self.front_img_size[0])
         self.ssim = MODELS.build(ssim_cfg)
 
-    def forward(self, fish_features, pv_features, front_features, fish_inputs, pv_inputs, front_inputs, split_num):
-        B_fish = split_num * fish_inputs[('color', 0)].shape[0]
-        B_pv = split_num * pv_inputs[('color', 0)].shape[0]
-        B_front = split_num * front_inputs[('color', 0)].shape[0]
-        fish_all_features = [torch.split(f, B_fish) for f in fish_features]
-        pv_all_features = [torch.split(f, B_pv) for f in pv_features]
-        front_all_features = [torch.split(f, B_front) for f in front_features]
+    def forward(self, fish_features, pv_features, front_features, fish_inputs, pv_inputs, front_inputs):
+        B_fish = fish_inputs[('color', 0)].shape[0]
+        B_pv = pv_inputs[('color', 0)].shape[0]
+        B_front = front_inputs[('color', 0)].shape[0]
+        fish_all_features = fish_features.split(B_fish) # 按BATCH切分成 0 1 2  (B_fish个feature一组)
+        pv_all_features = pv_features.split(B_pv)
+        front_all_features = front_features.split(B_front)
 
         losses = dict()
 
@@ -80,13 +79,14 @@ class Mono_Depth_Head(BaseModel):
         return losses
 
 
-    def forward_camera(self, inputs, features, camera_type):
+    def forward_camera(self, inputs, all_features, camera_type):
+        assert camera_type in self.camera_type, f"{camera_type} must be in {self.camera_type}."
         features = {}
         for i, k in enumerate(self.frame_ids):
-            features[k] = [f[i] for f in features]
+            features[k] = all_features[i]
         
         outputs = dict()
-        outputs['disp'] = self.depth_decoder(features[0])
+        outputs['disp'] = self.depth_decoder([features[0]])[0]
         outputs.update(self.predict_poses(features))
         self.generate_images_pred(inputs, outputs, camera_type)
         losses = self.compute_losses(inputs, outputs, camera_type)
@@ -100,7 +100,7 @@ class Mono_Depth_Head(BaseModel):
         for f_i in self.frame_ids[1:]:  # [1, 0, 2]
             if f_i != "s":
                 # To maintain ordering we always pass frames in temporal order
-                if f_i < 2:
+                if f_i < 1:
                     pose_inputs = [features[f_i], features[1]]
                 else:
                     pose_inputs = [features[1], features[f_i]]
@@ -117,7 +117,7 @@ class Mono_Depth_Head(BaseModel):
         """Generate the warped (reprojected) color images for a minibatch.
         Generated images are saved into the `outputs` dictionary.
         """
-        disp = inputs['disp']
+        disp = outputs['disp']
 
         _, depth = disp_to_depth(disp, self.min_depth, self.max_depth)
 
@@ -136,7 +136,7 @@ class Mono_Depth_Head(BaseModel):
                 outputs[("sample", frame_id)] = pix_coords
 
             outputs[("color", frame_id)] = F.grid_sample(
-                inputs['clolr', frame_id],
+                inputs['color', frame_id],
                 outputs[("sample", frame_id)],
                 padding_mode="border")
 
@@ -158,7 +158,6 @@ class Mono_Depth_Head(BaseModel):
         """Compute the reprojection and smoothness losses for a minibatch
         """
         losses = {}
-        total_loss = 0
         
         loss = 0
         disp = outputs['disp']

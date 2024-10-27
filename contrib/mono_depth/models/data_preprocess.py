@@ -131,11 +131,21 @@ class MonoDepthDataPreprocess(DetDataPreprocessor):
         delta_pose = self.cast_data(self.collect_delta_pose(data))
         frame_ids = [x['index_info'].frame_id for x in data]
         frame_exists = dict(
-            prev_exists = [x['index_info'].prev for x in data],
-            next_exists = [x['index_info'].next for x in data]
+            prev_exists=[],
+            next_exists=[]
         )
+        for x in data:
+            if x['index_info'].as_dict()['prev'] is None:
+                frame_exists['prev_exists'].append(None)
+            else:
+                frame_exists['prev_exists'].append(x['index_info'].as_dict()['prev']['frame_id'])
+            
+            if x['index_info'].as_dict()['next'] is None:
+                frame_exists['next_exists'].append(None)
+            else:
+                frame_exists['next_exists'].append(x['index_info'].as_dict()['next']['frame_id'])
 
-        return {'batch_data':{'fish_data': fish_data, 'front_data':front_data, 'pv_data':pv_data}, 'frame_ids':frame_ids, 'delta_pose': delta_pose, 'frame_exists':frame_exists, 'ori_data': data}
+        return {'batch_data':{'fish_data': fish_data, 'front_data':front_data, 'pv_data':pv_data}, 'frame_timestamp':frame_ids, 'delta_pose': delta_pose, 'frame_exists':frame_exists, 'ori_data': data}
 
 
     def preprocess_img(self, _batch_img: Tensor) -> Tensor:
