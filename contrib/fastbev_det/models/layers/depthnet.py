@@ -60,8 +60,13 @@ class DepthNet(nn.Module):
             #     im2col_step=128,
             # )),
         )
+        self.mono_depth_conv = nn.Conv2d(self.depth_channels,
+                                         128,
+                                         kernel_size=1,
+                                         stride=1,
+                                         padding=0)
 
-    def forward(self, x, intrinsic, extrinsic):
+    def forward(self, x, intrinsic, extrinsic, return_mono_depth=False):
         mlp_input = torch.cat(
             [intrinsic, extrinsic],
             -1,
@@ -75,6 +80,9 @@ class DepthNet(nn.Module):
         depth = self.depth_se(x, depth_se)
         depth = self.depth_conv(depth)
         supervised_depth = self.depth_super_conv(depth).softmax(dim=1)
+        if return_mono_depth:
+            mono_depth = self.mono_depth_conv(supervised_depth).sigmoid()
+            return torch.cat([depth, context], dim=1), supervised_depth, mono_depth
         return torch.cat([depth, context], dim=1), supervised_depth
             
     def dummy_forward(self, x, mlp_input):
