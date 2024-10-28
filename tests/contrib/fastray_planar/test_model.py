@@ -1,7 +1,8 @@
 import torch
 
 from contrib.fastray_planar.model import (
-    VoxelTemporalAlign
+    VoxelTemporalAlign,
+    FastRaySpatialTransform,
 )
 
 
@@ -50,3 +51,84 @@ def test_voxel_temporal_align():
     ], dtype=torch.float32)
     
     torch.testing.assert_close(voxel_feats_pre_aligned[0, 0, 1], answer)
+
+
+def test_fastray_spatial_transform():
+    voxel_shape = (2, 8, 8)
+    st = FastRaySpatialTransform(voxel_shape, fusion_mode='sampled')
+    
+    camera_feat_tensor = torch.zeros(1, 3, 4, 4, dtype=torch.float32)
+    camera_feat_tensor[0, 0, 1, 1:3] = 28
+    camera_feat_tensor[0, 1, 1, 1:3] = 4
+    camera_feats_dict = dict(cam_6=camera_feat_tensor)
+    camera_lookups = [dict(cam_6=dict(
+        valid_map_sampled=torch.tensor([
+            [[0, 1, 1, 1, 1, 1, 1, 0],
+             [0, 0, 1, 1, 1, 1, 0, 0],
+             [0, 0, 0, 1, 1, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0]],
+            [[0, 1, 1, 1, 1, 1, 1, 0],
+             [0, 0, 1, 1, 1, 1, 0, 0],
+             [0, 0, 0, 1, 1, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0]],
+        ], dtype=torch.bool).reshape(-1),
+        uu=torch.tensor([
+            [[0, 0, 0, 1, 2, 3, 3, 0],
+             [0, 0, 0, 1, 2, 3, 0, 0],
+             [0, 0, 0, 0, 3, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0]],
+            [[0, 0, 0, 1, 2, 3, 3, 0],
+             [0, 0, 0, 1, 2, 3, 0, 0],
+             [0, 0, 0, 0, 3, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0]],
+        ], dtype=torch.long).reshape(-1),
+        vv=torch.tensor([
+            [[0, 1, 1, 1, 1, 1, 1, 0],
+             [0, 0, 1, 1, 1, 1, 0, 0],
+             [0, 0, 0, 1, 1, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0]],
+            [[0, 1, 1, 1, 1, 1, 1, 0],
+             [0, 0, 1, 1, 1, 1, 0, 0],
+             [0, 0, 0, 1, 1, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0],
+             [0, 0, 0, 0, 0, 0, 0, 0]],
+        ], dtype=torch.long).reshape(-1)
+    ))]
+
+    voxel_feat = st(camera_feats_dict, camera_lookups)
+    
+    assert voxel_feat.shape == (1, 3, 2, 8, 8)
+    answer = torch.tensor([
+        [0, 0, 0,28,28, 0, 0, 0],
+        [0, 0, 0,28,28, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0],
+    ], dtype=torch.float32)
+    torch.testing.assert_close(voxel_feat[0, 0, 0], answer)
