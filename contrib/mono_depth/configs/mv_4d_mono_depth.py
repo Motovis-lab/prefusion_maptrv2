@@ -187,7 +187,9 @@ model = dict(
                                               width=fish_img_size[0],
                                               intrinsic=((fish_img_size[0]-1)/2, (fish_img_size[1]-1)/2, fish_img_size[0]/4, fish_img_size[0]/4, 0.1, 0,0,0)),                      
                       depth_decoder_conf=dict(type='DepthDecoder')
-    )
+    ),
+    supervised_depth_weight=0.2,
+    mono_depth_weight=10
 )    
 
 val_evaluator = None
