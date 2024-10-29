@@ -1,12 +1,13 @@
+default_scope = "prefusion"
 experiment_name = "fastray_planar_demo"
-
-_base_ = "../../../configs/default_runtime.py"
 
 custom_imports = dict(
     imports=["prefusion", "contrib.fastray_planar"], 
     allow_failed_imports=False
 )
 
+
+## camera and voxel feature configurations
 
 default_camera_feature_config = dict(
     ray_distance_num_channel=64,
@@ -33,29 +34,47 @@ voxel_feature_config=dict(
     ego_distance_step=5
 )
 
-# TODO:
-# classes and attrs needs to be redefined in info.pkl
-# or in transformable_loader or in tensor_smith
+## dictionaries and mappings for different types of tasks
+
+mapping_heading_objects = {
+    'passenger_car': [],
+    'bus': [],
+    'truck': [],
+    'ambulance': [],
+    'fire_engine': [],
+    'env_protect': [],
+    'tricycle':[],
+    'motorcycle':[],
+    'bicycle':[],
+    'cleaning_cart':[],
+    'shopping_cart':[],
+    'stroller':[]    
+}
+
 dictionary_heading_objects = dict(
-    classes=['class.vehicle.passenger_car', 
-             'class.vehicle.bus', 
-             'class.vehicle.truck', 
-             'class.vehicle.ambulance', 
-             'class.vehicle.fire_engine', 
-             'class.vehicle.env_protect',
-             'class.cycle.tricycle',
-             'class.cycle.motorcycle',
-             'class.cycle.bicycle',
-             'class.wheeled_push_device.cleaning_cart',
-             'class.wheeled_push_device.shopping_cart',
-             'class.wheeled_push_device.stroller'],
-    attrs=['attr.cycle.is_with_rider.true']
+    classes=['passenger_car', 
+             'bus', 
+             'truck', 
+             'ambulance', 
+             'fire_engine', 
+             'env_protect',
+             'tricycle',
+             'motorcycle',
+             'bicycle',
+             'cleaning_cart',
+             'shopping_cart',
+             'stroller'],
+    attrs=['cycle.is_with_rider.true']
 )
 
 dictionary_plane_objects = dict(
     classes=[],
     attrs=[]
 )
+
+mapping_no_heading_objects = {
+    'speed_bump': []
+}
 
 dictionary_no_heading_objects = dict(
     classes=['speed_bump'],
@@ -96,6 +115,39 @@ dictionary_polygons = dict(
 )
 
 
+## camera configurations for model inputs
+
+camera_groups = dict(
+    pv_front=['VCAMERA_PERSPECTIVE_FRONT'],
+    pv_sides=['VCAMERA_PERSPECTIVE_FRONT_LEFT',
+              'VCAMERA_PERSPECTIVE_FRONT_RIGHT',
+              'VCAMERA_PERSPECTIVE_BACK_LEFT',
+              'VCAMERA_PERSPECTIVE_BACK_RIGHT',
+              'VCAMERA_PERSPECTIVE_BACK'],
+    fisheyes=['VCAMERA_FISHEYE_FRONT',
+              'VCAMERA_FISHEYE_LEFT',
+              'VCAMERA_FISHEYE_BACK',
+              'VCAMERA_FISHEYE_RIGHT']
+)
+
+resolution_pv_front = (640, 320)
+resolution_pv_sides = (512, 320)
+resolution_fisheyes = (512, 320)
+
+camera_resolution_configs=dict(
+    VCAMERA_PERSPECTIVE_FRONT=resolution_pv_front,
+    VCAMERA_PERSPECTIVE_FRONT_LEFT=resolution_pv_sides,
+    VCAMERA_PERSPECTIVE_FRONT_RIGHT=resolution_pv_sides,
+    VCAMERA_PERSPECTIVE_BACK_LEFT=resolution_pv_sides,
+    VCAMERA_PERSPECTIVE_BACK_RIGHT=resolution_pv_sides,
+    VCAMERA_PERSPECTIVE_BACK=resolution_pv_sides,
+    VCAMERA_FISHEYE_FRONT=resolution_fisheyes,
+    VCAMERA_FISHEYE_LEFT=resolution_fisheyes,
+    VCAMERA_FISHEYE_BACK=resolution_fisheyes,
+    VCAMERA_FISHEYE_RIGHT=resolution_fisheyes,
+)
+
+
 train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
@@ -111,14 +163,14 @@ train_dataset = dict(
         ego_poses=dict(type='ego_poses'),
         bbox_3d=dict(
             type='Bbox3D', 
-            dictionary=dictionary_heading_objects,
+            dictionary=dict(classes=['class.vehicle.passenger_car'], attrs=[]),
             tensor_smith=dict(type='PlanarBbox3D', 
                               voxel_shape=voxel_feature_config['voxel_shape'],
                               voxel_range=voxel_feature_config['voxel_range'])
         ),
         polyline_3d=dict(
             type='Polyline3D',
-            dictionary=dictionary_polylines,
+            dictionary=dict(classes=['class.road_marker.lane_line'], attrs=[]),
             tensor_smith=dict(type='PlanarPolyline3D', 
                               voxel_shape=voxel_feature_config['voxel_shape'],
                               voxel_range=voxel_feature_config['voxel_range'])
@@ -130,6 +182,15 @@ train_dataset = dict(
                               voxel_range=voxel_feature_config['voxel_range'])
         )
     ),
+    transforms=[
+        dict(type='RandomRenderExtrinsic'),
+        dict(type='RandomRotateSpace'),
+        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs),
+        dict(type='RandomMirrorSpace'),
+        dict(type='RandomImageISP'),
+        dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
+        dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
+    ],
     phase="train",
     batch_size=4,
     possible_group_sizes=4,
@@ -138,11 +199,14 @@ train_dataset = dict(
 
 
 train_dataloader = dict(
-    num_workers=4,
+    num_workers=1,
     persistent_workers=True,
     collate_fn=dict(type="collate_dict"),
     dataset=train_dataset
 )
 
 val_dataloader = train_dataloader
-test_dataloader = train_dataloader
+
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=1, val_interval=-1)
+val_cfg = dict(type="GroupBatchValLoop")
+

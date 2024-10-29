@@ -38,8 +38,6 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
         super().__init__()
         self.voxel_feature_config = voxel_feature_config
         self.camera_feature_configs = camera_feature_configs
-        # TODO: move cam group to model
-        # self.camera_id_groups = camera_id_groups
         self.voxel_lut_gen = VoxelLookUpTableGenerator(
             voxel_feature_config=self.voxel_feature_config,
             camera_feature_configs=self.camera_feature_configs

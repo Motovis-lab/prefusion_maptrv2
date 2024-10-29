@@ -10,7 +10,6 @@ from typing import Union, List, Dict, Optional
 from mmengine.model import BaseModel, BaseModule
 
 from prefusion.registry import MODELS
-from prefusion.loss import PlanarLoss
 
 
 class ConvBN(nn.Module):
@@ -419,7 +418,6 @@ class VoxelStreamFusion(BaseModule):
             )
         self.add = EltwiseAdd()
             
-        
     
     def forward(self, voxel_feats_cur, voxel_feats_pre):
         """Temporal fusion of voxel current and previous features.
@@ -441,8 +439,7 @@ class VoxelStreamFusion(BaseModule):
         gain = self.gain(voxel_feats_cur)
         # update feats
         voxel_feats_updated = self.add(
-            gain * voxel_feats_cur,
-            (1 - gain) * voxel_feats_pre
+            gain * voxel_feats_cur, (1 - gain) * voxel_feats_pre
         )
         return voxel_feats_updated
             
@@ -465,7 +462,6 @@ class VoVNetEncoder(BaseModule):
     
     def forward(self, x):
         return self.enc_tower(x)
-
 
 
 @MODELS.register_module()
@@ -504,7 +500,6 @@ class PlanarHead(BaseModule):
         
 
 
-
 @MODELS.register_module()
 class FastRayPlanarStreamModel(BaseModel):
     
@@ -539,22 +534,15 @@ class FastRayPlanarStreamModel(BaseModel):
         self.head_occ_sdf = MODELS.build(heads['occ_sdf'])
         # hidden voxel features for temporal fusion
         self.voxel_feats_pre = None
-        # init losses, may use loss_cfg in the future
-        # self.losses = MODELS.build(loss_cfg)
-        self.loss_bbox_3d=PlanarLoss(
-            loss_name_prefix='bbox_3d'
-        )
-        self.loss_polyline_3d=PlanarLoss(
-            loss_name_prefix='polyline_3d'
-        )
-        self.loss_parkingslot_3d=PlanarLoss(
-            loss_name_prefix='parkingslot_3d'
-        )
+        # init losses
+        self.loss_bbox_3d = MODELS.build(loss_cfg['bbox_3d'])
+        self.loss_polyline_3d = MODELS.build(loss_cfg['polyline_3d'])
+        self.loss_parkingslot_3d = MODELS.build(loss_cfg['parkingslot_3d'])
 
     
     def forward(self, batched_input_dict, mode='tensor'):
         """
-        >>> processed_frame_batch = {
+        >>> batched_input_dict = processed_frame_batch = {
                 'index_infos': [index_info, index_info, ...],
                 'camera_images': {
                     'cam_0': (N, 3, H, W),
@@ -566,12 +554,12 @@ class FastRayPlanarStreamModel(BaseModel):
                     {'cam_0': {uu:, Z*X*Y, vv:, Z*X*Y, ...},
                     {'cam_0': {uu:, Z*X*Y, vv:, Z*X*Y, ...},
                 ],
-                'delta_poses': [],
+                'delta_poses': (N, 4, 4),
                 'annotations': {
-                    'bbox_3d_0': {
+                    'bbox_3d': {
                         'cen': (N, 1, X, Y)
-                        'seg': (N, C, X, Y)
-                        'reg': (N, C, X, Y)
+                        'seg': (N, V, X, Y)
+                        'reg': (N, V, X, Y)
                     },
                     ...
                 },
