@@ -51,8 +51,8 @@
   - Transformables
 - Runner
   - GroupBatchTrainLoop
-  - GroupValLoop
-  - GroupTestLoop
+  - GroupBatchValLoop
+  - GroupBatchTestLoop
 - Model
   - MatrivVT
   - WidthFormer4D

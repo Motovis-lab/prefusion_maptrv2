@@ -243,6 +243,10 @@ def cam_im():
         extrinsic=[np.eye(3), np.zeros((1, 3))],
     )
 
+@pytest.fixture
+def cam_im_set(cam_im):
+    return CameraImageSet('cam_im_set', transformables={'cam': cam_im})
+
 def test_random_set_intrinsic_param(cam_im):
     transform = RandomSetIntrinsicParam(prob=1.0, jitter_ratio=0.05, scope="group")
     assert transform.jitter_ratio == 0.05
@@ -257,6 +261,13 @@ def test_random_set_intrinsic_param_transformable_scope(cam_im):
     assert cam_im.intrinsic == pytest.approx([9.53855184, 19.07710368, 0.47692759, 0.763084147])
 
 
+def test_random_set_intrinsic_param_camera_image_set_transformable_scope(cam_im_set):
+    transform = RandomSetIntrinsicParam(prob=1.0, jitter_ratio=0.05, scope="transformable")
+    assert transform.jitter_ratio == 0.05
+    transform(cam_im_set, seeds={"frame": 42, "group": 1142})
+    assert cam_im_set.transformables['cam'].intrinsic == pytest.approx([9.53855184, 19.07710368, 0.47692759, 0.763084147])
+
+
 def test_random_set_extrinsic_param(cam_im):
     transform = RandomSetExtrinsicParam(prob=1.0, angle=10, translation=4, scope="batch")
     assert transform.angle == 10 and transform.translation == 4
@@ -267,6 +278,19 @@ def test_random_set_extrinsic_param(cam_im):
                   [-0.06285676,  0.02876781,  0.99760786]])
     ) 
     np.testing.assert_almost_equal(cam_im.extrinsic[1], np.array([[-0.11172955, -1.2373623, 2.66947292]]))
+
+
+def test_random_set_extrinsic_param_camera_image_set(cam_im_set):
+    transform = RandomSetExtrinsicParam(prob=1.0, angle=10, translation=4, scope="batch")
+    assert transform.angle == 10 and transform.translation == 4
+    transform(cam_im_set, seeds={"frame": 42, "batch": 142, "group": 1142})
+    np.testing.assert_almost_equal(cam_im_set.transformables['cam'].extrinsic[0], 
+        np.array([[ 0.99801237,  0.00632895,  0.06269974],
+                  [-0.00451007,  0.99956608, -0.02910845],
+                  [-0.06285676,  0.02876781,  0.99760786]])
+    ) 
+    np.testing.assert_almost_equal(cam_im_set.transformables['cam'].extrinsic[1], 
+                                   np.array([[-0.11172955, -1.2373623, 2.66947292]]))
 
 
 class MockNumberTransformable:
