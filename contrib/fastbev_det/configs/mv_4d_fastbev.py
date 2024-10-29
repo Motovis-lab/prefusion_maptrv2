@@ -338,11 +338,11 @@ val_evaluator = dict(
 )
 
 train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=48, val_interval=-1)  # -1 note don't eval
-val_cfg = dict(type='GroupValLoop')
+val_cfg = dict(type='GroupBatchValLoop')
 
 test_dataloader = val_dataloader
 test_evaluator = val_evaluator
-test_cfg = dict(type='GroupInferLoop')
+test_cfg = dict(type='GroupBatchInferLoop')
 
 
 env_cfg = dict(
