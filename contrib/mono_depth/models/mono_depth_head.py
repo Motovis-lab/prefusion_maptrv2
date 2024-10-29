@@ -2,47 +2,48 @@ import torch
 import torch.nn.functional as F
 import torch
 import torch.nn as nn
-from copy import deepcopy
 from prefusion.registry import MODELS
 from mmengine.model import BaseModel
-from ..utils.utils import transformation_from_parameters, intrinsics_matrix
-import math 
+from contrib.fastbev_det.models.utils import transformation_from_parameters
 import numpy as np
-from ..utils.virtual_camera import fish_unproject_points_from_image_to_camera
 
+
+__all__ = ["Mono_Depth_Head", "SSIM"]
 
 @MODELS.register_module()
-class Mono_Depth(BaseModel):
+class Mono_Depth_Head(BaseModel):
     def __init__(self,
                  fish_img_size=None,
                  pv_img_size=None, 
                  front_img_size=None,
-                 min_depth=0.1,
-                 max_depth=100,
+                 fish_min_max_depth=[0.1, 5.1],
+                 pv_min_max_depth=[0.1, 12.1],
+                 front_min_max_depth=[0.1, 36.1],
                  downsample_factor: torch.Tensor = [16] , 
                  batch_size=None,
                  avg_reprojection=False,
                  disparity_smoothness=0.001,
-                 depth_pose_net_cfg=dict(type="PoseDecoder", num_ch_enc=[256], num_input_features=2),
+                 depth_pose_net_cfg=dict(type="PoseDecoder", num_ch_enc=[128], num_input_features=2),
                  fish_unproject_cfg=None,
                  fish_project3d_cfg=None,
-                 mono_depth_net_cfg=None,
+                 depth_decoder_conf=None,
                  ssim_cfg=dict(type='SSIM'),
                  init_cfg=None):
         super().__init__(init_cfg=init_cfg)
-        self.camera_type = ['pv', 'front']
-        self.frame_start_end_ids = [0, -1, 1]
         self.depth_pose_net = MODELS.build(depth_pose_net_cfg)
-        
+        self.camera_type = ['fish', 'pv', 'front']
+        self.frame_ids = None
         self.fish_img_size = fish_img_size
         self.pv_img_size = pv_img_size
         self.front_img_size = front_img_size
-        self.min_depth = min_depth
-        self.max_depth = max_depth  
+        self.fish_min_max_depth=fish_min_max_depth,
+        self.pv_min_max_depth=pv_min_max_depth,
+        self.front_min_max_depth=front_min_max_depth,
         self.batch_size = batch_size
         self.avg_reprojection = avg_reprojection
         self.disparity_smoothness = disparity_smoothness
         self.each_camera_nums = None
+        self.depth_decoder = MODELS.build(depth_decoder_conf)
         if isinstance(downsample_factor, int):
             self.downsample_factor = [downsample_factor]
         elif isinstance(downsample_factor, list):
@@ -61,78 +62,90 @@ class Mono_Depth(BaseModel):
             else:
                 self.front_backproject_depth = BackprojectDepth(self.batch_size * 1, self.front_img_size[1], self.front_img_size[0])
                 self.front_project_3d = Project3D(self.batch_size * 1, self.front_img_size[1], self.front_img_size[0])
-        self.mono_depth_net = MODELS.build(mono_depth_net_cfg)
         self.ssim = MODELS.build(ssim_cfg)
-    def forward(self, inputs):
-        output = self.predict_poses(inputs)
-        for camera_type in self.camera_type:
-            inputs[f"{camera_type}_feat", 0] = self.mono_depth_net(inputs[f"{camera_type}_feat", 0])
-        self.generate_images_pred(inputs, output)
-        losses = self.compute_losses(inputs, output)
+
+    def forward(self, fish_features, pv_features, front_features, fish_inputs, pv_inputs, front_inputs):
+        B_fish = fish_inputs[('color', 0)].shape[0]
+        B_pv = pv_inputs[('color', 0)].shape[0]
+        B_front = front_inputs[('color', 0)].shape[0]
+        fish_all_features = fish_features.split(B_fish) # 按BATCH切分成 0 1 2  (B_fish个feature一组)
+        pv_all_features = pv_features.split(B_pv)
+        front_all_features = front_features.split(B_front)
+
+        losses = dict()
+
+        losses.update(self.forward_camera(fish_inputs, fish_all_features, "fish"))
+        losses.update(self.forward_camera(pv_inputs, pv_all_features, "pv"))
+        losses.update(self.forward_camera(front_inputs, front_all_features, "front"))
+    
+        return losses
+
+
+    def forward_camera(self, inputs, all_features, camera_type):
+        assert camera_type in self.camera_type, f"{camera_type} must be in {self.camera_type}."
+        features = {}
+        for i, k in enumerate(self.frame_ids):
+            features[k] = all_features[i]
+        
+        outputs = dict()
+        outputs['disp'] = self.depth_decoder([features[0]])[0]
+        outputs.update(self.predict_poses(features))
+        self.generate_images_pred(inputs, outputs, camera_type)
+        losses = self.compute_losses(inputs, outputs, camera_type)
 
         return losses
 
     def predict_poses(self, features):
         """Predict poses between input frames for monocular sequences.
         """
-        return_outputs = {}
-        for camera_type in self.camera_type:
-            outputs = {}
-            for f_i in self.frame_start_end_ids[1:]:
-                if f_i != "s":
-                    # To maintain ordering we always pass frames in temporal order
-                    if f_i < 1:
-                        pose_inputs = [features[f"{camera_type}_feat",f_i], features[(f"{camera_type}_feat", 0)]]
-                    else:
-                        pose_inputs = [features[(f"{camera_type}_feat", 0)], features[f"{camera_type}_feat",f_i]]
-                axisangle, translation = self.depth_pose_net(pose_inputs)
-                outputs[("axisangle", 0, f_i)] = axisangle
-                outputs[("translation", 0, f_i)] = translation
+        outputs = {}
+        for f_i in self.frame_ids[1:]:  # [1, 0, 2]
+            if f_i != "s":
+                # To maintain ordering we always pass frames in temporal order
+                if f_i < 1:
+                    pose_inputs = [features[f_i], features[1]]
+                else:
+                    pose_inputs = [features[1], features[f_i]]
+            axisangle, translation = self.depth_pose_net(pose_inputs)
+            outputs[("axisangle", f_i)] = axisangle
+            outputs[("translation", f_i)] = translation
 
-                # Invert the matrix if the frame id is negative
-                outputs[("cam_T_cam", 0, f_i)] = transformation_from_parameters(
-                    axisangle[:, 0], translation[:, 0], invert=(f_i < 1))
-            return_outputs[camera_type] = outputs   
-        return return_outputs
+            # Invert the matrix if the frame id is negative
+            outputs[("cam_T_cam", f_i)] = transformation_from_parameters(
+                axisangle[:, 0], translation[:, 0], invert=(f_i < 1))
+        return outputs
     
-    def generate_images_pred(self, inputs, outputs):
+    def generate_images_pred(self, inputs, outputs, camera_type):
         """Generate the warped (reprojected) color images for a minibatch.
         Generated images are saved into the `outputs` dictionary.
         """
-        for camera_type in self.camera_type:
-            disp = inputs[f"{camera_type}_feat", 0]
-            for scale in self.scales:
-                disp = F.interpolate(
-                    disp, [getattr(self, f"{camera_type}_img_size")[1], getattr(self, f"{camera_type}_img_size")[0]], mode="bilinear", align_corners=False)
-                source_scale = 0
+        disp = outputs['disp']
+        
+        min_depth = getattr(self, f"{camera_type}_min_max_depth")[0][0]
+        max_depth = getattr(self, f"{camera_type}_min_max_depth")[0][1]
+        _, depth = disp_to_depth(disp, min_depth, max_depth)
 
-                _, depth = disp_to_depth(disp, self.min_depth, self.max_depth)
+        outputs["depth"] = depth
 
-                outputs[camera_type][("depth", 0, scale)] = depth
+        for i, frame_id in enumerate(self.frame_ids[1:]):
+            T = outputs[("cam_T_cam", frame_id)]
+            if camera_type == "fish":
+                cam_points = getattr(self, f"{camera_type}_backproject_depth")(depth)
+                pix_coords = getattr(self, f"{camera_type}_project_3d")(cam_points, T)
+                outputs[("sample", frame_id)] = pix_coords
+            else:
+                cam_points = getattr(self,f"{camera_type}_backproject_depth")(depth, inputs["inv_K", 1])  # depth to camera point
+                pix_coords = getattr(self, f"{camera_type}_project_3d")(cam_points, inputs["K", 1], T)
+            
+                outputs[("sample", frame_id)] = pix_coords
 
-                for i, frame_id in enumerate(self.frame_start_end_ids[1:]):
+            outputs[("color", frame_id)] = F.grid_sample(
+                inputs[('color', frame_id)],
+                outputs[("sample", frame_id)],
+                padding_mode="border")
 
-                    T = outputs[camera_type][("cam_T_cam", 0, frame_id)]
-                    if camera_type == "fish":
-                        # fish_k = inputs[1][f'{camera_type}_data']['metainfo'][1].reshape(-1, 8).cpu().detach().numpy()
-                        cam_points = getattr(self, f"{camera_type}_backproject_depth")(depth)
-                        pix_coords = getattr(self, f"{camera_type}_project_3d")(cam_points, T)
-                        outputs[camera_type][("sample", frame_id, scale)] = pix_coords
-                    else:
-                        pv_k = inputs[f"{camera_type}_K", 0]
-
-                        cam_points = getattr(self,f"{camera_type}_backproject_depth")(depth, pv_k.inverse())  # depth to camera point
-                        pix_coords = getattr(self, f"{camera_type}_project_3d")(cam_points, pv_k, T)
-                    
-                        outputs[camera_type][("sample", frame_id, scale)] = pix_coords
-
-                    outputs[camera_type][("color", frame_id, scale)] = F.grid_sample(
-                        inputs[f"{camera_type}_img", frame_id],
-                        outputs[camera_type][("sample", frame_id, scale)],
-                        padding_mode="border")
-
-                    outputs[camera_type][("color_identity", frame_id, scale)] = \
-                        inputs[f"{camera_type}_img", frame_id]
+            outputs[("color_identity", frame_id)] = \
+                inputs['color', frame_id]
 
     def compute_reprojection_loss(self, pred, target):
         """Computes reprojection loss between a batch of predicted and target images
@@ -145,78 +158,63 @@ class Mono_Depth(BaseModel):
 
         return reprojection_loss
 
-    def compute_losses(self, inputs, outputs):
+    def compute_losses(self, inputs, outputs, camera_type):
         """Compute the reprojection and smoothness losses for a minibatch
         """
         losses = {}
-        total_loss = 0
-        for camera_type in self.camera_type:
-            loss = 0
-            disp = inputs[f"{camera_type}_feat", 0]
-            for scale in self.scales:
-                reprojection_losses = []
-                source_scale = scale
-
-                target = inputs[f"{camera_type}_img", 0]
-                color = F.interpolate(target, [disp.shape[-2], disp.shape[-1]], mode='bilinear', align_corners=False)
-                # target = inputs[("color", 0, source_scale)]
-
-                for frame_id in self.frame_start_end_ids[1:]:
-                    pred = outputs[camera_type][("color", frame_id, scale)]
-                    reprojection_losses.append(self.compute_reprojection_loss(pred, target))
-
-                reprojection_losses = torch.cat(reprojection_losses, 1)
-                
-                
-                # automasking
-                identity_reprojection_losses = []
-                for frame_id in self.frame_start_end_ids[1:]:
-                    # pred = inputs[("color", frame_id, source_scale)]
-                    pred = inputs[f"{camera_type}_img", frame_id]
-                    identity_reprojection_losses.append(
-                        self.compute_reprojection_loss(pred, target))
-
-                identity_reprojection_losses = torch.cat(identity_reprojection_losses, 1)
-
-                if self.avg_reprojection:
-                    identity_reprojection_loss = identity_reprojection_losses.mean(1, keepdim=True)
-                else:
-                    # save both images, and do min all at once below
-                    identity_reprojection_loss = identity_reprojection_losses
-
-                if self.avg_reprojection:
-                    reprojection_loss = reprojection_losses.mean(1, keepdim=True)
-                else:
-                    reprojection_loss = reprojection_losses
-
-                # add random numbers to break ties  auto masking
-                identity_reprojection_loss += torch.randn(
-                    identity_reprojection_loss.shape, device=disp.device) * 0.00001
-
-                combined = torch.cat((identity_reprojection_loss, reprojection_loss), dim=1)
-
-
-                if combined.shape[1] == 1:
-                    to_optimise = combined
-                else:
-                    to_optimise, idxs = torch.min(combined, dim=1)
-
-                outputs["identity_selection/{}".format(scale)] = (
-                    idxs > identity_reprojection_loss.shape[1] - 1).float()
-
-                loss += to_optimise.mean()
-
-                mean_disp = disp.mean(2, True).mean(3, True)
-                norm_disp = disp / (mean_disp + 1e-7)
-                smooth_loss = get_smooth_loss(norm_disp, color)
-
-                loss += self.disparity_smoothness * smooth_loss / (2 ** scale)
-            total_loss += loss
-            losses["mono_loss_{}".format(camera_type)] = loss
-
-        total_loss /= len(self.scales)
         
-        return losses, total_loss
+        loss = 0
+        disp = outputs['disp']
+        reprojection_losses = []
+        color = inputs[('color', 1)]
+        target = inputs[('color', 1)]
+        ego_mask = inputs[('ego_mask', 1)].unsqueeze(1)  # 可用的部分为1,不可用的部分为0
+
+        for frame_id in self.frame_ids[1:]:
+            pred = outputs[("color", frame_id)] * ego_mask
+            reprojection_losses.append(self.compute_reprojection_loss(pred, target * ego_mask))
+
+        reprojection_losses = torch.cat(reprojection_losses, 1)
+        
+        # automasking
+        identity_reprojection_losses = []
+        for frame_id in self.frame_ids[1:]:
+            pred = inputs[("color", frame_id)] * ego_mask
+            identity_reprojection_losses.append(
+                self.compute_reprojection_loss(pred, target * ego_mask))  # ssim
+
+        identity_reprojection_losses = torch.cat(identity_reprojection_losses, 1)
+
+        # save both images, and do min all at once below
+        identity_reprojection_loss = identity_reprojection_losses
+
+        reprojection_loss = reprojection_losses
+
+        # add random numbers to break ties  auto masking
+        identity_reprojection_loss += torch.randn(
+            identity_reprojection_loss.shape).cuda() * 0.00001
+
+        combined = torch.cat((identity_reprojection_loss, reprojection_loss), dim=1)
+
+        if combined.shape[1] == 1:
+            to_optimise = combined
+        else:
+            to_optimise, idxs = torch.min(combined, dim=1)
+
+        outputs["identity_selection"] = (
+            idxs > identity_reprojection_loss.shape[1] - 1).float()
+
+        loss += to_optimise.mean()
+
+        mean_disp = disp.mean(2, True).mean(3, True)
+        norm_disp = disp / (mean_disp + 1e-7)
+        smooth_loss = get_smooth_loss(norm_disp, color)
+
+        loss += self.disparity_smoothness * smooth_loss
+
+        losses["mono_loss_{}".format(camera_type)] = loss
+        
+        return losses
 
 
 def disp_to_depth(disp, min_depth, max_depth):
