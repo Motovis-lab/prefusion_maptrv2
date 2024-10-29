@@ -170,9 +170,11 @@ class PlanarBbox3D(PlanarTensorSmith):
         ```
         elements[0] = {
             'class': 'class.vehicle.passenger_car',
-            'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
-                    'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
-                    'attr.vehicle.is_door_open': 'attr.vehicle.is_door_open.false'},
+            'attr': [
+                'attr.time_varying.object.state.stationary',
+                'attr.vehicle.is_trunk_open.false',
+                'attr.vehicle.is_door_open.false'
+            ],
             'size': [4.6486, 1.9505, 1.5845],
             'rotation': array([
                 [ 0.93915682, -0.32818596, -0.10138267],
@@ -243,7 +245,7 @@ class PlanarBbox3D(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -506,9 +508,11 @@ class PlanarRectangularCuboid(PlanarBbox3D):
         ```
         elements[0] = {
             'class': 'class.vehicle.passenger_car',
-            'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
-                    'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
-                    'attr.vehicle.is_door_open': 'attr.vehicle.is_door_open.false'},
+            'attr': [
+                'attr.time_varying.object.state.stationary',
+                'attr.vehicle.is_trunk_open.false',
+                'attr.vehicle.is_door_open.false'
+            ],
             'size': [4.6486, 1.9505, 1.5845],
             'rotation': array([
                 [ 0.93915682, -0.32818596, -0.10138267],
@@ -577,7 +581,7 @@ class PlanarRectangularCuboid(PlanarBbox3D):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -874,7 +878,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -1151,7 +1155,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -1404,7 +1408,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -1656,7 +1660,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -1999,7 +2003,7 @@ class PlanarPolygon3D(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))

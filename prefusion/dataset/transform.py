@@ -1,5 +1,5 @@
 import random
-import copy
+from copy import deepcopy
 import inspect
 import functools
 import abc
@@ -314,7 +314,7 @@ class CameraImage(CameraTransformable):
         self.cam_type = cam_type
         self.img = img
         self.ego_mask = ego_mask
-        self.extrinsic = list(p.copy() for p in extrinsic)
+        self.extrinsic = list(deepcopy(p) for p in extrinsic)
         self.intrinsic = np.array(intrinsic)
         self.tensor_smith = tensor_smith
 
@@ -490,9 +490,10 @@ class CameraSegMask(CameraTransformable):
         self.cam_type = cam_type
         self.img = img
         self.ego_mask = ego_mask
-        self.extrinsic = list(p.copy() for p in extrinsic)
+        self.extrinsic = list(deepcopy(p) for p in extrinsic)
         self.intrinsic = np.array(intrinsic)
-        self.dictionary = dictionary.copy()
+        assert dictionary is not None
+        self.dictionary = deepcopy(dictionary)
         self.tensor_smith = tensor_smith
 
     def set_intrinsic_param(self, intrinsic: Sequence, **kwargs):
@@ -627,7 +628,7 @@ class CameraDepth(CameraTransformable):
         self.cam_type = cam_type
         self.img = img
         self.ego_mask = ego_mask
-        self.extrinsic = list(p.copy() for p in extrinsic)
+        self.extrinsic = list(deepcopy(p) for p in extrinsic)
         self.intrinsic = np.array(intrinsic)
         self.depth_mode = depth_mode
         self.tensor_smith = tensor_smith
@@ -741,8 +742,8 @@ class LidarPoints(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.positions = positions.copy()
-        self.attributes = attributes.copy()
+        self.positions = deepcopy(positions)
+        self.attributes = deepcopy(attributes)
         self.tensor_smith = tensor_smith
 
     def flip_3d(self, flip_mat, **kwargs):
@@ -770,9 +771,11 @@ class Bbox3D(SpatialTransformable):
             a list of boxes. Each element is a dict of box having the following format:
             elements[0] = {
                 'class': 'class.vehicle.passenger_car',
-                'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
-                        'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
-                        'attr.vehicle.is_door_open': 'attr.vehicle.is_door_open.false'},
+                'attr': [
+                    'attr.time_varying.object.state.stationary',
+                    'attr.vehicle.is_trunk_open.false',
+                    'attr.vehicle.is_door_open.false'
+                ],
                 'size': [4.6486, 1.9505, 1.5845],
                 'rotation': array([[ 0.93915682, -0.32818596, -0.10138267],
                                 [ 0.32677338,  0.94460343, -0.03071667],
@@ -793,8 +796,9 @@ class Bbox3D(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.elements = elements.copy()
-        self.dictionary = dictionary.copy()
+        self.elements = deepcopy(elements)
+        assert dictionary is not None
+        self.dictionary = deepcopy(dictionary)
         self.remove_elements_not_recognized_by_dictionary()
         self.flip_aware_class_pairs = flip_aware_class_pairs
         self.tensor_smith = tensor_smith
@@ -878,7 +882,7 @@ class Polyline3D(SpatialTransformable):
             ```python
             elements[0] = {
                 'class': 'class.road_marker.lane_line',
-                'attr': <dict>,
+                'attr': <list>,
                 'points': <N x 3 array>
             }
             ```
@@ -896,8 +900,8 @@ class Polyline3D(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.elements = elements.copy()
-        self.dictionary = dictionary.copy()
+        self.elements = deepcopy(elements)
+        self.dictionary = deepcopy(dictionary)
         self.remove_elements_not_recognized_by_dictionary()
         self.flip_aware_class_pairs = flip_aware_class_pairs
         self.tensor_smith = tensor_smith
@@ -947,7 +951,7 @@ class ParkingSlot3D(SpatialTransformable):
             ```python
             elements[0] = {
                 'class': 'class.parking.parking_slot',
-                'attr': <dict>,
+                'attr': <list>,
                 'points': <4 x 3 array>
             }
             ```
@@ -963,8 +967,8 @@ class ParkingSlot3D(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.elements = elements.copy()
-        self.dictionary = dictionary.copy()
+        self.elements = deepcopy(elements)
+        self.dictionary = deepcopy(dictionary)
         self.tensor_smith = tensor_smith
         self.remove_elements_not_recognized_by_dictionary()
     

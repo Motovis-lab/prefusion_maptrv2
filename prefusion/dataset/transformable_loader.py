@@ -1,12 +1,14 @@
+from copy import deepcopy
+from collections import defaultdict, UserDict, Counter
 from pathlib import Path
-from typing import Callable, Any, TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, Union, List
 
 import mmcv
 import numpy as np
 
 from prefusion.registry import TRANSFORMABLE_LOADERS
 from prefusion.dataset.tensor_smith import TensorSmith
-from prefusion.dataset.utils import read_pcd, read_ego_mask
+from prefusion.dataset.utils import read_pcd, read_ego_mask, get_reversed_mapping
 from prefusion.dataset.transform import (
     Transformable,
     CameraImage, 
@@ -189,28 +191,100 @@ class EgoPoseSetLoader(TransformableLoader):
 @TRANSFORMABLE_LOADERS.register_module()
 class Bbox3DLoader(TransformableLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> Bbox3D:
-        elements = scene_data["frame_info"][index_info.frame_id]["3d_boxes"]
+        """Basic loader that loads bbox3d info
+
+        Parameters
+        ----------
+        dictionary : Dict, optional
+            class and attr info of the bboxes, by default None
+            e.g.
+            ```
+            dictionary = {
+                "classes": ["car", "person", "bicycle"],
+                "attrs": ['is_door_open', 'is_trunk_open']
+            }
+            ```
+
+        Returns
+        -------
+        Bbox3D
+            Bbox3D transformable
+        """
+        elements = deepcopy(scene_data["frame_info"][index_info.frame_id]["3d_boxes"])
+        for ele in elements:
+            ele["attr"] = list(ele["attr"].values()) if isinstance(ele["attr"], dict) else ele["attr"]
+        return Bbox3D(name, elements, dictionary, tensor_smith=tensor_smith)
+
+
+@TRANSFORMABLE_LOADERS.register_module()
+class AdvancedBbox3DLoader(TransformableLoader):
+    def __init__(self, data_root: Path, class_mapping: Dict, attr_mapping: Dict = None, axis_rearrange_method="none") -> None:
+        """
+        Parameters
+        ----------
+        data_root : Path
+            dataset root
+        class_mapping : Dict
+            mapping info between original class and desired class
+            e.g.
+            ```
+            class_mapping = {
+                "car": ["class.vehicle.passenger_car", "class.vehicle.bus"], 
+                "person": ["class.pedestrian.pedestrian"], 
+                "bicycle": ["class.cycle.bicycle"],
+            }
+        attr_mapping : Dict, optional
+            mapping info between original attr and desired attr
+            e.g.
+            ```
+            attr_mapping = {
+                "is_trunk_open": ['attr.vehicle.is_trunk_open.true'],
+                "is_with_rider": ['attr.cycle.is_with_rider.true'],
+            }
+            ```
+        axis_rearrange_method: str, optional
+            axis rearrange method, choices: ["none", "longer_edge_as_x", "longer_edge_as_y"], default is "none"
+            setting this argument to control the x-axis and y-axis orientation.
+        """
+        super().__init__(data_root)
+        self.class_mapping = ClassMapping(class_mapping)
+        self.attr_mapping = AttrMapping(attr_mapping)
+        self.axis_rearrange_method = axis_rearrange_method
+        assert axis_rearrange_method in ["none", "longer_edge_as_x", "longer_edge_as_y"]
+
+    def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> Bbox3D:
+        elements = deepcopy(scene_data["frame_info"][index_info.frame_id]["3d_boxes"])
+        for ele in elements:
+            ele["class"] = self.class_mapping.get_mapped_class(ele["class"], ele["attr"])
+            ele["attr"] = self.attr_mapping.get_mapped_attr(ele["attr"])
+        dictionary = {"classes": list(self.class_mapping.keys()), "attrs": list(self.attr_mapping.keys())}
         return Bbox3D(name, elements, dictionary, tensor_smith=tensor_smith)
 
 
 @TRANSFORMABLE_LOADERS.register_module()
 class Polyline3DLoader(TransformableLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> Polyline3D:
-        elements = scene_data["frame_info"][index_info.frame_id]["3d_polylines"]
+        elements = deepcopy(scene_data["frame_info"][index_info.frame_id]["3d_polylines"])
+        for ele in elements:
+            ele["attr"] = list(ele["attr"].values()) if isinstance(ele["attr"], dict) else ele["attr"]
         return Polyline3D(name, elements, dictionary, tensor_smith=tensor_smith)
 
 
 @TRANSFORMABLE_LOADERS.register_module()
 class Polygon3DLoader(TransformableLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> Polygon3D:
-        elements = scene_data["frame_info"][index_info.frame_id]["3d_polylines"]
+        elements = deepcopy(scene_data["frame_info"][index_info.frame_id]["3d_polylines"])
+        for ele in elements:
+            ele["attr"] = list(ele["attr"].values()) if isinstance(ele["attr"], dict) else ele["attr"]
         return Polygon3D(name, elements, dictionary, tensor_smith=tensor_smith)
 
 
 @TRANSFORMABLE_LOADERS.register_module()
 class ParkingSlot3DLoader(TransformableLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> ParkingSlot3D:
-        elements = scene_data["frame_info"][index_info.frame_id]["3d_polylines"]
+        elements = deepcopy(scene_data["frame_info"][index_info.frame_id]["3d_polylines"])
+        for ele in elements:
+            ele["attr"] = list(ele["attr"].values()) if isinstance(ele["attr"], dict) else ele["attr"]
         return ParkingSlot3D(name, elements, dictionary, tensor_smith=tensor_smith)
 
 
@@ -243,3 +317,69 @@ class SegBevLoader(TransformableLoader):
 class OccSdf3DLoader(TransformableLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> OccSdf3D:
         raise NotImplementedError
+
+
+class ClassMapping(UserDict):
+    """Assume input to be Dict[str, List[str]]"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.hierarchical_mapping = self.get_hierarchical_mapping()
+
+    def get_hierarchical_mapping(self) -> Dict[str, Union[str, Dict[str, str]]]:
+        hierarchical_mapping = defaultdict(dict)
+        for k, v in self.items():
+            for ca in v:
+                if "::" in ca:
+                    c, a = ca.split("::")
+                    if c in hierarchical_mapping and isinstance(hierarchical_mapping[c], str):
+                        raise ValueError(f"Source class {c} is used more than once in the mapping.")
+                    if c in hierarchical_mapping and a in hierarchical_mapping[c]:
+                        raise ValueError(f"Source class {c}::{a} is used more than once in the mapping.")
+                    hierarchical_mapping[c][a] = k
+                else:
+                    if ca in hierarchical_mapping:
+                        raise ValueError(f"Source class {ca} is used more than once in the mapping.")
+                    hierarchical_mapping[ca] = k
+        return hierarchical_mapping
+
+    def get_mapped_class(self, ele_class_name: str, ele_attrs: Dict[str, str] = None) -> str:
+        """Get mapped class name from an element's class_name and attrs"""
+        if ele_class_name not in self.hierarchical_mapping:
+            return ele_class_name  # no matched configuration, keep the original class_name
+        
+        if isinstance(self.hierarchical_mapping[ele_class_name], str):
+            return self.hierarchical_mapping[ele_class_name]
+        
+        for attr in ele_attrs.values():
+            if attr in self.hierarchical_mapping[ele_class_name]:
+                return self.hierarchical_mapping[ele_class_name][attr]
+        
+        return ele_class_name  # no matched configuration, keep the original class_name
+
+
+class AttrMapping(UserDict):
+    """Assume input to be Dict[str, List[str]]"""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.validate_input()
+
+    def validate_input(self, **kwargs):
+        """ to prevent the same source attr from being used more than once. 
+        Following are the cases we want to prevent:
+        case 1:
+        ``` 
+        {
+            "new_attr_name1": ["c1::attr1.True"],
+            "new_attr_name2": ["c1::attr1.True"]
+        }
+        ```
+        """
+        src_attr_used_cnt = Counter([k for k in get_reversed_mapping(self)])
+        for k, v in src_attr_used_cnt.items():
+            if v > 1:
+                raise ValueError(f"Source attr {k} is used more than once in the mapping.")
+
+    def get_mapped_attr(self, ele_attrs: Dict[str, str] = None) -> List[str]:
+        """Get mapped attr name from attrs"""
+        reversed_mapping = get_reversed_mapping(self)
+        return sorted({reversed_mapping[attr] for attr in ele_attrs.values() if attr in reversed_mapping})

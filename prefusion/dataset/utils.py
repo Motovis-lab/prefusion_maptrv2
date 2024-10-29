@@ -1,4 +1,5 @@
 from typing import List, Union, Dict, TYPE_CHECKING
+from collections import UserDict, Counter, defaultdict
 from pathlib import Path
 import copy
 
@@ -171,3 +172,12 @@ def T4x4(rotation: np.ndarray, translation: np.ndarray):
     mat[:3, :3] = rotation
     mat[:3, 3] = translation.flatten()
     return mat
+
+
+def get_reversed_mapping(mapping) -> Dict[str, str]:
+    """Get reversed mapping from mapping"""
+    reversed_mapping = {}
+    for k, v in mapping.items():
+        for vv in v:
+            reversed_mapping[vv] = k
+    return reversed_mapping
