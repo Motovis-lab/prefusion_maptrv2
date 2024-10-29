@@ -1492,6 +1492,8 @@ class RandomImageISP(Transform):
             RandomSolarize(prob=0.01),
             RandomImEqualize(prob=0.1),
         ]
+        for transform in self.transforms:
+            transform.scope = scope
         self.delegate_transform = RandomChooseKTransform(
             transforms=self.transforms,
             prob=prob,
