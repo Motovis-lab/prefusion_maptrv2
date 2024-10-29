@@ -372,8 +372,8 @@ val_evaluator = dict(
 # test_evaluator = val_evaluator
 
 train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=24, val_interval=25)
-val_cfg = dict(type='GroupValLoop')
-# test_cfg = dict(type='GroupTestLoop')
+val_cfg = dict(type='GroupBatchValLoop')
+# test_cfg = dict(type='GroupBatchTestLoop')
 
 env_cfg = dict(
     cudnn_benchmark=False,
