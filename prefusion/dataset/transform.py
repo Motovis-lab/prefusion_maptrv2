@@ -1359,18 +1359,18 @@ ToTensor = deterministic_transform_class_factory("ToTensor", "to_tensor")
 #######################
 class RandomSetIntrinsicParam(RandomTransform):
 
-    def __init__(self, *, prob: float = 0.0, jitter_ratio: float = 0.0, scope: str = "frame", **kwargs):
+    def __init__(self, *, prob: float = 0.2, jitter_ratio: float = 0.01, scope: str = "transformable", **kwargs):
         """This transform random jitters the intrinsic params of CameraTransformable.
         (NOTE: only applicable to cx, cy, fx, fy).
 
         Parameters
         ----------
         prob : float, optional
-            the happening probability of this Transform, value range [0, 1], by default 0.0
+            the happening probability of this Transform, value range [0, 1], by default 0.2
         jitter_ratio : float, optional
-            the relative ratio of the jittering to each param in intrinsic, by default 0.0 (i.e. 0%)
+            the relative ratio of the jittering to each param in intrinsic, by default 0.01 (i.e. 0%)
         scope : str, optional
-            the scope of the Transform, by default "frame"
+            the scope of the Transform, by default "transformable"
         """
         Transform.__init__(self, scope=scope)
         self.prob = prob
@@ -1387,23 +1387,28 @@ class RandomSetIntrinsicParam(RandomTransform):
                 _seeds = dict(**seeds, transformable=make_seed(seeds["frame"], i))
                 new_intrinsic = [self.random_pick_param(_seeds, param) for param in transformable.intrinsic]
                 transformable.set_intrinsic_param(new_intrinsic)
+            elif isinstance(transformable, (CameraImageSet, CameraSegMaskSet, CameraDepthSet)):
+                for t in transformable.transformables.values():
+                    _seeds = dict(**seeds, transformable=make_seed(seeds["frame"], i))
+                    new_intrinsic = [self.random_pick_param(_seeds, param) for param in t.intrinsic]
+                    t.set_intrinsic_param(new_intrinsic)
         return transformables
 
 
 class RandomSetExtrinsicParam(RandomTransform):
-    def __init__(self, *, prob: float = 0.0, angle: float = 0.0, translation: float = 0.0, scope: str = "frame", **kwargs):
+    def __init__(self, *, prob: float = 0.2, angle: float = 1.0, translation: float = 0.01, scope: str = "transformable", **kwargs):
         """This transform random jitters the rotation angle and translation of CameraTransformable's extrinsic params.
 
         Parameters
         ----------
         prob : float, optional
-            the happening probability of this Transform, value range [0, 1], by default 0.0
+            the happening probability of this Transform, value range [0, 1], by default 0.2
         angle : float, optional
-            the jittering angle (degrees) that applies to current extrinsic.Rotation, by default 0.0
+            the jittering angle (degrees) that applies to current extrinsic.Rotation, by default 1.0
         translation : float, optional
-            the translation (m) that applies to current extrinsic.Translation, by default 0.0
+            the translation (m) that applies to current extrinsic.Translation, by default 0.01
         scope : str, optional
-            the scope of the Transform, by default "frame"
+            the scope of the Transform, by default "transformable"
         """
         Transform.__init__(self, scope=scope)
         self.prob = prob
@@ -1439,6 +1444,14 @@ class RandomSetExtrinsicParam(RandomTransform):
                 new_R = delta_R @ R
                 new_t = delta_t + t
                 transformable.set_extrinsic_param([new_R, new_t])
+            elif isinstance(transformable, (CameraImageSet, CameraSegMaskSet, CameraDepthSet)):
+                for t_sub in transformable.transformables.values():
+                    _seeds = dict(**seeds, transformable=make_seed(seeds['frame'], i))
+                    delta_R, delta_t = self.random_pick_param(_seeds)
+                    R, t = t_sub.extrinsic
+                    new_R = delta_R @ R
+                    new_t = delta_t + t
+                    t_sub.set_extrinsic_param([new_R, new_t])
         return transformables
 
 
@@ -1465,7 +1478,7 @@ class RandomChooseKTransform(RandomTransform):
 
 
 class RandomImageISP(Transform):
-    def __init__(self, prob=0.5, transform_probs=None, scope='frame'):
+    def __init__(self, prob=0.5, transform_probs=None, scope='transformable'):
         super().__init__(scope=scope)
         self.transforms=[
             RandomBrightness(prob=0.5, param_randomization_rules={"brightness": {"type": "float", "range": [0.5, 2.0]}}),
