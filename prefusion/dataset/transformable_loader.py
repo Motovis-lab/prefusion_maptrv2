@@ -35,6 +35,15 @@ if TYPE_CHECKING:
     from prefusion.dataset import IndexInfo
 
 
+__all__ = [
+    "CameraImageSetLoader", "CameraDepthSetLoader", "CameraSegMaskSetLoader",
+    "LidarPointsLoader", "EgoPoseSetLoader",
+    "Bbox3DLoader", "AdvancedBbox3DLoader",
+    "Polyline3DLoader", "Polygon3DLoader", "ParkingSlot3DLoader",
+    "OccSdfBevLoader", "SegBevLoader", "OccSdf3DLoader",
+]
+
+
 class TransformableLoader:
     def __init__(self, data_root: Path) -> None:
         self.data_root = data_root
