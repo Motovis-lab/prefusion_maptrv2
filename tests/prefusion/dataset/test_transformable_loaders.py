@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Any
+import functools
 import pickle
 
 import pytest
@@ -8,7 +9,18 @@ from numpy.testing import assert_almost_equal
 
 from copious.io.fs import mktmpdir
 from prefusion.dataset.dataset import IndexInfo
-from prefusion.dataset.transformable_loader import CameraImageSetLoader, CameraDepthSetLoader, CameraSegMaskSetLoader, EgoPoseSetLoader, Bbox3DLoader
+from prefusion.dataset.transformable_loader import (
+    CameraImageSetLoader, 
+    CameraDepthSetLoader, 
+    CameraSegMaskSetLoader, 
+    EgoPoseSetLoader, 
+    Bbox3DLoader,
+    AdvancedBbox3DLoader,
+    ClassMapping,
+    AttrMapping,
+)
+
+_approx = functools.partial(pytest.approx, rel=1e-4)
 
 
 class DummyImgTensorSmith:
@@ -51,7 +63,7 @@ def test_load_camera_seg_mask():
         info_data["20231101_160337"]["frame_info"]["1698825817864"]["camera_image_seg"]["camera8"] = Path("seg/fisheye_semantic_segmentation/camera8/1698825817864.png")
         info_data["20231101_160337"]["frame_info"]["1698825817864"]["camera_image_seg"]["camera11"] = Path("seg/fisheye_semantic_segmentation/camera11/1698825817864.png")
 
-    with pytest.raises(AttributeError):
+    with pytest.raises(AssertionError):
         loader.load("camera_segs", info_data["20231101_160337"], ii, tensor_smith=DummyImgTensorSmith())
 
     camera_segs = loader.load("camera_segs", info_data["20231101_160337"], ii, tensor_smith=DummyImgTensorSmith(), dictionary=dic)
@@ -165,7 +177,7 @@ def test_load_bbox_3d():
     with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
         info_data = pickle.load(f)
 
-    with pytest.raises(AttributeError):
+    with pytest.raises(AssertionError):
         loader.load("bbox_3d", info_data["20231101_160337"], ii, tensor_smith=DummyAnnoTensorSmith())
 
     bbox_3d = loader.load("bbox_3d", info_data["20231101_160337"], ii, tensor_smith=DummyAnnoTensorSmith(), dictionary=dic)
@@ -173,3 +185,172 @@ def test_load_bbox_3d():
     assert isinstance(bbox_3d.tensor_smith, DummyAnnoTensorSmith)
     assert len(bbox_3d.elements) == 7
     assert bbox_3d.elements[-1]['size'] == [3.0765, 0.5656, 0.0195]
+
+
+def test_advanced_bbox3d_loader_mapping():
+    data_root = Path("tests/prefusion/dataset/example_inputs")
+    dic = {"classes": ["hahaha", "hello-world"]}
+    loader = AdvancedBbox3DLoader(data_root, class_mapping={
+        "speed_bump": ["class.traffic_facility.speed_bump"],
+        "passenger_car": ["class.vehicle.passenger_car"],
+        # "pedestrian": ["class.pedestrian.pedestrian"],
+        "arrow": ["class.road_marker.arrow::attr.road_marker.arrow.type.ahead", "class.road_marker.arrow::attr.road_marker.arrow.type.ahead_left"],
+        "text_icon": ["class.parking.text_icon::attr.parking.text_icon.type.number", "class.parking.text_icon::attr.parking.text_icon.type.text"],
+    }, attr_mapping={
+        "is_door_open": ["attr.vehicle.is_door_open.true"],
+        "static": ["attr.time_varying.object.state.stationary"],
+    })
+    ii = IndexInfo('20231101_160337', '1698825817864')
+    with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
+        info_data = pickle.load(f)
+
+    adv_bbox3d = loader.load("adv_bbox3d", info_data["20231101_160337"], ii, tensor_smith=DummyAnnoTensorSmith(), dictionary=dic) # won't honor dic (dic is a distraction here)
+    assert adv_bbox3d.dictionary == {
+        "classes": ["speed_bump", "passenger_car", "arrow", "text_icon"],
+        "attrs": ["is_door_open", "static"]
+    }
+    assert isinstance(adv_bbox3d.tensor_smith, DummyAnnoTensorSmith)
+    assert len(adv_bbox3d.elements) == 28 # 33 - 5(pedestrian)
+    assert sum(ele['class'] == "speed_bump" for ele in adv_bbox3d.elements) == 1
+    assert sum(ele['class'] == "passenger_car" for ele in adv_bbox3d.elements) == 13
+    assert sum(ele['class'] == "arrow" for ele in adv_bbox3d.elements) == 2
+    assert sum(ele['class'] == "text_icon" for ele in adv_bbox3d.elements) == 12
+
+
+def test_class_mapping_validate_input():
+    with pytest.raises(ValueError):
+        _ = ClassMapping({"new_class_name": ["c1::attr1.True", "c1::attr1.True"]})
+    with pytest.raises(ValueError):
+        _ = ClassMapping({"new_class_name1": ["c1::attr1.True"], "new_class_name2": ["c1"]})
+    with pytest.raises(ValueError):
+        _ = ClassMapping({"new_class_name1": ["c1"], "new_class_name2": ["c1::attr1.True"]})
+    with pytest.raises(ValueError):
+        _ = ClassMapping({"new_class_name1": ["c1::attr1.True", "c1"]})
+
+    clsmap = ClassMapping({"new_class_name1": ["c1::attr1.EnumA", "c1::attr1.EnumB"]})
+    assert clsmap.hierarchical_mapping == {
+        "c1": {
+            "attr1.EnumA": "new_class_name1",
+            "attr1.EnumB": "new_class_name1",
+        },
+    }
+
+    clsmap = ClassMapping({"new_class_name1": ["c1::attr1.True"], "new_class_name2": ["c2::attr1.True"]})
+    assert clsmap.hierarchical_mapping == {
+        "c1": {"attr1.True": "new_class_name1"},
+        "c2": {"attr1.True": "new_class_name2"},
+    }
+
+
+def test_class_mapping_get_mapped_class():
+    clsmap = ClassMapping({"new_class_name1": ["c1::attr1.True"], "new_class_name2": ["c2::attr1.True"]})
+    assert clsmap.get_mapped_class("c1", {"attr1": "attr1.True"}) == "new_class_name1"
+    assert clsmap.get_mapped_class("c2", {"attr1": "attr1.True"}) == "new_class_name2"
+    assert clsmap.get_mapped_class("c2", {"attr2": "attr2.True"}) == "c2"
+    assert clsmap.get_mapped_class("c3", {"attr1": "attr1.True"}) == "c3"
+
+
+def test_attr_mapping():
+    attrmap = AttrMapping({"new_attr_name1": ["attr1.True", "attr2.True"], "new_attr_name2": ["attr3.True"]})
+    assert attrmap.get_mapped_attr({"attr1": "attr1.True", "attr2": "attr2.True"}) == ["new_attr_name1"]
+    assert attrmap.get_mapped_attr({"attr1": "attr1.True", "attr2": "attr2.True", "attr3": "attr3.True"}) == ["new_attr_name1", "new_attr_name2"]
+    assert attrmap.get_mapped_attr({"attr1": "attr1.True", "attr3": "attr3.True"}) == ["new_attr_name1", "new_attr_name2"]
+    assert attrmap.get_mapped_attr({"attr1": "attr1.False", "attr3": "attr3.True", "attr4": "attr4.True"}) == ["new_attr_name2"]
+
+
+def test_advanced_bbox3d_loader_rearrange_axis_longer_edge_as_y():
+    data_root = Path("tests/prefusion/dataset/example_inputs")
+    clsmap = {
+        "speed_bump": ["class.traffic_facility.speed_bump"],
+        "arrow": ["class.road_marker.arrow::attr.road_marker.arrow.type.ahead", "class.road_marker.arrow::attr.road_marker.arrow.type.ahead_left"],
+        "text_icon": ["class.parking.text_icon::attr.parking.text_icon.type.number", "class.parking.text_icon::attr.parking.text_icon.type.text"],
+    }
+    loader = AdvancedBbox3DLoader(data_root, class_mapping=clsmap, axis_rearrange_method="longer_edge_as_y")
+    ii = IndexInfo('20231101_160337', '1698825817864')
+    with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
+        info_data = pickle.load(f)
+    adv_bbox3d = loader.load("adv_bbox3d", info_data["20231101_160337"], ii, tensor_smith=DummyAnnoTensorSmith())
+    assert adv_bbox3d.dictionary == { "classes": ["speed_bump", "arrow", "text_icon"], "attrs": [] }
+    assert len(adv_bbox3d.elements) == 15
+    assert sum(ele['class'] == "speed_bump" for ele in adv_bbox3d.elements) == 1
+    assert sum(ele['class'] == "arrow" for ele in adv_bbox3d.elements) == 2
+    assert sum(ele['class'] == "text_icon" for ele in adv_bbox3d.elements) == 12
+
+    speed_bump = [ele for ele in adv_bbox3d.elements if ele['class'] == 'speed_bump'][0]
+    arrow_0, arrow_1 = [ele for ele in adv_bbox3d.elements if ele['class'] == 'arrow']
+    text_icon_0, text_icon_14 = adv_bbox3d.elements[0], adv_bbox3d.elements[-1]
+    
+    assert speed_bump["size"] == _approx([0.4303, 3.3381, 0.0359])
+    assert_almost_equal(speed_bump["rotation"], np.array([
+        [-0.24632949, -0.96913558,  0.00989984],
+        [ 0.96917362, -0.24626153,  0.00759955],
+        [-0.00492705,  0.01146666,  0.99992212],
+    ]))
+    assert arrow_0["size"] == _approx([1.0291, 3.2605, 0.0243])
+    assert arrow_1["size"] == _approx([0.5656, 3.0765, 0.0195])
+    assert text_icon_0["size"] == _approx([0.2333, 0.6493, 0.0358])
+    assert text_icon_14["size"] == _approx([0.2097, 0.7179, 0.0332])
+
+
+def test_advanced_bbox3d_loader_rearrange_axis_longer_edge_as_x():
+    data_root = Path("tests/prefusion/dataset/example_inputs")
+    clsmap = {
+        "speed_bump": ["class.traffic_facility.speed_bump"],
+        "arrow": ["class.road_marker.arrow::attr.road_marker.arrow.type.ahead", "class.road_marker.arrow::attr.road_marker.arrow.type.ahead_left"],
+        "text_icon": ["class.parking.text_icon::attr.parking.text_icon.type.number", "class.parking.text_icon::attr.parking.text_icon.type.text"],
+    }
+    loader = AdvancedBbox3DLoader(data_root, class_mapping=clsmap, axis_rearrange_method="longer_edge_as_x")
+    ii = IndexInfo('20231101_160337', '1698825817864')
+    with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
+        info_data = pickle.load(f)
+    adv_bbox3d = loader.load("adv_bbox3d", info_data["20231101_160337"], ii, tensor_smith=DummyAnnoTensorSmith())
+    assert adv_bbox3d.dictionary == { "classes": ["speed_bump", "arrow", "text_icon"], "attrs": [] }
+    assert len(adv_bbox3d.elements) == 15
+    assert sum(ele['class'] == "speed_bump" for ele in adv_bbox3d.elements) == 1
+    assert sum(ele['class'] == "arrow" for ele in adv_bbox3d.elements) == 2
+    assert sum(ele['class'] == "text_icon" for ele in adv_bbox3d.elements) == 12
+
+    speed_bump = [ele for ele in adv_bbox3d.elements if ele['class'] == 'speed_bump'][0]
+    arrow_0, arrow_1 = [ele for ele in adv_bbox3d.elements if ele['class'] == 'arrow']
+    text_icon_0, text_icon_14 = adv_bbox3d.elements[0], adv_bbox3d.elements[-1]
+    
+    assert speed_bump["size"] == _approx([3.3381, 0.4303, 0.0359])
+    assert_almost_equal(speed_bump["rotation"], np.array([
+        [-0.96913558,  0.24632949,  0.00989984],
+        [-0.24626153, -0.96917362,  0.00759955],
+        [ 0.01146666,  0.00492705,  0.99992212],
+    ]))
+    assert arrow_0["size"] == _approx([3.2605, 1.0291, 0.0243])
+    assert arrow_1["size"] == _approx([3.0765, 0.5656, 0.0195])
+    assert text_icon_0["size"] == _approx([0.6493, 0.2333, 0.0358])
+    assert text_icon_14["size"] == _approx([0.7179, 0.2097, 0.0332])
+
+def test_advanced_bbox3d_loader_rearrange_axis_corners():
+    data_root = Path("tests/prefusion/dataset/example_inputs")
+    ii = IndexInfo('20231101_160337', '1698825817864')
+    with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
+        info_data = pickle.load(f)
+    loader = Bbox3DLoader(data_root)
+    bbox3d = loader.load("bbox3d", info_data["20231101_160337"], ii, tensor_smith=DummyAnnoTensorSmith(), dictionary={"classes": ["class.traffic_facility.speed_bump"]})
+    assert len(bbox3d.elements) == 1
+
+    clsmap = {
+        "speed_bump": ["class.traffic_facility.speed_bump"],
+    }
+    adv_loader = AdvancedBbox3DLoader(data_root, class_mapping=clsmap, axis_rearrange_method="longer_edge_as_x")
+    bbox3d_rearranged = adv_loader.load("bbox3d_rearranged", info_data["20231101_160337"], ii, tensor_smith=DummyAnnoTensorSmith())
+    assert bbox3d_rearranged.dictionary == { "classes": ["speed_bump"], "attrs": [] }
+    assert len(bbox3d_rearranged.elements) == 1
+
+    # calcualted corner positions should be the same in ego-coord-sys but in shifted order
+    assert_almost_equal(bbox3d.corners[0][[1, 5, 4, 0], :], bbox3d_rearranged.corners[0][[0, 1, 5, 4], :])
+    # np.array([
+    #    [ 1.56436025,  0.6194041 , -0.03814708],
+    #    [-1.67071123, -0.20264152,  0.00012977],
+    #    [-1.67035583, -0.20236869,  0.03602697],
+    #    [ 1.56471565,  0.61967693, -0.00224988],
+    #    [ 1.67035583,  0.20236869, -0.03602697],
+    #    [-1.56471565, -0.61967693,  0.00224988],
+    #    [-1.56436025, -0.6194041 ,  0.03814708],
+    #    [ 1.67071123,  0.20264152, -0.00012977],
+    # ])

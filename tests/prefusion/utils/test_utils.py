@@ -5,7 +5,7 @@ import pytest
 from copious.io.fs import mktmpdir
 from pypcd_imp import pypcd
 
-from prefusion.dataset.utils import read_pcd, make_seed, read_ego_mask
+from prefusion.dataset.utils import read_pcd, make_seed, read_ego_mask, T4x4, get_reversed_mapping
 
 
 @pytest.fixture
@@ -75,3 +75,40 @@ def test_read_ego_mask():
     save_path = str(tmpdir / "mask255.png")
     cv2.imwrite(save_path, img255)
     assert_array_almost_equal(read_ego_mask(save_path),  img)
+
+
+def test_t4x4():
+    mat = T4x4(np.arange(9).reshape(3, 3), np.array([1, 2, 3]))
+    assert_array_almost_equal(mat, np.array([[0, 1, 2, 1],
+                                             [3, 4, 5, 2],
+                                             [6, 7, 8, 3],
+                                             [0, 0, 0, 1]]))
+
+
+def test_get_reversed_mapping_1():
+    assert get_reversed_mapping({"a": ["b", 1], 2: [18, "33"], "c": [77], 5: ["d"]}) == {
+        "b": "a",
+        1: "a",
+        18: 2,
+        "33": 2,
+        77: "c",
+        "d": 5,
+    }
+
+
+def test_get_reversed_mapping_2():
+    assert get_reversed_mapping({"a": ["b", "1"], "2": ["18", "33"], "c": ["77"], "5": ["d"]}) == {
+        "b": "a",
+        "1": "a",
+        "18": "2",
+        "33": "2",
+        "77": "c",
+        "d": "5",
+    }
+
+
+def test_get_reversed_mapping_3():
+    assert get_reversed_mapping({"new_class_name1": ["c1::attr1.True"], "new_class_name2": ["c2::attr1.True"]}) == { 
+        "c1::attr1.True": "new_class_name1", 
+        "c2::attr1.True": "new_class_name2", 
+    }
