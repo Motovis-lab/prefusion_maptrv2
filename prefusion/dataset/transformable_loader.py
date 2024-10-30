@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Dict, Union, List
 
 import mmcv
 import numpy as np
+from scipy.spatial.transform import Rotation
 
 from prefusion.registry import TRANSFORMABLE_LOADERS
 from prefusion.dataset.tensor_smith import TensorSmith
@@ -218,8 +219,17 @@ class Bbox3DLoader(TransformableLoader):
 
 @TRANSFORMABLE_LOADERS.register_module()
 class AdvancedBbox3DLoader(TransformableLoader):
+
+    rot90deg = np.array([[0., -1., 0.], [1., 0., 0.], [0., 0., 1.]])
+
     def __init__(self, data_root: Path, class_mapping: Dict, attr_mapping: Dict = None, axis_rearrange_method="none") -> None:
-        """
+        """ Advanced Bbox3D Loader
+        # CAUTION
+        FIXME:
+        only a minimum check has been applied to class_mapping and attr_mapping
+        there's still some configurations could lead to strange class mapping behavior,
+        such as: "new_cls1": ["c1\:\:attr1.True", "c1\:\:attr2.True"]
+
         Parameters
         ----------
         data_root : Path
@@ -254,11 +264,27 @@ class AdvancedBbox3DLoader(TransformableLoader):
 
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> Bbox3D:
         elements = deepcopy(scene_data["frame_info"][index_info.frame_id]["3d_boxes"])
+        dictionary = {"classes": list(self.class_mapping.keys()), "attrs": list(self.attr_mapping.keys())}
         for ele in elements:
             ele["class"] = self.class_mapping.get_mapped_class(ele["class"], ele["attr"])
             ele["attr"] = self.attr_mapping.get_mapped_attr(ele["attr"])
-        dictionary = {"classes": list(self.class_mapping.keys()), "attrs": list(self.attr_mapping.keys())}
+            if self.axis_rearrange_method != "none" and ele["class"] in dictionary["classes"]:
+                self.rearrange_axis_(ele)
         return Bbox3D(name, elements, dictionary, tensor_smith=tensor_smith)
+    
+    def rearrange_axis_(self, ele):
+        cur_longer_edge = "x" if ele["size"][0] >= ele["size"][1] else "y"
+        if (self.axis_rearrange_method == "longer_edge_as_y" and cur_longer_edge == "x") or (
+            self.axis_rearrange_method == "longer_edge_as_x" and cur_longer_edge == "y"
+        ):
+            ele["size"] = np.array(ele["size"])[[1, 0, 2]].tolist()  # change type back to <list>
+            ele["rotation"] = self._intrinsic_rotate_90_deg(ele["rotation"])
+    
+    @staticmethod
+    def _intrinsic_rotate_90_deg(original_rot_mat):
+        original_angles = Rotation.from_matrix(original_rot_mat).as_euler("XYZ", degrees=True)
+        new_angles = original_angles[:2].tolist() + [(original_angles[2] + 90) % 360]
+        return Rotation.from_euler("XYZ", new_angles, degrees=True).as_matrix()
 
 
 @TRANSFORMABLE_LOADERS.register_module()
