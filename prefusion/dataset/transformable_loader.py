@@ -219,9 +219,6 @@ class Bbox3DLoader(TransformableLoader):
 
 @TRANSFORMABLE_LOADERS.register_module()
 class AdvancedBbox3DLoader(TransformableLoader):
-
-    rot90deg = np.array([[0., -1., 0.], [1., 0., 0.], [0., 0., 1.]])
-
     def __init__(self, data_root: Path, class_mapping: Dict, attr_mapping: Dict = None, axis_rearrange_method="none") -> None:
         """ Advanced Bbox3D Loader
         # CAUTION
