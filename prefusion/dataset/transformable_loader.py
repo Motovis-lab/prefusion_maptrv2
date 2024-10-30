@@ -228,6 +228,9 @@ class Bbox3DLoader(TransformableLoader):
 
 @TRANSFORMABLE_LOADERS.register_module()
 class AdvancedBbox3DLoader(TransformableLoader):
+
+    rot90deg = Rotation.from_euler("XYZ", [0, 0, 90], degrees=True).as_matrix()
+    
     def __init__(self, data_root: Path, class_mapping: Dict, attr_mapping: Dict = None, axis_rearrange_method="none") -> None:
         """ Advanced Bbox3D Loader
         # CAUTION
@@ -288,9 +291,7 @@ class AdvancedBbox3DLoader(TransformableLoader):
     
     @staticmethod
     def _intrinsic_rotate_90_deg(original_rot_mat):
-        original_angles = Rotation.from_matrix(original_rot_mat).as_euler("XYZ", degrees=True)
-        new_angles = original_angles[:2].tolist() + [(original_angles[2] + 90) % 360]
-        return Rotation.from_euler("XYZ", new_angles, degrees=True).as_matrix()
+        return original_rot_mat @ AdvancedBbox3DLoader.rot90deg
 
 
 @TRANSFORMABLE_LOADERS.register_module()
