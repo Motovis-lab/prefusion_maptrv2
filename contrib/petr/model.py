@@ -79,7 +79,7 @@ class StreamPETR(BaseModel):
         else:
             return self.forward_test(*args, **kwargs)
 
-    def forward_train(self, *, index_info=None, camera_images=None, bbox_3d=None, ego_poses=None, meta_info=None):
+    def forward_train(self, *, index_info=None, camera_images=None, bbox_3d=None, ego_poses=None, meta_info=None, **kwargs):
         B, (N, C, H, W) = len(camera_images), camera_images[0].shape
         camera_images = torch.vstack([i.unsqueeze(0) for i in camera_images]).reshape(B * N, C, H, W)
         im_size = camera_images.shape[-2:][::-1]

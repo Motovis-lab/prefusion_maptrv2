@@ -1,4 +1,5 @@
 from typing import List, Union, Dict, TYPE_CHECKING
+from collections import UserDict, Counter, defaultdict
 from pathlib import Path
 import copy
 
@@ -150,3 +151,33 @@ def read_ego_mask(path):
     if ego_mask.max() == 255:
         ego_mask = ego_mask / 255
     return ego_mask
+
+
+def T4x4(rotation: np.ndarray, translation: np.ndarray):
+    """Create a 4x4 transformation matrix
+
+    Parameters
+    ----------
+    rotation : np.ndarray
+        of shape (3, 3)
+    translation : np.ndarray
+        of shape (3,) or (1, 3) or (3, 1)
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
+    mat = np.eye(4)
+    mat[:3, :3] = rotation
+    mat[:3, 3] = translation.flatten()
+    return mat
+
+
+def get_reversed_mapping(mapping) -> Dict[str, str]:
+    """Get reversed mapping from mapping"""
+    reversed_mapping = {}
+    for k, v in mapping.items():
+        for vv in v:
+            reversed_mapping[vv] = k
+    return reversed_mapping
