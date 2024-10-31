@@ -2,6 +2,7 @@ from copy import deepcopy
 from collections import defaultdict, UserDict, Counter
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Union, List
+import warnings
 
 import mmcv
 import numpy as np
@@ -231,7 +232,7 @@ class AdvancedBbox3DLoader(TransformableLoader):
 
     rot90deg = Rotation.from_euler("XYZ", [0, 0, 90], degrees=True).as_matrix()
     
-    def __init__(self, data_root: Path, class_mapping: Dict, attr_mapping: Dict = None, axis_rearrange_method="none") -> None:
+    def __init__(self, data_root: Path, class_mapping: Dict = None, attr_mapping: Dict = None, axis_rearrange_method="none") -> None:
         """ Advanced Bbox3D Loader
         # CAUTION
         FIXME:
@@ -243,7 +244,7 @@ class AdvancedBbox3DLoader(TransformableLoader):
         ----------
         data_root : Path
             dataset root
-        class_mapping : Dict
+        class_mapping : Dict, optional
             mapping info between original class and desired class
             e.g.
             ```
@@ -271,15 +272,32 @@ class AdvancedBbox3DLoader(TransformableLoader):
         self.axis_rearrange_method = axis_rearrange_method
         assert axis_rearrange_method in ["none", "longer_edge_as_x", "longer_edge_as_y"]
 
-    def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> Bbox3D:
+    def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> Bbox3D:
+        updated_dictionary = self._update_dictionary(dictionary)
         elements = deepcopy(scene_data["frame_info"][index_info.frame_id]["3d_boxes"])
-        dictionary = {"classes": list(self.class_mapping.keys()), "attrs": list(self.attr_mapping.keys())}
         for ele in elements:
             ele["class"] = self.class_mapping.get_mapped_class(ele["class"], ele["attr"])
             ele["attr"] = self.attr_mapping.get_mapped_attr(ele["attr"])
-            if self.axis_rearrange_method != "none" and ele["class"] in dictionary["classes"]:
+            if self.axis_rearrange_method != "none" and ele["class"] in updated_dictionary["classes"]:
                 self.rearrange_axis_(ele)
-        return Bbox3D(name, elements, dictionary, tensor_smith=tensor_smith)
+        return Bbox3D(name, elements, updated_dictionary, tensor_smith=tensor_smith)
+    
+    def _update_dictionary(self, dictionary: Dict = None) -> Dict:
+        if not dictionary:
+            dictionary = {"classes": [], "attrs": []}
+        else:
+            dictionary = {"classes": deepcopy(dictionary.get("classes", [])), "attrs": deepcopy(dictionary.get("attrs", []))}
+
+        if self.class_mapping:
+            dictionary.update(classes=list(self.class_mapping.keys()))
+        else:
+            if not dictionary.get("classes"):
+                warnings.warn("Neither class_mapping nor dictionary['classes'] is provided for AdvancedBbox3DLoader", UserWarning)
+
+        if self.attr_mapping:
+            dictionary.update(attrs=list(self.attr_mapping.keys()))
+
+        return dictionary
     
     def rearrange_axis_(self, ele):
         cur_longer_edge = "x" if ele["size"][0] >= ele["size"][1] else "y"

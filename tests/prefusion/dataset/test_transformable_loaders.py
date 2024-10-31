@@ -338,7 +338,7 @@ def test_advanced_bbox3d_loader_rearrange_axis_corners():
         "speed_bump": ["class.traffic_facility.speed_bump"],
     }
     adv_loader = AdvancedBbox3DLoader(data_root, class_mapping=clsmap, axis_rearrange_method="longer_edge_as_x")
-    bbox3d_rearranged = adv_loader.load("bbox3d_rearranged", info_data["20231101_160337"], ii, tensor_smith=DummyAnnoTensorSmith())
+    bbox3d_rearranged = adv_loader.load("bbox3d_rearranged", info_data["20231101_160337"], ii)
     assert bbox3d_rearranged.dictionary == { "classes": ["speed_bump"], "attrs": [] }
     assert len(bbox3d_rearranged.elements) == 1
 
@@ -354,3 +354,57 @@ def test_advanced_bbox3d_loader_rearrange_axis_corners():
     #    [-1.56436025, -0.6194041 ,  0.03814708],
     #    [ 1.67071123,  0.20264152, -0.00012977],
     # ])
+
+
+def test_advanced_bbox3d_loader_with_clsmap_and_attrmap():
+    data_root = Path("tests/prefusion/dataset/example_inputs")
+    ii = IndexInfo('20231101_160337', '1698825817864')
+    with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
+        info_data = pickle.load(f)
+    clsmap = {"static_car": ["class.vehicle.passenger_car::attr.time_varying.object.state.stationary"]}
+    attrmap = {"is_door_closed": ["attr.vehicle.is_door_open.false"], "is_static": ['attr.time_varying.object.state.stationary']}
+    loader = AdvancedBbox3DLoader(data_root, class_mapping=clsmap, attr_mapping=attrmap, axis_rearrange_method="none")
+    bbox3d = loader.load("bbox3d", info_data["20231101_160337"], ii, dictionary={"classes": ["class.vehicle.passenger_car"]})
+    assert bbox3d.dictionary == { "classes": ["static_car"], "attrs": ["is_door_closed", "is_static"] }
+    assert len(bbox3d.elements) == 12
+    assert bbox3d.elements[0]["class"] == "static_car"
+    assert bbox3d.elements[0]["attr"] == ["is_door_closed", "is_static"]
+
+
+def test_advanced_bbox3d_loader_no_clsmap():
+    data_root = Path("tests/prefusion/dataset/example_inputs")
+    ii = IndexInfo('20231101_160337', '1698825817864')
+    with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
+        info_data = pickle.load(f)
+    attrmap = {"hello": ["world"], "is_static": ['attr.time_varying.object.state.stationary']}
+    loader = AdvancedBbox3DLoader(data_root, attr_mapping=attrmap, axis_rearrange_method="none")
+    bbox3d = loader.load("bbox3d", info_data["20231101_160337"], ii, dictionary={"classes": ["class.traffic_facility.speed_bump"]})
+    assert bbox3d.dictionary == { "classes": ["class.traffic_facility.speed_bump"], "attrs": ["hello", "is_static"] }
+    assert len(bbox3d.elements) == 1
+
+
+def test_advanced_bbox3d_loader_no_clsmap_2():
+    data_root = Path("tests/prefusion/dataset/example_inputs")
+    ii = IndexInfo('20231101_160337', '1698825817864')
+    with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
+        info_data = pickle.load(f)
+    attrmap = {"is_door_closed": ["attr.vehicle.is_door_open.false"], "is_static": ['attr.time_varying.object.state.stationary']}
+    loader = AdvancedBbox3DLoader(data_root, attr_mapping=attrmap, axis_rearrange_method="none")
+    bbox3d = loader.load("bbox3d", info_data["20231101_160337"], ii, dictionary={"classes": ["class.vehicle.passenger_car"]})
+    assert bbox3d.dictionary == { "classes": ["class.vehicle.passenger_car"], "attrs": ["is_door_closed", "is_static"] }
+    assert len(bbox3d.elements) == 13
+    assert bbox3d.elements[0]["class"] == "class.vehicle.passenger_car"
+    assert bbox3d.elements[0]["attr"] == ["is_door_closed", "is_static"]
+    assert bbox3d.elements[-1]["class"] == "class.vehicle.passenger_car"
+    assert bbox3d.elements[-1]["attr"] == ["is_door_closed"]
+
+
+def test_advanced_bbox3d_loader_no_clsmap_no_attrmap():
+    data_root = Path("tests/prefusion/dataset/example_inputs")
+    ii = IndexInfo('20231101_160337', '1698825817864')
+    with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
+        info_data = pickle.load(f)
+    loader = AdvancedBbox3DLoader(data_root, axis_rearrange_method="none")
+    bbox3d = loader.load("bbox3d", info_data["20231101_160337"], ii, dictionary={"classes": ["class.traffic_facility.speed_bump"]})
+    assert bbox3d.dictionary == { "classes": ["class.traffic_facility.speed_bump"], "attrs": [] }
+    assert len(bbox3d.elements) == 1
