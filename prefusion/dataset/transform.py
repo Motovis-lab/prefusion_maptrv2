@@ -800,8 +800,10 @@ class Bbox3D(SpatialTransformable):
         self.elements = deepcopy(elements)
         for ele in self.elements:
             # ensure translation and velocity to be a column array
-            ele['translation'] = ele['translation'].flatten()[:, None]
-            ele['velocity'] = ele['velocity'].flatten()[:, None]
+            if 'translation' in ele:
+                ele['translation'] = ele['translation'].flatten()[:, None]
+            if 'velocity' in ele:
+                ele['velocity'] = ele['velocity'].flatten()[:, None]
         self.dictionary = deepcopy(dictionary)
         self.remove_elements_not_recognized_by_dictionary()
         self.flip_aware_class_pairs = flip_aware_class_pairs
