@@ -11,6 +11,7 @@ from .utils import (
     expand_line_2d, _sign, INF_DIST,
     vec_point2line_along_direction, 
     dist_point2line_along_direction,
+    choose_index
 )
 from .transform import (
     CameraImage, CameraSegMask, CameraDepth,
@@ -1719,10 +1720,10 @@ class PlanarPolyline3D(PlanarTensorSmith):
                 height_ims.append(height_im)
 
         index_im = np.argmin(np.array(dist_ims), axis=0)
-        vec_im = np.choose(index_im, vec_ims)
-        dist_im = np.choose(index_im, dist_ims)
-        dir_im = np.choose(index_im, dir_ims)
-        height_im = np.choose(index_im, height_ims)
+        vec_im = choose_index(index_im, vec_ims)
+        dist_im = choose_index(index_im, dist_ims)
+        dir_im = choose_index(index_im, dir_ims)
+        height_im = choose_index(index_im, height_ims)
 
         reg_im = np.concatenate([
             seg_im[:1] * dist_im[None],
@@ -2062,10 +2063,10 @@ class PlanarPolygon3D(PlanarTensorSmith):
                 height_ims.append(height_im)
 
         index_im = np.argmin(np.array(dist_ims), axis=0)
-        vec_im = np.choose(index_im, vec_ims)
-        dist_im = np.choose(index_im, dist_ims)
-        dir_im = np.choose(index_im, dir_ims)
-        height_im = np.choose(index_im, height_ims)
+        vec_im = choose_index(index_im, vec_ims)
+        dist_im = choose_index(index_im, dist_ims)
+        dir_im = choose_index(index_im, dir_ims)
+        height_im = choose_index(index_im, height_ims)
 
         reg_im = np.concatenate([
             seg_im * dist_im[None],

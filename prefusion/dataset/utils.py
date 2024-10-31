@@ -181,3 +181,23 @@ def get_reversed_mapping(mapping) -> Dict[str, str]:
         for vv in v:
             reversed_mapping[vv] = k
     return reversed_mapping
+
+
+def choose_index(index_im, choices):
+    """Alternative implementation (but support more than 32 choices) of 
+    >>> np.choose(index_im, choices)
+    """
+    max_batch_size = 16
+    assert len(choices) > 0
+    num_batches = (len(choices) + max_batch_size - 1) // max_batch_size
+    chosen = np.zeros_like(choices[0])
+    for b in range(num_batches):
+        start_ind = b * max_batch_size
+        end_ind = min(start_ind + max_batch_size, len(choices))
+        choices_batch = choices[start_ind:end_ind]
+        index_mask = (index_im >= start_ind) & (index_im < end_ind)
+        clipped_index_im = np.clip(index_im - start_ind, 0, len(choices_batch) - 1)
+        batch_result = np.choose(clipped_index_im, choices_batch)
+        chosen += batch_result * index_mask
+    return chosen
+    
