@@ -6,6 +6,7 @@ import virtual_camera as vc
 from typing import Dict
 from prefusion.dataset.transform import CameraImage, CameraImageSet
 
+__all__ = ["VoxelLookUpTableGenerator"]
 
 def get_voxel_points_in_ego(voxel_shape, voxel_range):
     # voxel_shape = (4, 320, 160)
