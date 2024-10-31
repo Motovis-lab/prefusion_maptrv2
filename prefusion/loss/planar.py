@@ -77,7 +77,6 @@ class PlanarLoss(nn.Module):
         """
         super().__init__(*args, **kwargs)
         assert loss_name_prefix is not None, "loss_name_prefix must be provided"
-        assert weight_scheme is not None and len(weight_scheme) > 0, "weight_scheme must be provided with minimum info. E.g. {'taskA': {'loss_weight': 1.0}}"
         self.loss_name_prefix = loss_name_prefix
         self.total_loss_name = complete_loss_name(self.loss_name_prefix)
         self.weight_scheme = edict(weight_scheme)
@@ -119,14 +118,15 @@ class PlanarLoss(nn.Module):
         return tensor_dict
 
     def forward(self, pred: torch.Tensor, label: torch.Tensor):
-        assert set(pred.keys()) == set(label.keys()) == set(self.weight_scheme.keys())
+        assert set(pred.keys()) == set(label.keys())
         pred = self._ensure_shape_nchw(pred)
         label = self._ensure_shape_nchw(label)
 
         loss = {}
-        for task in self.weight_scheme:
+        for task in label:
             _loss_func = getattr(self, f"_{task}_loss")
             fg_mask = label["seg"][:, 0:1] if task in ["cen", "reg"] else None
+            self.weight_scheme.setdefault(task, {"loss_weight": 1.0})  # if not provided, use 1.0 as default
             task_related_loss = _loss_func(pred[task], label[task], fg_mask=fg_mask, **self.weight_scheme[task])
             loss.update(**task_related_loss)
 
