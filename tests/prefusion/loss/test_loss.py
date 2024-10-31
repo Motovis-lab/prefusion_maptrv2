@@ -607,6 +607,31 @@ def test_planar_parkingslot3d_reg_loss(pkslot_reg_pred, pkslot_reg_label, planar
     assert reg_loss["plnrpkslot3d_reg_loss"] < 1e-5
 
 
+def test_planar_loss_with_empty_weight_scheme():
+    with pytest.raises(AssertionError):
+        _ = PlanarLoss(loss_name_prefix="any")
+    with pytest.raises(AssertionError):
+        _ = PlanarLoss(loss_name_prefix="any", weight_scheme={})
+
+
+def test_planar_loss_without_partition_weights(bx_reg_pred, bx_reg_label):
+    weight_scheme = {
+        "seg": {"loss_weight": "auto"},
+        "cen": {"loss_weight": 1},
+        "reg": {"loss_weight": 0.7},
+    }
+    planar_loss = PlanarLoss(loss_name_prefix="any", weight_scheme=weight_scheme, auto_loss_init_value=1e-5)
+    assert planar_loss.weight_scheme == {
+        "seg": {"loss_weight": 1e-5},
+        "cen": {"loss_weight": 1},
+        "reg": {"loss_weight": 0.7},
+    }
+    reg_loss = planar_loss._reg_loss(bx_reg_pred, bx_reg_label, fg_mask=torch.ones((1, 1, 4, 5)))
+    assert reg_loss["any_reg_0_loss"] == _approx(0.045)
+    assert reg_loss["any_reg_1_loss"] == _approx(0.04)
+    assert reg_loss["any_reg_loss"] == _approx(0.85)
+
+
 def test_planar_auto_loss():
     weight_scheme = {
         "taskA": {
