@@ -796,8 +796,11 @@ class Bbox3D(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.elements = deepcopy(elements)
         assert dictionary is not None
+        self.elements = deepcopy(elements)
+        for ele in self.elements:
+            # ensure translation to be a column array
+            ele['translation'] = ele['translation'].flatten()[:, None]
         self.dictionary = deepcopy(dictionary)
         self.remove_elements_not_recognized_by_dictionary()
         self.flip_aware_class_pairs = flip_aware_class_pairs
