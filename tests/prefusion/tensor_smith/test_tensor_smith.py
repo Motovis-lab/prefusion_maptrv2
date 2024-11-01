@@ -355,12 +355,9 @@ def test_planar_parkingslot_3d_generation_and_reverse():
     decimal=3)
 
 
-def test_planar_polyline_3d_generation_and_reverse():
-    pplyl = PlanarPolyline3D(
-        voxel_shape=(6, 160, 80),
-        voxel_range=([-0.5, 2.5], [24, -8], [8, -8])
-    )
-    plyl = Polyline3D(
+@pytest.fixture()
+def plyl3d() -> Polyline3D:
+    return Polyline3D(
         "polyline_3d",
         elements=[
             {
@@ -396,12 +393,41 @@ def test_planar_polyline_3d_generation_and_reverse():
         dictionary=dict(
             classes=['class.road_marker.lane_line', 'class.road_marker.arrow_heading_triangle']
         ),
-        tensor_smith=pplyl
     )
-    plyl.to_tensor()
-    tensor_dict = plyl.tensor
+
+
+def test_planar_polyline_3d_generation_and_reverse(plyl3d):
+    plyl3d_tensor_smith = PlanarPolyline3D(
+        voxel_shape=(6, 160, 80),
+        voxel_range=([-0.5, 2.5], [24, -8], [8, -8])
+    )
+    tensor_dict = plyl3d_tensor_smith(plyl3d)
     assert tensor_dict['seg'].shape == (3, 160, 80)
     assert tensor_dict['seg'][0].max() == 1
-    pred_plyl = pplyl.reverse(tensor_dict)
-    np.testing.assert_almost_equal(pred_plyl[0][[0, -1], :3], plyl.elements[0]['points'][[0, -1], :], decimal=3)
-    np.testing.assert_almost_equal(pred_plyl[1][[0, -1], :3], plyl.elements[1]['points'][[0, -1], :], decimal=3)
+    pred_plyl = plyl3d_tensor_smith.reverse(tensor_dict)
+    np.testing.assert_almost_equal(pred_plyl[0][[0, -1], :3], plyl3d.elements[0]['points'][[0, -1], :], decimal=3)
+    np.testing.assert_almost_equal(pred_plyl[1][[0, -1], :3], plyl3d.elements[1]['points'][[0, -1], :], decimal=3)
+
+
+def generate_points_of_spiral_pattern(num_pts, period=8, x_scale=7.5, y_scale=7.5, x_translate=0, y_translate=0):
+    # Generate a spiral pattern
+    t = np.linspace(0, period * np.pi, num_pts)
+    x = t * np.cos(t) / (period * np.pi) * x_scale + x_translate
+    y = t * np.sin(t) / (period * np.pi) * y_scale + y_translate
+    z = np.random.random(num_pts)
+
+    # Combine coordinates into a single array
+    points = np.column_stack((x, y, z))
+
+    return points
+
+def test_planar_polyline_3d_link_polyline():
+    pts = generate_points_of_spiral_pattern(200, x_scale=12, x_translate=6)
+    dic = dict(classes=['lane_line'])
+    spiral = Polyline3D( "polyline_3d", elements=[ { 'class': 'lane_line', 'attr': {}, 'points': pts } ], dictionary=dic)
+    plyl3d_tensor_smith = PlanarPolyline3D(voxel_shape=(6, 160, 80), voxel_range=([-0.5, 2.5], [24, -8], [8, -8]))
+    tensor_dict = plyl3d_tensor_smith(spiral)
+    assert tensor_dict['seg'].shape == (2, 160, 80)
+    assert tensor_dict['seg'][0].max() == 1
+
+    pred_plyl = plyl3d_tensor_smith.reverse(tensor_dict)

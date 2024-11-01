@@ -104,7 +104,7 @@ train_dataloader = dict(
 val_dataloader = train_dataloader
 test_dataloader = train_dataloader
 
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=num_epochs, val_interval=-1)  # -1 note don't eval
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=num_epochs, val_interval=1)  # -1 note don't eval
 val_cfg = dict(type="GroupBatchValLoop")
 test_cfg = dict(type="GroupBatchTestLoop")
 
