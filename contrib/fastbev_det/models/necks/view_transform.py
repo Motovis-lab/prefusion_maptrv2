@@ -67,9 +67,9 @@ class ProjectPlugin(torch.autograd.Function):
         ProjectPlugin.output_size = tuple(output_size)
 
     @staticmethod
-    def symbolic(g, input, uu, vv, valid, density, length):
+    def symbolic(g, input, uu, vv, valid, density, length, outputsizeb_i=1, outputsizec_i=2016, outputsizeh_i=240, outputsizew_i=120):
         
-        return g.op("custom::customClip", input, uu, vv, valid, density, voxelnum_i=length)
+        return g.op("custom::CustomProject", input, uu, vv, valid, density, voxelnum_i=length, outputsizeb_i=outputsizeb_i, outputsizec_i=outputsizec_i, outputsizeh_i=outputsizeh_i, outputsizew_i=outputsizew_i)
 
     @staticmethod
     def forward(ctx, input: Tensor, uu: Tensor, vv: Tensor, valid: Tensor, density: Tensor, length):
@@ -81,7 +81,7 @@ class VoxelProjection_fish(nn.Module):
         super().__init__(**kwargs)
         #TODO 加入 C H W 为模型固定参数
         self.plugin = ProjectPlugin()
-        self.plugin.set_output_size([1, 18, 240, 120])
+        self.plugin.set_output_size([1, 2016, 240, 120])
 
         self.length = 172800
 
@@ -111,7 +111,7 @@ class VoxelProjection_pv(nn.Module):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.plugin = ProjectPlugin()
-        self.plugin.set_output_size([1, 18, 240, 120])
+        self.plugin.set_output_size([1, 2016, 240, 120])
         
         self.length = 172800
         self.uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_uu.npy")).float())
@@ -131,7 +131,7 @@ class VoxelProjection_front(nn.Module):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.plugin = ProjectPlugin()
-        self.plugin.set_output_size([1, 18, 240, 120])
+        self.plugin.set_output_size([1, 2016, 240, 120])
         
         self.length = 172800
         self.uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_uu.npy")).float())

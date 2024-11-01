@@ -152,12 +152,13 @@ def main():
               fish_intrinsic, fish_extrinsic, pv_intrinsic, pv_extrinsic, front_intrinsic, front_extrinsic
     )
     model = fuse_conv_bn(model)
-
+    model = model.backbone
     out = model(preprecess_inputs['batch_data']["fish_data"]['imgs'], preprecess_inputs['batch_data']["pv_data"]['imgs'], preprecess_inputs['batch_data']["front_data"]['imgs'],
               fish_intrinsic, fish_extrinsic, pv_intrinsic, pv_extrinsic, front_intrinsic, front_extrinsic)
     save_root = "./work_dirs/deploy/fast_bev_det.onnx"
     torch.onnx.export(model, inputs, save_root, opset_version=11,
                       input_names = ["fish_img", "pv_img", "front_img", "fish_intrinsic", "fish_extrinsic", "pv_intrinsic", "pv_extrinsic", "front_intrinsic", "front_extrinsic"],
+                      # output_names = ["output"],
                       operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK
                       )
     from onnxsim import simplify
@@ -166,7 +167,7 @@ def main():
     onnx_model = onnx.load(save_root)
 
     # 简化模型
-    simplified_model, check = simplify(onnx_model)
+    simplified_model, check = simplify(onnx_model, perform_optimization=False, skip_shape_inference=True)
 
     # 保存简化后的模型
     onnx.save_model(simplified_model, save_root,)
