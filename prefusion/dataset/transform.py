@@ -40,83 +40,83 @@ class Transformable:
         self.name = name
 
     @transform_method
-    def at_transform(self, func_name, **kwargs):
+    def at_transform(self, func_name, *args, **kwargs):
         return self
 
     @transform_method
-    def adjust_brightness(self, brightness=1, **kwargs):
+    def adjust_brightness(self, *args, brightness=1, **kwargs):
         return self
     
     @transform_method
-    def adjust_saturation(self, saturation=1, **kwargs):
+    def adjust_saturation(self, *args, saturation=1, **kwargs):
         return self
     
     @transform_method
-    def adjust_contrast(self, contrast=1, **kwargs):
+    def adjust_contrast(self, *args, contrast=1, **kwargs):
         return self
     
     @transform_method
-    def adjust_hue(self, hue=1, **kwargs):
+    def adjust_hue(self, *args, hue=1, **kwargs):
         return self
     
     @transform_method
-    def adjust_sharpness(self, sharpness=1, **kwargs):
+    def adjust_sharpness(self, *args, sharpness=1, **kwargs):
         return self
     
     @transform_method
-    def posterize(self, bits=8, **kwargs):
+    def posterize(self, *args, bits=8, **kwargs):
         return self
     
     @transform_method
-    def auto_contrast(self, **kwargs):
+    def auto_contrast(self, *args, **kwargs):
         return self
     
     @transform_method
-    def imequalize(self, **kwargs):
+    def imequalize(self, *args, **kwargs):
         return self
     
     @transform_method
-    def solarize(self, **kwargs):
+    def solarize(self, *args, **kwargs):
         return self
     
     @transform_method
-    def sobelize(self, **kwargs):
+    def sobelize(self, *args, **kwargs):
         return self
     
     @transform_method
-    def gaussian_blur(self, **kwargs):
+    def gaussian_blur(self, *args, **kwargs):
         return self
     
     @transform_method
-    def channel_shuffle(self, **kwargs):
+    def channel_shuffle(self, *args, **kwargs):
         return self
     
     @transform_method
-    def set_intrinsic_param(self, **kwargs):
+    def set_intrinsic_param(self, *args, **kwargs):
         return self
     
     @transform_method
-    def render_intrinsic(self, **kwargs):
+    def render_intrinsic(self, *args, **kwargs):
         return self
     
     @transform_method
-    def set_extrinsic_param(self, **kwargs):
+    def set_extrinsic_param(self, *args, **kwargs):
         return self
     
     @transform_method
-    def render_extrinsic(self, **kwargs):
+    def render_extrinsic(self, *args, **kwargs):
         return self
     
     @transform_method
-    def flip_3d(self, **kwargs):
+    def flip_3d(self, *args, **kwargs):
         return self
     
     @transform_method
-    def rotate_3d(self, **kwargs):
+    def rotate_3d(self, *args, **kwargs):
         return self
 
     @transform_method
-    def scale_3d(self, **kwargs):
+    def scale_3d(self, *args, **kwargs):
         return self
 
     def to_tensor(self):
@@ -147,44 +147,44 @@ class Transformable:
 class CameraTransformable(Transformable, metaclass=abc.ABCMeta):
     @transform_method
     @abc.abstractmethod
-    def set_intrinsic_param(self, **kwargs):
+    def set_intrinsic_param(self, *args, **kwargs):
         pass
     
     @transform_method
     @abc.abstractmethod
-    def render_intrinsic(self, **kwargs):
+    def render_intrinsic(self, *args, **kwargs):
         pass
     
     @transform_method
     @abc.abstractmethod
-    def set_extrinsic_param(self, **kwargs):
+    def set_extrinsic_param(self, *args, **kwargs):
         pass
     
     @transform_method
     @abc.abstractmethod
-    def render_extrinsic(self, **kwargs):
+    def render_extrinsic(self, *args, **kwargs):
         pass
     
     @transform_method
     @abc.abstractmethod
-    def flip_3d(self, **kwargs):
+    def flip_3d(self, *args, **kwargs):
         pass
     
     @transform_method
     @abc.abstractmethod
-    def rotate_3d(self, **kwargs):
+    def rotate_3d(self, *args, **kwargs):
         pass
 
 
 class SpatialTransformable(Transformable, metaclass=abc.ABCMeta):
     @transform_method
     @abc.abstractmethod
-    def flip_3d(self, **kwargs):
+    def flip_3d(self, *args, **kwargs):
         pass
     
     @transform_method
     @abc.abstractmethod
-    def rotate_3d(self, **kwargs):
+    def rotate_3d(self, *args, **kwargs):
         pass
 
 
@@ -348,15 +348,15 @@ class CameraImage(CameraTransformable):
         self.img = mmcv.posterize(self.img, bits)
         return self
     
-    def auto_contrast(self, **kwargs):
+    def auto_contrast(self, *args, **kwargs):
         self.img = mmcv.auto_contrast(self.img)
         return self
     
-    def imequalize(self, **kwargs):
+    def imequalize(self, *args, **kwargs):
         self.img = mmcv.imequalize(self.img)
         return self
     
-    def solarize(self, **kwargs):
+    def solarize(self, *args, **kwargs):
         self.img = mmcv.solarize(self.img)
         return self
     
@@ -796,14 +796,20 @@ class Bbox3D(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.elements = deepcopy(elements)
         assert dictionary is not None
+        self.elements = deepcopy(elements)
+        for ele in self.elements:
+            # ensure translation and velocity to be a column array
+            if 'translation' in ele:
+                ele['translation'] = ele['translation'].flatten()[:, None]
+            if 'velocity' in ele:
+                ele['velocity'] = ele['velocity'].flatten()[:, None]
         self.dictionary = deepcopy(dictionary)
         self.remove_elements_not_recognized_by_dictionary()
         self.flip_aware_class_pairs = flip_aware_class_pairs
         self.tensor_smith = tensor_smith
 
-    def remove_elements_not_recognized_by_dictionary(self, **kwargs):
+    def remove_elements_not_recognized_by_dictionary(self):
         full_set_of_classes = {c for c in self.dictionary['classes']}
         for i in range(len(self.elements) - 1, -1, -1):
             if self.elements[i]['class'] not in full_set_of_classes:
@@ -906,7 +912,7 @@ class Polyline3D(SpatialTransformable):
         self.flip_aware_class_pairs = flip_aware_class_pairs
         self.tensor_smith = tensor_smith
 
-    def remove_elements_not_recognized_by_dictionary(self, **kwargs):
+    def remove_elements_not_recognized_by_dictionary(self):
         full_set_of_classes = {c for c in self.dictionary['classes']}
         for i in range(len(self.elements) - 1, -1, -1):
             if self.elements[i]['class'] not in full_set_of_classes:
@@ -972,7 +978,7 @@ class ParkingSlot3D(SpatialTransformable):
         self.tensor_smith = tensor_smith
         self.remove_elements_not_recognized_by_dictionary()
     
-    def remove_elements_not_recognized_by_dictionary(self, **kwargs):
+    def remove_elements_not_recognized_by_dictionary(self):
         full_set_of_classes = {c for c in self.dictionary['classes']}
         for i in range(len(self.elements) - 1, -1, -1):
             if self.elements[i]['class'] not in full_set_of_classes:
@@ -1053,10 +1059,10 @@ class EgoPoseSet(TransformableSet):
 
 
 class SegBev(SpatialTransformable):
-    def flip_3d(self, **kwargs):
+    def flip_3d(self, *args, **kwargs):
         raise NotImplementedError
     
-    def rotate_3d(self, **kwargs):
+    def rotate_3d(self, *args, **kwargs):
         raise NotImplementedError
 
 
@@ -1212,10 +1218,10 @@ class OccSdfBev(SpatialTransformable):
 
 
 class OccSdf3D(SpatialTransformable):
-    def flip_3d(self, **kwargs):
+    def flip_3d(self, *args, **kwargs):
         raise NotImplementedError
     
-    def rotate_3d(self, **kwargs):
+    def rotate_3d(self, *args, **kwargs):
         raise NotImplementedError
 
 #--------------------------------#

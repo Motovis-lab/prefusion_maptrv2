@@ -3,19 +3,18 @@ experiment_name = "fastray_planar_demo"
 
 custom_imports = dict(
     imports=["prefusion", "contrib.fastray_planar"], 
-    allow_failed_imports=False
-)
+    allow_failed_imports=False)
 
 
-## camera and voxel feature configurations
+## camera and voxel feature configs
 
 default_camera_feature_config = dict(
     ray_distance_num_channel=64,
     ray_distance_start=0.25,
     ray_distance_step=0.25,
-    feature_downscale=8,
-)
-camera_feature_configs=dict(
+    feature_downscale=8)
+
+camera_feature_configs = dict(
     VCAMERA_PERSPECTIVE_FRONT=default_camera_feature_config,
     VCAMERA_PERSPECTIVE_FRONT_LEFT=default_camera_feature_config,
     VCAMERA_PERSPECTIVE_FRONT_RIGHT=default_camera_feature_config,
@@ -25,14 +24,16 @@ camera_feature_configs=dict(
     VCAMERA_FISHEYE_FRONT=default_camera_feature_config,
     VCAMERA_FISHEYE_LEFT=default_camera_feature_config,
     VCAMERA_FISHEYE_BACK=default_camera_feature_config,
-    VCAMERA_FISHEYE_RIGHT=default_camera_feature_config,
-)
-voxel_feature_config=dict(
-    voxel_shape=(6, 320, 160),  # Z, X, Y in ego system
-    voxel_range=([-0.5, 2.5], [36, -12], [12, -12]),
+    VCAMERA_FISHEYE_RIGHT=default_camera_feature_config)
+
+voxel_shape = (6, 320, 160)  # Z, X, Y in ego system
+voxel_range = ([-0.5, 2.5], [36, -12], [12, -12])
+
+voxel_feature_config = dict(
+    voxel_shape=voxel_shape, 
+    voxel_range=voxel_range,
     ego_distance_max=40,
-    ego_distance_step=5
-)
+    ego_distance_step=5)
 
 ## dictionaries and mappings for different types of tasks
 
@@ -115,7 +116,7 @@ dictionary_polygons = dict(
 )
 
 
-## camera configurations for model inputs
+## camera configs for model inputs
 
 camera_groups = dict(
     pv_front=['VCAMERA_PERSPECTIVE_FRONT'],
@@ -127,8 +128,7 @@ camera_groups = dict(
     fisheyes=['VCAMERA_FISHEYE_FRONT',
               'VCAMERA_FISHEYE_LEFT',
               'VCAMERA_FISHEYE_BACK',
-              'VCAMERA_FISHEYE_RIGHT']
-)
+              'VCAMERA_FISHEYE_RIGHT'])
 
 resolution_pv_front = (640, 320)
 resolution_pv_sides = (512, 320)
@@ -144,15 +144,14 @@ camera_resolution_configs=dict(
     VCAMERA_FISHEYE_FRONT=resolution_fisheyes,
     VCAMERA_FISHEYE_LEFT=resolution_fisheyes,
     VCAMERA_FISHEYE_BACK=resolution_fisheyes,
-    VCAMERA_FISHEYE_RIGHT=resolution_fisheyes,
-)
+    VCAMERA_FISHEYE_RIGHT=resolution_fisheyes)
 
-
+## GroupBatchDataset configs
 train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='../MV4D-PARKING/20231028_150815',
-    info_path='../MV4D-PARKING/info_pkls/mv_4d_infos_20231028_150815.pkl',
+    data_root='../MV4D-PARKING',
+    info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -160,31 +159,23 @@ train_dataset = dict(
     ),
     transformables=dict(
         camera_images=dict(type='CameraImageSet', tensor_smith=dict(type='CameraImageTensor')),
-        ego_poses=dict(type='ego_poses'),
+        ego_poses=dict(type='EgoPoseSet'),
         bbox_3d=dict(
             type='Bbox3D', 
-            dictionary=dict(classes=['class.vehicle.passenger_car'], attrs=[]),
-            tensor_smith=dict(type='PlanarBbox3D', 
-                              voxel_shape=voxel_feature_config['voxel_shape'],
-                              voxel_range=voxel_feature_config['voxel_range'])
-        ),
+            dictionary=dict(classes=['class.vehicle.passenger_car']),
+            tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
         polyline_3d=dict(
             type='Polyline3D',
-            dictionary=dict(classes=['class.road_marker.lane_line'], attrs=[]),
-            tensor_smith=dict(type='PlanarPolyline3D', 
-                              voxel_shape=voxel_feature_config['voxel_shape'],
-                              voxel_range=voxel_feature_config['voxel_range'])
-        ),
+            dictionary=dict(classes=['class.road_marker.lane_line']),
+            tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
         parkingslot_3d=dict(
             type='ParkingSlot3D',
-            tensor_smith=dict(type='PlanarParkingSlot3D', 
-                              voxel_shape=voxel_feature_config['voxel_shape'],
-                              voxel_range=voxel_feature_config['voxel_range'])
-        )
+            dictionary=dict(classes=['class.parking.parking_slot']),
+            tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range))
     ),
     transforms=[
         dict(type='RandomRenderExtrinsic'),
-        dict(type='RandomRotateSpace'),
+        dict(type='RandomRotateSpace', prob=1, prob_inverse_cameras_rotation=1),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs),
         dict(type='RandomMirrorSpace'),
         dict(type='RandomImageISP'),
@@ -197,16 +188,108 @@ train_dataset = dict(
     possible_frame_intervals=5,
 )
 
-
+## dataloader configs
 train_dataloader = dict(
-    num_workers=1,
-    persistent_workers=True,
+    num_workers=0,
+    persistent_workers=False,
     collate_fn=dict(type="collate_dict"),
     dataset=train_dataset
 )
 
-val_dataloader = train_dataloader
+# val_dataloader = train_dataloader
 
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=1, val_interval=-1)
-val_cfg = dict(type="GroupBatchValLoop")
 
+## model configs
+bev_mode = False
+# backbones
+camera_feat_channels = 128
+backbones = dict(
+    pv_front=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels),
+    pv_sides=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels),
+    fisheyes=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels))
+# spatial_transform
+spatial_transform = dict(
+    type='FastRaySpatialTransform',
+    voxel_shape=voxel_shape,
+    fusion_mode='weighted',
+    bev_mode=bev_mode)
+# temporal_transform
+temporal_transform = dict(
+    type='VoxelTemporalAlign',
+    voxel_shape=voxel_shape,
+    voxel_range=voxel_range,
+    bev_mode=bev_mode,
+    interpolation='bilinear')
+# voxel feature fusion
+voxel_fusion = dict(
+    type='VoxelStreamFusion',
+    in_channels=camera_feat_channels,
+    mid_channels=256,
+    bev_mode=bev_mode)
+# heads
+heads = dict(
+    voxel_encoder=dict(type='VoVNetEncoder', 
+                       in_channels=camera_feat_channels * voxel_shape[0], 
+                       mid_channels=256,
+                       out_channels=256,
+                       repeat=4),
+    bbox_3d=dict(type='PlanarHead',
+                 in_channels=256,
+                 mid_channels=256,
+                 cen_cls_channels=3,
+                 reg_channels=20),
+    polyline_3d=dict(type='PlanarHead',
+                     in_channels=256,
+                     mid_channels=256,
+                     cen_cls_channels=2,
+                     reg_channels=7),
+    parkingslot_3d=dict(type='PlanarHead',
+                        in_channels=256,
+                        mid_channels=256,
+                        cen_cls_channels=5,
+                        reg_channels=15))
+# loss configs
+# loss_cfg = dict(
+#     bbox_3d=dict(
+#         type='PlanarLoss',
+#         loss_name_prefix='bbox_3d',
+#         weight_scheme=dict(
+#             seg=dict(loss_weight=1.0,
+#                      iou_loss_weight=5,
+#                      dual_focal_loss_weight=1),
+#             cen=dict(loss_weight=1.0,
+#                      fg_weight=1.0,
+#                      bg_weight=1),
+#             reg=dict(loss_weight=1.0)
+#         ))
+# )
+
+# metric configs
+
+# integrated model config
+model = dict(
+    type='FastRayPlanarStreamModel',
+    camera_groups=camera_groups,
+    backbones=backbones,
+    spatial_transform=spatial_transform,
+    temporal_transform=temporal_transform,
+    voxel_fusion=voxel_fusion,
+    heads=heads,    
+)
+
+
+## runner loop configs
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
+# val_cfg = dict(type="GroupBatchValLoop")
+
+
+## optimizer configs
+optim_wrapper = dict(type='OptimWrapper', 
+                     optimizer=dict(type='SGD', 
+                                    lr=0.001, 
+                                    momentum=0.9,
+                                    weight_decay=0.0001))
+
+## scheduler configs
+param_scheduler = dict(type='MultiStepLR',
+                       milestones=[12, 20])

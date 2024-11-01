@@ -12,6 +12,21 @@ from mmengine.model import BaseModel, BaseModule
 from prefusion.registry import MODELS
 
 
+__all__ = [
+    "ConvBN",
+    "Concat",
+    "EltwiseAdd",
+    "OSABlock",
+    "VoVNetFPN",
+    "FastRaySpatialTransform",
+    "VoxelTemporalAlign",
+    "VoxelStreamFusion",
+    "VoVNetEncoder",
+    "PlanarHead",
+    "FastRayPlanarStreamModel"
+]
+
+
 class ConvBN(nn.Module):
     def __init__(self,
                  in_channels,
@@ -150,7 +165,7 @@ class VoVNetFPN(BaseModule):
         if self.out_stride <= 16:
             self.p4_up = nn.ConvTranspose2d(192, 192, kernel_size=2, stride=2, padding=0, bias=False)
             self.p4_fusion = Concat()
-        elif self.out_stride <= 8:
+        if self.out_stride <= 8:
             self.p3_linear = ConvBN(384, 128, kernel_size=1, padding=0)
             self.p3_up = nn.ConvTranspose2d(128, 128, kernel_size=2, stride=2, padding=0, bias=False)
             self.p3_fusion = Concat()
@@ -256,13 +271,13 @@ class VoxelTemporalAlign(BaseModule):
     def __init__(self,
                  voxel_shape,
                  voxel_range,
-                 approx_bev=False,
+                 bev_mode=False,
                  interpolation='bilinear',
                  init_cfg=None):
         super().__init__(init_cfg=init_cfg)
         self.voxel_shape = voxel_shape
         self.voxel_range = voxel_range
-        self.approx_bev = approx_bev
+        self.bev_mode = bev_mode
         self.interpolation = interpolation
         self.voxel_intrinsics = self._get_voxel_intrinsics(voxel_shape, voxel_range)
     
@@ -281,7 +296,7 @@ class VoxelTemporalAlign(BaseModule):
     def _unproject_points_from_voxel_to_ego(self):
         Z, X, Y = self.voxel_shape
         cx, cy, cz, fx, fy, fz = self.voxel_intrinsics
-        if self.approx_bev:
+        if self.bev_mode:
             xx, yy = torch.meshgrid(torch.arange(X), torch.arange(Y), indexing='ij')
             xx_ego = (xx - cx) / fx
             yy_ego = (yy - cy) / fy
@@ -321,7 +336,7 @@ class VoxelTemporalAlign(BaseModule):
         Z, X, Y = self.voxel_shape
         N, _, _ = ego_points.shape
         cx, cy, cz, fx, fy, fz = self.voxel_intrinsics
-        if self.approx_bev:
+        if self.bev_mode:
             xx_egos = ego_points[:, 0]
             yy_egos = ego_points[:, 1]
             xx_ = xx_egos * fx + cx
@@ -371,10 +386,10 @@ class VoxelTemporalAlign(BaseModule):
         
         """
         # gen ego_points from voxel
-        ego_points = self._unproject_points_from_voxel_to_ego()
-        ego_points.to(voxel_feats_pre, non_blocking=True)[None]
+        ego_points = self._unproject_points_from_voxel_to_ego().to(
+            voxel_feats_pre, non_blocking=True)[None]
         # get projection matrix
-        if self.approx_bev:
+        if self.bev_mode:
             assert len(voxel_feats_pre.shape) == 4, 'must be 4-D Tensor'
             rotations = delta_poses[:, :2, :2]
             translations = delta_poses[:, :2, [3]]
@@ -402,7 +417,7 @@ class VoxelStreamFusion(BaseModule):
             self.gain = nn.Sequential(
                 ConvBN(in_channels, mid_channels),
                 ConvBN(mid_channels, mid_channels),
-                nn.Conv2d(mid_channels, 1, kernel_size=3, padding=1),
+                nn.Conv2d(mid_channels, in_channels, kernel_size=3, padding=1),
                 nn.Sigmoid()
             )
         else:
@@ -413,7 +428,7 @@ class VoxelStreamFusion(BaseModule):
                 nn.Conv3d(mid_channels, mid_channels, kernel_size=3, padding=1),
                 nn.BatchNorm3d(mid_channels),
                 nn.ReLU(),
-                nn.Conv3d(mid_channels, 1, kernel_size=3, padding=1),
+                nn.Conv3d(mid_channels, in_channels, kernel_size=3, padding=1),
                 nn.Sigmoid()
             )
         self.add = EltwiseAdd()
@@ -531,16 +546,16 @@ class FastRayPlanarStreamModel(BaseModel):
         self.head_bbox_3d = MODELS.build(heads['bbox_3d'])
         self.head_polyline_3d = MODELS.build(heads['polyline_3d'])
         self.head_parkingslot_3d = MODELS.build(heads['parkingslot_3d'])
-        self.head_occ_sdf = MODELS.build(heads['occ_sdf'])
+        # self.head_occ_sdf = MODELS.build(heads['occ_sdf'])
         # hidden voxel features for temporal fusion
         self.voxel_feats_pre = None
         # init losses
-        self.loss_bbox_3d = MODELS.build(loss_cfg['bbox_3d'])
-        self.loss_polyline_3d = MODELS.build(loss_cfg['polyline_3d'])
-        self.loss_parkingslot_3d = MODELS.build(loss_cfg['parkingslot_3d'])
+        # self.loss_bbox_3d = MODELS.build(loss_cfg['bbox_3d'])
+        # self.loss_polyline_3d = MODELS.build(loss_cfg['polyline_3d'])
+        # self.loss_parkingslot_3d = MODELS.build(loss_cfg['parkingslot_3d'])
 
     
-    def forward(self, batched_input_dict, mode='tensor'):
+    def forward(self, mode='tensor', **batched_input_dict):
         """
         >>> batched_input_dict = processed_frame_batch = {
                 'index_infos': [index_info, index_info, ...],
