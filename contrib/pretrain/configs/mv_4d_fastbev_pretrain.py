@@ -34,7 +34,7 @@ val_pipeline = [
         keep_ratio=True),
     dict(type='PackSegInputs')
 ]
-batch_size = 8
+batch_size = 14
 
 dataset_4d = dict(
     type=dataset_type_4d,
@@ -54,19 +54,19 @@ dataset_avp = dict(
 
 train_dataloader = dict(
     batch_size=batch_size,
-    num_workers=6,
+    num_workers=16,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
-    batch_sampler=dict(type="SameSourceBatchSampler"),
+    batch_sampler=dict(type="SameSourceBatchSampler", drop_last=True),
     dataset=dict(
         type=dataset_type_wrapper,
-        datasets=[dataset_4d, dataset_avp]
+        datasets=[dataset_avp, dataset_4d]
     )
 )
 
 val_dataloader = dict(
     batch_size=batch_size,
-    num_workers=6,
+    num_workers=12,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(

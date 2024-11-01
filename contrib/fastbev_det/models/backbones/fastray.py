@@ -186,5 +186,5 @@ class FastRay_DP(FastRay):
                                                 )
         
         img_bev_feats = img_bev_feats_fish + img_bev_feats_pv + img_bev_feats_front
-        
+        # img_bev_feats = self.bev_feat_reducer(img_bev_feats)
         return img_bev_feats
