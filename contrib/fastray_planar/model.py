@@ -165,7 +165,7 @@ class VoVNetFPN(BaseModule):
         if self.out_stride <= 16:
             self.p4_up = nn.ConvTranspose2d(192, 192, kernel_size=2, stride=2, padding=0, bias=False)
             self.p4_fusion = Concat()
-        elif self.out_stride <= 8:
+        if self.out_stride <= 8:
             self.p3_linear = ConvBN(384, 128, kernel_size=1, padding=0)
             self.p3_up = nn.ConvTranspose2d(128, 128, kernel_size=2, stride=2, padding=0, bias=False)
             self.p3_fusion = Concat()
@@ -386,8 +386,8 @@ class VoxelTemporalAlign(BaseModule):
         
         """
         # gen ego_points from voxel
-        ego_points = self._unproject_points_from_voxel_to_ego()
-        ego_points.to(voxel_feats_pre, non_blocking=True)[None]
+        ego_points = self._unproject_points_from_voxel_to_ego().to(
+            voxel_feats_pre, non_blocking=True)[None]
         # get projection matrix
         if self.bev_mode:
             assert len(voxel_feats_pre.shape) == 4, 'must be 4-D Tensor'
@@ -555,7 +555,7 @@ class FastRayPlanarStreamModel(BaseModel):
         # self.loss_parkingslot_3d = MODELS.build(loss_cfg['parkingslot_3d'])
 
     
-    def forward(self, batched_input_dict, mode='tensor'):
+    def forward(self, mode='tensor', **batched_input_dict):
         """
         >>> batched_input_dict = processed_frame_batch = {
                 'index_infos': [index_info, index_info, ...],
