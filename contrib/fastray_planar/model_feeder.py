@@ -3,6 +3,7 @@ import numpy as np
 
 from typing import List, Union, TYPE_CHECKING
 from collections import defaultdict
+from copious.data_structure.dict import defaultdict2dict
 from prefusion.dataset.model_feeder import BaseModelFeeder
 from prefusion.registry import MODEL_FEEDERS
 
@@ -44,7 +45,7 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
         )
 
 
-    def process(self, frame_batch: list) -> dict | list:
+    def process(self, frame_batch: list) -> Union[dict, list]:
         """
         Parameters
         ----------
@@ -156,4 +157,4 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
             # stack tensor batches
             elif all(isinstance(data, torch.Tensor) for data in data_batch):
                 anno_batch_dict[transformable_name] = torch.stack(data_batch)
-        return processed_frame_batch
+        return defaultdict2dict(processed_frame_batch)
