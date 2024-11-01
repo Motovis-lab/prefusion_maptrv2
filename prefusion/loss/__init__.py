@@ -1,1 +1,2 @@
-from .planar import PlanarLoss
+from .planar import *
+from .basic import *

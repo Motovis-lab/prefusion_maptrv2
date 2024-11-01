@@ -461,6 +461,45 @@ class VoxelStreamFusion(BaseModule):
 
 
 @MODELS.register_module()
+class VoxelConcatFusion(BaseModule):
+    def __init__(self, in_channels, bev_mode=False, init_cfg=None):
+        super().__init__(init_cfg=init_cfg)
+        self.bev_mode = bev_mode
+        self.cat = Concat()
+        if bev_mode:
+            self.fuse = nn.Sequential(
+                nn.Conv2d(in_channels * 2, in_channels, kernel_size=3, padding=1),
+                nn.BatchNorm2d(in_channels)
+            )
+        else:
+            self.fuse = nn.Sequential(
+                nn.Conv3d(in_channels * 2, in_channels, kernel_size=3, padding=1),
+                nn.BatchNorm3d(in_channels)
+            )
+    
+    def forward(self, voxel_feats_cur, voxel_feats_pre):
+        """Temporal fusion of voxel current and previous features.
+
+        Parameters
+        ----------
+        voxel_feats_cur : torch.Tensor
+            current voxel features for measurement
+        voxel_feats_pre : torch.Tensor
+            previously predicted voxel features
+
+        Returns
+        -------
+        voxel_feats_updated : torch.Tensor
+            updated voxel features
+        """
+        assert voxel_feats_cur.shape == voxel_feats_pre.shape
+        cat = self.cat(voxel_feats_cur, voxel_feats_pre)
+        voxel_feats_updated = self.fuse(cat)
+        return voxel_feats_updated
+   
+
+
+@MODELS.register_module()
 class VoVNetEncoder(BaseModule):
     def __init__(self, 
                  in_channels, 
@@ -484,12 +523,13 @@ class PlanarHead(BaseModule):
     def __init__(self, 
                  in_channels, 
                  mid_channels, 
-                 cen_cls_channels,
+                 cen_seg_channels,
                  reg_channels,
+                 has_cen=True,
                  repeat=3,
                  init_cfg=None):
         super().__init__(init_cfg=init_cfg)
-        self.cls_tower = OSABlock(in_channels, 
+        self.seg_tower = OSABlock(in_channels, 
                                   mid_channels, 
                                   stride=1, 
                                   repeat=repeat, 
@@ -499,19 +539,22 @@ class PlanarHead(BaseModule):
                                   stride=1, 
                                   repeat=repeat, 
                                   with_reduce=False)
-        self.cen_cls = nn.Conv2d(mid_channels * repeat, 
-                                 cen_cls_channels, 
+        self.cen_seg = nn.Conv2d(mid_channels * repeat, 
+                                 cen_seg_channels, 
                                  kernel_size=1)
         self.reg = nn.Conv2d(mid_channels * repeat, 
                              reg_channels, 
                              kernel_size=1)
+        self.has_cen = has_cen
     
     def forward(self, x):
-        cls_feat = self.cls_tower(x)
-        cen_cls = self.cen_cls(cls_feat)
+        seg_feat = self.seg_tower(x)
+        cen_seg = self.cen_seg(seg_feat)
         reg_feat = self.reg_tower(x)
         reg = self.reg(reg_feat)
-        return cen_cls, reg
+        if self.has_cen:
+            cen_seg = torch.sigmoid(cen_seg)
+        return cen_seg, reg
         
 
 
@@ -526,7 +569,6 @@ class FastRayPlanarStreamModel(BaseModel):
                  voxel_fusion,
                  heads,
                  loss_cfg=None,
-                 metric_cfg=None,
                  data_preprocessor=None,
                  init_cfg=None):
         super().__init__(data_preprocessor, init_cfg)
@@ -544,13 +586,13 @@ class FastRayPlanarStreamModel(BaseModel):
         self.voxel_encoder = MODELS.build(heads['voxel_encoder'])
         # voxel heads
         self.head_bbox_3d = MODELS.build(heads['bbox_3d'])
-        self.head_polyline_3d = MODELS.build(heads['polyline_3d'])
-        self.head_parkingslot_3d = MODELS.build(heads['parkingslot_3d'])
+        # self.head_polyline_3d = MODELS.build(heads['polyline_3d'])
+        # self.head_parkingslot_3d = MODELS.build(heads['parkingslot_3d'])
         # self.head_occ_sdf = MODELS.build(heads['occ_sdf'])
         # hidden voxel features for temporal fusion
         self.voxel_feats_pre = None
         # init losses
-        # self.loss_bbox_3d = MODELS.build(loss_cfg['bbox_3d'])
+        self.loss_bbox_3d = MODELS.build(loss_cfg['bbox_3d'])
         # self.loss_polyline_3d = MODELS.build(loss_cfg['polyline_3d'])
         # self.loss_parkingslot_3d = MODELS.build(loss_cfg['parkingslot_3d'])
 
@@ -597,34 +639,58 @@ class FastRayPlanarStreamModel(BaseModel):
         voxel_feats_cur = self.spatial_transform(camera_feats_dict, camera_lookups)
         # temporal transform
         if batched_input_dict['index_infos'][0].prev is None:
-            self.voxel_feats_pre = voxel_feats_cur
+            self.voxel_feats_pre = voxel_feats_cur.clone().detach()
         voxel_feats_pre_aligned = self.temporal_transform(self.voxel_feats_pre, delta_poses)
         # voxel fusion
         voxel_feats_updated = self.voxel_fusion(voxel_feats_cur, voxel_feats_pre_aligned)
-        self.voxel_feats_pre = voxel_feats_updated
+        self.voxel_feats_pre = voxel_feats_cur.clone().detach()
         # voxel encoder
         if len(voxel_feats_updated.shape) == 5:
             N, C, Z, X, Y = voxel_feats_updated.shape
             voxel_feats_updated = voxel_feats_updated.reshape(N, C*Z, X, Y)
         bev_feats = self.voxel_encoder(voxel_feats_updated)
         # heads
-        pred_bbox_3d = self.head_bbox_3d(bev_feats)
-        pred_polyline_3d = self.head_polyline_3d(bev_feats)
-        pred_parkingslot_3d = self.head_parkingslot_3d(bev_feats)
+        out_bbox_3d = self.head_bbox_3d(bev_feats)
+        # out_polyline_3d = self.head_polyline_3d(bev_feats)
+        # out_parkingslot_3d = self.head_parkingslot_3d(bev_feats)
+        # outputs
+        pred_bbox_3d = dict(
+            cen=out_bbox_3d[0][:, 0:1],
+            seg=out_bbox_3d[0][:, 1:],
+            reg=out_bbox_3d[1])
+        # pred_polyline_3d = dict(
+        #     seg=out_polyline_3d[0],
+        #     reg=out_polyline_3d[1])
+        # pred_parkingslot_3d = dict(
+        #     cen=out_parkingslot_3d[0][:, 0:1],
+        #     seg=out_parkingslot_3d[0][:, 1:],
+        #     reg=out_parkingslot_3d[1])
         
         if mode == 'tensor':
-            return dict(hidden_feats=self.voxel_feats_pre,
-                        pred_bbox_3d=pred_bbox_3d,
-                        pred_polyline_3d=pred_polyline_3d,
-                        pred_parkingslot_3d=pred_parkingslot_3d)
+            return dict(
+                hidden_feats=self.voxel_feats_pre,
+                pred_bbox_3d=pred_bbox_3d,
+                # pred_polyline_3d=pred_polyline_3d,
+                # pred_parkingslot_3d=pred_parkingslot_3d
+            )
         if mode == 'loss':
             gt_bbox_3d = batched_input_dict['annotations']['bbox_3d']
-            gt_polyline_3d = batched_input_dict['annotations']['polyline_3d']
-            gt_parkingslot_3d = batched_input_dict['annotations']['parkingslot_3d']
-            losses = {}
-            losses.update(self.loss_bbox_3d(pred_bbox_3d, gt_bbox_3d))
-            losses.update(self.loss_polyline_3d(pred_polyline_3d, gt_polyline_3d))
-            losses.update(self.loss_parkingslot_3d(pred_parkingslot_3d, gt_parkingslot_3d))
+            # gt_polyline_3d = batched_input_dict['annotations']['polyline_3d']
+            # gt_parkingslot_3d = batched_input_dict['annotations']['parkingslot_3d']
+
+            loss_bbox_3d = self.loss_bbox_3d(pred_bbox_3d, gt_bbox_3d)
+            # loss_polyline_3d = self.loss_polyline_3d(pred_polyline_3d, gt_polyline_3d)
+            # loss_parkingslot_3d = self.loss_parkingslot_3d(pred_parkingslot_3d, gt_parkingslot_3d)
+
+            losses = dict(
+                loss=loss_bbox_3d['bbox_3d_loss'],
+                loss_seg_iou=loss_bbox_3d['bbox_3d_seg_iou_0_loss']
+                # loss=loss_bbox_3d + loss_polyline_3d + loss_parkingslot_3d,
+                # loss_bbox_3d=loss_bbox_3d,
+                # loss_polyline_3d=loss_polyline_3d,
+                # loss_parkingslot_3d=loss_parkingslot_3d
+            )
+
             return losses
         
         if mode == 'predict':

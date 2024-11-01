@@ -1718,12 +1718,17 @@ class PlanarPolyline3D(PlanarTensorSmith):
                     points_grid_bev + vec_map - line_bev[0][..., None, None], axis=0
                 )
                 height_ims.append(height_im)
-
-        index_im = np.argmin(np.array(dist_ims), axis=0)
-        vec_im = choose_index(index_im, vec_ims)
-        dist_im = choose_index(index_im, dist_ims)
-        dir_im = choose_index(index_im, dir_ims)
-        height_im = choose_index(index_im, height_ims)
+        if len(dist_ims) > 0:
+            index_im = np.argmin(np.array(dist_ims), axis=0)
+            vec_im = choose_index(index_im, vec_ims)
+            dist_im = choose_index(index_im, dist_ims)
+            dir_im = choose_index(index_im, dir_ims)
+            height_im = choose_index(index_im, height_ims)
+        else:
+            vec_im = np.zeros((2, X, Y))
+            dist_im = np.zeros((X, Y))
+            dir_im = np.zeros((3, X, Y))
+            height_im = np.zeros((X, Y))
 
         reg_im = np.concatenate([
             seg_im[:1] * dist_im[None],
