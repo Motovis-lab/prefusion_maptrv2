@@ -23,7 +23,7 @@ img_right = mmcv.imread("work_dirs/vt_debug/img_fish_feats_0_3.jpg").transpose(2
 
 input = torch.from_numpy(np.stack([img_front, img_left, img_back, img_right], axis=0)).cuda() / 255.0
 
-model = MODELS.build(cfg.model.backbone_conf)
+model = MODELS.build(cfg.model.backbone_conf).cuda()
 model.forward = model.pure_forward
 out = model.eval()(input_fish, input_pv, input_front)
 # out = out.view(18,240,120)
