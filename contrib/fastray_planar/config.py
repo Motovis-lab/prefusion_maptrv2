@@ -170,11 +170,12 @@ train_dataset = dict(
             tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
         parkingslot_3d=dict(
             type='ParkingSlot3D',
+            dictionary=dict(classes=['class.parking.parking_slot']),
             tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range))
     ),
     transforms=[
         dict(type='RandomRenderExtrinsic'),
-        dict(type='RandomRotateSpace'),
+        dict(type='RandomRotateSpace', prob=1, prob_inverse_cameras_rotation=1),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs),
         dict(type='RandomMirrorSpace'),
         dict(type='RandomImageISP'),
@@ -189,8 +190,8 @@ train_dataset = dict(
 
 ## dataloader configs
 train_dataloader = dict(
-    num_workers=1,
-    persistent_workers=True,
+    num_workers=0,
+    persistent_workers=False,
     collate_fn=dict(type="collate_dict"),
     dataset=train_dataset
 )
