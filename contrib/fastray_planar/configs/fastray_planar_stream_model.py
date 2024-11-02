@@ -1,5 +1,4 @@
 default_scope = "prefusion"
-experiment_name = "fastray_planar_demo"
 
 custom_imports = dict(
     imports=["prefusion", "contrib.fastray_planar"], 
@@ -164,27 +163,27 @@ train_dataset = dict(
             type='Bbox3D', 
             dictionary=dict(classes=['class.vehicle.passenger_car']),
             tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
-        # polyline_3d=dict(
-        #     type='Polyline3D',
-        #     dictionary=dict(classes=['class.road_marker.lane_line']),
-        #     tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
-        # parkingslot_3d=dict(
-        #     type='ParkingSlot3D',
-        #     dictionary=dict(classes=['class.parking.parking_slot']),
-        #     tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range))
+        polyline_3d=dict(
+            type='Polyline3D',
+            dictionary=dict(classes=['class.road_marker.lane_line']),
+            tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+        parkingslot_3d=dict(
+            type='ParkingSlot3D',
+            dictionary=dict(classes=['class.parking.parking_slot']),
+            tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range))
     ),
     transforms=[
-        dict(type='RandomRenderExtrinsic'),
+        # dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs),
-        dict(type='RandomRotateSpace'),
-        dict(type='RandomMirrorSpace'),
-        dict(type='RandomImageISP'),
-        dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
-        dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
+        # dict(type='RandomRotateSpace'),
+        # dict(type='RandomMirrorSpace'),
+        # dict(type='RandomImageISP'),
+        # dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
+        # dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ],
     phase="train",
     batch_size=4,
-    possible_group_sizes=6,
+    possible_group_sizes=10,
     possible_frame_intervals=5,
 )
 
@@ -221,7 +220,7 @@ temporal_transform = dict(
     interpolation='bilinear')
 # voxel feature fusion
 voxel_fusion = dict(
-    type='VoxelConcatFusion',
+    type='VoxelStreamFusion',
     in_channels=camera_feat_channels,
     bev_mode=bev_mode)
 # heads
@@ -230,44 +229,44 @@ heads = dict(
                        in_channels=camera_feat_channels * voxel_shape[0], 
                        mid_channels=256,
                        out_channels=256,
-                       repeat=4),
+                       repeat=3),
     bbox_3d=dict(type='PlanarHead',
-                 in_channels=256,
-                 mid_channels=256,
+                 in_channels=128,
+                 mid_channels=128,
                  cen_seg_channels=3,
                  reg_channels=20),
-    # polyline_3d=dict(type='PlanarHead',
-    #                  in_channels=256,
-    #                  mid_channels=256,
-    #                  cen_seg_channels=2,
-    #                  reg_channels=7),
-    # parkingslot_3d=dict(type='PlanarHead',
-    #                     in_channels=256,
-    #                     mid_channels=256,
-    #                     cen_seg_channels=5,
-    #                     reg_channels=15)
+    polyline_3d=dict(type='PlanarHead',
+                     in_channels=128,
+                     mid_channels=128,
+                     cen_seg_channels=2,
+                     reg_channels=7),
+    parkingslot_3d=dict(type='PlanarHead',
+                        in_channels=128,
+                        mid_channels=128,
+                        cen_seg_channels=5,
+                        reg_channels=15)
 )
 # loss configs
 bbox_3d_weight_scheme = dict(
-    cen=dict(loss_weight=1.0,
+    cen=dict(loss_weight=0.5,
              fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=5,
+             iou_loss_weight=2,
              dual_focal_loss_weight=1),
-    reg=dict(loss_weight=5.0))
+    reg=dict(loss_weight=1.0))
 
 loss_cfg = dict(
     bbox_3d=dict(
         type='PlanarLoss',
         loss_name_prefix='bbox_3d',
         weight_scheme=bbox_3d_weight_scheme),
-    # polyline_3d=dict(
-    #     type='PlanarLoss',
-    #     loss_name_prefix='polyline_3d'),
-    # parkingslot_3d=dict(
-    #     type='PlanarLoss',
-    #     loss_name_prefix='parkingslot_3d')
+    polyline_3d=dict(
+        type='PlanarLoss',
+        loss_name_prefix='polyline_3d'),
+    parkingslot_3d=dict(
+        type='PlanarLoss',
+        loss_name_prefix='parkingslot_3d')
 )
 
 # metric configs
@@ -300,12 +299,11 @@ optim_wrapper = dict(
                 lr=0.01, 
                 momentum=0.9,
                 weight_decay=0.0001),
-    # dtype='bfloat16'
+    dtype='bfloat16'
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR',
-                       milestones=[12, 20])
+param_scheduler = dict(type='MultiStepLR', milestones=[24, 36, 48])
 
 
 env_cfg = dict(
@@ -313,3 +311,5 @@ env_cfg = dict(
     mp_cfg=dict(mp_start_method='fork', opencv_num_threads=0),
     dist_cfg=dict(backend='nccl'),
 )
+
+# resume = True
