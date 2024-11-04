@@ -1,4 +1,5 @@
 from typing import List, Union, Dict, TYPE_CHECKING
+from collections import UserDict, Counter, defaultdict
 from pathlib import Path
 import copy
 
@@ -150,3 +151,53 @@ def read_ego_mask(path):
     if ego_mask.max() == 255:
         ego_mask = ego_mask / 255
     return ego_mask
+
+
+def T4x4(rotation: np.ndarray, translation: np.ndarray):
+    """Create a 4x4 transformation matrix
+
+    Parameters
+    ----------
+    rotation : np.ndarray
+        of shape (3, 3)
+    translation : np.ndarray
+        of shape (3,) or (1, 3) or (3, 1)
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
+    mat = np.eye(4)
+    mat[:3, :3] = rotation
+    mat[:3, 3] = translation.flatten()
+    return mat
+
+
+def get_reversed_mapping(mapping) -> Dict[str, str]:
+    """Get reversed mapping from mapping"""
+    reversed_mapping = {}
+    for k, v in mapping.items():
+        for vv in v:
+            reversed_mapping[vv] = k
+    return reversed_mapping
+
+
+def choose_index(index_im, choices):
+    """Alternative implementation (but support more than 32 choices) of 
+    >>> np.choose(index_im, choices)
+    """
+    max_batch_size = 16
+    assert len(choices) > 0
+    num_batches = (len(choices) + max_batch_size - 1) // max_batch_size
+    chosen = np.zeros_like(choices[0])
+    for b in range(num_batches):
+        start_ind = b * max_batch_size
+        end_ind = min(start_ind + max_batch_size, len(choices))
+        choices_batch = choices[start_ind:end_ind]
+        index_mask = (index_im >= start_ind) & (index_im < end_ind)
+        clipped_index_im = np.clip(index_im - start_ind, 0, len(choices_batch) - 1)
+        batch_result = np.choose(clipped_index_im, choices_batch)
+        chosen += batch_result * index_mask
+    return chosen
+    

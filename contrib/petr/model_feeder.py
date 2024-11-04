@@ -55,7 +55,7 @@ class StreamPETRModelFeeder(BaseModelFeeder):
                         ],
                     }
                     continue
-                if isinstance(trnsfmb, Bbox3D):
+                if isinstance(trnsfmb, Bbox3D) and len(trnsfmb.elements) > 0:
                     visible_boxes = self.get_boxes_within_visible_range(trnsfmb.tensor)
                     processed_frame[k] = visible_boxes["xyz_lwh_yaw_vx_vy"]
                     processed_frame["meta_info"][k] = {"classes": visible_boxes["classes"]}

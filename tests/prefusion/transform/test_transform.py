@@ -11,7 +11,8 @@ from prefusion.dataset.transform import (
     CameraImage, CameraImageSet,
     RandomSetIntrinsicParam, RandomSetExtrinsicParam,
     RenderIntrinsic, RenderExtrinsic, RandomRenderExtrinsic,
-    RandomChooseKTransform, RandomBrightness, RandomSharpness, RandomImEqualize
+    RandomChooseKTransform, RandomBrightness, RandomSharpness, RandomImEqualize,
+    RandomRotateSpace
 )
 
 class MockTextTransformable:
@@ -395,3 +396,8 @@ def test_random_isp_delegate_transform():
         [32, 35, 37, 40, 42, 44],
         [44, 46, 48, 51, 53, 55]]]
     ).transpose(1, 2, 0))
+
+def test_random_rotate_space(camera_imageset):
+    rotate_space = RandomRotateSpace(prob=1, prob_inverse_cameras_rotation=1)
+    transformed_camera_imageset = rotate_space(camera_imageset, seeds={'frame': 42, 'batch': 142, 'group': 1142})[0]
+    assert len(transformed_camera_imageset.transformables) == 2

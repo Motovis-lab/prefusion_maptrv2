@@ -73,13 +73,7 @@ class StreamPETR(BaseModel):
         self.stride = stride
         self.position_level = position_level
 
-    def forward(self, *args, mode="loss", **kwargs):
-        if mode == "loss":
-            return self.forward_train(*args, **kwargs)
-        else:
-            return self.forward_test(*args, **kwargs)
-
-    def forward_train(self, *, index_info=None, camera_images=None, bbox_3d=None, ego_poses=None, meta_info=None):
+    def forward(self, *, index_info=None, camera_images=None, bbox_3d=None, ego_poses=None, meta_info=None, mode="loss", **kwargs):
         B, (N, C, H, W) = len(camera_images), camera_images[0].shape
         camera_images = torch.vstack([i.unsqueeze(0) for i in camera_images]).reshape(B * N, C, H, W)
         im_size = camera_images.shape[-2:][::-1]
@@ -117,8 +111,22 @@ class StreamPETR(BaseModel):
         gt_labels = [m['bbox_3d']['classes'] for m in meta_info]
         outs = self.box_head(img_feats, location, img_metas, bbox_3d, gt_labels, topk_indexes=topk_indexes, **data)
 
-        loss_inputs = [bbox_3d, gt_labels, outs]
+        # self.visualize_bbox3d(data, bbox_3d, outs, meta_info, ego_poses)
 
+        if mode == "loss":
+            loss_inputs = [bbox_3d, gt_labels, outs]
+            losses = self.box_head.loss(*loss_inputs)
+            # if self.with_img_roi_head:
+            #     loss2d_inputs = [gt_bboxes, gt_labels, centers2d, depths, outs_roi, img_metas]
+            #     losses2d = self.img_roi_head.loss(*loss2d_inputs)
+            #     losses.update(losses2d)
+            return losses
+        elif mode == "predict":
+            return [{"name": k, "content": v} for k, v in outs.items()]
+        elif mode == "tensor":
+            return outs
+
+    def visualize_bbox3d(self, data, bbox_3d, outs, meta_info, ego_poses, *args, **kwargs):
         ###########################
         # FIXME: Visualize Images
         ###########################
@@ -186,19 +194,7 @@ class StreamPETR(BaseModel):
             plt.gca().set_aspect('equal')
             plt.savefig(f"./vis/{ts.item()}.png")
             plt.close()
-        a = 100
-
-        losses = self.box_head.loss(*loss_inputs)
-
-        # if self.with_img_roi_head:
-        #     loss2d_inputs = [gt_bboxes, gt_labels, centers2d, depths, outs_roi, img_metas]
-        #     losses2d = self.img_roi_head.loss(*loss2d_inputs)
-        #     losses.update(losses2d)
-
-        return losses
-
-    def forward_test(self, *args, **kwargs):
-        return
+        a = 100        
 
     def extract_img_feat(self, img: torch.Tensor):
         """

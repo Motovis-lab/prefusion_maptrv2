@@ -11,6 +11,7 @@ from .utils import (
     expand_line_2d, _sign, INF_DIST,
     vec_point2line_along_direction, 
     dist_point2line_along_direction,
+    choose_index
 )
 from .transform import (
     CameraImage, CameraSegMask, CameraDepth,
@@ -170,9 +171,11 @@ class PlanarBbox3D(PlanarTensorSmith):
         ```
         elements[0] = {
             'class': 'class.vehicle.passenger_car',
-            'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
-                    'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
-                    'attr.vehicle.is_door_open': 'attr.vehicle.is_door_open.false'},
+            'attr': [
+                'attr.time_varying.object.state.stationary',
+                'attr.vehicle.is_trunk_open.false',
+                'attr.vehicle.is_door_open.false'
+            ],
             'size': [4.6486, 1.9505, 1.5845],
             'rotation': array([
                 [ 0.93915682, -0.32818596, -0.10138267],
@@ -243,7 +246,7 @@ class PlanarBbox3D(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -506,9 +509,11 @@ class PlanarRectangularCuboid(PlanarBbox3D):
         ```
         elements[0] = {
             'class': 'class.vehicle.passenger_car',
-            'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
-                    'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
-                    'attr.vehicle.is_door_open': 'attr.vehicle.is_door_open.false'},
+            'attr': [
+                'attr.time_varying.object.state.stationary',
+                'attr.vehicle.is_trunk_open.false',
+                'attr.vehicle.is_door_open.false'
+            ],
             'size': [4.6486, 1.9505, 1.5845],
             'rotation': array([
                 [ 0.93915682, -0.32818596, -0.10138267],
@@ -577,7 +582,7 @@ class PlanarRectangularCuboid(PlanarBbox3D):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -874,7 +879,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -1151,7 +1156,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -1404,7 +1409,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -1656,7 +1661,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -1713,12 +1718,17 @@ class PlanarPolyline3D(PlanarTensorSmith):
                     points_grid_bev + vec_map - line_bev[0][..., None, None], axis=0
                 )
                 height_ims.append(height_im)
-
-        index_im = np.argmin(np.array(dist_ims), axis=0)
-        vec_im = np.choose(index_im, vec_ims)
-        dist_im = np.choose(index_im, dist_ims)
-        dir_im = np.choose(index_im, dir_ims)
-        height_im = np.choose(index_im, height_ims)
+        if len(dist_ims) > 0:
+            index_im = np.argmin(np.array(dist_ims), axis=0)
+            vec_im = choose_index(index_im, vec_ims)
+            dist_im = choose_index(index_im, dist_ims)
+            dir_im = choose_index(index_im, dir_ims)
+            height_im = choose_index(index_im, height_ims)
+        else:
+            vec_im = np.zeros((2, X, Y))
+            dist_im = np.zeros((X, Y))
+            dir_im = np.zeros((3, X, Y))
+            height_im = np.zeros((X, Y))
 
         reg_im = np.concatenate([
             seg_im[:1] * dist_im[None],
@@ -1759,47 +1769,15 @@ class PlanarPolyline3D(PlanarTensorSmith):
 
         return kept_groups
 
-
-    @staticmethod
-    def _angle_hook_dist(oriented_point_1, oriented_point_2, disth_thresh=2, z_weight=10):
-        point_1, abs_dir_1 = oriented_point_1
-        point_2, abs_dir_2 = oriented_point_2
-        
-        vec_1 = np.float32([abs_dir_1[0], abs_dir_1[1] * abs_dir_1[2]])
-        vec_2 = np.float32([abs_dir_2[0], abs_dir_2[1] * abs_dir_2[2]])
-        vec_1 /= np.linalg.norm(vec_1)
-        vec_2 /= np.linalg.norm(vec_2)
-        # vec_mean = 0.5 * (vec_1 + vec_2)
-        
-        dir_12 = point_2 - point_1
-        dist_12 = np.linalg.norm(dir_12)
-        unit_12 = dir_12 / dist_12
-
-        if dist_12 < disth_thresh:
-            # calc link_dir vs vec similarity
-            link_12 = dir_12[:2] / max(1e-5, np.linalg.norm(dir_12[:2]))
-            cos_link = np.sum(link_12 * vec_1)
-            # calc vec_1 vs vec_2 similarity
-            cos_12 = np.sum(vec_1 * vec_2)
-            # z distance
-            dist_z = np.abs(unit_12[2])
-            dir_gain = 0.5 * disth_thresh * (cos_link + cos_12)
-            dist = dist_12 + z_weight * dist_z - dir_gain
-        else:
-            dist = dist_12
-        
-        return dist
-        
-
     def _link_line_points(self, fused_points, fused_vecs, max_adist):
         points_ind = np.arange(fused_points.shape[1])
         # get groups of line segments
         line_segments = []
-        kept_inds = []
+        kept_inds = {}
 
         for i in points_ind:
             if i not in kept_inds:
-                kept_inds.append(i)
+                kept_inds[i] = 1
                 grouped_inds = [i]
                 line_segments.append(grouped_inds)
                 # go forward if direction is similar
@@ -1816,22 +1794,23 @@ class PlanarPolyline3D(PlanarTensorSmith):
                             abs_vec_j = fused_vecs[:, j]
                             oriented_point_j = [point_j, abs_vec_j]
                             point_vec = point_j - point_i_forward
-                            ward = np.sum(point_vec * vec_i_forward)
+                            ward = fast_inner_product(point_vec, vec_i_forward) # np.sum(point_vec * vec_i_forward)
                             if ward > 0:
-                                adist_ij = self._angle_hook_dist(oriented_point_i_forward, oriented_point_j, disth_thresh=max_adist)
+                                adist_ij = _angle_hook_dist(oriented_point_i_forward, oriented_point_j, disth_thresh=max_adist)
                                 if adist_ij < adist_forward_max:
                                     adist_forward_max = adist_ij
                                     adist_forward_max_ind = j
                     if adist_forward_max >= max_adist:
                         break
                     grouped_inds.append(adist_forward_max_ind)
-                    kept_inds.append(adist_forward_max_ind)
+                    kept_inds[adist_forward_max_ind] = 1
                     point_i_forward_old = point_i_forward
                     point_i_forward = fused_points[:, adist_forward_max_ind]
                     abs_vec_i_forward = fused_vecs[:, adist_forward_max_ind]
                     oriented_point_i_forward = [point_i_forward, abs_vec_i_forward]
                     vec_i_forward = np.float32([abs_vec_i_forward[0], abs_vec_i_forward[1] * abs_vec_i_forward[2], 0])
-                    if np.sum(vec_i_forward * (point_i_forward - point_i_forward_old)) <= 0:
+                    # if np.sum(vec_i_forward * (point_i_forward - point_i_forward_old)) <= 0:
+                    if fast_inner_product(vec_i_forward, (point_i_forward - point_i_forward_old)) <= 0:
                         vec_i_forward *= -1
                     
                 # go backward if direction is opposite
@@ -1848,22 +1827,23 @@ class PlanarPolyline3D(PlanarTensorSmith):
                             abs_vec_j = fused_vecs[:, j]
                             oriented_point_j = [point_j, abs_vec_j]
                             point_vec = point_j - point_i_backward
-                            ward = np.sum(point_vec * vec_i_backward)
+                            ward = fast_inner_product(point_vec, vec_i_backward) # np.sum(point_vec * vec_i_backward)
                             if ward <= 0:
-                                adist_ij = self._angle_hook_dist(oriented_point_i_backward, oriented_point_j, disth_thresh=max_adist)
+                                adist_ij = _angle_hook_dist(oriented_point_i_backward, oriented_point_j, disth_thresh=max_adist)
                                 if adist_ij < adist_backward_max:
                                     adist_backward_max = adist_ij
                                     adist_backward_max_ind = j
                     if adist_backward_max >= max_adist:
                         break
                     grouped_inds.insert(0, adist_backward_max_ind)
-                    kept_inds.append(adist_backward_max_ind)
+                    kept_inds[adist_backward_max_ind] = 1
                     point_i_backward_old = point_i_backward
                     point_i_backward = fused_points[:, adist_backward_max_ind]
                     abs_vec_i_backward = fused_vecs[:, adist_backward_max_ind]
                     oriented_point_i_backward = [point_i_backward, abs_vec_i_backward]
                     vec_i_backward = np.float32([abs_vec_i_backward[0], abs_vec_i_backward[1] * abs_vec_i_backward[2], 0])
-                    if np.sum(vec_i_backward * (point_i_backward - point_i_backward_old)) > 0:
+                    # if np.sum(vec_i_backward * (point_i_backward - point_i_backward_old)) > 0:
+                    if fast_inner_product(vec_i_backward, (point_i_backward - point_i_backward_old)) > 0:
                         vec_i_backward *= -1
         
         # remove isolated points
@@ -1953,7 +1933,44 @@ class PlanarPolyline3D(PlanarTensorSmith):
         return polylines_3d
 
 
+@numba.jit(nopython=True)
+def fast_norm(x):
+    return np.sqrt(np.sum(x * x))
 
+
+@numba.jit(nopython=True)
+def fast_inner_product(x, y):
+    return (x[None, :] @ y[:, None])[0, 0]
+
+
+def _angle_hook_dist(oriented_point_1, oriented_point_2, disth_thresh=2, z_weight=10):
+    point_1, abs_dir_1 = oriented_point_1
+    point_2, abs_dir_2 = oriented_point_2
+    
+    vec_1 = np.float32([abs_dir_1[0], abs_dir_1[1] * abs_dir_1[2]])
+    vec_2 = np.float32([abs_dir_2[0], abs_dir_2[1] * abs_dir_2[2]])
+    vec_1 /= fast_norm(vec_1)
+    vec_2 /= fast_norm(vec_2)
+    # vec_mean = 0.5 * (vec_1 + vec_2)
+    
+    dir_12 = point_2 - point_1
+    dist_12 = fast_norm(dir_12)
+    unit_12 = dir_12 / dist_12
+
+    if dist_12 < disth_thresh:
+        # calc link_dir vs vec similarity
+        link_12 = dir_12[:2] / max(1e-5, fast_norm(dir_12[:2]))
+        cos_link = fast_inner_product(link_12, vec_1) # np.sum(link_12 * vec_1)
+        # calc vec_1 vs vec_2 similarity
+        cos_12 = fast_inner_product(vec_1, vec_2) # np.sum(vec_1 * vec_2)
+        # z distance
+        dist_z = np.abs(unit_12[2])
+        dir_gain = 0.5 * disth_thresh * (cos_link + cos_12)
+        dist = dist_12 + z_weight * dist_z - dir_gain
+    else:
+        dist = dist_12
+    
+    return dist
 
 
 @TENSOR_SMITHS.register_module()
@@ -1999,7 +2016,7 @@ class PlanarPolygon3D(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -2057,11 +2074,17 @@ class PlanarPolygon3D(PlanarTensorSmith):
                 )
                 height_ims.append(height_im)
 
-        index_im = np.argmin(np.array(dist_ims), axis=0)
-        vec_im = np.choose(index_im, vec_ims)
-        dist_im = np.choose(index_im, dist_ims)
-        dir_im = np.choose(index_im, dir_ims)
-        height_im = np.choose(index_im, height_ims)
+        if len(dist_ims) > 0:
+            index_im = np.argmin(np.array(dist_ims), axis=0)
+            vec_im = choose_index(index_im, vec_ims)
+            dist_im = choose_index(index_im, dist_ims)
+            dir_im = choose_index(index_im, dir_ims)
+            height_im = choose_index(index_im, height_ims)
+        else:
+            vec_im = np.zeros((2, X, Y))
+            dist_im = np.zeros((X, Y))
+            dir_im = np.zeros((3, X, Y))
+            height_im = np.zeros((X, Y))
 
         reg_im = np.concatenate([
             seg_im * dist_im[None],

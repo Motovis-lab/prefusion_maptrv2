@@ -41,8 +41,6 @@ def _render_virtual_image(
         vcamera = PerspectiveCamera((W, H), (R, t), intrinsic)
     elif virtual_camera_type == "FisheyeCamera":
         fov = 180
-        W = 1024
-        H = 640
         cx = (W - 1) / 2
         cy = (H - 1) / 2
         fx = fy = W / 4
@@ -63,7 +61,12 @@ def create_camera_model(cam_model_type: str, cam_calib_info: dict, ego_mask_path
     cam_model_cls = CAMERA_MODEL_CLS_MAPPING[cam_model_type]
     cam_model = cam_model_cls.init_from_motovis_cfg(cam_calib_info)
     if ego_mask_path is not None:
-        cam_model.ego_mask = mmcv.imread(ego_mask_path, channel_order="gray")
+        _mask = mmcv.imread(ego_mask_path, channel_order="gray")
+        if _mask.ndim == 3:
+            _mask = _mask[..., 0]
+        if _mask.max() == 255:
+            _mask = _mask / 255
+        cam_model.ego_mask = _mask
     return cam_model
 
 
@@ -94,7 +97,7 @@ def render_virtual_iamge(data_args):
 
 def main(args):
     calib = read_yaml(args.motovis_calibration)
-    real_cam_model = create_camera_model(args.real_camera_type, calib["rig"][args.real_camera_id])
+    real_cam_model = create_camera_model(args.real_camera_type, calib["rig"][args.real_camera_id], ego_mask_path=args.real_camera_ego_mask)
     real_image_paths = get_real_image_paths(args.real_camera_image_dir, args.img_suffix)
     data_args = [
         (
@@ -117,12 +120,14 @@ def main(args):
     vcam_calib = {
         "extrinsic": v_camera_t.tolist() + Rotation.from_matrix(v_camera_rmatrix).as_quat().tolist(),
         "pp": list(v_camera_intrinsic[:2]),
-        "focal": list(v_camera_intrinsic[2:]),
+        "focal": list(v_camera_intrinsic[2:4]),
         "image_size": list(d_vcamera.resolution),
         "fov_fit": vcamera_fov,
         "sensor_model": type(d_vcamera).__name__,
         "sensor_id": args.virtual_camera_id,
     }
+    if args.virtual_camera_type == "FisheyeCamera":
+        vcam_calib["inv_poly"] = list(v_camera_intrinsic[4:])
     write_yaml(vcam_calib, args.virtual_camera_calibration_save_path)
 
 

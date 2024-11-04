@@ -25,7 +25,7 @@ class PlanarLoss(nn.Module):
     reduction_dim: Union[Tuple, List] = (0, 2, 3)
 
     def __init__(
-        self, *args, loss_name_prefix: str, weight_scheme: Dict[str, Dict], auto_loss_init_value: float = 1e-5, **kwargs
+        self, *args, loss_name_prefix: str = None, weight_scheme: Dict[str, Dict] = None, auto_loss_init_value: float = 1e-5, **kwargs
     ) -> None:
         """Specially designed loss for planar data.
 
@@ -76,6 +76,7 @@ class PlanarLoss(nn.Module):
 
         """
         super().__init__(*args, **kwargs)
+        assert loss_name_prefix is not None, "loss_name_prefix must be provided"
         self.loss_name_prefix = loss_name_prefix
         self.total_loss_name = complete_loss_name(self.loss_name_prefix)
         self.weight_scheme = edict(weight_scheme)
@@ -97,9 +98,9 @@ class PlanarLoss(nn.Module):
 
     def unify_reg_partition_weights_(self):
         """Unify single value index to standard 2-value slice"""
-        if "reg" not in self.weight_scheme:
+        if "reg" not in self.weight_scheme or "partition_weights" not in self.weight_scheme["reg"]:
             return
-
+        
         for partition_name, partition_info in self.weight_scheme.reg.partition_weights.items():
             try:
                 _slice = slice(*partition_info.slice)
@@ -117,14 +118,15 @@ class PlanarLoss(nn.Module):
         return tensor_dict
 
     def forward(self, pred: torch.Tensor, label: torch.Tensor):
-        assert set(pred.keys()) == set(label.keys()) == set(self.weight_scheme.keys())
+        assert set(pred.keys()) == set(label.keys())
         pred = self._ensure_shape_nchw(pred)
         label = self._ensure_shape_nchw(label)
 
         loss = {}
-        for task in self.weight_scheme:
+        for task in label:
             _loss_func = getattr(self, f"_{task}_loss")
             fg_mask = label["seg"][:, 0:1] if task in ["cen", "reg"] else None
+            self.weight_scheme.setdefault(task, {"loss_weight": 1.0})  # if not provided, use 1.0 as default
             task_related_loss = _loss_func(pred[task], label[task], fg_mask=fg_mask, **self.weight_scheme[task])
             loss.update(**task_related_loss)
 
@@ -203,6 +205,9 @@ class PlanarLoss(nn.Module):
         partition_weights: Dict[str, dict] = None,
         **kwargs,
     ):
+        if partition_weights is None:
+            partition_weights = edict({f"{c}": {"weight": 1.0, "slice": slice(c, c + 1)} for c in range(label.shape[1])})
+
         assert list(range(pred.shape[1])) == self.enumerate_slices(
             [p.slice for p in partition_weights.values()]
         ), "partition weight slices doesn't meet MECE principle."

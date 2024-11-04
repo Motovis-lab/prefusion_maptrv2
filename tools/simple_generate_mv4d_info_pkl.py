@@ -10,6 +10,8 @@ from copious.io.fs import parent_ensured_path, read_yaml, read_json, write_pickl
 from copious.io.parallelism import maybe_multithreading
 from copious.cv.geometry import xyzq2mat, euler2mat, points3d_to_homo
 
+from prefusion.dataset.utils import T4x4
+
 
 class Mat4x4(argparse.Action):
     def __call__(
@@ -59,9 +61,10 @@ def main():
 
 def prepare_scene(args, scene_root: Path) -> Dict:
     logger.info(f"Generating info pkl for scene {scene_root.name}")
+    calib = prepare_calibration(scene_root)
     return {
         "scene_info": {
-            "calibration": prepare_calibration(scene_root),
+            "calibration": calib,
             "camera_mask": prepare_camera_mask(scene_root),
             "depth_mode": prepare_depth_mode(scene_root),
         },
@@ -74,7 +77,7 @@ def prepare_scene(args, scene_root: Path) -> Dict:
             "time_range": 2,
             "time_unit": 1e-3,
         },
-        "frame_info": prepare_all_frame_infos(args, scene_root),
+        "frame_info": prepare_all_frame_infos(args, scene_root, calib),
     }
 
 
@@ -115,7 +118,7 @@ def prepare_ego_poses(scene_root: Path) -> Dict[int, np.ndarray]:
     return poses
 
 
-def prepare_all_frame_infos(args, scene_root: Path) -> Dict:
+def prepare_all_frame_infos(args, scene_root: Path, calib: dict) -> Dict:
     common_ts = read_common_ts(scene_root)
 
     if args.timestamp_range is not None and len(args.timestamp_range) == 2:
@@ -127,8 +130,9 @@ def prepare_all_frame_infos(args, scene_root: Path) -> Dict:
     res = maybe_multithreading(prepare_object_info, data_args, num_threads=args.num_workers, use_tqdm=True)
     ego_poses = prepare_ego_poses(scene_root)
     for ts, boxes, polylines in res:
+        transform_velocity_to_ego_(boxes, ego_poses[ts])  # box velo from upstream is assumed to be direction-vector in the world sys, so we need to transform it to ego sys
         frame_infos[str(ts)] = {  # convert to str to make it align with the design
-            "camera_image": prepare_camera_image_paths(scene_root, ts),
+            "camera_image": prepare_camera_image_paths(scene_root, ts, calib),
             "3d_boxes": boxes,
             "3d_polylines": polylines,
             "ego_pose": ego_poses[ts],
@@ -143,10 +147,13 @@ def read_common_ts(scene_root: Path) -> List[int]:
     return [int(i["lidar"]) for i in ts_info]
 
 
-def prepare_camera_image_paths(scene_root: Path, ts: int) -> Dict[str, str]:
-    return {
-        p.parent.name: p.relative_to(scene_root.parent) for p in (scene_root / args.camera_root_name).rglob(f"*{ts}*.jpg")
-    }
+def prepare_camera_image_paths(scene_root: Path, ts: int, calib: dict) -> Dict[str, str]:
+    camera_image_paths = {}
+    for p in (scene_root / args.camera_root_name).rglob(f"*{ts}*.jpg"):
+        cam_id = p.parent.name
+        if cam_id in calib:
+            camera_image_paths[cam_id] = p.relative_to(scene_root.parent)
+    return camera_image_paths
 
 
 def prepare_object_info(scene_root: Path, ts: int) -> Tuple[List[dict], List[dict]]:
@@ -159,6 +166,28 @@ def prepare_object_info(scene_root: Path, ts: int) -> Tuple[List[dict], List[dic
         elif obj.geometry_type == "polyline3d":
             polylines.append(convert_polyline3d_format(obj))
     return ts, boxes, polylines
+
+
+def transform_velocity_to_ego_(boxes: List[Dict], ego_pose: Dict[str, np.ndarray]) -> None:
+    rot_world_to_ego = np.linalg.inv(ego_pose["rotation"])
+    for bx in boxes:
+        bx["velocity"] = (bx["velocity"][None] @ rot_world_to_ego.T)[0]
+
+
+############################################################################################################################################
+# TODO: put rearrange_object_class_attr_ and unify_longer_shorter_edge_definition_ to Bbox3DLoader, and use config to control the behavior
+# rearrange_object_class_attr_:
+#   attr_translate = {
+#       "attr.traffic_facility.box.type",
+#       "attr.traffic_facility.soft_barrier.type",
+#       "attr.traffic_facility.hard_barrier.type"
+#       "attr.parking.indoor_column.shape"
+#   }
+#
+# unify_longer_shorter_edge_definition_:
+#     standard direction: X-axis perpendicular to the longer edge
+#     steps: check if X-axis not perpendicular to the longer edge, if yes, rotate the box (RotMat) by 90 deg, and switch scale[0] and scale[1]
+############################################################################################################################################
 
 
 def convert_box3d_format(box_info: Dict):
@@ -185,7 +214,8 @@ def convert_polyline3d_format(polyline_info: Dict):
     return {
         "class": polyline_info.obj_type,
         "attr": polyline_info.obj_attr,
-        "points": standard_points[:3],
+        "points": standard_points[:, :3],
+        "track_id": polyline_info.obj_track_id,
     }
 
 
