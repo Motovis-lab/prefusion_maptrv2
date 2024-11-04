@@ -13,9 +13,9 @@ from mmengine.config import Config
 
 cfg = Config.fromfile("contrib/fastbev_det/configs/mv_4d_fastbev_3dbox_deploy.py")
 
-input_fish = torch.ones((4, 3, 80, 128)).float().cuda()
-input_pv = torch.ones(5, 3, 96, 128).float().cuda()
-input_front = torch.ones(1, 3, 96, 192).float().cuda()
+input_fish = torch.ones((4, 96, 80, 128)).float().cuda()
+input_pv = torch.ones(5, 96, 96, 128).float().cuda()
+input_front = torch.ones(1, 96, 96, 192).float().cuda()
 img_front = mmcv.imread("work_dirs/vt_debug/img_fish_feats_0_0.jpg").transpose(2,0,1)
 img_left = mmcv.imread("work_dirs/vt_debug/img_fish_feats_0_1.jpg").transpose(2,0,1)
 img_back = mmcv.imread("work_dirs/vt_debug/img_fish_feats_0_2.jpg").transpose(2,0,1)
