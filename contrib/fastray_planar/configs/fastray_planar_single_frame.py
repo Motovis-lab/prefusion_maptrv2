@@ -147,14 +147,26 @@ camera_resolution_configs=dict(
     VCAMERA_FISHEYE_RIGHT=resolution_fisheyes)
 
 
-debug_mode = False
+debug_mode = True
 
 if debug_mode:
     batch_size = 1
     num_workers = 0
+    transforms = [
+        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs)
+    ]
 else:
     batch_size = 12
     num_workers = 6
+    transforms = [
+        dict(type='RandomRenderExtrinsic'),
+        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs),
+        dict(type='RandomRotateSpace'),
+        dict(type='RandomMirrorSpace'),
+        dict(type='RandomImageISP', prob=0.2),
+        dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
+        dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
+    ]
 
 ## GroupBatchDataset configs
 train_dataset = dict(
@@ -183,15 +195,7 @@ train_dataset = dict(
         #     dictionary=dict(classes=['class.parking.parking_slot']),
         #     tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range))
     ),
-    transforms=[
-        dict(type='RandomRenderExtrinsic'),
-        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs),
-        dict(type='RandomRotateSpace'),
-        dict(type='RandomMirrorSpace'),
-        dict(type='RandomImageISP', prob=0.2),
-        dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
-        dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
-    ],
+    transforms=transforms,
     phase="train",
     batch_size=batch_size,
     possible_group_sizes=1,
@@ -330,8 +334,8 @@ env_cfg = dict(
     dist_cfg=dict(backend='nccl'),
 )
 
-# load_from = "./work_dirs/fastray_planar_single_frame_1102/epoch_13.pth"
+load_from = "./work_dirs/fastray_planar_single_frame_1102_2/epoch_50.pth"
 
-work_dir = './work_dirs/fastray_planar_single_frame_1102_2'
+work_dir = './work_dirs/fastray_planar_single_frame_1102_infer'
 
-resume = True
+# resume = True

@@ -411,7 +411,7 @@ class VoxelTemporalAlign(BaseModule):
 
 @MODELS.register_module()
 class VoxelStreamFusion(BaseModule):
-    def __init__(self, in_channels, mid_channels, bev_mode=False, init_cfg=None):
+    def __init__(self, in_channels, mid_channels=128, bev_mode=False, init_cfg=None):
         super().__init__(init_cfg=init_cfg)
         self.bev_mode = bev_mode
         if bev_mode:
@@ -662,10 +662,31 @@ class FastRayPlanarSingleFrameModel(BaseModel):
 
             gt_seg = batched_input_dict['annotations']['bbox_3d']['seg'][0][0].detach().cpu()
             plt.imshow(gt_seg)
+            plt.title('gt_seg')
             plt.show()
-
             pred_seg = pred_bbox_3d['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
             plt.imshow(pred_seg)
+            plt.title("pred_seg")
+            plt.show()
+
+            gt_cen = batched_input_dict['annotations']['bbox_3d']['cen'][0][0].detach().cpu()
+            plt.imshow(gt_cen)
+            plt.title("gt_cen")
+            plt.show()
+            pred_cen = pred_bbox_3d['cen'][0][0].to(torch.float32).sigmoid().detach().cpu()
+            pred_cen *= (pred_seg > 0.5)
+            plt.imshow(pred_cen)
+            plt.title("pred_cen")
+            plt.show()
+
+            gt_reg = batched_input_dict['annotations']['bbox_3d']['reg'][0][0].detach().cpu()
+            plt.imshow(gt_reg)
+            plt.title("gt_reg")
+            plt.show()
+            pred_reg = pred_bbox_3d['reg'][0][0].to(torch.float32).detach().cpu()
+            pred_reg *= (pred_seg > 0.5)
+            plt.imshow(pred_reg)
+            plt.title("pred_reg")
             plt.show()
         
         if mode == 'tensor':
@@ -712,14 +733,15 @@ class FastRayPlanarStreamModel(BaseModel):
                  temporal_transform,
                  voxel_fusion,
                  heads,
+                 debug_mode=False,
                  loss_cfg=None,
                  data_preprocessor=None,
                  init_cfg=None):
         super().__init__(data_preprocessor, init_cfg)
+        self.debug_mode = debug_mode
         # backbone
         self.camera_groups = camera_groups
-        self.backbone_pv_front = MODELS.build(backbones['pv_front'])
-        self.backbone_pv_sides = MODELS.build(backbones['pv_sides'])
+        self.backbone_perspectives = MODELS.build(backbones['perspectives'])
         self.backbone_fisheyes = MODELS.build(backbones['fisheyes'])
         # view transform and temporal transform
         self.spatial_transform = MODELS.build(spatial_transform)
@@ -773,10 +795,8 @@ class FastRayPlanarStreamModel(BaseModel):
         # backbone
         camera_feats_dict = {}
         for cam_id in camera_tensors_dict:
-            if cam_id in self.camera_groups['pv_front']:
-                camera_feats_dict[cam_id] = self.backbone_pv_front(camera_tensors_dict[cam_id])
-            if cam_id in self.camera_groups['pv_sides']:
-                camera_feats_dict[cam_id] = self.backbone_pv_sides(camera_tensors_dict[cam_id])
+            if cam_id in self.camera_groups['perspectives']:
+                camera_feats_dict[cam_id] = self.backbone_perspectives(camera_tensors_dict[cam_id])
             if cam_id in self.camera_groups['fisheyes']:
                 camera_feats_dict[cam_id] = self.backbone_fisheyes(camera_tensors_dict[cam_id])
         # spatial transform: output shape can be 4D or 5D (N, C*Z, X, Y) or (N, C, Z, X, Y)
@@ -787,7 +807,7 @@ class FastRayPlanarStreamModel(BaseModel):
         voxel_feats_pre_aligned = self.temporal_transform(self.voxel_feats_pre, delta_poses)
         # voxel fusion
         voxel_feats_updated = self.voxel_fusion(voxel_feats_cur, voxel_feats_pre_aligned)
-        self.voxel_feats_pre = voxel_feats_cur.clone().detach()
+        self.voxel_feats_pre = voxel_feats_updated.clone().detach()
         # voxel encoder
         if len(voxel_feats_updated.shape) == 5:
             N, C, Z, X, Y = voxel_feats_updated.shape
@@ -809,6 +829,95 @@ class FastRayPlanarStreamModel(BaseModel):
             seg=out_parkingslot_3d[0][:, 1:],
             reg=out_parkingslot_3d[1])
         
+        if self.debug_mode:
+            import numpy as np
+            import matplotlib.pyplot as plt
+
+            front_img = camera_tensors_dict['VCAMERA_PERSPECTIVE_FRONT'].detach().cpu().numpy()[0].transpose(1, 2, 0)[..., ::-1] * 255 + 128
+            front_img = front_img.astype(np.uint8)
+            
+            plt.imshow(front_img)
+            plt.show()
+
+            gt_seg = batched_input_dict['annotations']['bbox_3d']['seg'][0][0].detach().cpu()
+            plt.imshow(gt_seg)
+            plt.title('bbox_3d gt_seg')
+            plt.show()
+            pred_seg = pred_bbox_3d['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
+            plt.imshow(pred_seg)
+            plt.title("bbox_3d pred_seg")
+            plt.show()
+
+            gt_cen = batched_input_dict['annotations']['bbox_3d']['cen'][0][0].detach().cpu()
+            plt.imshow(gt_cen)
+            plt.title("bbox_3d gt_cen")
+            plt.show()
+            pred_cen = pred_bbox_3d['cen'][0][0].to(torch.float32).sigmoid().detach().cpu()
+            pred_cen *= (pred_seg > 0.5)
+            plt.imshow(pred_cen)
+            plt.title("bbox_3d pred_cen")
+            plt.show()
+
+            gt_reg = batched_input_dict['annotations']['bbox_3d']['reg'][0][0].detach().cpu()
+            plt.imshow(gt_reg)
+            plt.title("bbox_3d gt_reg")
+            plt.show()
+            pred_reg = pred_bbox_3d['reg'][0][0].to(torch.float32).detach().cpu()
+            pred_reg *= (pred_seg > 0.5)
+            plt.imshow(pred_reg)
+            plt.title("bbox_3d pred_reg")
+            plt.show()
+            
+            
+            gt_seg = batched_input_dict['annotations']['parkingslot_3d']['seg'][0][1].detach().cpu()
+            plt.imshow(gt_seg)
+            plt.title('parkingslot_3d gt_seg')
+            plt.show()
+            pred_mask = pred_parkingslot_3d['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
+            pred_seg = pred_parkingslot_3d['seg'][0][1].to(torch.float32).sigmoid().detach().cpu()
+            plt.imshow(pred_seg)
+            plt.title("parkingslot_3d pred_seg")
+            plt.show()
+
+            gt_cen = batched_input_dict['annotations']['parkingslot_3d']['cen'][0][0].detach().cpu()
+            plt.imshow(gt_cen)
+            plt.title("parkingslot_3d gt_cen")
+            plt.show()
+            pred_cen = pred_parkingslot_3d['cen'][0][0].to(torch.float32).sigmoid().detach().cpu()
+            pred_cen *= (pred_mask > 0.5)
+            plt.imshow(pred_cen)
+            plt.title("parkingslot_3d pred_cen")
+            plt.show()
+
+            gt_reg = batched_input_dict['annotations']['parkingslot_3d']['reg'][0][2].detach().cpu()
+            plt.imshow(gt_reg)
+            plt.title("parkingslot_3d gt_reg")
+            plt.show()
+            pred_reg = pred_parkingslot_3d['reg'][0][2].to(torch.float32).detach().cpu()
+            pred_reg *= (pred_mask > 0.5)
+            plt.imshow(pred_reg)
+            plt.title("parkingslot_3d pred_reg")
+            plt.show()
+
+            gt_seg = batched_input_dict['annotations']['polyline_3d']['seg'][0][0].detach().cpu()
+            plt.imshow(gt_seg)
+            plt.title('polyline_3d gt_seg')
+            plt.show()
+            pred_seg = pred_polyline_3d['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
+            plt.imshow(pred_seg)
+            plt.title("polyline_3d pred_seg")
+            plt.show()
+
+            gt_reg = batched_input_dict['annotations']['polyline_3d']['reg'][0][0].detach().cpu()
+            plt.imshow(gt_reg)
+            plt.title("polyline_3d gt_reg")
+            plt.show()
+            pred_reg = pred_polyline_3d['reg'][0][0].to(torch.float32).detach().cpu()
+            pred_reg *= (pred_seg > 0.5)
+            plt.imshow(pred_reg)
+            plt.title("polyline_3d pred_reg")
+            plt.show()
+        
         if mode == 'tensor':
             return dict(
                 hidden_feats=self.voxel_feats_pre,
@@ -821,15 +930,19 @@ class FastRayPlanarStreamModel(BaseModel):
             gt_polyline_3d = batched_input_dict['annotations']['polyline_3d']
             gt_parkingslot_3d = batched_input_dict['annotations']['parkingslot_3d']
 
-            loss_bbox_3d = self.loss_bbox_3d(pred_bbox_3d, gt_bbox_3d)['bbox_3d_loss']
-            loss_polyline_3d = self.loss_polyline_3d(pred_polyline_3d, gt_polyline_3d)['polyline_3d_loss']
-            loss_parkingslot_3d = self.loss_parkingslot_3d(pred_parkingslot_3d, gt_parkingslot_3d)['parkingslot_3d_loss']
+            loss_bbox_3d = self.loss_bbox_3d(pred_bbox_3d, gt_bbox_3d)
+            loss_polyline_3d = self.loss_polyline_3d(pred_polyline_3d, gt_polyline_3d)
+            loss_parkingslot_3d = self.loss_parkingslot_3d(pred_parkingslot_3d, gt_parkingslot_3d)
+
+            total_loss = sum([loss_bbox_3d['bbox_3d_loss'],
+                              loss_polyline_3d['polyline_3d_loss'],
+                              loss_parkingslot_3d['parkingslot_3d_loss']])
 
             losses = dict(
-                loss=loss_bbox_3d + loss_polyline_3d + loss_parkingslot_3d,
-                loss_bbox_3d=loss_bbox_3d,
-                loss_polyline_3d=loss_polyline_3d,
-                loss_parkingslot_3d=loss_parkingslot_3d
+                loss=total_loss,
+                seg_iou_loss_bbox_3d=loss_bbox_3d['bbox_3d_seg_iou_0_loss'],
+                seg_iou_loss_polyline_3d=loss_polyline_3d['polyline_3d_seg_iou_0_loss'],
+                seg_iou_loss_parkingslot_3d=loss_parkingslot_3d['parkingslot_3d_seg_iou_0_loss']
             )
 
             return losses
