@@ -118,12 +118,12 @@ dictionary_polygons = dict(
 ## camera configs for model inputs
 
 camera_groups = dict(
-    perspectives=['VCAMERA_PERSPECTIVE_FRONT',
-                  'VCAMERA_PERSPECTIVE_FRONT_LEFT',
-                  'VCAMERA_PERSPECTIVE_FRONT_RIGHT',
-                  'VCAMERA_PERSPECTIVE_BACK_LEFT',
-                  'VCAMERA_PERSPECTIVE_BACK_RIGHT',
-                  'VCAMERA_PERSPECTIVE_BACK'],
+    pv_front=['VCAMERA_PERSPECTIVE_FRONT'],
+    pv_sides=['VCAMERA_PERSPECTIVE_FRONT_LEFT',
+              'VCAMERA_PERSPECTIVE_FRONT_RIGHT',
+              'VCAMERA_PERSPECTIVE_BACK_LEFT',
+              'VCAMERA_PERSPECTIVE_BACK_RIGHT',
+              'VCAMERA_PERSPECTIVE_BACK'],
     fisheyes=['VCAMERA_FISHEYE_FRONT',
               'VCAMERA_FISHEYE_LEFT',
               'VCAMERA_FISHEYE_BACK',
@@ -133,7 +133,7 @@ resolution_pv_front = (640, 320)
 resolution_pv_sides = (512, 320)
 resolution_fisheyes = (512, 320)
 
-camera_resolution_configs=dict(
+camera_resolution_configs = dict(
     VCAMERA_PERSPECTIVE_FRONT=resolution_pv_front,
     VCAMERA_PERSPECTIVE_FRONT_LEFT=resolution_pv_sides,
     VCAMERA_PERSPECTIVE_FRONT_RIGHT=resolution_pv_sides,
@@ -145,6 +145,10 @@ camera_resolution_configs=dict(
     VCAMERA_FISHEYE_BACK=resolution_fisheyes,
     VCAMERA_FISHEYE_RIGHT=resolution_fisheyes)
 
+camera_intrinsic_configs = dict(
+    VCAMERA_PERSPECTIVE_FRONT=[319.5, 159.5, 640, 640],
+)
+
 
 debug_mode = True
 
@@ -152,14 +156,16 @@ if debug_mode:
     batch_size = 1
     num_workers = 0
     transforms = [
-        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs)
+        dict(type='RenderIntrinsic', 
+             resolutions=camera_resolution_configs,
+             intrinsics=camera_intrinsic_configs)
     ]
 else:
     batch_size = 4
     num_workers = 4
     transforms = [
         dict(type='RandomRenderExtrinsic'),
-        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs),
+        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
         dict(type='RandomRotateSpace'),
         dict(type='RandomMirrorSpace'),
         dict(type='RandomImageISP', prob=0.2),
@@ -198,7 +204,7 @@ train_dataset = dict(
     transforms=transforms,
     phase="train",
     batch_size=batch_size,
-    possible_group_sizes=60,
+    possible_group_sizes=4,
     possible_frame_intervals=5,
 )
 
@@ -217,7 +223,8 @@ bev_mode = False
 # backbones
 camera_feat_channels = 128
 backbones = dict(
-    perspectives=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels),
+    pv_front=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels),
+    pv_sides=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels),
     fisheyes=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels))
 # spatial_transform
 spatial_transform = dict(
@@ -233,9 +240,13 @@ temporal_transform = dict(
     bev_mode=bev_mode,
     interpolation='bilinear')
 # voxel feature fusion
+if bev_mode:
+    fusion_in_channels = camera_feat_channels * voxel_shape[0]
+else:
+    fusion_in_channels = camera_feat_channels
 voxel_fusion = dict(
     type='VoxelStreamFusion',
-    in_channels=camera_feat_channels,
+    in_channels=fusion_in_channels,
     mid_channels=128,
     bev_mode=bev_mode)
 # heads
@@ -331,8 +342,7 @@ optim_wrapper = dict(
     optimizer=dict(type='SGD', 
                 lr=0.01, 
                 momentum=0.9,
-                weight_decay=0.0001),
-    dtype='bfloat16'
+                weight_decay=0.0001)
 )
 
 ## scheduler configs
@@ -346,6 +356,8 @@ env_cfg = dict(
 )
 
 # work_dir = "./work_dirs/fastray_planar_stream_model_1103"
-work_dir = "./work_dirs/fastray_planar_stream_model_1103_infer"
-load_from = "./work_dirs/fastray_planar_stream_model_1103/epoch_50.pth"
+# work_dir = "./work_dirs/fastray_planar_stream_model_1103_infer"
+work_dir = "./work_dirs/fastray_planar_stream_model_1104"
+# load_from = "./work_dirs/fastray_planar_stream_model_1104/pretrain.pth"
+load_from = "./work_dirs/fastray_planar_stream_model_1104/epoch_16.pth"
 # resume = True
