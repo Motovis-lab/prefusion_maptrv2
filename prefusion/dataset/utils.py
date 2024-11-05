@@ -3,6 +3,7 @@ from collections import UserDict, Counter, defaultdict
 from pathlib import Path
 import copy
 
+import torch
 import mmcv
 import numpy as np
 from pypcd_imp import pypcd
@@ -200,4 +201,17 @@ def choose_index(index_im, choices):
         batch_result = np.choose(clipped_index_im, choices_batch)
         chosen += batch_result * index_mask
     return chosen
-    
+
+
+def unstack_batch_size(batch_data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    assert isinstance(batch_data, dict)
+    assert all(i.ndim >= 2 for i in batch_data.values())
+    assert len(set(i.shape[0] for i in batch_data.values())) == 1
+    unstacked_data = []
+    keys = list(batch_data.keys())
+    for inner_data in zip(*batch_data.values()):
+        _unstacked = {}
+        for key, single_inner_data in zip(keys, inner_data):
+            _unstacked[key] = single_inner_data
+        unstacked_data.append(_unstacked)
+    return unstacked_data
