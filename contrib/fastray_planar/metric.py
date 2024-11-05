@@ -16,7 +16,6 @@ class PlanarBbox3DAveragePrecision(BaseMetric):
         super().__init__(prefix=f"{transformable_name}_segiou")
         self.transformable_name = transformable_name
         self.tensor_smith = build_tensor_smith(tensor_smith_cfg)
-        self.gt_results: List[Any] = []
 
     def process(self, data_batch, data_samples):
         gt = data_batch["annotations"].get(self.transformable_name)
@@ -29,16 +28,16 @@ class PlanarBbox3DAveragePrecision(BaseMetric):
         gt_unstacked = unstack_batch_size(gt)
         pred_unstacked = unstack_batch_size(pred)
 
-        for _gt, _pred, _index_info in zip(gt_unstacked, pred_unstacked, data_batch["index_info"]):
+        for _gt, _pred, _index_info in zip(gt_unstacked, pred_unstacked, data_batch["index_infos"]):
+            _pred["seg"] = _pred["seg"].sigmoid()
+            _pred["cen"] = _pred["cen"].sigmoid()
             _reversed_pred = self.tensor_smith.reverse(_pred)
-            self.results.append({"frame_id": _index_info.frame_id, 'boxes': _reversed_pred})
             _reversed_gt = self.tensor_smith.reverse(_gt)
-            self.gt_results.append({"frame_id": _index_info.frame_id, 'boxes': _reversed_gt})
+            self.results.append({"result_type": "pred", "frame_id": _index_info.frame_id, 'boxes': _reversed_pred})
+            self.results.append({"result_type": "gt", "frame_id": _index_info.frame_id, 'boxes': _reversed_gt})
 
     def compute_metrics(self, results):
-        total_correct = sum(r['correct'] for r in results)
-        total_size = sum(r['batch_size'] for r in results)
-        return dict(accuracy=100*total_correct/total_size)
+        return
 
 
 @METRICS.register_module()
