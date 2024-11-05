@@ -1538,6 +1538,10 @@ class RenderIntrinsic(Transform):
             intrinsics = {}
             for cam_id in self.cam_ids:
                 intrinsics[cam_id] = 'default'
+        # fill default intrinsics
+        for cam_id in self.cam_ids:
+            if cam_id not in intrinsics:
+                intrinsics[cam_id] = 'default'
         self.intrinsics = intrinsics
 
     @staticmethod
