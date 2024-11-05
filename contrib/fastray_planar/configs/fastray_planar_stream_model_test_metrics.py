@@ -149,7 +149,7 @@ camera_resolution_configs=dict(
 debug_mode = False
 
 if debug_mode:
-    batch_size = 2
+    batch_size = 1
     num_workers = 0
     transforms = [
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs)
@@ -173,7 +173,7 @@ train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/mv4d',
-    info_path='/data/datasets/mv4d/mv4d_infos_dbg_246.pkl',
+    info_path='/data/datasets/mv4d/mv4d_infos_dbg_50.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -206,7 +206,7 @@ val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/mv4d',
-    info_path='/data/datasets/mv4d/mv4d_infos_dbg_246.pkl',
+    info_path='/data/datasets/mv4d/mv4d_infos_dbg_50.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -363,21 +363,7 @@ val_cfg = dict(type="GroupBatchValLoop")
 
 ## evaluator and metrics
 val_evaluator = [
-    dict(
-        type="PlanarSegIou", 
-        transformable_name="bbox_3d", 
-        tensor_smith_cfg=val_dataset["transformables"]["bbox_3d"]["tensor_smith"]
-    ),
-    dict(
-        type="PlanarSegIou", 
-        transformable_name="polyline_3d", 
-        tensor_smith_cfg=val_dataset["transformables"]["polyline_3d"]["tensor_smith"]
-    ),
-    dict(
-        type="PlanarSegIou", 
-        transformable_name="parkingslot_3d", 
-        tensor_smith_cfg=val_dataset["transformables"]["parkingslot_3d"]["tensor_smith"]
-    ),
+    dict(type="PlanarSegIou"),
 ]
 # test_evaluator = val_evaluator
 

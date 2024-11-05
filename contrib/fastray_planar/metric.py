@@ -1,8 +1,9 @@
-from typing import Optional, Dict, List, Any
+from typing import Dict, List, Any
 
+import pandas as pd
 from mmengine.evaluator import BaseMetric
 
-from prefusion.registry import METRICS, TENSOR_SMITHS
+from prefusion.registry import METRICS
 from prefusion.dataset.utils import build_tensor_smith, unstack_batch_size
 
 
@@ -42,26 +43,29 @@ class PlanarBbox3DAveragePrecision(BaseMetric):
 
 @METRICS.register_module()
 class PlanarSegIou(BaseMetric):
-    def __init__(self, transformable_name: str, tensor_smith_cfg: Dict):
-        super().__init__(prefix=f"{transformable_name}_segiou")
-        self.transformable_name = transformable_name
-        self.tensor_smith = build_tensor_smith(tensor_smith_cfg)
+    def __init__(self):
+        super().__init__(prefix="segiou")
 
     def process(self, data_batch, data_samples):
-        gt = data_batch["annotations"].get(self.transformable_name)
-        pred = [ds.get(self.transformable_name) for ds in data_samples if ds.get(self.transformable_name)][0]
+        for trnsfmbl in data_samples:
+            transformable_name, pred = list(trnsfmbl.items())[0]
+            gt = data_batch["annotations"].get(transformable_name)
 
-        if not gt or not pred:
-            self.results.append({'intersection': 0, 'union': 1e-6})
-            return
+            if not gt or not pred:
+                continue
 
-        for _gt, _pred in zip(gt["seg"], pred["seg"]):
-            _pred_sigmoid = _pred[0].sigmoid()
-            inter = (_pred_sigmoid * _gt[0]).sum() + 1
-            union = (_pred_sigmoid + _gt[0] - _pred_sigmoid * _gt[0]).sum() + 1
-            self.results.append({'intersection': inter.item(), 'union': union.item()})
+            if "seg" not in gt or "seg" not in pred:
+                continue
+
+            for _gt, _pred in zip(gt["seg"], pred["seg"]):
+                _pred_sigmoid = _pred[0].sigmoid()
+                inter = (_pred_sigmoid * _gt[0]).sum() + 1
+                union = (_pred_sigmoid + _gt[0] - _pred_sigmoid * _gt[0]).sum() + 1
+                self.results.append({'transformable_name': transformable_name, 'intersection': inter.item(), 'union': union.item()})
 
     def compute_metrics(self, results):
-        total_inter = sum(r['intersection'] for r in results)
-        total_union = sum(r['union'] for r in results)
-        return dict(seg_iou=total_inter/total_union)
+        res_df = pd.DataFrame.from_records(results)
+        metric_df = res_df.groupby(['transformable_name']).agg({'intersection': 'sum', 'union': 'sum'})
+        metric_df.loc[:, "seg_iou"] = metric_df['intersection'] / metric_df['union']
+        full_result = metric_df.reset_index()[['transformable_name', 'seg_iou']].to_dict('records')
+        return {r['transformable_name']: r['seg_iou'] for r in full_result}
