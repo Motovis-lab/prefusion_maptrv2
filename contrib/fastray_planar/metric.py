@@ -13,7 +13,7 @@ __all__ = ["PlanarBbox3DAveragePrecision", "PlanarSegIou"]
 @METRICS.register_module()
 class PlanarBbox3DAveragePrecision(BaseMetric):
     def __init__(self, transformable_name: str, tensor_smith_cfg: Dict):
-        super().__init__(prefix=f"{transformable_name}_segiou")
+        super().__init__(prefix=transformable_name)
         self.transformable_name = transformable_name
         self.tensor_smith = build_tensor_smith(tensor_smith_cfg)
 
@@ -22,7 +22,6 @@ class PlanarBbox3DAveragePrecision(BaseMetric):
         pred = [ds.get(self.transformable_name) for ds in data_samples if ds.get(self.transformable_name)][0]
 
         if not gt or not pred:
-            self.results.append({'intersection': 0, 'union': 1e-6})
             return
 
         gt_unstacked = unstack_batch_size(gt)
@@ -37,7 +36,12 @@ class PlanarBbox3DAveragePrecision(BaseMetric):
             self.results.append({"result_type": "gt", "frame_id": _index_info.frame_id, 'boxes': _reversed_gt})
 
     def compute_metrics(self, results):
-        return
+        gt = [res for res in results if res['result_type'] == "gt"]
+        pred = [res for res in results if res['result_type'] == "pred"]
+        return self.calculate_ap(gt, pred)
+    
+    def calculate_ap(self, gt: List[Dict], pred: List[Dict]) -> Dict:
+        return {}
 
 
 @METRICS.register_module()
