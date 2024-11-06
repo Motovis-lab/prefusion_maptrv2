@@ -67,7 +67,7 @@ class ProjectPlugin(torch.autograd.Function):
         ProjectPlugin.output_size = tuple(output_size)
 
     @staticmethod
-    def symbolic(g, input, uu, vv, valid, density, length, outputsizeb_i=1, outputsizec_i=576, outputsizeh_i=240, outputsizew_i=120):
+    def symbolic(g, input, uu, vv, valid, density, length, outputsizeb_i=1, outputsizec_i=18, outputsizeh_i=240, outputsizew_i=120):
         
         return g.op("custom::CustomProject", input, uu, vv, valid, density, voxelnum_i=length, outputsizeb_i=outputsizeb_i, outputsizec_i=outputsizec_i, outputsizeh_i=outputsizeh_i, outputsizew_i=outputsizew_i)
 

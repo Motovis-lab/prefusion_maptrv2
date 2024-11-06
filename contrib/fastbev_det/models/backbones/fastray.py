@@ -178,10 +178,13 @@ class FastRay_DP(FastRay):
     
     def pure_forward(self, img_feats_fish, img_feats_pv, img_feats_front
         ):
+        img_feats_fish =  torch.clip(img_feats_fish, min=-1, max=1)
         img_bev_feats_fish = self.plugin_fish(img_feats_fish
                                                 )
+        img_feats_pv = torch.clip(img_feats_pv, min=-1, max=1)
         img_bev_feats_pv = self.plugin_pv(img_feats_pv
                                                 )
+        img_feats_front = torch.clip(img_feats_front, min=-1, max=1)
         img_bev_feats_front = self.plugin_front(img_feats_front
                                                 )
         
