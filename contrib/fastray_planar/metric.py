@@ -5,7 +5,7 @@ import pandas as pd
 import torch
 import numpy as np
 from tqdm import tqdm
-from pytorch3d import box3d_overlap
+from pytorch3d.ops import box3d_overlap
 from mmengine.evaluator import BaseMetric
 from copious.cv.geometry import Box3d
 from scipy.spatial.transform import Rotation
