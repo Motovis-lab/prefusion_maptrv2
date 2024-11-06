@@ -1,10 +1,11 @@
-from typing import List, Union, Dict, TYPE_CHECKING
-from collections import UserDict, Counter, defaultdict
+from typing import List, Union, Dict, TYPE_CHECKING, Tuple
 from pathlib import Path
+from collections import defaultdict, namedtuple
 import copy
 
 import torch
 import mmcv
+from tqdm import tqdm
 import numpy as np
 from pypcd_imp import pypcd
 
@@ -215,3 +216,192 @@ def unstack_batch_size(batch_data: Dict[str, torch.Tensor]) -> Dict[str, torch.T
             _unstacked[key] = single_inner_data
         unstacked_data.append(_unstacked)
     return unstacked_data
+
+
+def calculate_bbox3d_ap(
+    gt: Dict[str, List[Dict]],
+    pred: Dict[str, List[Dict]],
+    iou_thresh: float = 0.5,
+    max_conf_as_pred_class: bool = True,
+    is_first_conf_special: bool = True,
+    allow_gt_reuse: bool = True,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """calculate average precision of predicted 3D bounding boxes against ground truth
+
+    Parameters
+    ----------
+    gt : Dict[str, List[Dict]]
+        >>> {
+                '169883828964': [
+                    {
+                        'confs': [1, 1, 0],  # each value denotes the confidence of the class
+                        'corners': torch.Tensor([[ 6.7, -5.7, -0.02],
+                                                 [ 6.0, -3.5, -0.03],
+                                                 [ 6.0, -3.5,  1.91],
+                                                 [ 6.7, -5.7,  1.92],
+                                                 [ 1.8, -7.4, -0.05],
+                                                 [ 1.0, -5.3, -0.06],
+                                                 [ 1.0, -5.3,  1.88],
+                                                 [ 1.8, -7.4,  1.89]])  # of shape (8, 3), indicating the location of 8 corners of the bbox
+                    },
+                    ...
+                ],
+                
+                ...
+            }
+
+    pred : Dict[str, List[Dict]]
+        >>> {
+                '169883828964': [
+                    {
+                        'confs': [0.9999999, 0.82, 0.03],  # each value denotes the confidence of the class
+                        'corners': torch.Tensor([[ 6.7, -5.7, -0.02],
+                                                 [ 6.0, -3.5, -0.03],
+                                                 [ 6.0, -3.5,  1.91],
+                                                 [ 6.7, -5.7,  1.92],
+                                                 [ 1.8, -7.4, -0.05],
+                                                 [ 1.0, -5.3, -0.06],
+                                                 [ 1.0, -5.3,  1.88],
+                                                 [ 1.8, -7.4,  1.89]])  # of shape (8, 3), indicating the location of 8 corners of the bbox
+                    },
+                    ...
+                ],
+                
+                ...
+            }
+
+    iou_thresh : float, optional
+        the threshold for deciding whethat 2 boxes are matched, by default 0.5
+
+    max_conf_as_pred_class : bool, optional
+        whether to use the max confidence as the predicted class, by default True
+
+    is_first_conf_special : bool, optional
+        whether the first confidence is special (i.e. denoting is_superclass), by default True
+    
+    allow_gt_reuse : bool, optional
+        whether to allow a ground truth box to be reused (i.e. matched more than once with predictions), by default True
+
+    Returns
+    -------
+    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
+        pred_confidences, precision, recall and ap, respectively. All of them are sorted according to pred confidences.
+    """
+    from pytorch3d import box3d_overlap
+    assert 0 < iou_thresh < 1, 'iou thresh should be a value between (0, 1)'
+    PredResult = namedtuple('PredResult', 'frame_id box_id cls_idx conf matched', defaults=[None, None, None])
+    num_classes = len(next(iter(gt.values()))['confs'])
+    
+    union_frame_ids = set(gt.keys()) | set(pred.keys())
+    all_predictions = []  # if max_conf_as_pred_class==False, predicted results will be duplicated for each class
+    for frame_id in tqdm(union_frame_ids):
+        pred_of_frame = pred.get(frame_id, [])
+        gt_of_frame = gt.get(frame_id, [])
+        predictions = []
+
+        if not pred_of_frame:
+            continue
+
+        if not gt_of_frame:
+            for box_id, bx in enumerate(pred_of_frame):
+                if max_conf_as_pred_class:
+                    start_pos = int(is_first_conf_special)  # if is_first_conf_special==True, ignore the special conf
+                    cls_idx = np.argmax(bx["confs"][start_pos:]) + start_pos  # if is_first_conf_special==True, idx should be increased by 1
+                    assert cls_idx > 0
+                    pred_res = PredResult(frame_id, box_id, cls_idx, bx["confs"][cls_idx], False)
+                    predictions.append(pred_res)
+                else:
+                    predictions.extend([PredResult(frame_id, box_id, cls_idx, bx["confs"][cls_idx], False) for cls_idx in range(num_classes)])
+            all_predictions.extend(predictions)
+            continue
+
+        pred_confs = torch.stack([bx["confs"] for bx in pred_of_frame])
+        pred_corners = torch.stack([bx["corners"] for bx in pred_of_frame])
+        gt_confs = torch.stack([bx["confs"] for bx in gt_of_frame])
+        gt_corners = torch.stack([bx["corners"] for bx in gt_of_frame])
+
+        _, ious = box3d_overlap(pred_corners, gt_corners)
+
+        if max_conf_as_pred_class:
+            start_pos = int(is_first_conf_special)  # if is_first_conf_special==True, ignore the special conf
+            pred_conf_max_idx = torch.argmax(pred_confs[:, start_pos:], dim=1) + start_pos  # if is_first_conf_special==True, idx should be increased by 1
+            assert (pred_conf_max_idx == 0).sum() == 0
+            matching_table = torch.zeros_like(ious)
+            for i in range(ious.shape[0]):
+                matched_gt_idx = torch.argmax(ious[i])
+                pred_cls_idx = pred_conf_max_idx[i]
+                pred_conf = pred_confs[i][pred_cls_idx]
+                is_gt_the_same_class = gt_confs[matched_gt_idx][pred_cls_idx]
+                if is_gt_the_same_class == 1 and pred_conf >= iou_thresh:
+                    if allow_gt_reuse or not matching_table[i].any():
+                        predictions.append(PredResult(frame_id, i, pred_cls_idx, pred_conf, True))
+                        matching_table[i, matched_gt_idx] = 1
+                else:
+                    predictions.append(PredResult(frame_id, i, pred_cls_idx, pred_conf, False))
+        else:
+            for cls_idx in range(num_classes):
+                matching_table = torch.zeros_like(ious)
+                for i in range(ious.shape[0]):
+                    matched_gt_idx = torch.argmax(ious[i])
+                    pred_conf = pred_confs[i][cls_idx]
+                    is_gt_the_same_class = gt_confs[matched_gt_idx][cls_idx]
+                    if is_gt_the_same_class == 1 and pred_conf >= iou_thresh:
+                        if allow_gt_reuse or not matching_table[i].any():
+                            predictions.append(PredResult(frame_id, i, cls_idx, pred_conf, True))
+                            matching_table[i, matched_gt_idx] = 1
+                    else:
+                        predictions.append(PredResult(frame_id, i, cls_idx, pred_conf, False))
+
+    cls_idxes = list(range(num_classes))
+    if max_conf_as_pred_class:
+        del cls_idxes[0]
+    
+    results = {}
+    for cls_idx in cls_idxes:
+        filtered_predictions = [p for p in all_predictions if p.cls_idx == cls_idx]
+        sorted_predictions = sorted(filtered_predictions, key=lambda x: x.conf, reverse=True)
+        num_gt_boxes = sum([sum(confs[cls_idx] == 1 for confs in gt_of_frame["confs"]) for gt_of_frame in gt.values()])
+        tp = torch.zeros(len(sorted_predictions))
+        fp = torch.zeros(len(sorted_predictions))
+        for i, p in enumerate(sorted_predictions):
+            if p.matched:
+                tp[i] = 1
+            else:
+                fp[i] = 1
+        cfp = np.cumsum(fp)
+        ctp = np.cumsum(tp)
+        recall = ctp / (num_gt_boxes + 1e-7)
+        precision = ctp / (ctp + cfp + 1e-7)
+        ap = voc_ap(precision, recall)
+        results[cls_idx] = (sorted_predictions, precision, recall, ap)
+    
+    return results
+
+
+def voc_ap(precision, recall, use_07_metric=False):
+    if use_07_metric:
+        # 11 point metric
+        ap = 0.
+        for t in np.arange(0., 1.1, 0.1):
+            if np.sum(recall >= t) == 0:
+                p = 0
+            else:
+                p = np.max(precision[recall >= t])
+            ap = ap + p / 11.
+    else:
+        # correct AP calculation
+        # first append sentinel values at the end
+        mrec = np.concatenate(([0.], recall, [1.]))
+        mpre = np.concatenate(([0.], precision, [0.]))
+
+        # compute the precision envelope
+        for i in range(mpre.size - 1, 0, -1):
+            mpre[i - 1] = np.maximum(mpre[i - 1], mpre[i])
+
+        # to calculate area under PR curve, look for points
+        # where X axis (recall) changes value
+        i = np.where(mrec[1:] != mrec[:-1])[0]
+
+        # and sum (\Delta recall) * prec
+        ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
+    return ap

@@ -1,10 +1,11 @@
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 
+import numpy as np
 import pandas as pd
 from mmengine.evaluator import BaseMetric
 
 from prefusion.registry import METRICS
-from prefusion.dataset.utils import build_tensor_smith, unstack_batch_size
+from prefusion.dataset.utils import build_tensor_smith, unstack_batch_size, calculate_ap
 
 
 __all__ = ["PlanarBbox3DAveragePrecision", "PlanarSegIou"]
@@ -12,10 +13,11 @@ __all__ = ["PlanarBbox3DAveragePrecision", "PlanarSegIou"]
 
 @METRICS.register_module()
 class PlanarBbox3DAveragePrecision(BaseMetric):
-    def __init__(self, transformable_name: str, tensor_smith_cfg: Dict):
+    def __init__(self, transformable_name: str, tensor_smith_cfg: Dict, dictionary: Dict):
         super().__init__(prefix=transformable_name)
         self.transformable_name = transformable_name
         self.tensor_smith = build_tensor_smith(tensor_smith_cfg)
+        self.dictionary = dictionary
 
     def process(self, data_batch, data_samples):
         gt = data_batch["annotations"].get(self.transformable_name)
@@ -32,16 +34,24 @@ class PlanarBbox3DAveragePrecision(BaseMetric):
             _pred["cen"] = _pred["cen"].sigmoid()
             _reversed_pred = self.tensor_smith.reverse(_pred)
             _reversed_gt = self.tensor_smith.reverse(_gt)
-            self.results.append({"result_type": "pred", "frame_id": _index_info.frame_id, 'boxes': _reversed_pred})
-            self.results.append({"result_type": "gt", "frame_id": _index_info.frame_id, 'boxes': _reversed_gt})
+            if _reversed_pred:
+                self.results.append({"result_type": "pred", "frame_id": _index_info.frame_id, 'boxes': _reversed_pred})
+            if _reversed_gt:
+                self.results.append({"result_type": "gt", "frame_id": _index_info.frame_id, 'boxes': _reversed_gt})
 
     def compute_metrics(self, results):
+        from copious.cv.geometry import Box3d
+        from pytorch3d.ops import box3d_overlap
+        from scipy.spatial.transform import Rotation
+        import torch
         gt = [res for res in results if res['result_type'] == "gt"]
         pred = [res for res in results if res['result_type'] == "pred"]
-        return self.calculate_ap(gt, pred)
-    
-    def calculate_ap(self, gt: List[Dict], pred: List[Dict]) -> Dict:
-        return {}
+        pred_box = pred[0]['boxes'][0]
+        gt_box = gt[0]['boxes'][0]
+        pred_corners = Box3d(pred_box['translation'], pred_box['size'], Rotation.from_matrix(pred_box['rotation'])).corners
+        gt_corners = Box3d(gt_box['translation'], gt_box['size'], Rotation.from_matrix(gt_box['rotation'])).corners
+        intersection_vol, iou_3d = box3d_overlap(torch.tensor(pred_corners[None]).float(), torch.tensor(gt_corners[None]).float())
+        pred_confidence, precision, recall, ap = calculate_ap(gt, pred)
 
 
 @METRICS.register_module()
