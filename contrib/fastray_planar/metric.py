@@ -94,7 +94,7 @@ def calculate_bbox3d_ap(
         2. all_predictions (not sorted)
     """
     assert 0 < iou_thresh < 1, 'iou thresh should be a value between (0, 1)'
-    num_confs = num_confs or len(next(iter(gt.values()))[0]['confs'])
+    num_confs = num_confs or torch.tensor([bx['confs'].tolist() for boxes in gt.values() for bx in boxes]).shape[1]
     
     union_frame_ids = set(gt.keys()) | set(pred.keys())
     all_predictions = []  # if max_conf_as_pred_class==False, predicted results will be duplicated for each class
@@ -124,7 +124,7 @@ def calculate_bbox3d_ap(
         gt_confs = torch.stack([bx["confs"] for bx in gt_of_frame])
         gt_corners = torch.stack([bx["corners"] for bx in gt_of_frame])
 
-        _, ious = box3d_overlap(pred_corners, gt_corners)
+        _, ious = box3d_overlap(pred_corners, gt_corners, eps=1e-5)  # set eps to 1e-5 to prevent "ValueError: Planes have zero areas"
 
         if max_conf_as_pred_class:
             start_pos = int(is_first_conf_special)  # if is_first_conf_special==True, ignore the special conf
@@ -263,6 +263,10 @@ class PlanarBbox3DAveragePrecision(BaseMetric):
 
         gt = {res["frame_id"]: [_convert(bx) for bx in res["boxes"]] for res in results if res['result_type'] == "gt"}
         pred = {res["frame_id"]: [_convert(bx) for bx in res["boxes"]] for res in results if res['result_type'] == "pred"}
+        
+        if not gt or not pred:
+            return {f"{cls_name}_ap": 0.0 for cls_name in self.dictionary["classes"]}
+        
         ap_results, _ = calculate_bbox3d_ap(gt, pred, **self.ap_args)
         class_names = ["any"] + self.dictionary["classes"]
         return {f"{class_names[cls_idx]}_ap": ap_res["ap"] for cls_idx, ap_res in ap_results.items()}
