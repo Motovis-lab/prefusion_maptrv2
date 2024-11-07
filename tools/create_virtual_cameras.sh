@@ -1,6 +1,7 @@
 #!/bin/bash
 
 scene_root=$1; shift;
+num_workers=$1; shift;
 
 python tools/create_virtual_camera.py \
     --motovis-calibration ${scene_root}/calibration_center.yml \
@@ -16,7 +17,7 @@ python tools/create_virtual_camera.py \
     --virtual-camera-image-save-dir ${scene_root}/vcamera/VCAMERA_FISHEYE_BACK \
     --virtual-camera-mask-save-path ${scene_root}/self_mask/camera/VCAMERA_FISHEYE_BACK.png \
     --virtual-camera-calibration-save-path ${scene_root}/vcamera_calibration/VCAMERA_FISHEYE_BACK.yml \
-    --num-workers 10
+    --num-workers ${num_workers}
 
 python tools/create_virtual_camera.py \
     --motovis-calibration ${scene_root}/calibration_center.yml \
@@ -32,7 +33,7 @@ python tools/create_virtual_camera.py \
     --virtual-camera-image-save-dir ${scene_root}/vcamera/VCAMERA_FISHEYE_LEFT \
     --virtual-camera-mask-save-path ${scene_root}/self_mask/camera/VCAMERA_FISHEYE_LEFT.png \
     --virtual-camera-calibration-save-path ${scene_root}/vcamera_calibration/VCAMERA_FISHEYE_LEFT.yml \
-    --num-workers 10
+    --num-workers ${num_workers}
 
 python tools/create_virtual_camera.py \
     --motovis-calibration ${scene_root}/calibration_center.yml \
@@ -48,7 +49,7 @@ python tools/create_virtual_camera.py \
     --virtual-camera-image-save-dir ${scene_root}/vcamera/VCAMERA_FISHEYE_FRONT \
     --virtual-camera-mask-save-path ${scene_root}/self_mask/camera/VCAMERA_FISHEYE_FRONT.png \
     --virtual-camera-calibration-save-path ${scene_root}/vcamera_calibration/VCAMERA_FISHEYE_FRONT.yml \
-    --num-workers 10
+    --num-workers ${num_workers}
 
 python tools/create_virtual_camera.py \
     --motovis-calibration ${scene_root}/calibration_center.yml \
@@ -64,7 +65,7 @@ python tools/create_virtual_camera.py \
     --virtual-camera-image-save-dir ${scene_root}/vcamera/VCAMERA_FISHEYE_RIGHT \
     --virtual-camera-mask-save-path ${scene_root}/self_mask/camera/VCAMERA_FISHEYE_RIGHT.png \
     --virtual-camera-calibration-save-path ${scene_root}/vcamera_calibration/VCAMERA_FISHEYE_RIGHT.yml \
-    --num-workers 10
+    --num-workers ${num_workers}
 
 python tools/create_virtual_camera.py \
     --motovis-calibration ${scene_root}/calibration_center.yml \
@@ -80,7 +81,7 @@ python tools/create_virtual_camera.py \
     --virtual-camera-image-save-dir ${scene_root}/vcamera/VCAMERA_PERSPECTIVE_FRONT_LEFT \
     --virtual-camera-mask-save-path ${scene_root}/self_mask/camera/VCAMERA_PERSPECTIVE_FRONT_LEFT.png \
     --virtual-camera-calibration-save-path ${scene_root}/vcamera_calibration/VCAMERA_PERSPECTIVE_FRONT_LEFT.yml \
-    --num-workers 10
+    --num-workers ${num_workers}
 
 python tools/create_virtual_camera.py \
     --motovis-calibration ${scene_root}/calibration_center.yml \
@@ -96,7 +97,7 @@ python tools/create_virtual_camera.py \
     --virtual-camera-image-save-dir ${scene_root}/vcamera/VCAMERA_PERSPECTIVE_FRONT_RIGHT \
     --virtual-camera-mask-save-path ${scene_root}/self_mask/camera/VCAMERA_PERSPECTIVE_FRONT_RIGHT.png \
     --virtual-camera-calibration-save-path ${scene_root}/vcamera_calibration/VCAMERA_PERSPECTIVE_FRONT_RIGHT.yml \
-    --num-workers 10
+    --num-workers ${num_workers}
 
 python tools/create_virtual_camera.py \
     --motovis-calibration ${scene_root}/calibration_center.yml \
@@ -112,7 +113,7 @@ python tools/create_virtual_camera.py \
     --virtual-camera-image-save-dir ${scene_root}/vcamera/VCAMERA_PERSPECTIVE_BACK_LEFT \
     --virtual-camera-mask-save-path ${scene_root}/self_mask/camera/VCAMERA_PERSPECTIVE_BACK_LEFT.png \
     --virtual-camera-calibration-save-path ${scene_root}/vcamera_calibration/VCAMERA_PERSPECTIVE_BACK_LEFT.yml \
-    --num-workers 10
+    --num-workers ${num_workers}
 
 python tools/create_virtual_camera.py \
     --motovis-calibration ${scene_root}/calibration_center.yml \
@@ -128,7 +129,7 @@ python tools/create_virtual_camera.py \
     --virtual-camera-image-save-dir ${scene_root}/vcamera/VCAMERA_PERSPECTIVE_BACK_RIGHT \
     --virtual-camera-mask-save-path ${scene_root}/self_mask/camera/VCAMERA_PERSPECTIVE_BACK_RIGHT.png \
     --virtual-camera-calibration-save-path ${scene_root}/vcamera_calibration/VCAMERA_PERSPECTIVE_BACK_RIGHT.yml \
-    --num-workers 10
+    --num-workers ${num_workers}
 
 python tools/create_virtual_camera.py \
     --motovis-calibration ${scene_root}/calibration_center.yml \
@@ -144,7 +145,7 @@ python tools/create_virtual_camera.py \
     --virtual-camera-image-save-dir ${scene_root}/vcamera/VCAMERA_PERSPECTIVE_FRONT \
     --virtual-camera-mask-save-path ${scene_root}/self_mask/camera/VCAMERA_PERSPECTIVE_FRONT.png \
     --virtual-camera-calibration-save-path ${scene_root}/vcamera_calibration/VCAMERA_PERSPECTIVE_FRONT.yml \
-    --num-workers 10
+    --num-workers ${num_workers}
 
 python tools/create_virtual_camera.py \
     --motovis-calibration ${scene_root}/calibration_center.yml \
@@ -160,4 +161,19 @@ python tools/create_virtual_camera.py \
     --virtual-camera-image-save-dir ${scene_root}/vcamera/VCAMERA_PERSPECTIVE_BACK \
     --virtual-camera-mask-save-path ${scene_root}/self_mask/camera/VCAMERA_PERSPECTIVE_BACK.png \
     --virtual-camera-calibration-save-path ${scene_root}/vcamera_calibration/VCAMERA_PERSPECTIVE_BACK.yml \
-    --num-workers 10
+    --num-workers ${num_workers}
+
+python tools/merge_calibration_files.py \
+    --input-calib-files \
+        ${scene_root}/vcamera_calibration/VCAMERA_FISHEYE_BACK.yml \
+        ${scene_root}/vcamera_calibration/VCAMERA_FISHEYE_FRONT.yml \
+        ${scene_root}/vcamera_calibration/VCAMERA_FISHEYE_LEFT.yml \
+        ${scene_root}/vcamera_calibration/VCAMERA_FISHEYE_RIGHT.yml \
+        ${scene_root}/vcamera_calibration/VCAMERA_PERSPECTIVE_BACK_LEFT.yml \
+        ${scene_root}/vcamera_calibration/VCAMERA_PERSPECTIVE_BACK_RIGHT.yml \
+        ${scene_root}/vcamera_calibration/VCAMERA_PERSPECTIVE_BACK.yml \
+        ${scene_root}/vcamera_calibration/VCAMERA_PERSPECTIVE_FRONT_LEFT.yml \
+        ${scene_root}/vcamera_calibration/VCAMERA_PERSPECTIVE_FRONT_RIGHT.yml \
+        ${scene_root}/vcamera_calibration/VCAMERA_PERSPECTIVE_FRONT.yml \
+    --output-calib-file \
+        ${scene_root}/vcalib_center.yml

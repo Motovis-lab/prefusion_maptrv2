@@ -16,15 +16,18 @@ from prefusion.dataset.utils import build_tensor_smith, unstack_batch_size
 
 __all__ = ["PlanarBbox3DAveragePrecision", "PlanarSegIou"]
 
+PredResult = namedtuple('PredResult', 'frame_id box_id cls_idx conf matched', defaults=[None, None, None])
+
 
 def calculate_bbox3d_ap(
     gt: Dict[str, List[Dict]],
     pred: Dict[str, List[Dict]],
     iou_thresh: float = 0.5,
+    num_confs: int = None,
     max_conf_as_pred_class: bool = True,
     is_first_conf_special: bool = True,
     allow_gt_reuse: bool = True,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[Dict[int, Dict[str, torch.Tensor]], List[PredResult]]:
     """calculate average precision of predicted 3D bounding boxes against ground truth
 
     Parameters
@@ -72,6 +75,9 @@ def calculate_bbox3d_ap(
     iou_thresh : float, optional
         the threshold for deciding whethat 2 boxes are matched, by default 0.5
 
+    num_confs : int, optional
+        similar to num_classes, but has 1 more value. by default None
+
     max_conf_as_pred_class : bool, optional
         whether to use the max confidence as the predicted class, by default True
 
@@ -83,12 +89,12 @@ def calculate_bbox3d_ap(
 
     Returns
     -------
-    Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]
-        pred_confidences, precision, recall and ap, respectively. All of them are sorted according to pred confidences.
+    Tuple[Dict[int, Dict[str, torch.Tensor]], List[PredResult]]
+        1. pred_confidences, precision, recall and ap for each class respectively (class name as the dict key)
+        2. all_predictions (not sorted)
     """
     assert 0 < iou_thresh < 1, 'iou thresh should be a value between (0, 1)'
-    PredResult = namedtuple('PredResult', 'frame_id box_id cls_idx conf matched', defaults=[None, None, None])
-    num_classes = len(next(iter(gt.values()))['confs'])
+    num_confs = num_confs or len(next(iter(gt.values()))[0]['confs'])
     
     union_frame_ids = set(gt.keys()) | set(pred.keys())
     all_predictions = []  # if max_conf_as_pred_class==False, predicted results will be duplicated for each class
@@ -106,10 +112,10 @@ def calculate_bbox3d_ap(
                     start_pos = int(is_first_conf_special)  # if is_first_conf_special==True, ignore the special conf
                     cls_idx = np.argmax(bx["confs"][start_pos:]) + start_pos  # if is_first_conf_special==True, idx should be increased by 1
                     assert cls_idx > 0
-                    pred_res = PredResult(frame_id, box_id, cls_idx, bx["confs"][cls_idx], False)
+                    pred_res = PredResult(frame_id, box_id, cls_idx.item(), bx["confs"][cls_idx].item(), False)
                     predictions.append(pred_res)
                 else:
-                    predictions.extend([PredResult(frame_id, box_id, cls_idx, bx["confs"][cls_idx], False) for cls_idx in range(num_classes)])
+                    predictions.extend([PredResult(frame_id, box_id, cls_idx.item(), bx["confs"][cls_idx].item(), False) for cls_idx in range(num_confs)])
             all_predictions.extend(predictions)
             continue
 
@@ -130,27 +136,31 @@ def calculate_bbox3d_ap(
                 pred_cls_idx = pred_conf_max_idx[i]
                 pred_conf = pred_confs[i][pred_cls_idx]
                 is_gt_the_same_class = gt_confs[matched_gt_idx][pred_cls_idx]
-                if is_gt_the_same_class == 1 and pred_conf >= iou_thresh:
+                iou_with_gt = ious[i][matched_gt_idx]
+                if is_gt_the_same_class == 1 and iou_with_gt >= iou_thresh:
                     if allow_gt_reuse or not matching_table[i].any():
-                        predictions.append(PredResult(frame_id, i, pred_cls_idx, pred_conf, True))
+                        predictions.append(PredResult(frame_id, i, pred_cls_idx.item(), pred_conf.item(), True))
                         matching_table[i, matched_gt_idx] = 1
                 else:
-                    predictions.append(PredResult(frame_id, i, pred_cls_idx, pred_conf, False))
+                    predictions.append(PredResult(frame_id, i, pred_cls_idx.item(), pred_conf.item(), False))
         else:
-            for cls_idx in range(num_classes):
+            for cls_idx in range(num_confs):
                 matching_table = torch.zeros_like(ious)
                 for i in range(ious.shape[0]):
                     matched_gt_idx = torch.argmax(ious[i])
                     pred_conf = pred_confs[i][cls_idx]
                     is_gt_the_same_class = gt_confs[matched_gt_idx][cls_idx]
-                    if is_gt_the_same_class == 1 and pred_conf >= iou_thresh:
+                    iou_with_gt = ious[i][matched_gt_idx]
+                    if is_gt_the_same_class == 1 and iou_with_gt >= iou_thresh:
                         if allow_gt_reuse or not matching_table[i].any():
-                            predictions.append(PredResult(frame_id, i, cls_idx, pred_conf, True))
+                            predictions.append(PredResult(frame_id, i, cls_idx.item(), pred_conf.item(), True))
                             matching_table[i, matched_gt_idx] = 1
                     else:
-                        predictions.append(PredResult(frame_id, i, cls_idx, pred_conf, False))
+                        predictions.append(PredResult(frame_id, i, cls_idx.item(), pred_conf.item(), False))
+        
+        all_predictions.extend(predictions)
 
-    cls_idxes = list(range(num_classes))
+    cls_idxes = list(range(num_confs))
     if max_conf_as_pred_class:
         del cls_idxes[0]
     
@@ -158,7 +168,7 @@ def calculate_bbox3d_ap(
     for cls_idx in cls_idxes:
         filtered_predictions = [p for p in all_predictions if p.cls_idx == cls_idx]
         sorted_predictions = sorted(filtered_predictions, key=lambda x: x.conf, reverse=True)
-        num_gt_boxes = sum([sum(confs[cls_idx] == 1 for confs in gt_of_frame["confs"]) for gt_of_frame in gt.values()])
+        num_gt_boxes = sum([sum(bx["confs"][cls_idx] == 1 for bx in gt_of_frame) for gt_of_frame in gt.values()])
         tp = torch.zeros(len(sorted_predictions))
         fp = torch.zeros(len(sorted_predictions))
         for i, p in enumerate(sorted_predictions):
@@ -170,48 +180,59 @@ def calculate_bbox3d_ap(
         ctp = np.cumsum(tp)
         recall = ctp / (num_gt_boxes + 1e-7)
         precision = ctp / (ctp + cfp + 1e-7)
-        ap = voc_ap(precision, recall)
-        results[cls_idx] = (sorted_predictions, precision, recall, ap)
+        ap = naive_ap(precision, recall)
+        results[cls_idx] = {"predictions": sorted_predictions, "precision": precision, "recall": recall, "ap": ap}
     
-    return results
+    return results, all_predictions
 
 
-def voc_ap(precision, recall, use_07_metric=False):
-    if use_07_metric:
-        # 11 point metric
-        ap = 0.
-        for t in np.arange(0., 1.1, 0.1):
-            if np.sum(recall >= t) == 0:
-                p = 0
-            else:
-                p = np.max(precision[recall >= t])
-            ap = ap + p / 11.
-    else:
-        # correct AP calculation
-        # first append sentinel values at the end
-        mrec = np.concatenate(([0.], recall, [1.]))
-        mpre = np.concatenate(([0.], precision, [0.]))
+def naive_ap(precisions, recalls):
+    # Ensure the lists are of the same length
+    if len(precisions) != len(recalls):
+        raise ValueError("Precisions and recalls must have the same length")
 
-        # compute the precision envelope
-        for i in range(mpre.size - 1, 0, -1):
-            mpre[i - 1] = np.maximum(mpre[i - 1], mpre[i])
+    # Initialize variables
+    average_precision = 0
+    previous_recall = 0
 
-        # to calculate area under PR curve, look for points
-        # where X axis (recall) changes value
-        i = np.where(mrec[1:] != mrec[:-1])[0]
+    # Iterate through the precision-recall pairs
+    for precision, recall in zip(precisions, recalls):
+        # Calculate the width of the rectangle
+        recall_difference = recall - previous_recall
 
-        # and sum (\Delta recall) * prec
-        ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
-    return ap
+        # Add the area of the rectangle to the average precision
+        average_precision += precision * recall_difference
+
+        # Update the previous recall
+        previous_recall = recall
+
+    return average_precision
 
 
 @METRICS.register_module()
 class PlanarBbox3DAveragePrecision(BaseMetric):
-    def __init__(self, transformable_name: str, tensor_smith_cfg: Dict, dictionary: Dict):
+    def __init__(
+        self, 
+        transformable_name: str, 
+        tensor_smith_cfg: Dict, 
+        dictionary: Dict,
+        iou_thresh: float = 0.5,
+        num_confs: int = None,
+        max_conf_as_pred_class: bool = True,
+        is_first_conf_special: bool = True,
+        allow_gt_reuse: bool = True,
+    ):
         super().__init__(prefix=transformable_name)
         self.transformable_name = transformable_name
         self.tensor_smith = build_tensor_smith(tensor_smith_cfg)
         self.dictionary = dictionary
+        self.ap_args = dict(
+            iou_thresh=iou_thresh,
+            num_confs=num_confs,
+            max_conf_as_pred_class=max_conf_as_pred_class,
+            is_first_conf_special=is_first_conf_special,
+            allow_gt_reuse=allow_gt_reuse,
+        )
 
     def process(self, data_batch, data_samples):
         gt = data_batch["annotations"].get(self.transformable_name)
@@ -234,12 +255,15 @@ class PlanarBbox3DAveragePrecision(BaseMetric):
                 self.results.append({"result_type": "gt", "frame_id": _index_info.frame_id, 'boxes': _reversed_gt})
 
     def compute_metrics(self, results):
-        def _get_corners(_bx):
-            return torch.tensor(Box3d(_bx['translation'], _bx['size'], Rotation.from_matrix(_bx['rotation'])).corners).float()
+        def _convert(_bx):
+            return {
+                "confs": torch.tensor(_bx["confs"]).float(),
+                "corners": torch.tensor(Box3d(_bx['translation'], _bx['size'], Rotation.from_matrix(_bx['rotation'])).corners).float()
+            }
 
-        gt = {res["frame_id"]: [_get_corners(bx) for bx in res["boxes"]] for res in results if res['result_type'] == "gt"}
-        pred = {res["frame_id"]: [_get_corners(bx) for bx in res["boxes"]] for res in results if res['result_type'] == "pred"}
-        ap_results = calculate_bbox3d_ap(gt, pred)
+        gt = {res["frame_id"]: [_convert(bx) for bx in res["boxes"]] for res in results if res['result_type'] == "gt"}
+        pred = {res["frame_id"]: [_convert(bx) for bx in res["boxes"]] for res in results if res['result_type'] == "pred"}
+        ap_results, _ = calculate_bbox3d_ap(gt, pred, **self.ap_args)
         class_names = ["any"] + self.dictionary["classes"]
         return {f"{class_names[cls_idx]}_ap": ap_res["ap"] for cls_idx, ap_res in ap_results.items()}
 
