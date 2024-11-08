@@ -1,4 +1,6 @@
 import sys
+
+import torch.onnx.operators
 sys.path.append("/home/wuhan/prefusion/")
 
 
@@ -10,6 +12,8 @@ import mmcv
 import numpy as np
 import matplotlib.pyplot as plt
 from mmengine.config import Config
+import torch.nn as nn 
+nn.Conv2d
 
 cfg = Config.fromfile("contrib/fastbev_det/configs/mv_4d_fastbev_3dbox_deploy.py")
 
@@ -35,7 +39,7 @@ save_root = "./work_dirs/deploy/voxel_projection_img.onnx"
 torch.onnx.export(model, (input_fish, input_pv, input_front), save_root, opset_version=11,  # input must be tuple type
         input_names = ['input_fish', 'input_pv', 'input_front'],
         output_names = ['output'],
-        operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK)
+        operator_export_type=torch.onnx.OperatorExportTypes.ONNX_FALLTHROUGH)
 
 from onnxsim import simplify
 import onnx
