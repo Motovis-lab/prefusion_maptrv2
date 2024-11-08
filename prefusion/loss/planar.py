@@ -149,6 +149,7 @@ class PlanarLoss(nn.Module):
         _channel_weights = torch.ones(num_cls)
         if channel_weights is not None:
             _channel_weights = [c["weight"] for _, c in channel_weights.items()]
+        channel_weights_sum = max(sum(_channel_weights), 1e-4)
 
         assert num_cls == len(_channel_weights), f"number of channel weights does not match with number of classes"
 
@@ -169,10 +170,10 @@ class PlanarLoss(nn.Module):
         loss_dict.update(seg_iou_loss_by_channel)
         loss_dict.update(seg_dual_focal_loss_by_channel)
         loss_dict[L("seg_iou")] = (
-            iou_loss_weight * sum(seg_iou_loss_by_channel.values()) / sum(_channel_weights)
+            iou_loss_weight * sum(seg_iou_loss_by_channel.values()) / channel_weights_sum
         )  # functools.reduce(lambda x, y: x + y, seg_iou_loss_by_channel.values())
         loss_dict[L("seg_dual_focal")] = (
-            dual_focal_loss_weight * sum(seg_dual_focal_loss_by_channel.values()) / sum(_channel_weights)
+            dual_focal_loss_weight * sum(seg_dual_focal_loss_by_channel.values()) / channel_weights_sum
         )
         loss_dict[L("seg")] = (loss_dict[L("seg_dual_focal")] + loss_dict[L("seg_iou")]) * loss_weight
         return loss_dict
@@ -188,7 +189,8 @@ class PlanarLoss(nn.Module):
         **kwargs,
     ):
         dual_loss = dual_focal_loss(pred, label, reduction="none").mean()
-        fg_dual_loss = (dual_focal_loss(pred, label, reduction="none") * fg_mask).sum() / fg_mask.sum()
+        mask_sum = max(fg_mask.sum(), 1e-4)  # fg_mask is assumed to be from label (gt), so no need to worry about backward
+        fg_dual_loss = (dual_focal_loss(pred, label, reduction="none") * fg_mask).sum() / mask_sum
         loss_dict = {}
         L = partial(complete_loss_name, self.loss_name_prefix)
         loss_dict[L("cen_dual_focal")] = bg_weight * dual_loss
@@ -213,7 +215,7 @@ class PlanarLoss(nn.Module):
         ), "partition weight slices doesn't meet MECE principle."
         loss_dict = {}
         L = partial(complete_loss_name, self.loss_name_prefix)
-        mask_sum = fg_mask.sum()
+        mask_sum = max(fg_mask.sum(), 1e-4)  # fg_mask is assumed to be from label (gt), so no need to worry about backward
 
         def _calc_sub_loss(_weight, channel_slice):
             l1 = nn.L1Loss(reduction="none")(pred[:, channel_slice, ...], label[:, channel_slice, ...])
