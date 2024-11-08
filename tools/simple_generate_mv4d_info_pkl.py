@@ -2,6 +2,7 @@ import argparse
 from typing import Dict, List, Tuple, Sequence, Any
 from pathlib import Path
 
+import pandas as pd
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from loguru import logger
@@ -142,9 +143,16 @@ def prepare_all_frame_infos(args, scene_root: Path, calib: dict) -> Dict:
 
 
 def read_common_ts(scene_root: Path) -> List[int]:
-    ts_info = read_json(scene_root / "4d_anno_infos" / "ts.json")
-    # TODO: should specify a list of sensors, the common ts will be the intersection of timestamps of these sensors
-    return [int(i["lidar"]) for i in ts_info]
+    try:
+        ts_info = read_json(scene_root / "4d_anno_infos" / "ts.json")
+        return [int(i["lidar"]) for i in ts_info]
+    except FileNotFoundError:
+        ts_info = read_json(scene_root / "4d_anno_infos" / "ts_full.json")
+        df = pd.DataFrame.from_records(ts_info)
+        hpr_cols = [c for c in df.columns if c.startswith('hpr_')]
+        camera_cols = [c for c in df.columns if c.startswith('camera')]
+        valid_ts = df[['lidar'] + hpr_cols + camera_cols].isnull().sum(axis=1) == 0
+        return df['lidar'][valid_ts].values.astype(int).tolist()
 
 
 def prepare_camera_image_paths(scene_root: Path, ts: int, calib: dict) -> Dict[str, str]:

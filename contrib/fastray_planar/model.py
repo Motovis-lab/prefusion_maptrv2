@@ -8,6 +8,7 @@ from torch import Tensor
 from typing import Union, List, Dict, Optional
 
 from mmengine.model import BaseModel, BaseModule
+from mmengine.structures import BaseDataElement
 
 from prefusion.registry import MODELS
 
@@ -1115,27 +1116,34 @@ class FastRayPlanarStreamModel(BaseModel):
                 pred_parkingslot_3d=pred_parkingslot_3d
             )
         if mode == 'loss':
-            gt_bbox_3d = batched_input_dict['annotations']['bbox_3d']
-            gt_polyline_3d = batched_input_dict['annotations']['polyline_3d']
-            gt_parkingslot_3d = batched_input_dict['annotations']['parkingslot_3d']
+            gt = batched_input_dict['annotations']
+            pred = {"bbox_3d": pred_bbox_3d, "polyline_3d": pred_polyline_3d, "parkingslot_3d": pred_parkingslot_3d}
+            losses = self.compute_losses(gt, pred)
+            return losses
 
-            loss_bbox_3d = self.loss_bbox_3d(pred_bbox_3d, gt_bbox_3d)
-            loss_polyline_3d = self.loss_polyline_3d(pred_polyline_3d, gt_polyline_3d)
-            loss_parkingslot_3d = self.loss_parkingslot_3d(pred_parkingslot_3d, gt_parkingslot_3d)
-
-            total_loss = sum([loss_bbox_3d['bbox_3d_loss'],
-                              loss_polyline_3d['polyline_3d_loss'],
-                              loss_parkingslot_3d['parkingslot_3d_loss']])
-
-            losses = dict(
-                loss=total_loss,
-                seg_iou_loss_bbox_3d=loss_bbox_3d['bbox_3d_seg_iou_0_loss'],
-                seg_iou_loss_polyline_3d=loss_polyline_3d['polyline_3d_seg_iou_0_loss'],
-                seg_iou_loss_parkingslot_3d=loss_parkingslot_3d['parkingslot_3d_seg_iou_0_loss']
+        if mode == 'predict':
+            gt = batched_input_dict['annotations']
+            pred = {"bbox_3d": pred_bbox_3d, "polyline_3d": pred_polyline_3d, "parkingslot_3d": pred_parkingslot_3d}
+            losses = self.compute_losses(gt, pred)
+            return (
+                *[{trsfmbl_name: {t: v.cpu() for t, v in _pred.items()}} for trsfmbl_name, _pred in pred.items()],
+                BaseDataElement(loss=losses),
             )
 
-            return losses
-        
-        if mode == 'predict':
-            raise NotImplementedError
+    def compute_losses(self, gt: Dict, pred: Dict):
+        loss_bbox_3d = self.loss_bbox_3d(pred["bbox_3d"], gt['bbox_3d'])
+        loss_polyline_3d = self.loss_polyline_3d(pred["polyline_3d"], gt['polyline_3d'])
+        loss_parkingslot_3d = self.loss_parkingslot_3d(pred["parkingslot_3d"], gt['parkingslot_3d'])
 
+        total_loss = sum([loss_bbox_3d['bbox_3d_loss'],
+                            loss_polyline_3d['polyline_3d_loss'],
+                            loss_parkingslot_3d['parkingslot_3d_loss']])
+
+        losses = dict(
+            loss=total_loss,
+            seg_iou_loss_bbox_3d=loss_bbox_3d['bbox_3d_seg_iou_0_loss'],
+            seg_iou_loss_polyline_3d=loss_polyline_3d['polyline_3d_seg_iou_0_loss'],
+            seg_iou_loss_parkingslot_3d=loss_parkingslot_3d['parkingslot_3d_seg_iou_0_loss']
+        )
+
+        return losses
