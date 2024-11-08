@@ -150,7 +150,7 @@ camera_intrinsic_configs = dict(
 )
 
 
-debug_mode = True
+debug_mode = False
 
 if debug_mode:
     batch_size = 1
@@ -160,9 +160,10 @@ if debug_mode:
              resolutions=camera_resolution_configs,
              intrinsics=camera_intrinsic_configs)
     ]
+    possible_group_sizes=20,
 else:
-    batch_size = 4
-    num_workers = 4
+    batch_size = 8
+    num_workers = 6
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
@@ -172,6 +173,7 @@ else:
         dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
         dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
+    possible_group_sizes=2,
 
 
 ## GroupBatchDataset configs
@@ -204,9 +206,48 @@ train_dataset = dict(
     transforms=transforms,
     phase="train",
     batch_size=batch_size,
-    possible_group_sizes=4,
-    possible_frame_intervals=5,
+    possible_group_sizes=possible_group_sizes,
+    possible_frame_intervals=10,
 )
+
+
+val_dataset = dict(
+    type='GroupBatchDataset',
+    name="demo_parking",
+    data_root='../MV4D-PARKING',
+    info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
+    model_feeder=dict(
+        type="FastRayPlanarModelFeeder",
+        voxel_feature_config=voxel_feature_config,
+        camera_feature_configs=camera_feature_configs,
+    ),
+    transformables=dict(
+        camera_images=dict(type='CameraImageSet', tensor_smith=dict(type='CameraImageTensor')),
+        ego_poses=dict(type='EgoPoseSet'),
+        bbox_3d=dict(
+            type='Bbox3D', 
+            dictionary=dict(classes=['class.vehicle.passenger_car']),
+            tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+        polyline_3d=dict(
+            type='Polyline3D',
+            dictionary=dict(classes=['class.road_marker.lane_line']),
+            tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+        parkingslot_3d=dict(
+            type='ParkingSlot3D',
+            dictionary=dict(classes=['class.parking.parking_slot']),
+            tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range))
+    ),
+    transforms=[
+        dict(type='RenderIntrinsic', 
+             resolutions=camera_resolution_configs,
+             intrinsics=camera_intrinsic_configs)
+    ],
+    phase="val",
+    batch_size=1,
+    possible_group_sizes=20,
+    possible_frame_intervals=10,
+)
+
 
 ## dataloader configs
 train_dataloader = dict(
@@ -215,11 +256,15 @@ train_dataloader = dict(
     dataset=train_dataset
 )
 
-# val_dataloader = train_dataloader
+val_dataloader = dict(
+    num_workers=1,
+    collate_fn=dict(type="collate_dict"),
+    dataset=val_dataset
+)
 
 
 ## model configs
-bev_mode = False
+bev_mode = True
 # backbones
 camera_feat_channels = 128
 backbones = dict(
@@ -238,36 +283,26 @@ temporal_transform = dict(
     voxel_shape=voxel_shape,
     voxel_range=voxel_range,
     bev_mode=bev_mode,
-    interpolation='bilinear')
-# voxel feature fusion
-if bev_mode:
-    fusion_in_channels = camera_feat_channels * voxel_shape[0]
-else:
-    fusion_in_channels = camera_feat_channels
-voxel_fusion = dict(
-    type='VoxelStreamFusion',
-    in_channels=fusion_in_channels,
-    mid_channels=128,
-    bev_mode=bev_mode)
+    interpolation='nearest')
 # heads
 heads = dict(
     voxel_encoder=dict(type='VoVNetEncoder', 
                        in_channels=camera_feat_channels * voxel_shape[0], 
-                       mid_channels=256,
-                       out_channels=256,
+                       mid_channels=128,
+                       out_channels=128,
                        repeat=3),
     bbox_3d=dict(type='PlanarHead',
-                 in_channels=256,
+                 in_channels=128,
                  mid_channels=128,
                  cen_seg_channels=3,
                  reg_channels=20),
     polyline_3d=dict(type='PlanarHead',
-                     in_channels=256,
+                     in_channels=128,
                      mid_channels=128,
                      cen_seg_channels=2,
                      reg_channels=7),
     parkingslot_3d=dict(type='PlanarHead',
-                        in_channels=256,
+                        in_channels=128,
                         mid_channels=128,
                         cen_seg_channels=5,
                         reg_channels=15)
@@ -316,12 +351,11 @@ loss_cfg = dict(
 
 # integrated model config
 model = dict(
-    type='FastRayPlanarStreamModel',
+    type='FastRayPlanarMultiFrameModel',
     camera_groups=camera_groups,
     backbones=backbones,
     spatial_transform=spatial_transform,
     temporal_transform=temporal_transform,
-    voxel_fusion=voxel_fusion,
     heads=heads,
     loss_cfg=loss_cfg,
     debug_mode=debug_mode,
@@ -333,14 +367,13 @@ default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
 train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
-# val_cfg = dict(type="GroupBatchValLoop")
 
 
 ## optimizer configs
 optim_wrapper = dict(
     type='OptimWrapper', 
     optimizer=dict(type='SGD', 
-                lr=0.01, 
+                lr=0.01 * 0.5, 
                 momentum=0.9,
                 weight_decay=0.0001)
 )
@@ -355,9 +388,7 @@ env_cfg = dict(
     dist_cfg=dict(backend='nccl'),
 )
 
-# work_dir = "./work_dirs/fastray_planar_stream_model_1103"
-# work_dir = "./work_dirs/fastray_planar_stream_model_1103_infer"
-work_dir = "./work_dirs/fastray_planar_stream_model_1104"
-# load_from = "./work_dirs/fastray_planar_stream_model_1104/pretrain.pth"
-load_from = "./work_dirs/fastray_planar_stream_model_1104/epoch_16.pth"
+work_dir = "./work_dirs/fastray_planar_multi_frame_1107"
+# load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
+load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
 # resume = True

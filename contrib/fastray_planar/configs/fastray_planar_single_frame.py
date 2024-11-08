@@ -131,6 +131,7 @@ camera_groups = dict(
               'VCAMERA_FISHEYE_RIGHT'])
 
 resolution_pv_front = (640, 320)
+# resolution_pv_front = (512, 320)
 resolution_pv_sides = (512, 320)
 resolution_fisheyes = (512, 320)
 
@@ -146,21 +147,29 @@ camera_resolution_configs=dict(
     VCAMERA_FISHEYE_BACK=resolution_fisheyes,
     VCAMERA_FISHEYE_RIGHT=resolution_fisheyes)
 
+camera_intrinsic_configs = dict(
+    VCAMERA_PERSPECTIVE_FRONT=[319.5, 159.5, 640, 640],
+    # VCAMERA_PERSPECTIVE_FRONT='default',
+)
 
-debug_mode = False
+debug_mode = True
 
 if debug_mode:
     batch_size = 1
     num_workers = 0
+    persistent_workers = False
     transforms = [
-        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs)
+        dict(type='RenderIntrinsic', 
+             resolutions=camera_resolution_configs,
+             intrinsics=camera_intrinsic_configs)
     ]
 else:
     batch_size = 12
-    num_workers = 6
+    num_workers = 8
+    persistent_workers = True
     transforms = [
         dict(type='RandomRenderExtrinsic'),
-        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs),
+        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
         dict(type='RandomRotateSpace'),
         dict(type='RandomMirrorSpace'),
         dict(type='RandomImageISP', prob=0.2),
@@ -206,7 +215,8 @@ train_dataset = dict(
 train_dataloader = dict(
     num_workers=num_workers,
     collate_fn=dict(type="collate_dict"),
-    dataset=train_dataset
+    dataset=train_dataset,
+    persistent_workers=persistent_workers,
 )
 
 # val_dataloader = train_dataloader
@@ -316,7 +326,7 @@ optim_wrapper = dict(
                 lr=0.01, 
                 momentum=0.9,
                 weight_decay=0.0001),
-    dtype='bfloat16'
+    # dtype='bfloat16'
 )
 
 ## scheduler configs
@@ -329,7 +339,14 @@ env_cfg = dict(
 )
 
 
-load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_48.pth"
-work_dir = './work_dirs/fastray_planar_single_frame_1104'
+load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
+# load_from = "./work_dirs/fastray_planar_single_frame_1106_sampled/epoch_50.pth"
+# load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
+# work_dir = './work_dirs/fastray_planar_single_frame_1104'
+# work_dir = './work_dirs/fastray_planar_single_frame_1105_infer'
+# work_dir = './work_dirs/fastray_planar_single_frame_1106_sampled'
+# work_dir = './work_dirs/fastray_planar_single_frame_1106_sampled_infer'
+# work_dir = './work_dirs/fastray_planar_single_frame_1107'
+work_dir = './work_dirs/fastray_planar_single_frame_1107_infer'
 
 # resume = True
