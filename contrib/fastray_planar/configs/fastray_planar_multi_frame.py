@@ -150,7 +150,7 @@ camera_intrinsic_configs = dict(
 )
 
 
-debug_mode = False
+debug_mode = True
 
 if debug_mode:
     batch_size = 1
@@ -256,11 +256,11 @@ train_dataloader = dict(
     dataset=train_dataset
 )
 
-val_dataloader = dict(
-    num_workers=1,
-    collate_fn=dict(type="collate_dict"),
-    dataset=val_dataset
-)
+# val_dataloader = dict(
+#     num_workers=1,
+#     collate_fn=dict(type="collate_dict"),
+#     dataset=val_dataset
+# )
 
 
 ## model configs
@@ -359,6 +359,7 @@ model = dict(
     heads=heads,
     loss_cfg=loss_cfg,
     debug_mode=debug_mode,
+    pre_nframes=1,
 )
 
 ## log_processor
@@ -388,7 +389,8 @@ env_cfg = dict(
     dist_cfg=dict(backend='nccl'),
 )
 
-work_dir = "./work_dirs/fastray_planar_multi_frame_1107"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_1107"
+work_dir = "./work_dirs/fastray_planar_multi_frame_1107_infer"
 # load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
 load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
 # resume = True
