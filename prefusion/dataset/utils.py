@@ -1,11 +1,9 @@
-from typing import List, Union, Dict, TYPE_CHECKING, Tuple
+from typing import List, Union, Dict, TYPE_CHECKING
 from pathlib import Path
-from collections import defaultdict, namedtuple
 import copy
 
 import torch
 import mmcv
-from tqdm import tqdm
 import numpy as np
 from pypcd_imp import pypcd
 
@@ -216,3 +214,7 @@ def unstack_batch_size(batch_data: Dict[str, torch.Tensor]) -> Dict[str, torch.T
             _unstacked[key] = single_inner_data
         unstacked_data.append(_unstacked)
     return unstacked_data
+
+
+def approx_equal(a, b, eps=1e-4):
+    return abs(a - b) < eps

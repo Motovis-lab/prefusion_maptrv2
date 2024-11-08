@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Tuple
 from collections import namedtuple
 
 import pandas as pd
@@ -11,7 +11,7 @@ from copious.cv.geometry import Box3d
 from scipy.spatial.transform import Rotation
 
 from prefusion.registry import METRICS
-from prefusion.dataset.utils import build_tensor_smith, unstack_batch_size
+from prefusion.dataset.utils import build_tensor_smith, unstack_batch_size, approx_equal
 
 
 __all__ = ["PlanarBbox3DAveragePrecision", "PlanarSegIou"]
@@ -135,9 +135,9 @@ def calculate_bbox3d_ap(
                 matched_gt_idx = torch.argmax(ious[i])
                 pred_cls_idx = pred_conf_max_idx[i]
                 pred_conf = pred_confs[i][pred_cls_idx]
-                is_gt_the_same_class = gt_confs[matched_gt_idx][pred_cls_idx]
+                is_gt_the_same_class = approx_equal(gt_confs[matched_gt_idx][pred_cls_idx].item(), 1)
                 iou_with_gt = ious[i][matched_gt_idx]
-                if is_gt_the_same_class == 1 and iou_with_gt >= iou_thresh:
+                if is_gt_the_same_class and iou_with_gt >= iou_thresh:
                     if allow_gt_reuse or not matching_table[i].any():
                         predictions.append(PredResult(frame_id, i, pred_cls_idx.item(), pred_conf.item(), True))
                         matching_table[i, matched_gt_idx] = 1
@@ -149,9 +149,9 @@ def calculate_bbox3d_ap(
                 for i in range(ious.shape[0]):
                     matched_gt_idx = torch.argmax(ious[i])
                     pred_conf = pred_confs[i][cls_idx]
-                    is_gt_the_same_class = gt_confs[matched_gt_idx][cls_idx]
+                    is_gt_the_same_class = approx_equal(gt_confs[matched_gt_idx][pred_cls_idx].item(), 1)
                     iou_with_gt = ious[i][matched_gt_idx]
-                    if is_gt_the_same_class == 1 and iou_with_gt >= iou_thresh:
+                    if is_gt_the_same_class and iou_with_gt >= iou_thresh:
                         if allow_gt_reuse or not matching_table[i].any():
                             predictions.append(PredResult(frame_id, i, cls_idx.item(), pred_conf.item(), True))
                             matching_table[i, matched_gt_idx] = 1
@@ -168,7 +168,7 @@ def calculate_bbox3d_ap(
     for cls_idx in cls_idxes:
         filtered_predictions = [p for p in all_predictions if p.cls_idx == cls_idx]
         sorted_predictions = sorted(filtered_predictions, key=lambda x: x.conf, reverse=True)
-        num_gt_boxes = sum([sum(bx["confs"][cls_idx] == 1 for bx in gt_of_frame) for gt_of_frame in gt.values()])
+        num_gt_boxes = sum([sum(approx_equal(bx["confs"][cls_idx], 1) for bx in gt_of_frame) for gt_of_frame in gt.values()])
         tp = torch.zeros(len(sorted_predictions))
         fp = torch.zeros(len(sorted_predictions))
         for i, p in enumerate(sorted_predictions):
@@ -238,21 +238,21 @@ class PlanarBbox3DAveragePrecision(BaseMetric):
         gt = data_batch["annotations"].get(self.transformable_name)
         pred = [ds.get(self.transformable_name) for ds in data_samples if ds.get(self.transformable_name)][0]
 
-        if not gt or not pred:
-            return
+        res = [{"frame_id": ii.frame_id} for ii in data_batch["index_infos"]]
 
-        gt_unstacked = unstack_batch_size(gt)
-        pred_unstacked = unstack_batch_size(pred)
-
-        for _gt, _pred, _index_info in zip(gt_unstacked, pred_unstacked, data_batch["index_infos"]):
-            _pred["seg"] = _pred["seg"].sigmoid()
-            _pred["cen"] = _pred["cen"].sigmoid()
-            _reversed_pred = self.tensor_smith.reverse(_pred)
-            _reversed_gt = self.tensor_smith.reverse(_gt)
-            if _reversed_pred:
-                self.results.append({"result_type": "pred", "frame_id": _index_info.frame_id, 'boxes': _reversed_pred})
-            if _reversed_gt:
-                self.results.append({"result_type": "gt", "frame_id": _index_info.frame_id, 'boxes': _reversed_gt})
+        if gt:
+            for i, _gt in enumerate(unstack_batch_size(gt)):
+                _reversed_gt = self.tensor_smith.reverse(_gt)
+                res[i]["gt"] = _reversed_gt
+        
+        if pred:
+            for i, _pred in enumerate(unstack_batch_size(pred)):
+                _pred["seg"] = _pred["seg"].sigmoid()
+                _pred["cen"] = _pred["cen"].sigmoid()
+                _reversed_pred = self.tensor_smith.reverse(_pred)
+                res[i]["pred"] = _reversed_pred
+        
+        self.results.extend(res)
 
     def compute_metrics(self, results):
         def _convert(_bx):
@@ -261,13 +261,13 @@ class PlanarBbox3DAveragePrecision(BaseMetric):
                 "corners": torch.tensor(Box3d(_bx['translation'], _bx['size'], Rotation.from_matrix(_bx['rotation'])).corners).float()
             }
 
-        gt = {res["frame_id"]: [_convert(bx) for bx in res["boxes"]] for res in results if res['result_type'] == "gt"}
-        pred = {res["frame_id"]: [_convert(bx) for bx in res["boxes"]] for res in results if res['result_type'] == "pred"}
+        gt = {res["frame_id"]: [_convert(bx) for bx in res["gt"]] for res in results if "gt" in res}
+        pred = {res["frame_id"]: [_convert(bx) for bx in res["pred"]] for res in results if "pred" in res}
         
         if not gt or not pred:
             return {f"{cls_name}_ap": 0.0 for cls_name in self.dictionary["classes"]}
         
-        ap_results, _ = calculate_bbox3d_ap(gt, pred, **self.ap_args)
+        ap_results, all_predictions = calculate_bbox3d_ap(gt, pred, **self.ap_args)
         class_names = ["any"] + self.dictionary["classes"]
         return {f"{class_names[cls_idx]}_ap": ap_res["ap"] for cls_idx, ap_res in ap_results.items()}
 

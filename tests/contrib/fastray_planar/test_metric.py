@@ -1,4 +1,5 @@
 from typing import Dict, List
+import pickle
 import functools
 
 import torch
@@ -102,12 +103,22 @@ def test_calculate_bbox3d_ap(pred_corners, gt_corners):
 def val_boxes():
     rot = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
     return [
-        {"result_type": "pred", "frame_id": "f001", 'boxes': [{'confs': np.array([0.98, 0.75, 0.7]), 'size': np.array([2, 2, 2]), 'rotation': rot, 'translation': np.array([6, 9, 1])}]},
-        {"result_type": "pred", "frame_id": "f002", 'boxes': [{'confs': np.array([0.99, 0.91, 0.7]), 'size': np.array([4, 4, 2]), 'rotation': rot, 'translation': np.array([6, 3, 1])}]},
-        {"result_type": "pred", "frame_id": "f003", 'boxes': [{'confs': np.array([0.95, 0.6, 0.51]), 'size': np.array([2, 2, 2]), 'rotation': rot, 'translation': np.array([1, 2, 1])}]},
-        {"result_type": "gt", "frame_id": "f001", 'boxes': [{'confs': np.array([1, 1, 0]), 'size': np.array([2, 3, 2]), 'rotation': rot, 'translation': np.array([6.5, 9, 1])}]},
-        {"result_type": "gt", "frame_id": "f002", 'boxes': [{'confs': np.array([1, 1, 0]), 'size': np.array([3, 3, 2]), 'rotation': rot, 'translation': np.array([5.5, 2.5, 1])}]},
-        {"result_type": "gt", "frame_id": "f004", 'boxes': [{'confs': np.array([1, 1, 0]), 'size': np.array([2, 2, 2]), 'rotation': rot, 'translation': np.array([2, 3, 1])}]},
+        {
+            "frame_id": "f001", 
+            'pred': [{'confs': np.array([0.98, 0.75, 0.7]), 'size': np.array([2, 2, 2]), 'rotation': rot, 'translation': np.array([6, 9, 1])}],
+            'gt': [{'confs': np.array([1, 1, 0]), 'size': np.array([2, 3, 2]), 'rotation': rot, 'translation': np.array([6.5, 9, 1])}]
+        },
+        {
+            "frame_id": "f002", 
+            'pred': [{'confs': np.array([0.99, 0.91, 0.7]), 'size': np.array([4, 4, 2]), 'rotation': rot, 'translation': np.array([6, 3, 1])}],
+            'gt': [{'confs': np.array([1, 1, 0]), 'size': np.array([3, 3, 2]), 'rotation': rot, 'translation': np.array([5.5, 2.5, 1])}]
+        },
+        {
+            "frame_id": "f003", 'pred': [{'confs': np.array([0.95, 0.6, 0.51]), 'size': np.array([2, 2, 2]), 'rotation': rot, 'translation': np.array([1, 2, 1])}]
+        },
+        {
+            "frame_id": "f004", 'gt': [{'confs': np.array([1, 1, 0]), 'size': np.array([2, 2, 2]), 'rotation': rot, 'translation': np.array([2, 3, 1])}]
+        },
     ]
 
 
@@ -121,3 +132,58 @@ def test_planar_bbox3d_average_precision(val_boxes):
     results = metric.compute_metrics(val_boxes)
     assert results["passenger_car_ap"] == _approx(0.6666667)
     assert results["truck_ap"] == 0
+
+
+def test_calculate_bbox3d_ap_2():
+    gt = {"1698825868464": [
+            {
+                "confs": torch.tensor([1., 1., 0.]), 
+                "corners": torch.tensor([[ 3.5657,  9.5749, -0.0572],
+                                         [ 1.7904,  9.3328, -0.0771],
+                                         [ 1.7693,  9.3361,  1.7611],
+                                         [ 3.5447,  9.5782,  1.7810],
+                                         [ 4.0727,  5.8564, -0.0447],
+                                         [ 2.2973,  5.6143, -0.0646],
+                                         [ 2.2763,  5.6176,  1.7735],
+                                         [ 4.0516,  5.8597,  1.7934]])
+            }
+        ]
+    }
+    pred = {"1698825868464": [
+            {
+                "confs": torch.tensor([.99433, .98413, 0.]), 
+                "corners": torch.tensor([[ 3.5657,  9.5749, -0.0572],
+                                         [ 1.7904,  9.3328, -0.0771],
+                                         [ 1.7693,  9.3361,  1.7611],
+                                         [ 3.5447,  9.5782,  1.7810],
+                                         [ 4.0727,  5.8564, -0.0447],
+                                         [ 2.2973,  5.6143, -0.0646],
+                                         [ 2.2763,  5.6176,  1.7735],
+                                         [ 4.0516,  5.8597,  1.7934]])
+            }
+        ]
+    }
+    results, all_predictions = calculate_bbox3d_ap(gt, pred, iou_thresh=0.5, max_conf_as_pred_class=True)
+    assert all_predictions[0].matched
+
+def test_calculate_bbox3d_ap_3():
+    with open("tests/contrib/fastray_planar/pred_20231101_160337_1698825868464.pkl", "rb") as f:
+        pred = pickle.load(f)
+    with open("tests/contrib/fastray_planar/gt_20231101_160337_1698825868464.pkl", "rb") as f:
+        gt = pickle.load(f)
+    pred["1698825868464"] = pred["1698825868464"][:3]
+    gt["1698825868464"] = gt["1698825868464"][:3]
+    results, all_predictions = calculate_bbox3d_ap(gt, pred, iou_thresh=0.5, max_conf_as_pred_class=True)
+    sorted_all_predictions = sorted(all_predictions, key=lambda x: x.conf, reverse=True)
+    assert [p._asdict() for p in sorted_all_predictions] == [
+        {'frame_id': '1698825868464', 'box_id': 0, 'cls_idx': 1, 'conf': _approx(0.9923), 'matched': True},
+        {'frame_id': '1698825868464', 'box_id': 1, 'cls_idx': 1, 'conf': _approx(0.9920), 'matched': True},
+        {'frame_id': '1698825868464', 'box_id': 2, 'cls_idx': 1, 'conf': _approx(0.9841), 'matched': True},
+    ]
+    assert results[1]["precision"] == _approx([1, 1, 1])
+    assert results[1]["recall"] == _approx([0.333333, 0.66666667, 1])
+    assert results[1]["ap"] == _approx(1)
+    assert len(results[2]["precision"]) == 0
+    assert len(results[2]["recall"]) == 0
+    assert results[2]["ap"] == _approx(0.0)
+    
