@@ -150,7 +150,7 @@ camera_intrinsic_configs = dict(
 )
 
 
-debug_mode = True
+debug_mode = False
 
 if debug_mode:
     batch_size = 1
@@ -210,6 +210,45 @@ train_dataset = dict(
     possible_frame_intervals=10,
 )
 
+
+val_dataset = dict(
+    type='GroupBatchDataset',
+    name="demo_parking",
+    data_root='../MV4D-PARKING',
+    info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
+    model_feeder=dict(
+        type="FastRayPlanarModelFeeder",
+        voxel_feature_config=voxel_feature_config,
+        camera_feature_configs=camera_feature_configs,
+    ),
+    transformables=dict(
+        camera_images=dict(type='CameraImageSet', tensor_smith=dict(type='CameraImageTensor')),
+        ego_poses=dict(type='EgoPoseSet'),
+        bbox_3d=dict(
+            type='Bbox3D', 
+            dictionary=dict(classes=['class.vehicle.passenger_car']),
+            tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+        polyline_3d=dict(
+            type='Polyline3D',
+            dictionary=dict(classes=['class.road_marker.lane_line']),
+            tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+        parkingslot_3d=dict(
+            type='ParkingSlot3D',
+            dictionary=dict(classes=['class.parking.parking_slot']),
+            tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range))
+    ),
+    transforms=[
+        dict(type='RenderIntrinsic', 
+             resolutions=camera_resolution_configs,
+             intrinsics=camera_intrinsic_configs)
+    ],
+    phase="val",
+    batch_size=1,
+    possible_group_sizes=20,
+    possible_frame_intervals=10,
+)
+
+
 ## dataloader configs
 train_dataloader = dict(
     num_workers=num_workers,
@@ -217,7 +256,11 @@ train_dataloader = dict(
     dataset=train_dataset
 )
 
-# val_dataloader = train_dataloader
+val_dataloader = dict(
+    num_workers=1,
+    collate_fn=dict(type="collate_dict"),
+    dataset=val_dataset
+)
 
 
 ## model configs
