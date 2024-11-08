@@ -160,9 +160,10 @@ if debug_mode:
              resolutions=camera_resolution_configs,
              intrinsics=camera_intrinsic_configs)
     ]
+    possible_group_sizes=20,
 else:
-    batch_size = 4
-    num_workers = 4
+    batch_size = 8
+    num_workers = 6
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
@@ -172,6 +173,7 @@ else:
         dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
         dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
+    possible_group_sizes=2,
 
 
 ## GroupBatchDataset configs
@@ -204,8 +206,8 @@ train_dataset = dict(
     transforms=transforms,
     phase="train",
     batch_size=batch_size,
-    possible_group_sizes=4,
-    possible_frame_intervals=5,
+    possible_group_sizes=possible_group_sizes,
+    possible_frame_intervals=10,
 )
 
 ## dataloader configs
@@ -219,7 +221,7 @@ train_dataloader = dict(
 
 
 ## model configs
-bev_mode = False
+bev_mode = True
 # backbones
 camera_feat_channels = 128
 backbones = dict(
@@ -238,36 +240,26 @@ temporal_transform = dict(
     voxel_shape=voxel_shape,
     voxel_range=voxel_range,
     bev_mode=bev_mode,
-    interpolation='bilinear')
-# voxel feature fusion
-if bev_mode:
-    fusion_in_channels = camera_feat_channels * voxel_shape[0]
-else:
-    fusion_in_channels = camera_feat_channels
-voxel_fusion = dict(
-    type='VoxelStreamFusion',
-    in_channels=fusion_in_channels,
-    mid_channels=128,
-    bev_mode=bev_mode)
+    interpolation='nearest')
 # heads
 heads = dict(
     voxel_encoder=dict(type='VoVNetEncoder', 
                        in_channels=camera_feat_channels * voxel_shape[0], 
-                       mid_channels=256,
-                       out_channels=256,
+                       mid_channels=128,
+                       out_channels=128,
                        repeat=3),
     bbox_3d=dict(type='PlanarHead',
-                 in_channels=256,
+                 in_channels=128,
                  mid_channels=128,
                  cen_seg_channels=3,
                  reg_channels=20),
     polyline_3d=dict(type='PlanarHead',
-                     in_channels=256,
+                     in_channels=128,
                      mid_channels=128,
                      cen_seg_channels=2,
                      reg_channels=7),
     parkingslot_3d=dict(type='PlanarHead',
-                        in_channels=256,
+                        in_channels=128,
                         mid_channels=128,
                         cen_seg_channels=5,
                         reg_channels=15)
@@ -316,12 +308,11 @@ loss_cfg = dict(
 
 # integrated model config
 model = dict(
-    type='FastRayPlanarStreamModel',
+    type='FastRayPlanarMultiFrameModel',
     camera_groups=camera_groups,
     backbones=backbones,
     spatial_transform=spatial_transform,
     temporal_transform=temporal_transform,
-    voxel_fusion=voxel_fusion,
     heads=heads,
     loss_cfg=loss_cfg,
     debug_mode=debug_mode,
@@ -333,14 +324,13 @@ default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
 train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
-# val_cfg = dict(type="GroupBatchValLoop")
 
 
 ## optimizer configs
 optim_wrapper = dict(
     type='OptimWrapper', 
     optimizer=dict(type='SGD', 
-                lr=0.01, 
+                lr=0.01 * 0.5, 
                 momentum=0.9,
                 weight_decay=0.0001)
 )
@@ -355,9 +345,7 @@ env_cfg = dict(
     dist_cfg=dict(backend='nccl'),
 )
 
-# work_dir = "./work_dirs/fastray_planar_stream_model_1103"
-# work_dir = "./work_dirs/fastray_planar_stream_model_1103_infer"
-work_dir = "./work_dirs/fastray_planar_stream_model_1104"
-# load_from = "./work_dirs/fastray_planar_stream_model_1104/pretrain.pth"
-load_from = "./work_dirs/fastray_planar_stream_model_1104/epoch_16.pth"
+work_dir = "./work_dirs/fastray_planar_multi_frame_1107"
+# load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
+load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
 # resume = True
