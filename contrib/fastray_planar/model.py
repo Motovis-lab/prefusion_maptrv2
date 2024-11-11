@@ -1148,3 +1148,195 @@ class FastRayPlanarStreamModel(BaseModel):
         )
 
         return losses
+
+
+@MODELS.register_module()
+class NuscenesFastRayPlanarSingleFrameModel(BaseModel):
+    
+    def __init__(self,
+                 camera_groups,
+                 backbones,
+                 spatial_transform,
+                 heads,
+                 loss_cfg=None,
+                 debug_mode=False,
+                 data_preprocessor=None,
+                 init_cfg=None):
+        super().__init__(data_preprocessor, init_cfg)
+        self.debug_mode = debug_mode
+        # backbone
+        self.camera_groups = camera_groups
+        self.backbone_pv_front = MODELS.build(backbones['pv_front'])
+        self.backbone_pv_sides = MODELS.build(backbones['pv_sides'])
+        # view transform
+        self.spatial_transform = MODELS.build(spatial_transform)
+        # voxel encoder
+        self.voxel_encoder = MODELS.build(heads['voxel_encoder'])
+        # voxel heads
+        self.head_bbox_3d = MODELS.build(heads['bbox_3d'])
+        # self.head_polyline_3d = MODELS.build(heads['polyline_3d'])
+        # self.head_occ_sdf = MODELS.build(heads['occ_sdf'])
+        # init losses
+        self.loss_bbox_3d = MODELS.build(loss_cfg['bbox_3d'])
+        # self.loss_polyline_3d = MODELS.build(loss_cfg['polyline_3d'])
+
+    
+    def forward(self, mode='tensor', **batched_input_dict):
+        """
+        >>> batched_input_dict = processed_frame_batch = {
+                'index_infos': [index_info, index_info, ...],
+                'camera_images': {
+                    'cam_0': (N, 3, H, W),
+                    ...
+                },
+                'camera_lookups': [
+                    {'cam_0': {uu:, Z*X*Y, vv:, Z*X*Y, ...},
+                    {'cam_0': {uu:, Z*X*Y, vv:, Z*X*Y, ...},
+                    {'cam_0': {uu:, Z*X*Y, vv:, Z*X*Y, ...},
+                    {'cam_0': {uu:, Z*X*Y, vv:, Z*X*Y, ...},
+                ],
+                'delta_poses': (N, 4, 4),
+                'annotations': {
+                    'bbox_3d': {
+                        'cen': (N, 1, X, Y)
+                        'seg': (N, V, X, Y)
+                        'reg': (N, V, X, Y)
+                    },
+                    ...
+                },
+                ...
+            }
+        """
+        camera_tensors_dict = batched_input_dict['camera_tensors']
+        camera_lookups = batched_input_dict['camera_lookups']
+        # backbone
+        camera_feats_dict = {}
+        for cam_id in camera_tensors_dict:
+            if cam_id in self.camera_groups['pv_front']:
+                camera_feats_dict[cam_id] = self.backbone_pv_front(camera_tensors_dict[cam_id])
+            if cam_id in self.camera_groups['pv_sides']:
+                camera_feats_dict[cam_id] = self.backbone_pv_sides(camera_tensors_dict[cam_id])
+        # spatial transform: output shape can be 4D or 5D (N, C*Z, X, Y) or (N, C, Z, X, Y)
+        voxel_feats = self.spatial_transform(camera_feats_dict, camera_lookups)
+        # voxel encoder
+        if len(voxel_feats.shape) == 5:
+            N, C, Z, X, Y = voxel_feats.shape
+            voxel_feats = voxel_feats.reshape(N, C*Z, X, Y)
+        bev_feats = self.voxel_encoder(voxel_feats)
+        # heads
+        out_bbox_3d = self.head_bbox_3d(bev_feats)
+        # out_polyline_3d = self.head_polyline_3d(bev_feats)
+        # outputs
+        pred_bbox_3d = dict(
+            cen=out_bbox_3d[0][:, 0:1],
+            seg=out_bbox_3d[0][:, 1:],
+            reg=out_bbox_3d[1])
+        # pred_polyline_3d = dict(
+        #     seg=out_polyline_3d[0],
+        #     reg=out_polyline_3d[1])
+
+        if self.debug_mode:
+            draw_out_feats(batched_input_dict, 
+                           camera_tensors_dict,
+                           pred_bbox_3d,)
+        
+        if mode == 'tensor':
+            return dict(
+                hidden_feats=self.voxel_feats_pre,
+                pred_bbox_3d=pred_bbox_3d,
+                # pred_polyline_3d=pred_polyline_3d,
+            )
+        if mode == 'loss':
+            gt_bbox_3d = batched_input_dict['annotations']['bbox_3d']
+            # gt_polyline_3d = batched_input_dict['annotations']['polyline_3d']
+
+            try:
+                loss_bbox_3d = self.loss_bbox_3d(pred_bbox_3d, gt_bbox_3d)
+            except Exception as e:
+                print(e)
+                print(gt_bbox_3d)
+                print(batched_input_dict['index_infos'][0])
+            # loss_polyline_3d = self.loss_polyline_3d(pred_polyline_3d, gt_polyline_3d)
+
+            total_loss = sum([loss_bbox_3d['bbox_3d_loss'],
+                            #   loss_polyline_3d['polyline_3d_loss'],
+                              ])
+
+            losses = dict(
+                loss=total_loss,
+                seg_iou_loss_bbox_3d=loss_bbox_3d['bbox_3d_seg_iou_0_loss'],
+                # seg_iou_loss_polyline_3d=loss_polyline_3d['polyline_3d_seg_iou_0_loss'],
+            )
+
+            return losses
+        
+        if mode == 'predict':
+            raise NotImplementedError
+    
+
+def draw_out_feats(batched_input_dict, 
+                    camera_tensors_dict,
+                    pred_bbox_3d,
+                    # pred_polyline_3d,
+    ):
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    fig, _ = plt.subplots(3, 10)
+    fig.suptitle(batched_input_dict['index_infos'][0].scene_frame_id)
+    for i, cam_id in enumerate(camera_tensors_dict):
+        img = camera_tensors_dict[cam_id].detach().cpu().numpy()[0].transpose(1, 2, 0)[..., ::-1] * 255 + 128
+        img = img.astype(np.uint8)
+        plt.subplot(3, 10, i+1)
+        plt.title(cam_id.replace('VCAMERA_', '').lower())
+        plt.imshow(img)
+
+    gt_seg = batched_input_dict['annotations']['bbox_3d']['seg'][0][0].detach().cpu()
+    pred_seg = pred_bbox_3d['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
+    plt.subplot(3, 10, 11)
+    plt.imshow(gt_seg)
+    plt.title('bbox_3d gt_seg')
+    plt.subplot(3, 10, 12)
+    plt.imshow(pred_seg)
+    plt.title("bbox_3d pred_seg")
+    
+    gt_cen = batched_input_dict['annotations']['bbox_3d']['cen'][0][0].detach().cpu()
+    pred_cen = pred_bbox_3d['cen'][0][0].to(torch.float32).sigmoid().detach().cpu()
+    pred_cen *= (pred_seg > 0.5)
+    plt.subplot(3, 10, 13)
+    plt.imshow(gt_cen)
+    plt.title("bbox_3d gt_cen")
+    plt.subplot(3, 10, 14)
+    plt.imshow(pred_cen)
+    plt.title("bbox_3d pred_cen")
+    
+    gt_reg = batched_input_dict['annotations']['bbox_3d']['reg'][0][0].detach().cpu()
+    pred_reg = pred_bbox_3d['reg'][0][0].to(torch.float32).detach().cpu()
+    pred_reg *= (pred_seg > 0.5)
+    plt.subplot(3, 10, 15)
+    plt.imshow(gt_reg)
+    plt.title("bbox_3d gt_reg")
+    plt.subplot(3, 10, 16)
+    plt.imshow(pred_reg)
+    plt.title("bbox_3d pred_reg")
+    
+    # gt_seg = batched_input_dict['annotations']['polyline_3d']['seg'][0][0].detach().cpu()
+    # pred_seg = pred_polyline_3d['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
+    # plt.subplot(3, 10, 17)
+    # plt.imshow(gt_seg)
+    # plt.title('polyline_3d gt_seg')
+    # plt.subplot(3, 10, 18)
+    # plt.imshow(pred_seg)
+    # plt.title("polyline_3d pred_seg")
+    
+    # gt_reg = batched_input_dict['annotations']['polyline_3d']['reg'][0][0].detach().cpu()
+    # pred_reg = pred_polyline_3d['reg'][0][0].to(torch.float32).detach().cpu()
+    # pred_reg *= (pred_seg > 0.5)
+    # plt.subplot(3, 10, 19)
+    # plt.imshow(gt_reg)
+    # plt.title("polyline_3d gt_reg")
+    # plt.subplot(3, 10, 20)
+    # plt.imshow(pred_reg)
+    # plt.title("polyline_3d pred_reg")
+    
+    plt.show()

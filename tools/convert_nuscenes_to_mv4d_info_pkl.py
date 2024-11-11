@@ -92,7 +92,7 @@ def build_frame_info(nusc, first_sample_token) -> Dict:
     frame_info = defaultdict(lambda: defaultdict(dict))
 
     while True:
-        ts = cur_sample["timestamp"]
+        ts = str(cur_sample["timestamp"] // 1000)  # convert time-unit to ms
         lidar_ego_pose = build_ego_pose(nusc, cur_sample)
 
         for cam_name in NUSC_CAM_NAMES:
@@ -129,7 +129,7 @@ def build_ego_pose(nusc, cur_sample):
 
 
 def build_camera_mask(cam_name: str) -> Path:
-    return Path("self_mask") / cam_name
+    return Path("self_mask") / f"{cam_name}.png"
 
 
 def build_depth_mode(cam_name: str) -> str:
@@ -236,8 +236,8 @@ def build_3d_boxes(nusc, cur_sample, lidar_ego_pose):
                 "class": ann_info["category_name"],
                 "attr": {},
                 "size": ann_info["size"],
-                "rotation": ann_rot_ego,
-                "translation": ann_translation_ego.flatten(),
+                "rotation": ann_rot_ego[:3, :3],
+                "translation": ann_translation_ego.flatten()[:3],
                 "track_id": ann_info["instance_token"],
                 "velocity": velocity,
             }
