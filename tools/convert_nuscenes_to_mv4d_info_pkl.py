@@ -235,7 +235,7 @@ def build_3d_boxes(nusc, cur_sample, lidar_ego_pose):
             {
                 "class": ann_info["category_name"],
                 "attr": {},
-                "size": ann_info["size"],
+                "size": np.array(ann_info["size"])[[1, 0, 2]].tolist(),
                 "rotation": ann_rot_ego[:3, :3],
                 "translation": ann_translation_ego.flatten()[:3],
                 "track_id": ann_info["instance_token"],

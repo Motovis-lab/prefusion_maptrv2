@@ -319,7 +319,7 @@ def plot_bbox_2d(data, save_dir):
         for cam_id, frame_cam_data in frame_info["camera_image"].items():
             calib = frame_cam_data["calibration"]
             im_rel_path = frame_cam_data["path"]
-            data_args.append( ( frame_info["3d_boxes"], calib[cam_id], args.data_root / im_rel_path, ensured_path(save_dir / cam_id) / f"{frame_id}.jpg", ) )
+            data_args.append( ( frame_info["3d_boxes"], calib, args.data_root / im_rel_path, ensured_path(save_dir / cam_id) / f"{frame_id}.jpg", ) )
     maybe_multiprocessing(_plot_bbox_2d_of_single_frame, data_args, num_processes=args.num_workers, use_tqdm=True, tqdm_desc="plotting bbox 2d")
 
 
