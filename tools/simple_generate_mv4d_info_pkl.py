@@ -106,7 +106,7 @@ def prepare_camera_mask(scene_root: Path) -> Dict:
 
 
 def prepare_depth_mode(scene_root: Path) -> Dict:
-    return {p.stem: "d" for p in (scene_root / "camera").iterdir()}
+    return {p.stem: "d" for p in (scene_root / "camera").iterdir() if not p.name.startswith(".")}
 
 
 def prepare_ego_poses(scene_root: Path) -> Dict[int, np.ndarray]:
