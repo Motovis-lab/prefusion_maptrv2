@@ -82,7 +82,7 @@ camera_intrinsic_configs = dict(
     CAM_FRONT_LEFT=[363.711, 71.091, 559.943, 559.943], 
 )
 
-debug_mode = True
+debug_mode = False
 
 if debug_mode:
     batch_size = 1
@@ -95,7 +95,7 @@ if debug_mode:
     ]
 else:
     batch_size = 16
-    num_workers = 8
+    num_workers = 12
     persistent_workers = True
     transforms = [
         dict(type='RandomRenderExtrinsic'),
@@ -277,7 +277,7 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=12, val_interval=1)
 val_cfg = dict(type="GroupBatchValLoop")
 
 
@@ -303,7 +303,7 @@ optim_wrapper = dict(
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[25, 40, 47])
+param_scheduler = dict(type='MultiStepLR', milestones=[6, 8, 10])
 
 env_cfg = dict(
     cudnn_benchmark=False,
