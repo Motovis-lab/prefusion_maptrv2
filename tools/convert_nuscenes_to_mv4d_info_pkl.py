@@ -42,10 +42,10 @@ args = parse_arguments()
 
 def main():
     nusc = NuScenes(version=args.nusc_version, dataroot=args.nusc_data_root, verbose=True)
-    train_scene_list = ["scene-0001", "scene-0004"]  # TODO: to replace with splits.train
-    val_scene_list = ["scene-0003"]
-    # train_scene_list = splits.train
-    # val_scene_list = splits.val
+    # train_scene_list = ["scene-0001", "scene-0004"]  # TODO: to replace with splits.train
+    # val_scene_list = ["scene-0003"]
+    train_scene_list = splits.train
+    val_scene_list = splits.val
     train_infos = generate_info_pkl(nusc, train_scene_list)
     val_infos = generate_info_pkl(nusc, val_scene_list)
     save_pickle(train_infos, args.info_pkl_save_dir / f"{args.info_pkl_filename_prefix}train_info.pkl")
