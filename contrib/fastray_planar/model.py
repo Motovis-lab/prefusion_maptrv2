@@ -86,6 +86,7 @@ class Concat(nn.Module):
         return torch.cat(inputs, dim=self.dim)
 
 
+@MODELS.register_module()
 class EltwiseAdd(nn.Module):
     def __init__(self):
         super(EltwiseAdd, self).__init__()
@@ -266,14 +267,14 @@ class FastRaySpatialTransform(BaseModule):
                     valid_vv = camera_lookup['vv'][valid_map]
                     voxel_feats[n, :, valid_map] = camera_feat[:, valid_vv, valid_uu]
                 if self.fusion_mode == 'bilinear_weighted':
-                    valid_map = camera_lookup['valid_map']
+                    valid_map = camera_lookup['valid_map_bilinear']
                     valid_norm_density_map = camera_lookup['norm_density_map'][valid_map]
                     valid_uu_floor = camera_lookup['uu_floor'][valid_map]
                     valid_uu_ceil = camera_lookup['uu_ceil'][valid_map]
                     valid_vv_floor = camera_lookup['vv_floor'][valid_map]
                     valid_vv_ceil = camera_lookup['vv_ceil'][valid_map]
-                    valid_uu_bilinear_weight = camera_lookup['uu_bilinear_weight'][valid_map]
-                    valid_vv_bilinear_weight = camera_lookup['vv_bilinear_weight'][valid_map]
+                    valid_uu_bilinear_weight = camera_lookup['uu_bilinear_weight'][valid_map].to(camera_feat.dtype)
+                    valid_vv_bilinear_weight = camera_lookup['vv_bilinear_weight'][valid_map].to(camera_feat.dtype)
                     interpolated_camera_feat = valid_uu_bilinear_weight[None] * (
                         camera_feat[:, valid_vv_floor, valid_uu_floor] * valid_vv_bilinear_weight[None] +
                         camera_feat[:, valid_vv_ceil, valid_uu_floor] * (1 - valid_vv_bilinear_weight)[None]
@@ -488,40 +489,37 @@ class VoxelStreamFusion(BaseModule):
 
 @MODELS.register_module()
 class VoxelConcatFusion(BaseModule):
-    def __init__(self, in_channels, bev_mode=False, init_cfg=None):
+    def __init__(self, in_channels, pre_nframes, bev_mode=False, init_cfg=None):
         super().__init__(init_cfg=init_cfg)
         self.bev_mode = bev_mode
         self.cat = Concat()
         if bev_mode:
             self.fuse = nn.Sequential(
-                nn.Conv2d(in_channels * 2, in_channels, kernel_size=3, padding=1),
+                nn.Conv2d(in_channels * (pre_nframes + 1), in_channels, kernel_size=3, padding=1),
                 nn.BatchNorm2d(in_channels)
             )
         else:
             self.fuse = nn.Sequential(
-                nn.Conv3d(in_channels * 2, in_channels, kernel_size=3, padding=1),
+                nn.Conv3d(in_channels * (pre_nframes + 1), in_channels, kernel_size=3, padding=1),
                 nn.BatchNorm3d(in_channels)
             )
     
-    def forward(self, voxel_feats_cur, voxel_feats_pre):
+    def forward(self, *aligned_voxel_feats_cat):
         """Temporal fusion of voxel current and previous features.
 
         Parameters
         ----------
-        voxel_feats_cur : torch.Tensor
-            current voxel features for measurement
-        voxel_feats_pre : torch.Tensor
-            previously predicted voxel features
+        aligned_voxel_feats_cat : List[torch.Tensor]
+            concated nframes of voxel features
 
         Returns
         -------
-        voxel_feats_updated : torch.Tensor
+        voxel_feats_fused : torch.Tensor
             updated voxel features
         """
-        assert voxel_feats_cur.shape == voxel_feats_pre.shape
-        cat = self.cat(voxel_feats_cur, voxel_feats_pre)
-        voxel_feats_updated = self.fuse(cat)
-        return voxel_feats_updated
+        cat = self.cat(*aligned_voxel_feats_cat)
+        voxel_feats_fused = self.fuse(cat)
+        return voxel_feats_fused
    
 
 
@@ -848,7 +846,9 @@ def draw_out_feats(batched_input_dict,
     pred_boxes_3d = get_bbox_3d(pred_bbox_3d_0)
     
     for element in pred_boxes_3d:
-        if element['confs'][0] < 0.7:
+        # if element['confs'][0] < 0.7:
+        #     continue
+        if element['area_score'] < 0.5:
             continue
         center = element['translation']
         xvec = element['size'][0] * element['rotation'][:, 0]
@@ -860,7 +860,7 @@ def draw_out_feats(batched_input_dict,
             center - 0.5 * xvec - 0.5 * yvec
         ], dtype=np.float32)
         # print('pred: ', corner_points[:, :2])
-        plt.text(center[1], center[0], '{:.2f}'.format(element['confs'][0]), color='r',
+        plt.text(center[1], center[0], '{:.2f}'.format(element['area_score']), color='r',
                  ha='center', va='center')
         plt.plot(corner_points[[0, 1, 2, 3, 0], 1], corner_points[[0, 1, 2, 3, 0], 0], 'r')
     
@@ -914,7 +914,7 @@ def get_bbox_3d(tensor_dict):
         voxel_shape=(6, 320, 160),
         voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
     )
-    return pbox.reverse(tensor_dict, pre_conf=0.3, ratio=1.5)
+    return pbox.reverse(tensor_dict, pre_conf=0.3, ratio=1.0)
     
 
 def get_parkingslot_3d(tensor_dict):
@@ -935,6 +935,7 @@ class FastRayPlanarMultiFrameModel(BaseModel):
                  backbones,
                  spatial_transform,
                  temporal_transform,
+                 voxel_fusion,
                  heads,
                  debug_mode=False,
                  loss_cfg=None,
@@ -952,7 +953,8 @@ class FastRayPlanarMultiFrameModel(BaseModel):
         self.spatial_transform = MODELS.build(spatial_transform)
         self.temporal_transform = MODELS.build(temporal_transform)
         # voxel fusion
-        self.voxel_fusion = EltwiseAdd()
+        # self.voxel_fusion = EltwiseAdd()
+        self.voxel_fusion = MODELS.build(voxel_fusion)
         # voxel encoder
         self.voxel_encoder = MODELS.build(heads['voxel_encoder'])
         # voxel heads
@@ -1032,9 +1034,9 @@ class FastRayPlanarMultiFrameModel(BaseModel):
             aligned_voxel_feats_cat.append(self.temporal_transform(
                 self.cached_voxel_feats[f'pre_{pre_i+1}'], self.cached_delta_poses[f'pre_{pre_i+1}']
             ))
-        # if self.debug_mode:
-        #     draw_aligned_voxel_feats(aligned_voxel_feats_cat)
-        #     draw_aligned_voxel_feats(list(self.cached_voxel_feats.values()))
+        if self.debug_mode:
+            draw_aligned_voxel_feats(aligned_voxel_feats_cat)
+            # draw_aligned_voxel_feats(list(self.cached_voxel_feats.values()))
         # cache voxel features
         for pre_i in range(self.pre_nframes, 0, -1):
             self.cached_voxel_feats[f'pre_{pre_i}'] = (self.cached_voxel_feats[f'pre_{pre_i-1}']).clone().detach()
