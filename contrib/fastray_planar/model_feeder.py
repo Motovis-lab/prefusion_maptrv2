@@ -97,9 +97,10 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
             'camera_lookups': [],
             'lidar_points': [],
             'delta_poses': [],
-            'annotations': defaultdict(lambda: defaultdict(list)),
-            'transformables': []
+            'annotations': defaultdict(lambda: defaultdict(list))
         }
+        if self.debug_mode:
+            processed_frame_batch['transformables'] = []
         anno_batch_dict = processed_frame_batch['annotations']
         # rearange input_dict into batches
         for input_dict in frame_batch:
