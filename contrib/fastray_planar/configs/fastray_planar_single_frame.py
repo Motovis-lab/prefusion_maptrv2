@@ -339,7 +339,9 @@ env_cfg = dict(
 )
 
 
-load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
+load_from = "./work_dirs/3scenes_singleframe_epoch_50.pth"
+# load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
+
 # load_from = "./work_dirs/fastray_planar_single_frame_1106_sampled/epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
@@ -347,6 +349,7 @@ load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1106_sampled'
 # work_dir = './work_dirs/fastray_planar_single_frame_1106_sampled_infer'
 # work_dir = './work_dirs/fastray_planar_single_frame_1107'
-work_dir = './work_dirs/fastray_planar_single_frame_1107_infer'
+# work_dir = './work_dirs/fastray_planar_single_frame_1107_infer'
+work_dir = './work_dirs/fastray_planar_single_frame_1111_infer'
 
 # resume = True

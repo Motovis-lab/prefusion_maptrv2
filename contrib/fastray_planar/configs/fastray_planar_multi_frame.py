@@ -150,7 +150,7 @@ camera_intrinsic_configs = dict(
 )
 
 
-debug_mode = True
+debug_mode = False
 
 if debug_mode:
     batch_size = 1
@@ -163,7 +163,7 @@ if debug_mode:
     possible_group_sizes=20,
 else:
     batch_size = 8
-    num_workers = 6
+    num_workers = 4
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
@@ -186,7 +186,7 @@ train_dataset = dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
         camera_feature_configs=camera_feature_configs,
-    ),
+        debug_mode=debug_mode),
     transformables=dict(
         camera_images=dict(type='CameraImageSet', tensor_smith=dict(type='CameraImageTensor')),
         ego_poses=dict(type='EgoPoseSet'),
@@ -242,9 +242,9 @@ val_dataset = dict(
              resolutions=camera_resolution_configs,
              intrinsics=camera_intrinsic_configs)
     ],
-    phase="val",
-    batch_size=1,
-    possible_group_sizes=20,
+    phase="train",
+    batch_size=batch_size,
+    possible_group_sizes=2,
     possible_frame_intervals=10,
 )
 
@@ -256,11 +256,11 @@ train_dataloader = dict(
     dataset=train_dataset
 )
 
-# val_dataloader = dict(
-#     num_workers=1,
-#     collate_fn=dict(type="collate_dict"),
-#     dataset=val_dataset
-# )
+val_dataloader = dict(
+    num_workers=0,
+    collate_fn=dict(type="collate_dict"),
+    dataset=val_dataset
+)
 
 
 ## model configs
@@ -275,7 +275,8 @@ backbones = dict(
 spatial_transform = dict(
     type='FastRaySpatialTransform',
     voxel_shape=voxel_shape,
-    fusion_mode='weighted',
+    fusion_mode='bilinear_weighted',
+    # fusion_mode='weighted',
     bev_mode=bev_mode)
 # temporal_transform
 temporal_transform = dict(
@@ -283,7 +284,16 @@ temporal_transform = dict(
     voxel_shape=voxel_shape,
     voxel_range=voxel_range,
     bev_mode=bev_mode,
-    interpolation='nearest')
+    interpolation='bilinear')
+# voxel fusion
+pre_nframes = 1
+# voxel_fusion = dict(type='EltwiseAdd')
+voxel_fusion = dict(
+    type='VoxelConcatFusion',
+    in_channels=camera_feat_channels * voxel_shape[0],
+    pre_nframes=pre_nframes,
+    bev_mode=bev_mode)
+
 # heads
 heads = dict(
     voxel_encoder=dict(type='VoVNetEncoder', 
@@ -356,10 +366,11 @@ model = dict(
     backbones=backbones,
     spatial_transform=spatial_transform,
     temporal_transform=temporal_transform,
+    voxel_fusion=voxel_fusion,
     heads=heads,
     loss_cfg=loss_cfg,
     debug_mode=debug_mode,
-    pre_nframes=1,
+    pre_nframes=pre_nframes,
 )
 
 ## log_processor
@@ -368,7 +379,19 @@ default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
 train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
+val_cfg = dict(type="GroupBatchValLoop")
 
+## evaluator and metrics
+val_evaluator = [
+    dict(type="PlanarSegIou"),
+    # dict(
+    #     type="PlanarBbox3DAveragePrecision", 
+    #     transformable_name="bbox_3d" ,
+    #     tensor_smith_cfg=val_dataset['transformables']['bbox_3d']['tensor_smith'],
+    #     dictionary={"classes": ['class.vehicle.passenger_car']},
+    #     max_conf_as_pred_class=True,
+    # )
+]
 
 ## optimizer configs
 optim_wrapper = dict(
@@ -390,7 +413,8 @@ env_cfg = dict(
 )
 
 # work_dir = "./work_dirs/fastray_planar_multi_frame_1107"
-work_dir = "./work_dirs/fastray_planar_multi_frame_1107_infer"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_1107_infer"
+work_dir = "./work_dirs/fastray_planar_multi_frame_1112"
 # load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
 load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
 # resume = True
