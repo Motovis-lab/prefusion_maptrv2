@@ -798,9 +798,10 @@ def draw_aligned_voxel_feats(aligned_voxel_feats):
     import numpy as np
     import matplotlib.pyplot as plt
 
-    plt.subplots(1, 4)
+    n_frames = len(aligned_voxel_feats)
+    plt.subplots(1, n_frames)
     for i, voxel_feats_frame in enumerate(aligned_voxel_feats):
-        plt.subplot(1, 4, i+1)
+        plt.subplot(1, n_frames, i+1)
         plt.imshow(voxel_feats_frame[0, 0].detach().cpu().to(torch.float32).numpy() > 0)
         plt.title(f'frame t({0 - i})')
     plt.show()
@@ -817,6 +818,7 @@ class FastRayPlanarMultiFrameModel(BaseModel):
                  heads,
                  debug_mode=False,
                  loss_cfg=None,
+                 pre_nframes=1,
                  data_preprocessor=None,
                  init_cfg=None):
         super().__init__(data_preprocessor, init_cfg)
@@ -839,6 +841,7 @@ class FastRayPlanarMultiFrameModel(BaseModel):
         self.head_parkingslot_3d = MODELS.build(heads['parkingslot_3d'])
         # self.head_occ_sdf = MODELS.build(heads['occ_sdf'])
         # hidden voxel features for temporal fusion
+        self.pre_nframes = pre_nframes
         self.cached_voxel_feats = {}
         self.cached_delta_poses = {}
         # init losses
@@ -876,7 +879,7 @@ class FastRayPlanarMultiFrameModel(BaseModel):
         camera_tensors_dict = batched_input_dict['camera_tensors']
         camera_lookups = batched_input_dict['camera_lookups']
         delta_poses = batched_input_dict['delta_poses']
-        # backbone
+        ## backbone
         camera_feats_dict = {}
         for cam_id in camera_tensors_dict:
             if cam_id in self.camera_groups['pv_front']:
@@ -885,51 +888,47 @@ class FastRayPlanarMultiFrameModel(BaseModel):
                 camera_feats_dict[cam_id] = self.backbone_pv_sides(camera_tensors_dict[cam_id])
             if cam_id in self.camera_groups['fisheyes']:
                 camera_feats_dict[cam_id] = self.backbone_fisheyes(camera_tensors_dict[cam_id])
-        # spatial transform: output shape can be 4D or 5D (N, C*Z, X, Y) or (N, C, Z, X, Y)
+        ## spatial transform: output shape can be 4D or 5D (N, C*Z, X, Y) or (N, C, Z, X, Y)
         voxel_feats_cur = self.spatial_transform(camera_feats_dict, camera_lookups)
-        # temporal transform
-        if batched_input_dict['index_infos'][0].prev is None:
-            self.cached_voxel_feats['t-1'] = voxel_feats_cur.clone().detach()
-            # self.cached_voxel_feats['t-2'] = voxel_feats_cur.clone().detach()
-            # self.cached_voxel_feats['t-3'] = voxel_feats_cur.clone().detach()
-            self.cached_delta_poses['t-1'] = delta_poses.clone().detach()
-            # self.cached_delta_poses['t-2'] = delta_poses.clone().detach()
-            # self.cached_delta_poses['t-3'] = delta_poses.clone().detach()
-        # elif batched_input_dict['index_infos'][0].prev.prev is None:
-        #     self.cached_voxel_feats['t-2'] = self.cached_voxel_feats['t-1'].clone().detach()
-        #     self.cached_voxel_feats['t-3'] = self.cached_voxel_feats['t-1'].clone().detach()
-        #     self.cached_delta_poses['t-2'] = self.cached_delta_poses['t-1'].clone().detach()
-        #     self.cached_delta_poses['t-3'] = self.cached_delta_poses['t-1'].clone().detach()
-        # elif batched_input_dict['index_infos'][0].prev.prev.prev is None:
-        #     self.cached_voxel_feats['t-3'] = self.cached_voxel_feats['t-2'].clone().detach()
-        #     self.cached_delta_poses['t-3'] = self.cached_delta_poses['t-2'].clone().detach()
+        ## temporal transform
+        cur_first_index_info = batched_input_dict['index_infos'][0]
+        # init tmp pre_0 cache
+        self.cached_voxel_feats[f'pre_0'] = voxel_feats_cur
+        self.cached_delta_poses[f'pre_0'] = delta_poses
+        for pre_i in range(self.pre_nframes):
+            index_info_prev_str = 'cur_first_index_info' + ''.join(['.prev'] * (pre_i+1))
+            if eval(index_info_prev_str) is None:
+                for pre_j in range(pre_i, self.pre_nframes):
+                    self.cached_voxel_feats[f'pre_{pre_j+1}'] = self.cached_voxel_feats[f'pre_{pre_j}'].clone().detach()
+                    self.cached_delta_poses[f'pre_{pre_j+1}'] = self.cached_delta_poses[f'pre_{pre_j}'].clone().detach()
+                break
         # cache delta_poses
-        # self.cached_delta_poses['t-3'] = (self.cached_delta_poses['t-2'] @ delta_poses).clone().detach()
-        # self.cached_delta_poses['t-2'] = (self.cached_delta_poses['t-1'] @ delta_poses).clone().detach()
-        self.cached_delta_poses['t-1'] = delta_poses.clone().detach()
+        for pre_i in range(self.pre_nframes, 1, -1):
+            self.cached_delta_poses[f'pre_{pre_i}'] = (self.cached_delta_poses[f'pre_{pre_i-1}'] @ delta_poses).clone().detach()
+        self.cached_delta_poses['pre_1'] = delta_poses.clone().detach()
         # align all history frames to current frame
-        aligned_voxel_feats = [voxel_feats_cur]
-        for frame_key in self.cached_delta_poses:
-            aligned_voxel_feats.append(self.temporal_transform(
-                self.cached_voxel_feats[frame_key], 
-                self.cached_delta_poses[frame_key]
+        aligned_voxel_feats_cat = [voxel_feats_cur]
+        for pre_i in range(self.pre_nframes):
+            aligned_voxel_feats_cat.append(self.temporal_transform(
+                self.cached_voxel_feats[f'pre_{pre_i+1}'], self.cached_delta_poses[f'pre_{pre_i+1}']
             ))
         if self.debug_mode:
-            draw_aligned_voxel_feats(aligned_voxel_feats)
-            draw_aligned_voxel_feats([voxel_feats_cur] + list(self.cached_voxel_feats.values()))
-
+            draw_aligned_voxel_feats(aligned_voxel_feats_cat)
+            draw_aligned_voxel_feats(list(self.cached_voxel_feats.values()))
         # cache voxel features
-        # self.cached_voxel_feats['t-3'] = self.cached_voxel_feats['t-2'].clone().detach()
-        # self.cached_voxel_feats['t-2'] = self.cached_voxel_feats['t-1'].clone().detach()
-        self.cached_voxel_feats['t-1'] = voxel_feats_cur.clone().detach()
-        # voxel fusion
-        voxel_feats_fused = self.voxel_fusion(*aligned_voxel_feats)
-        # voxel encoder
+        for pre_i in range(self.pre_nframes, 0, -1):
+            self.cached_voxel_feats[f'pre_{pre_i}'] = (self.cached_voxel_feats[f'pre_{pre_i-1}']).clone().detach()
+        # pop tmp pre_0 cache
+        self.cached_voxel_feats.pop('pre_0')
+        self.cached_delta_poses.pop('pre_0')
+        ## voxel fusion
+        voxel_feats_fused = self.voxel_fusion(*aligned_voxel_feats_cat)
+        ## voxel encoder
         if len(voxel_feats_fused.shape) == 5:
             N, C, Z, X, Y = voxel_feats_fused.shape
             voxel_feats_fused = voxel_feats_fused.reshape(N, C*Z, X, Y)
         bev_feats = self.voxel_encoder(voxel_feats_fused)
-        # heads & outputs
+        ## heads & outputs
         out_bbox_3d = self.head_bbox_3d(bev_feats)
         out_polyline_3d = self.head_polyline_3d(bev_feats)
         out_parkingslot_3d = self.head_parkingslot_3d(bev_feats)
