@@ -94,8 +94,8 @@ if debug_mode:
              intrinsics=camera_intrinsic_configs)
     ]
 else:
-    batch_size = 16
-    num_workers = 12
+    batch_size = 12
+    num_workers = 8
     persistent_workers = True
     transforms = [
         dict(type='RandomRenderExtrinsic'),
