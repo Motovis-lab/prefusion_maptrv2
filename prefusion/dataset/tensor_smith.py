@@ -377,12 +377,13 @@ class PlanarBbox3D(PlanarTensorSmith):
                         if self._is_in_bbox3d(delta_ij, sizes_i * ratio, unit_xvec_i, unit_yvec_i, unit_zvec_i):
                             kept_inds.append(j)
                             grouped_inds.append(j)
+        _, _, fx, fy = self.bev_intrinsics
         ## get mean bbox in group
         pred_bboxes_3d = []
         for group in kept_groups:
             # use score weighted mean
             score_sum = scores[group].sum() + 1e-6
-            mean_classes = (seg_classes[:, group] * scores[group][None]).sum(1) / max(score_sum, 50)
+            mean_classes = (seg_classes[:, group] * scores[group][None]).sum(1) / score_sum
             # get mean_unit_xvec
             # average all xvecs, xvecs may not have same directions
             reference_unit_xvec = (unit_xvecs[:, group] * scores[group][None]).sum(1) / score_sum
@@ -400,12 +401,18 @@ class PlanarBbox3D(PlanarTensorSmith):
             # rotation matrix
             mean_rmat = np.float32([mean_unit_xvec, unit_yvec, unit_zvec]).T
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get area score
+            mean_count = seg_classes[0, group].sum()
+            mean_area = mean_size[0] * mean_size[1] * fx * fy * min(ratio ** 2, 1)
+            area_score = mean_count / mean_area
+            # get center
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * unit_zvec * mean_size[2]
             mean_velocity = (velocities[:, group] * scores[group][None]).sum(1) / score_sum
             bbox_3d = {
                 'confs': mean_classes,
+                'area_score': area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
                 'translation': mean_center,
@@ -677,6 +684,7 @@ class PlanarRectangularCuboid(PlanarBbox3D):
                             kept_inds.append(j)
                             grouped_inds.append(j)
         ## get mean bbox in group
+        _, _, fx, fy = self.bev_intrinsics
         pred_bboxes_3d = []
         for group in kept_groups:
             # use score weighted mean
@@ -699,11 +707,16 @@ class PlanarRectangularCuboid(PlanarBbox3D):
             # rotation matrix
             mean_rmat = np.float32([mean_unit_xvec, unit_yvec, unit_zvec]).T
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get area score
+            mean_count = seg_classes[0, group].sum()
+            mean_area = mean_size[0] * mean_size[1] * fx * fy * min(ratio ** 2, 1)
+            area_score = mean_count / mean_area
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * unit_zvec * mean_size[2]
             bbox_3d = {
                 'confs': mean_classes,
+                'area_score': area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
                 'translation': mean_center
@@ -1001,6 +1014,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
                             kept_inds.append(j)
                             grouped_inds.append(j)
         ## get mean bbox in group
+        _, _, fx, fy = self.bev_intrinsics
         pred_pillars = []
         for group in kept_groups:
             # use score weighted mean
@@ -1020,11 +1034,16 @@ class PlanarSquarePillar(PlanarTensorSmith):
             # rotation matrix
             mean_rmat = np.float32([unit_xvec, unit_yvec, mean_unit_zvec]).T
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get area score
+            mean_count = seg_classes[0, group].sum()
+            mean_area = mean_size[0] * mean_size[1] * fx * fy * min(ratio ** 2, 1)
+            area_score = mean_count / mean_area
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[2]
             pillar_3d = {
                 'confs': mean_classes,
+                'area_score': area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
                 'translation': mean_center
@@ -1239,6 +1258,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
                             kept_inds.append(j)
                             grouped_inds.append(j)
         ## get mean bbox in group
+        _, _, fx, fy = self.bev_intrinsics
         pred_cylinders = []
         for group in kept_groups:
             # use score weighted mean
@@ -1247,11 +1267,16 @@ class PlanarCylinder3D(PlanarTensorSmith):
             # get mean_unit_zvec
             mean_unit_zvec = (unit_zvecs[:, group] * scores[group][None]).sum(1) / score_sum
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get area score
+            mean_count = seg_classes[0, group].sum()
+            mean_area = mean_size[0] * mean_size[0] * fx * fy * min(ratio ** 2, 1) * np.pi / 4
+            area_score = mean_count / mean_area
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[1]
             cylinder_3d = {
                 'confs': mean_classes,
+                'area_score': area_score,
                 'radius': mean_size[0],
                 'height': mean_size[1],
                 'zvec': mean_unit_zvec,
@@ -1519,6 +1544,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
                             kept_inds.append(j)
                             grouped_inds.append(j)
         ## get mean bbox in group
+        _, _, fx, fy = self.bev_intrinsics
         pred_cylinders = []
         for group in kept_groups:
             # use score weighted mean
@@ -1531,12 +1557,17 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             # rotation matrix
             mean_rmat = np.float32([unit_xvec, unit_yvec, mean_unit_zvec]).T
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get area score
+            mean_count = seg_classes[0, group].sum()
+            mean_area = mean_size[0] * mean_size[0] * fx * fy * min(ratio ** 2, 1) * np.pi / 4
+            area_score = mean_count / mean_area
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[1]
             mean_velocity = (velocities[:, group] * scores[group][None]).sum(1) / score_sum
             cylinder_3d = {
                 'confs': mean_classes,
+                'area_score': area_score,
                 'size': mean_size[[0, 0, 1]],
                 'rotation': mean_rmat,
                 'translation': mean_center,
