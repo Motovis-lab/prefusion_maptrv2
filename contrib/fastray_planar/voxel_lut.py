@@ -148,6 +148,13 @@ class VoxelLookUpTableGenerator:
             vv = np.round(vv_float).astype(int)
             dd = np.round(dd_float).astype(int)
             dd[dd < ray_distance_num_channel] = ray_distance_num_channel - 1
+            # for bilinear interpolation rasterizing
+            uu_floor = np.floor(uu_float).astype(int)
+            vv_floor = np.floor(vv_float).astype(int)
+            uu_ceil = np.ceil(uu_float).astype(int)
+            vv_ceil = np.ceil(vv_float).astype(int)
+            uu_bilinear_weight = (uu_ceil - uu_float)
+            vv_bilinear_weight = (vv_ceil - vv_float)
             # get valid maps, Z*X*Y, 6*320*160
             valid_map = (uu >= 0) * (uu < resolution[0]) * (vv >= 0) * (vv < resolution[1]) * (camera_points[2] > 0)
             uv_mask = cv2.resize(camera_image.ego_mask, resolution)
@@ -158,8 +165,19 @@ class VoxelLookUpTableGenerator:
             uu[~valid_map] = -1
             vv[~valid_map] = -1
             dd[~valid_map] = -1
+            uu_floor[~valid_map] = -1
+            vv_floor[~valid_map] = -1
+            uu_ceil[~valid_map] = -1
+            vv_ceil[~valid_map] = -1
+            
             # allocate LUTS
-            LUT[key] = dict(uu=uu, vv=vv, dd=dd, valid_map=valid_map)
+            LUT[key] = dict(
+                uu=uu, vv=vv, dd=dd, valid_map=valid_map,
+                uu_floor=uu_floor, vv_floor=vv_floor, 
+                uu_ceil=uu_ceil, vv_ceil=vv_ceil,
+                uu_bilinear_weight=uu_bilinear_weight, 
+                vv_bilinear_weight=vv_bilinear_weight
+            )
             # gen voxel ray density for each camera, in shape of Z*X*Y
             density_map = np.zeros_like(distances_ego)
             for dist_ind in range(len(distance_bins) - 1):
