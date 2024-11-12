@@ -44,6 +44,8 @@ def main():
     nusc = NuScenes(version=args.nusc_version, dataroot=args.nusc_data_root, verbose=True)
     train_scene_list = ["scene-0001", "scene-0004"]  # TODO: to replace with splits.train
     val_scene_list = ["scene-0003"]
+    # train_scene_list = splits.train
+    # val_scene_list = splits.val
     train_infos = generate_info_pkl(nusc, train_scene_list)
     val_infos = generate_info_pkl(nusc, val_scene_list)
     save_pickle(train_infos, args.info_pkl_save_dir / f"{args.info_pkl_filename_prefix}train_info.pkl")
@@ -227,7 +229,7 @@ def build_3d_boxes(nusc, cur_sample, lidar_ego_pose):
         if np.any(np.isnan(velocity_world)):
             velocity_ego = np.zeros(3)
         else:
-            velocity_ego = T_e_w[:3, :3] @ np.array([*velocity_world.tolist(), 1])[:, None]
+            velocity_ego = T_e_w[:3, :3] @ velocity_world[:, None]
 
         ann_rot = np.eye(4)
         ann_rot[:3, :3] = Rotation.from_quat(np.array(ann_info["rotation"])[[1, 2, 3, 0]]).as_matrix()
