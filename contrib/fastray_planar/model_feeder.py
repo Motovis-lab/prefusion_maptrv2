@@ -35,7 +35,8 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
 
     def __init__(self, 
                  voxel_feature_config: dict, 
-                 camera_feature_configs: dict):
+                 camera_feature_configs: dict,
+                 debug_mode: bool = False):
         super().__init__()
         self.voxel_feature_config = voxel_feature_config
         self.camera_feature_configs = camera_feature_configs
@@ -43,6 +44,7 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
             voxel_feature_config=self.voxel_feature_config,
             camera_feature_configs=self.camera_feature_configs
         )
+        self.debug_mode = debug_mode
 
 
     def process(self, frame_batch: list) -> Union[dict, list]:
@@ -104,7 +106,8 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
             # batching index info
             processed_frame_batch['index_infos'].append(input_dict['index_info'])
             # append transformables
-            processed_frame_batch['transformables'].append(input_dict['transformables'])
+            if self.debug_mode:
+                processed_frame_batch['transformables'].append(input_dict['transformables'])
             # batching transformables
             for transformable in input_dict['transformables'].values():
                 match transformable:
