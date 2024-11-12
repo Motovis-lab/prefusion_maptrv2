@@ -40,12 +40,12 @@ voxel_feature_config = dict(
 
 camera_groups = dict(
     pv_sides=[
-        'CAM_FRONT'
+        'CAM_FRONT',
         'CAM_FRONT_RIGHT',
         'CAM_BACK_RIGHT',
         'CAM_BACK',
         'CAM_BACK_LEFT',
-        'CAM_FRONT_LEFT'
+        'CAM_FRONT_LEFT',
     ])
 
 # 1600 x 900, 1408 x 512, 1056 x 384, 704 x 256
@@ -82,7 +82,7 @@ camera_intrinsic_configs = dict(
     CAM_FRONT_LEFT=[363.711, 71.091, 559.943, 559.943], 
 )
 
-debug_mode = False
+debug_mode = True
 
 if debug_mode:
     batch_size = 1
@@ -156,6 +156,54 @@ train_dataset = dict(
     possible_frame_intervals=1,
 )
 
+val_dataset = dict(
+    type='GroupBatchDataset',
+    name="demo_parking",
+    data_root='/data/datasets/nuscenes',
+    info_path='/data/datasets/nuscenes/nusc_train_info.pkl',
+    model_feeder=dict(
+        type="FastRayPlanarModelFeeder",
+        voxel_feature_config=voxel_feature_config,
+        camera_feature_configs=camera_feature_configs,
+    ),
+    transformables=dict(
+        camera_images=dict(
+            type='CameraImageSet', 
+            loader=dict(type="NuscenesCameraImageSetLoader"),
+            tensor_smith=dict(type='CameraImageTensor'),
+        ),
+        ego_poses=dict(type='EgoPoseSet'),
+        bbox_3d=dict(
+            type='Bbox3D',
+            loader=dict(
+                type="AdvancedBbox3DLoader",
+                class_mapping=dict(
+                    truck=['vehicle.truck'],
+                    # 'movable_object.barrier',
+                    # 'movable_object.debris',
+                    # 'movable_object.pushable_pullable',
+                    # 'human.pedestrian.adult',
+                    # 'human.pedestrian.construction_worker',
+                    motorcycle=['vehicle.motorcycle'],
+                    # 'movable_object.trafficcone',
+                    car=['vehicle.car'],
+                    construction=['vehicle.construction'],
+                    bicycle=['vehicle.bicycle'],
+                ),
+            ),
+            tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+        # polyline_3d=dict(
+        #     type='Polyline3D',
+        #     dictionary=dict(classes=['class.road_marker.lane_line']),
+        #     tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+    ),
+    transforms=[dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs)],
+    phase="val",
+    batch_size=batch_size,
+    possible_group_sizes=1,
+    possible_frame_intervals=1,
+)
+
 ## dataloader configs
 train_dataloader = dict(
     num_workers=num_workers,
@@ -164,7 +212,12 @@ train_dataloader = dict(
     persistent_workers=persistent_workers,
 )
 
-# val_dataloader = train_dataloader
+val_dataloader = dict(
+    num_workers=0,
+    collate_fn=dict(type="collate_dict"),
+    dataset=val_dataset,
+    persistent_workers=False,
+)
 
 
 ## model configs
@@ -244,7 +297,20 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=100, val_interval=1)
+val_cfg = dict(type="GroupBatchValLoop")
+
+
+val_evaluator = [
+    dict(type="PlanarSegIou"),
+    # dict(
+    #     type="PlanarBbox3DAveragePrecision", 
+    #     transformable_name="bbox_3d" ,
+    #     tensor_smith_cfg=val_dataset['transformables']['bbox_3d']['tensor_smith'],
+    #     dictionary={"classes": ['truck' ,'motorcycle' ,'car' ,'construction' ,'bicycle']},
+    #     max_conf_as_pred_class=True,
+    # )
+]
 
 ## optimizer configs
 optim_wrapper = dict(
@@ -257,7 +323,7 @@ optim_wrapper = dict(
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[24, 36, 48])
+param_scheduler = dict(type='MultiStepLR', milestones=[50, 75, 94])
 
 env_cfg = dict(
     cudnn_benchmark=False,
@@ -266,7 +332,8 @@ env_cfg = dict(
 )
 
 
-load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
+# load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
+load_from = "./work_dirs/fastray_planar_single_frame_nusc_1111/epoch_99.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1106_sampled/epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
