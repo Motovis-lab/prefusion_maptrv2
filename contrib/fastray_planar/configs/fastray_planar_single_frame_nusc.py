@@ -94,7 +94,7 @@ if debug_mode:
              intrinsics=camera_intrinsic_configs)
     ]
 else:
-    batch_size = 12
+    batch_size = 16
     num_workers = 8
     persistent_workers = True
     transforms = [
@@ -107,6 +107,46 @@ else:
         dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
 
+## Transformables
+transformables = dict(
+    camera_images=dict(
+        type='CameraImageSet', 
+        loader=dict(type="NuscenesCameraImageSetLoader"),
+        tensor_smith=dict(type='CameraImageTensor'),
+    ),
+    ego_poses=dict(type='EgoPoseSet'),
+    bbox_3d=dict(
+        type='Bbox3D',
+        loader=dict(
+            type="AdvancedBbox3DLoader",
+            class_mapping=dict(
+                stroller=['human.pedestrian.stroller'],
+                barrier=['movable_object.barrier'],
+                pushable_pullable=['movable_object.pushable_pullable'],
+                human=['human.pedestrian.construction_worker', 'human.pedestrian.child', 'human.pedestrian.adult', 'human.pedestrian.police_officer'],
+                bus=['vehicle.bus.rigid', 'vehicle.bus.bendy'],
+                truck=['vehicle.truck'],
+                wheelchair=['human.pedestrian.wheelchair'],
+                personal_mobility=['human.pedestrian.personal_mobility'],
+                trailer=['vehicle.trailer'],
+                animal=['animal'],
+                trafficcone=['movable_object.trafficcone'],
+                car=['vehicle.car', 'vehicle.emergency.police', 'vehicle.emergency.ambulance'],
+                construction=['vehicle.construction'],
+                motorcycle=['vehicle.motorcycle'],
+                bicycle=['vehicle.bicycle'],
+            ),
+        ),
+        tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+    ),
+    # polyline_3d=dict(
+    #     type='Polyline3D',
+    #     dictionary=dict(classes=['class.road_marker.lane_line']),
+    #     tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+)
+
+
+
 ## GroupBatchDataset configs
 train_dataset = dict(
     type='GroupBatchDataset',
@@ -118,37 +158,7 @@ train_dataset = dict(
         voxel_feature_config=voxel_feature_config,
         camera_feature_configs=camera_feature_configs,
     ),
-    transformables=dict(
-        camera_images=dict(
-            type='CameraImageSet', 
-            loader=dict(type="NuscenesCameraImageSetLoader"),
-            tensor_smith=dict(type='CameraImageTensor'),
-        ),
-        ego_poses=dict(type='EgoPoseSet'),
-        bbox_3d=dict(
-            type='Bbox3D',
-            loader=dict(
-                type="AdvancedBbox3DLoader",
-                class_mapping=dict(
-                    truck=['vehicle.truck'],
-                    # 'movable_object.barrier',
-                    # 'movable_object.debris',
-                    # 'movable_object.pushable_pullable',
-                    # 'human.pedestrian.adult',
-                    # 'human.pedestrian.construction_worker',
-                    motorcycle=['vehicle.motorcycle'],
-                    # 'movable_object.trafficcone',
-                    car=['vehicle.car'],
-                    construction=['vehicle.construction'],
-                    bicycle=['vehicle.bicycle'],
-                ),
-            ),
-            tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
-        # polyline_3d=dict(
-        #     type='Polyline3D',
-        #     dictionary=dict(classes=['class.road_marker.lane_line']),
-        #     tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
-    ),
+    transformables=transformables,
     transforms=transforms,
     phase="train",
     batch_size=batch_size,
@@ -166,37 +176,7 @@ val_dataset = dict(
         voxel_feature_config=voxel_feature_config,
         camera_feature_configs=camera_feature_configs,
     ),
-    transformables=dict(
-        camera_images=dict(
-            type='CameraImageSet', 
-            loader=dict(type="NuscenesCameraImageSetLoader"),
-            tensor_smith=dict(type='CameraImageTensor'),
-        ),
-        ego_poses=dict(type='EgoPoseSet'),
-        bbox_3d=dict(
-            type='Bbox3D',
-            loader=dict(
-                type="AdvancedBbox3DLoader",
-                class_mapping=dict(
-                    truck=['vehicle.truck'],
-                    # 'movable_object.barrier',
-                    # 'movable_object.debris',
-                    # 'movable_object.pushable_pullable',
-                    # 'human.pedestrian.adult',
-                    # 'human.pedestrian.construction_worker',
-                    motorcycle=['vehicle.motorcycle'],
-                    # 'movable_object.trafficcone',
-                    car=['vehicle.car'],
-                    construction=['vehicle.construction'],
-                    bicycle=['vehicle.bicycle'],
-                ),
-            ),
-            tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
-        # polyline_3d=dict(
-        #     type='Polyline3D',
-        #     dictionary=dict(classes=['class.road_marker.lane_line']),
-        #     tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
-    ),
+    transformables=transformables,
     transforms=[dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs)],
     phase="val",
     batch_size=batch_size,
@@ -297,7 +277,7 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=100, val_interval=1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=1)
 val_cfg = dict(type="GroupBatchValLoop")
 
 
@@ -323,7 +303,7 @@ optim_wrapper = dict(
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[50, 75, 94])
+param_scheduler = dict(type='MultiStepLR', milestones=[25, 40, 47])
 
 env_cfg = dict(
     cudnn_benchmark=False,
@@ -332,8 +312,8 @@ env_cfg = dict(
 )
 
 
-# load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
-load_from = "./work_dirs/fastray_planar_single_frame_nusc_1111/epoch_99.pth"
+load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
+# load_from = "./work_dirs/fastray_planar_single_frame_nusc_1111/epoch_99.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1106_sampled/epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
@@ -341,6 +321,6 @@ load_from = "./work_dirs/fastray_planar_single_frame_nusc_1111/epoch_99.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1106_sampled'
 # work_dir = './work_dirs/fastray_planar_single_frame_1106_sampled_infer'
 # work_dir = './work_dirs/fastray_planar_single_frame_1107'
-work_dir = './work_dirs/fastray_planar_single_frame_nusc_1111'
+work_dir = './work_dirs/fastray_planar_single_frame_nusc_1112'
 
 # resume = True
