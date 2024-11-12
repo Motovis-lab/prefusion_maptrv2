@@ -152,7 +152,7 @@ class OSABlock(nn.Module):
 class VoVNetFPN(BaseModule):
     def __init__(self, out_stride=8, out_channels=128, init_cfg=None):
         super().__init__(init_cfg=init_cfg)
-        self.strides = [8, 16, 32]
+        self.strides = [4, 8, 16, 32]
         assert out_stride in self.strides
         self.out_stride = out_stride
 
@@ -171,9 +171,13 @@ class VoVNetFPN(BaseModule):
             self.p3_linear = ConvBN(384, 128, kernel_size=1, padding=0)
             self.p3_up = nn.ConvTranspose2d(128, 128, kernel_size=2, stride=2, padding=0, bias=False)
             self.p3_fusion = Concat()
+        if self.out_stride <= 4:
+            self.p2_linear = ConvBN(256, 96, kernel_size=1, padding=0)
+            self.p2_up = nn.ConvTranspose2d(96, 96, kernel_size=2, stride=2, padding=0, bias=False)
+            self.p2_fusion = Concat()
         
-        in_channels = {8: 256, 16: 384, 32: 192}
-        mid_channels = {8: 96, 16: 128, 32: 192}
+        in_channels = {4: 192, 8: 256, 16: 384, 32: 192}
+        mid_channels = {4: 96, 8: 96, 16: 128, 32: 192}
         self.out = OSABlock(
             in_channels[self.out_stride], mid_channels[self.out_stride], out_channels,
             stride=1, repeat=3, has_bn=False
@@ -193,6 +197,8 @@ class VoVNetFPN(BaseModule):
             out = self.p4_fusion(self.p4_up(out), osa4)
         if self.out_stride <= 8:
             out = self.p3_fusion(self.p3_up(self.p3_linear(out)), osa3)
+        if self.out_stride <= 4:
+            out = self.p2_fusion(self.p2_up(self.p2_linear(out)), osa2)
         
         out = self.out(out)
         
