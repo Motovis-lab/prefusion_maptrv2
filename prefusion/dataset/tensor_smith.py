@@ -382,7 +382,7 @@ class PlanarBbox3D(PlanarTensorSmith):
         for group in kept_groups:
             # use score weighted mean
             score_sum = scores[group].sum() + 1e-6
-            mean_classes = (seg_classes[:, group] * scores[group][None]).sum(1) / score_sum
+            mean_classes = (seg_classes[:, group] * scores[group][None]).sum(1) / max(score_sum, 50)
             # get mean_unit_xvec
             # average all xvecs, xvecs may not have same directions
             reference_unit_xvec = (unit_xvecs[:, group] * scores[group][None]).sum(1) / score_sum
@@ -415,7 +415,7 @@ class PlanarBbox3D(PlanarTensorSmith):
         return pred_bboxes_3d
     
     
-    def reverse(self, tensor_dict, pre_conf=0.1):
+    def reverse(self, tensor_dict, pre_conf=0.1, ratio=0.7):
         """
         Parameters
         ----------
@@ -488,7 +488,8 @@ class PlanarBbox3D(PlanarTensorSmith):
         ## group nms
         boxes_3d = self._group_nms(
             seg_scores, cen_scores, seg_classes, 
-            centers, sizes, unit_xvecs, roll_vecs, velocities
+            centers, sizes, unit_xvecs, roll_vecs, velocities,
+            ratio=ratio
         )
 
         return boxes_3d
@@ -2589,8 +2590,8 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
                     heights.append(None)
                 else:
                     heights.append(reg_pred[14][
-                        min(max(round(point[1]), 0), H), 
-                        min(max(round(point[0]), 0), W)
+                        min(max(round(point[1]), 0), H - 1), 
+                        min(max(round(point[0]), 0), W - 1)
                     ].mean())
             valid_heights = [height for height in heights if height is not None]
             if len(valid_heights) > 0:
