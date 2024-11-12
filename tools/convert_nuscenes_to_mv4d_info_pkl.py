@@ -223,10 +223,12 @@ def build_3d_boxes(nusc, cur_sample, lidar_ego_pose):
         if int(ann_info["visibility_token"]) < 1:
             continue
 
-        # velocity = nusc.box_velocity(ann_info["token"])
-        # if np.any(np.isnan(velocity)):
-        velocity = np.zeros(3)
-        # ann_info["velocity"] = velocity
+        velocity_world = nusc.box_velocity(ann_info["token"])
+        if np.any(np.isnan(velocity_world)):
+            velocity_ego = np.zeros(3)
+        else:
+            velocity_ego = T_e_w[:3, :3] @ np.array([*velocity_world.tolist(), 1])[:, None]
+
         ann_rot = np.eye(4)
         ann_rot[:3, :3] = Rotation.from_quat(np.array(ann_info["rotation"])[[1, 2, 3, 0]]).as_matrix()
         ann_rot_ego = T_e_w @ ann_rot
@@ -239,7 +241,7 @@ def build_3d_boxes(nusc, cur_sample, lidar_ego_pose):
                 "rotation": ann_rot_ego[:3, :3],
                 "translation": ann_translation_ego.flatten()[:3],
                 "track_id": ann_info["instance_token"],
-                "velocity": velocity,
+                "velocity": velocity_ego.flatten()[:3],
             }
         )
     return annos

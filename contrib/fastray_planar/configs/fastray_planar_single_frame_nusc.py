@@ -23,13 +23,14 @@ camera_feature_configs = dict(
     CAM_FRONT_LEFT=default_camera_feature_config
 )
 
-voxel_shape = (6, 320, 160)  # Z, X, Y in ego system
-voxel_range = ([-0.5, 2.5], [36, -12], [12, -12])
+voxel_shape = (8, 256, 256)  # Z, X, Y in ego system
+voxel_range = ([-3, 5], [50, -50], [50, -50])
+# voxel_range = ([-0.5, 2.5], [30, -12], [12, -12])
 
 voxel_feature_config = dict(
     voxel_shape=voxel_shape, 
     voxel_range=voxel_range,
-    ego_distance_max=40,
+    ego_distance_max=75,  # 50 * sqrt(2)
     ego_distance_step=5)
 
 ## dictionaries and mappings for different types of tasks
@@ -38,28 +39,47 @@ voxel_feature_config = dict(
 ## camera configs for model inputs
 
 camera_groups = dict(
-    pv_front=['CAM_FRONT'],
-    pv_sides=['CAM_FRONT_RIGHT',
-              'CAM_BACK_RIGHT',
-              'CAM_BACK',
-              'CAM_BACK_LEFT',
-              'CAM_FRONT_LEFT'])
+    pv_sides=[
+        'CAM_FRONT'
+        'CAM_FRONT_RIGHT',
+        'CAM_BACK_RIGHT',
+        'CAM_BACK',
+        'CAM_BACK_LEFT',
+        'CAM_FRONT_LEFT'
+    ])
 
-resolution_pv_front = (640, 320)
-# resolution_pv_front = (512, 320)
-resolution_pv_sides = (512, 320)
+# 1600 x 900, 1408 x 512, 1056 x 384, 704 x 256
+resolution_pv = (704, 256)
 
 camera_resolution_configs=dict(
-    CAM_FRONT=resolution_pv_front,
-    CAM_FRONT_RIGHT=resolution_pv_sides,
-    CAM_BACK_RIGHT=resolution_pv_sides,
-    CAM_BACK=resolution_pv_sides,
-    CAM_BACK_LEFT=resolution_pv_sides,
-    CAM_FRONT_LEFT=resolution_pv_sides)
+    CAM_FRONT=resolution_pv,
+    CAM_FRONT_RIGHT=resolution_pv,
+    CAM_BACK_RIGHT=resolution_pv,
+    CAM_BACK=resolution_pv,
+    CAM_BACK_LEFT=resolution_pv,
+    CAM_FRONT_LEFT=resolution_pv)
 
+# camera_intrinsic_configs is calculated by the following code snippet
+# H, W = 900, 1600
+# new_H, new_W = 256, 704
+# for cam_name in NUSC_CAM_NAMES:
+#     intr = nusc.get("calibrated_sensor", nusc.get("sample_data", first_sample['data'][cam_name])['calibrated_sensor_token'])['camera_intrinsic']
+#     fx, fy, cx, cy = intr[0][0], intr[1][1], intr[0][2], intr[1][2]
+#     scale = new_W / W
+#     new_fx = fx * scale
+#     new_fy = fy * scale
+#     new_cx = cx * scale
+#     top_to_crop = H * scale - new_H
+#     cy_if_no_crop = cy * scale
+#     new_cy = cy_if_no_crop - top_to_crop
+#     print((f"{cam_name}=" + "{:.3f}, " * 4).format(new_cx, new_cy, new_fx, new_fy))
 camera_intrinsic_configs = dict(
-    CAM_FRONT=[319.5, 159.5, 640, 640],
-    # CAM_FRONT='default',
+    CAM_FRONT=[359.157, 76.263, 557.224, 557.224], 
+    CAM_FRONT_RIGHT=[355.506, 77.947, 554.773, 554.773], 
+    CAM_BACK_RIGHT=[355.191, 80.526, 554.186, 554.186], 
+    CAM_BACK=[364.857, 71.983, 356.057, 356.057], 
+    CAM_BACK_LEFT=[348.530, 76.821, 552.966, 552.966], 
+    CAM_FRONT_LEFT=[363.711, 71.091, 559.943, 559.943], 
 )
 
 debug_mode = False
@@ -106,8 +126,23 @@ train_dataset = dict(
         ),
         ego_poses=dict(type='EgoPoseSet'),
         bbox_3d=dict(
-            type='Bbox3D', 
-            dictionary=dict(classes=['class.vehicle.passenger_car']),
+            type='Bbox3D',
+            loader=dict(
+                type="AdvancedBbox3DLoader",
+                class_mapping=dict(
+                    truck=['vehicle.truck'],
+                    # 'movable_object.barrier',
+                    # 'movable_object.debris',
+                    # 'movable_object.pushable_pullable',
+                    # 'human.pedestrian.adult',
+                    # 'human.pedestrian.construction_worker',
+                    motorcycle=['vehicle.motorcycle'],
+                    # 'movable_object.trafficcone',
+                    car=['vehicle.car'],
+                    construction=['vehicle.construction'],
+                    bicycle=['vehicle.bicycle'],
+                ),
+            ),
             tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
         # polyline_3d=dict(
         #     type='Polyline3D',
@@ -137,9 +172,8 @@ bev_mode = True
 # backbones
 camera_feat_channels = 128
 backbones = dict(
-    pv_front=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels),
-    pv_sides=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels),
-    fisheyes=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels))
+    pv_sides=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels)
+)
 # spatial_transform
 spatial_transform = dict(
     type='FastRaySpatialTransform',
@@ -156,7 +190,7 @@ heads = dict(
     bbox_3d=dict(type='PlanarHead',
                  in_channels=128,
                  mid_channels=128,
-                 cen_seg_channels=3,
+                 cen_seg_channels=len(train_dataset["transformables"]["bbox_3d"]["loader"]["class_mapping"]) + 1 + 1, # 1 for seg[0], 1 for cen
                  reg_channels=20),
     # polyline_3d=dict(type='PlanarHead',
     #                  in_channels=128,

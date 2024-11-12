@@ -696,11 +696,13 @@ class FastRayPlanarSingleFrameModel(BaseModel):
             raise NotImplementedError
     
 
-def draw_out_feats(batched_input_dict, 
-                    camera_tensors_dict,
-                    pred_bbox_3d,
-                    pred_polyline_3d,
-                    pred_parkingslot_3d):
+def draw_out_feats(
+        batched_input_dict, 
+        camera_tensors_dict,
+        pred_bbox_3d,
+        pred_polyline_3d=None,
+        pred_parkingslot_3d=None,
+    ):
     import numpy as np
     import matplotlib.pyplot as plt
 
@@ -742,54 +744,56 @@ def draw_out_feats(batched_input_dict,
     plt.imshow(pred_reg)
     plt.title("bbox_3d pred_reg")
     
-    gt_seg = batched_input_dict['annotations']['polyline_3d']['seg'][0][0].detach().cpu()
-    pred_seg = pred_polyline_3d['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
-    plt.subplot(3, 10, 17)
-    plt.imshow(gt_seg)
-    plt.title('polyline_3d gt_seg')
-    plt.subplot(3, 10, 18)
-    plt.imshow(pred_seg)
-    plt.title("polyline_3d pred_seg")
+    if pred_polyline_3d is not None:
+        gt_seg = batched_input_dict['annotations']['polyline_3d']['seg'][0][0].detach().cpu()
+        pred_seg = pred_polyline_3d['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
+        plt.subplot(3, 10, 17)
+        plt.imshow(gt_seg)
+        plt.title('polyline_3d gt_seg')
+        plt.subplot(3, 10, 18)
+        plt.imshow(pred_seg)
+        plt.title("polyline_3d pred_seg")
+        
+        gt_reg = batched_input_dict['annotations']['polyline_3d']['reg'][0][0].detach().cpu()
+        pred_reg = pred_polyline_3d['reg'][0][0].to(torch.float32).detach().cpu()
+        pred_reg *= (pred_seg > 0.5)
+        plt.subplot(3, 10, 19)
+        plt.imshow(gt_reg)
+        plt.title("polyline_3d gt_reg")
+        plt.subplot(3, 10, 20)
+        plt.imshow(pred_reg)
+        plt.title("polyline_3d pred_reg")
     
-    gt_reg = batched_input_dict['annotations']['polyline_3d']['reg'][0][0].detach().cpu()
-    pred_reg = pred_polyline_3d['reg'][0][0].to(torch.float32).detach().cpu()
-    pred_reg *= (pred_seg > 0.5)
-    plt.subplot(3, 10, 19)
-    plt.imshow(gt_reg)
-    plt.title("polyline_3d gt_reg")
-    plt.subplot(3, 10, 20)
-    plt.imshow(pred_reg)
-    plt.title("polyline_3d pred_reg")
-    
-    gt_seg = batched_input_dict['annotations']['parkingslot_3d']['seg'][0][1].detach().cpu()
-    pred_mask = pred_parkingslot_3d['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
-    pred_seg = pred_parkingslot_3d['seg'][0][1].to(torch.float32).sigmoid().detach().cpu()
-    plt.subplot(3, 10, 21)
-    plt.imshow(gt_seg)
-    plt.title('parkingslot_3d gt_seg')
-    plt.subplot(3, 10, 22)
-    plt.imshow(pred_seg)
-    plt.title("parkingslot_3d pred_seg")
-    
-    gt_cen = batched_input_dict['annotations']['parkingslot_3d']['cen'][0][0].detach().cpu()
-    pred_cen = pred_parkingslot_3d['cen'][0][0].to(torch.float32).sigmoid().detach().cpu()
-    pred_cen *= (pred_mask > 0.5)
-    plt.subplot(3, 10, 23)
-    plt.imshow(gt_cen)
-    plt.title("parkingslot_3d gt_cen")
-    plt.subplot(3, 10, 24)
-    plt.imshow(pred_cen)
-    plt.title("parkingslot_3d pred_cen")
-    
-    gt_reg = batched_input_dict['annotations']['parkingslot_3d']['reg'][0][2].detach().cpu()
-    pred_reg = pred_parkingslot_3d['reg'][0][2].to(torch.float32).detach().cpu()
-    pred_reg *= (pred_mask > 0.5)
-    plt.subplot(3, 10, 25)
-    plt.imshow(gt_reg)
-    plt.title("parkingslot_3d gt_reg")
-    plt.subplot(3, 10, 26)
-    plt.imshow(pred_reg)
-    plt.title("parkingslot_3d pred_reg")
+    if pred_parkingslot_3d is not None:
+        gt_seg = batched_input_dict['annotations']['parkingslot_3d']['seg'][0][1].detach().cpu()
+        pred_mask = pred_parkingslot_3d['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
+        pred_seg = pred_parkingslot_3d['seg'][0][1].to(torch.float32).sigmoid().detach().cpu()
+        plt.subplot(3, 10, 21)
+        plt.imshow(gt_seg)
+        plt.title('parkingslot_3d gt_seg')
+        plt.subplot(3, 10, 22)
+        plt.imshow(pred_seg)
+        plt.title("parkingslot_3d pred_seg")
+        
+        gt_cen = batched_input_dict['annotations']['parkingslot_3d']['cen'][0][0].detach().cpu()
+        pred_cen = pred_parkingslot_3d['cen'][0][0].to(torch.float32).sigmoid().detach().cpu()
+        pred_cen *= (pred_mask > 0.5)
+        plt.subplot(3, 10, 23)
+        plt.imshow(gt_cen)
+        plt.title("parkingslot_3d gt_cen")
+        plt.subplot(3, 10, 24)
+        plt.imshow(pred_cen)
+        plt.title("parkingslot_3d pred_cen")
+        
+        gt_reg = batched_input_dict['annotations']['parkingslot_3d']['reg'][0][2].detach().cpu()
+        pred_reg = pred_parkingslot_3d['reg'][0][2].to(torch.float32).detach().cpu()
+        pred_reg *= (pred_mask > 0.5)
+        plt.subplot(3, 10, 25)
+        plt.imshow(gt_reg)
+        plt.title("parkingslot_3d gt_reg")
+        plt.subplot(3, 10, 26)
+        plt.imshow(pred_reg)
+        plt.title("parkingslot_3d pred_reg")
     
     plt.show()
 
@@ -1166,7 +1170,6 @@ class NuscenesFastRayPlanarSingleFrameModel(BaseModel):
         self.debug_mode = debug_mode
         # backbone
         self.camera_groups = camera_groups
-        self.backbone_pv_front = MODELS.build(backbones['pv_front'])
         self.backbone_pv_sides = MODELS.build(backbones['pv_sides'])
         # view transform
         self.spatial_transform = MODELS.build(spatial_transform)
@@ -1212,8 +1215,6 @@ class NuscenesFastRayPlanarSingleFrameModel(BaseModel):
         # backbone
         camera_feats_dict = {}
         for cam_id in camera_tensors_dict:
-            if cam_id in self.camera_groups['pv_front']:
-                camera_feats_dict[cam_id] = self.backbone_pv_front(camera_tensors_dict[cam_id])
             if cam_id in self.camera_groups['pv_sides']:
                 camera_feats_dict[cam_id] = self.backbone_pv_sides(camera_tensors_dict[cam_id])
         # spatial transform: output shape can be 4D or 5D (N, C*Z, X, Y) or (N, C, Z, X, Y)
@@ -1272,71 +1273,3 @@ class NuscenesFastRayPlanarSingleFrameModel(BaseModel):
         
         if mode == 'predict':
             raise NotImplementedError
-    
-
-def draw_out_feats(batched_input_dict, 
-                    camera_tensors_dict,
-                    pred_bbox_3d,
-                    # pred_polyline_3d,
-    ):
-    import numpy as np
-    import matplotlib.pyplot as plt
-
-    fig, _ = plt.subplots(3, 10)
-    fig.suptitle(batched_input_dict['index_infos'][0].scene_frame_id)
-    for i, cam_id in enumerate(camera_tensors_dict):
-        img = camera_tensors_dict[cam_id].detach().cpu().numpy()[0].transpose(1, 2, 0)[..., ::-1] * 255 + 128
-        img = img.astype(np.uint8)
-        plt.subplot(3, 10, i+1)
-        plt.title(cam_id.replace('VCAMERA_', '').lower())
-        plt.imshow(img)
-
-    gt_seg = batched_input_dict['annotations']['bbox_3d']['seg'][0][0].detach().cpu()
-    pred_seg = pred_bbox_3d['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
-    plt.subplot(3, 10, 11)
-    plt.imshow(gt_seg)
-    plt.title('bbox_3d gt_seg')
-    plt.subplot(3, 10, 12)
-    plt.imshow(pred_seg)
-    plt.title("bbox_3d pred_seg")
-    
-    gt_cen = batched_input_dict['annotations']['bbox_3d']['cen'][0][0].detach().cpu()
-    pred_cen = pred_bbox_3d['cen'][0][0].to(torch.float32).sigmoid().detach().cpu()
-    pred_cen *= (pred_seg > 0.5)
-    plt.subplot(3, 10, 13)
-    plt.imshow(gt_cen)
-    plt.title("bbox_3d gt_cen")
-    plt.subplot(3, 10, 14)
-    plt.imshow(pred_cen)
-    plt.title("bbox_3d pred_cen")
-    
-    gt_reg = batched_input_dict['annotations']['bbox_3d']['reg'][0][0].detach().cpu()
-    pred_reg = pred_bbox_3d['reg'][0][0].to(torch.float32).detach().cpu()
-    pred_reg *= (pred_seg > 0.5)
-    plt.subplot(3, 10, 15)
-    plt.imshow(gt_reg)
-    plt.title("bbox_3d gt_reg")
-    plt.subplot(3, 10, 16)
-    plt.imshow(pred_reg)
-    plt.title("bbox_3d pred_reg")
-    
-    # gt_seg = batched_input_dict['annotations']['polyline_3d']['seg'][0][0].detach().cpu()
-    # pred_seg = pred_polyline_3d['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
-    # plt.subplot(3, 10, 17)
-    # plt.imshow(gt_seg)
-    # plt.title('polyline_3d gt_seg')
-    # plt.subplot(3, 10, 18)
-    # plt.imshow(pred_seg)
-    # plt.title("polyline_3d pred_seg")
-    
-    # gt_reg = batched_input_dict['annotations']['polyline_3d']['reg'][0][0].detach().cpu()
-    # pred_reg = pred_polyline_3d['reg'][0][0].to(torch.float32).detach().cpu()
-    # pred_reg *= (pred_seg > 0.5)
-    # plt.subplot(3, 10, 19)
-    # plt.imshow(gt_reg)
-    # plt.title("polyline_3d gt_reg")
-    # plt.subplot(3, 10, 20)
-    # plt.imshow(pred_reg)
-    # plt.title("polyline_3d pred_reg")
-    
-    plt.show()

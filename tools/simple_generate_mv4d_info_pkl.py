@@ -177,25 +177,10 @@ def prepare_object_info(scene_root: Path, ts: int) -> Tuple[List[dict], List[dic
 
 
 def transform_velocity_to_ego_(boxes: List[Dict], ego_pose: Dict[str, np.ndarray]) -> None:
+    """box velo from upstream is assumed to be direction-vector in the world sys, so we need to transform it to ego sys"""
     rot_world_to_ego = np.linalg.inv(ego_pose["rotation"])
     for bx in boxes:
         bx["velocity"] = (bx["velocity"][None] @ rot_world_to_ego.T)[0]
-
-
-############################################################################################################################################
-# TODO: put rearrange_object_class_attr_ and unify_longer_shorter_edge_definition_ to Bbox3DLoader, and use config to control the behavior
-# rearrange_object_class_attr_:
-#   attr_translate = {
-#       "attr.traffic_facility.box.type",
-#       "attr.traffic_facility.soft_barrier.type",
-#       "attr.traffic_facility.hard_barrier.type"
-#       "attr.parking.indoor_column.shape"
-#   }
-#
-# unify_longer_shorter_edge_definition_:
-#     standard direction: X-axis perpendicular to the longer edge
-#     steps: check if X-axis not perpendicular to the longer edge, if yes, rotate the box (RotMat) by 90 deg, and switch scale[0] and scale[1]
-############################################################################################################################################
 
 
 def convert_box3d_format(box_info: Dict):
