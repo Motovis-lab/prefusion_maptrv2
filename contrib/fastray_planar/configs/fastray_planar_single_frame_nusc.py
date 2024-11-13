@@ -120,31 +120,48 @@ transformables = dict(
         loader=dict(
             type="AdvancedBbox3DLoader",
             class_mapping=dict(
-                stroller=['human.pedestrian.stroller'],
-                barrier=['movable_object.barrier'],
-                pushable_pullable=['movable_object.pushable_pullable'],
-                human=['human.pedestrian.construction_worker', 'human.pedestrian.child', 'human.pedestrian.adult', 'human.pedestrian.police_officer'],
-                bus=['vehicle.bus.rigid', 'vehicle.bus.bendy'],
-                truck=['vehicle.truck'],
-                wheelchair=['human.pedestrian.wheelchair'],
-                personal_mobility=['human.pedestrian.personal_mobility'],
-                trailer=['vehicle.trailer'],
-                animal=['animal'],
-                trafficcone=['movable_object.trafficcone'],
-                car=['vehicle.car', 'vehicle.emergency.police', 'vehicle.emergency.ambulance'],
-                construction=['vehicle.construction'],
-                motorcycle=['vehicle.motorcycle'],
-                bicycle=['vehicle.bicycle'],
+                bicycle=["vehicle.bicycle"],
+                car=["vehicle.car"],
+                construction_vehicle=["vehicle.construction"],
+                motorcycle=["vehicle.motorcycle"],
+                trailer=["vehicle.trailer"],
+                truck=["vehicle.truck"],
+                bus=["vehicle.bus.bendy", "vehicle.bus.rigid"],
             ),
         ),
         tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
     ),
-    # polyline_3d=dict(
-    #     type='Polyline3D',
-    #     dictionary=dict(classes=['class.road_marker.lane_line']),
-    #     tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+    bbox_3d_cylinder=dict(
+        type='Bbox3D',
+        loader=dict(
+            type="AdvancedBbox3DLoader",
+            class_mapping=dict(
+                traffic_cone=["movable_object.trafficcone"]
+            ),
+        ),
+        tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+    ),
+    bbox_3d_oriented_cylinder=dict(
+        type='Bbox3D',
+        loader=dict(
+            type="AdvancedBbox3DLoader",
+            class_mapping=dict(
+                pedestrian=["human.pedestrian.adult" ,"human.pedestrian.child" ,"human.pedestrian.construction_worker" ,"human.pedestrian.police_officer"],
+            ),
+        ),
+        tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+    ),
+    bbox_3d_rect_cuboid=dict(
+        type='Bbox3D',
+        loader=dict(
+            type="AdvancedBbox3DLoader",
+            class_mapping=dict(
+                barrier=['movable_object.barrier']
+            ),
+        ),
+        tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+    ),
 )
-
 
 
 ## GroupBatchDataset configs
@@ -225,11 +242,21 @@ heads = dict(
                  mid_channels=128,
                  cen_seg_channels=len(train_dataset["transformables"]["bbox_3d"]["loader"]["class_mapping"]) + 1 + 1, # 1 for seg[0], 1 for cen
                  reg_channels=20),
-    # polyline_3d=dict(type='PlanarHead',
-    #                  in_channels=128,
-    #                  mid_channels=128,
-    #                  cen_seg_channels=2,
-    #                  reg_channels=7),
+    bbox_3d_cylinder=dict(type='PlanarHead',
+                 in_channels=128,
+                 mid_channels=128,
+                 cen_seg_channels=len(train_dataset["transformables"]["bbox_3d_cylinder"]["loader"]["class_mapping"]) + 1 + 1, # 1 for seg[0], 1 for cen
+                 reg_channels=8),
+    bbox_3d_oriented_cylinder=dict(type='PlanarHead',
+                 in_channels=128,
+                 mid_channels=128,
+                 cen_seg_channels=len(train_dataset["transformables"]["bbox_3d_oriented_cylinder"]["loader"]["class_mapping"]) + 1 + 1, # 1 for seg[0], 1 for cen
+                 reg_channels=13),
+    bbox_3d_rect_cuboid=dict(type='PlanarHead',
+                 in_channels=128,
+                 mid_channels=128,
+                 cen_seg_channels=len(train_dataset["transformables"]["bbox_3d_rect_cuboid"]["loader"]["class_mapping"]) + 1 + 1, # 1 for seg[0], 1 for cen
+                 reg_channels=14),
 )
 # loss configs
 bbox_3d_weight_scheme = dict(
@@ -241,22 +268,50 @@ bbox_3d_weight_scheme = dict(
              dual_focal_loss_weight=2),
     reg=dict(loss_weight=1.0))
 
-polyline_3d_weight_scheme = dict(
+bbox_3d_cylinder_weight_scheme = dict(
+    cen=dict(loss_weight=0.5,
+             fg_weight=1.0,
+             bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=2,
-             dual_focal_loss_weight=5),
+             iou_loss_weight=1,
+             dual_focal_loss_weight=2),
     reg=dict(loss_weight=1.0))
 
+bbox_3d_oriented_cylinder_weight_scheme = dict(
+    cen=dict(loss_weight=0.5,
+             fg_weight=1.0,
+             bg_weight=1),
+    seg=dict(loss_weight=1.0,
+             iou_loss_weight=1,
+             dual_focal_loss_weight=2),
+    reg=dict(loss_weight=1.0))
+
+bbox_3d_rect_cuboid_weight_scheme = dict(
+    cen=dict(loss_weight=0.5,
+             fg_weight=1.0,
+             bg_weight=1),
+    seg=dict(loss_weight=1.0,
+             iou_loss_weight=1,
+             dual_focal_loss_weight=2),
+    reg=dict(loss_weight=1.0))
 
 loss_cfg = dict(
     bbox_3d=dict(
         type='PlanarLoss',
         loss_name_prefix='bbox_3d',
         weight_scheme=bbox_3d_weight_scheme),
-    # polyline_3d=dict(
-    #     type='PlanarLoss',
-    #     loss_name_prefix='polyline_3d',
-    #     weight_scheme=polyline_3d_weight_scheme),
+    bbox_3d_cylinder=dict(
+        type='PlanarLoss',
+        loss_name_prefix='bbox_3d_cylinder',
+        weight_scheme=bbox_3d_cylinder_weight_scheme),
+    bbox_3d_oriented_cylinder=dict(
+        type='PlanarLoss',
+        loss_name_prefix='bbox_3d_oriented_cylinder',
+        weight_scheme=bbox_3d_oriented_cylinder_weight_scheme),
+    bbox_3d_rect_cuboid=dict(
+        type='PlanarLoss',
+        loss_name_prefix='bbox_3d_rect_cuboid',
+        weight_scheme=bbox_3d_rect_cuboid_weight_scheme),
 )
 
 # metric configs
@@ -311,6 +366,8 @@ env_cfg = dict(
     dist_cfg=dict(backend='nccl'),
 )
 
+import datetime
+today = datetime.datetime.now().strftime("%m%d")
 
 load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_nusc_1111/epoch_99.pth"
@@ -321,6 +378,6 @@ load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1106_sampled'
 # work_dir = './work_dirs/fastray_planar_single_frame_1106_sampled_infer'
 # work_dir = './work_dirs/fastray_planar_single_frame_1107'
-work_dir = './work_dirs/fastray_planar_single_frame_nusc_1112'
+work_dir = f'./work_dirs/{experiment_name}_{today}'
 
 # resume = True
