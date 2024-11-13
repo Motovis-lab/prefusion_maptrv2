@@ -157,6 +157,10 @@ class VoxelLookUpTableGenerator:
             vv_bilinear_weight = (np.ceil(vv_float) - vv_float)
             # get valid maps, Z*X*Y, 6*320*160
             valid_map = (uu >= 0) * (uu < resolution[0]) * (vv >= 0) * (vv < resolution[1]) * (camera_points[2] > 0)
+            # in some case, vv * valid_map will be out of range
+            uu[~valid_map] = -1
+            vv[~valid_map] = -1
+            # add uv_mask
             uv_mask = cv2.resize(camera_image.ego_mask, resolution)
             valid_map *= uv_mask[vv * valid_map, uu * valid_map].astype(bool)
             uu_float[~valid_map] = -1
