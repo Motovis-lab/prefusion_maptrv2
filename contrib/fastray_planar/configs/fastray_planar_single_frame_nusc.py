@@ -139,7 +139,7 @@ transformables = dict(
                 traffic_cone=["movable_object.trafficcone"]
             ),
         ),
-        tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+        tensor_smith=dict(type='PlanarCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
     ),
     bbox_3d_oriented_cylinder=dict(
         type='Bbox3D',
@@ -149,7 +149,7 @@ transformables = dict(
                 pedestrian=["human.pedestrian.adult" ,"human.pedestrian.child" ,"human.pedestrian.construction_worker" ,"human.pedestrian.police_officer"],
             ),
         ),
-        tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+        tensor_smith=dict(type='PlanarOrientedCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
     ),
     bbox_3d_rect_cuboid=dict(
         type='Bbox3D',
@@ -159,7 +159,7 @@ transformables = dict(
                 barrier=['movable_object.barrier']
             ),
         ),
-        tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+        tensor_smith=dict(type='PlanarRectangularCuboid', voxel_shape=voxel_shape, voxel_range=voxel_range)
     ),
 )
 

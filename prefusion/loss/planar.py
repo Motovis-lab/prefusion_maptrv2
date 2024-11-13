@@ -212,7 +212,7 @@ class PlanarLoss(nn.Module):
 
         assert list(range(pred.shape[1])) == self.enumerate_slices(
             [p.slice for p in partition_weights.values()]
-        ), "partition weight slices doesn't meet MECE principle."
+        ), f"partition weight slices doesn't meet MECE principle. ({label.shape[1]=}, {pred.shape[1]=})"
         loss_dict = {}
         L = partial(complete_loss_name, self.loss_name_prefix)
         mask_sum = max(fg_mask.sum(), 1e-4)  # fg_mask is assumed to be from label (gt), so no need to worry about backward
