@@ -916,18 +916,21 @@ def get_bbox_3d(tensor_dict):
     from prefusion.dataset.tensor_smith import PlanarBbox3D
     pbox = PlanarBbox3D(
         voxel_shape=(6, 320, 160),
-        voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        voxel_range=([-0.5, 2.5], [36, -12], [12, -12]),
+        reverse_pre_conf=0.3,
+        reverse_nms_ratio=1.0
     )
-    return pbox.reverse(tensor_dict, pre_conf=0.3, ratio=1.0)
+    return pbox.reverse(tensor_dict)
     
 
 def get_parkingslot_3d(tensor_dict):
     from prefusion.dataset.tensor_smith import PlanarParkingSlot3D
     pslot = PlanarParkingSlot3D(
         voxel_shape=(6, 320, 160),
-        voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        voxel_range=([-0.5, 2.5], [36, -12], [12, -12]),
+        reverse_pre_conf=0.5
     )
-    return pslot.reverse(tensor_dict, pre_conf=0.5)
+    return pslot.reverse(tensor_dict)
 
 
 
