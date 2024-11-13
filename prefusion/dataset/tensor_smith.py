@@ -1169,7 +1169,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
                     center[2]
                 ], dtype=np.float32))
                 l, w, h = element['size']
-                radius = max(l, w)  # l, w should be the same
+                radius = 0.5 * max(l, w)  # l, w should be the same
                 radii.append(radius)
                 heights.append(h)
                 # get class and attr index
@@ -1189,7 +1189,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
             num_attr_channels = 0
         seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
         cen_im = np.zeros((1, X, Y), dtype=np.float32)
-        reg_im = np.zeros((10, X, Y), dtype=np.float32)
+        reg_im = np.zeros((8, X, Y), dtype=np.float32)
         for unit_zvec, center, radius, height, class_ind, attr_list in zip(
             unit_zvecs, centers, radii, heights, class_inds, attr_lists
         ):
@@ -1231,7 +1231,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
         zvec_vertical = np.array([0, zvec[2], -zvec[1]])
         zvec_vertical /= np.linalg.norm(zvec_vertical)
         return all([
-            np.linalg.norm(delta_ij * zvec_vertical) < 0.5 * sizes[0],
+            np.linalg.norm(delta_ij * zvec_vertical) < sizes[0],
             np.linalg.norm(delta_ij * zvec) < 0.5 * sizes[1]
         ])
 
@@ -1269,7 +1269,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
             # get area score
             mean_count = seg_classes[0, group].sum()
-            mean_area = mean_size[0] * mean_size[0] * fx * fy * min(ratio ** 2, 1) * np.pi / 4
+            mean_area = mean_size[0] * mean_size[0] * fx * fy * min(ratio ** 2, 1) * np.pi
             area_score = mean_count / mean_area
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
@@ -1427,7 +1427,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
                     center[2]
                 ], dtype=np.float32))
                 l, w, h = element['size']
-                radius = max(l, w)  # l, w should be the same
+                radius = 0.5 * max(l, w)  # l, w should be the same
                 radii.append(radius)
                 heights.append(h)
                 velocities.append(element['velocity'][:, 0])
@@ -1514,8 +1514,8 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
     @staticmethod
     def _is_in_cylinder3d(delta_ij, sizes, xvec, yvec, zvec):
         return all([
-            np.linalg.norm(delta_ij * xvec) < 0.5 * sizes[0],
-            np.linalg.norm(delta_ij * yvec) < 0.5 * sizes[0],
+            np.linalg.norm(delta_ij * xvec) < sizes[0],
+            np.linalg.norm(delta_ij * yvec) < sizes[0],
             np.linalg.norm(delta_ij * zvec) < 0.5 * sizes[1]
         ])
 
@@ -1559,7 +1559,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
             # get area score
             mean_count = seg_classes[0, group].sum()
-            mean_area = mean_size[0] * mean_size[0] * fx * fy * min(ratio ** 2, 1) * np.pi / 4
+            mean_area = mean_size[0] * mean_size[0] * fx * fy * min(ratio ** 2, 1) * np.pi
             area_score = mean_count / mean_area
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
@@ -1568,7 +1568,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             cylinder_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
-                'size': mean_size[[0, 0, 1]],
+                'size': mean_size[[0, 0, 1]] * [2, 2, 1],
                 'rotation': mean_rmat,
                 'translation': mean_center,
                 'velocity': mean_velocity
