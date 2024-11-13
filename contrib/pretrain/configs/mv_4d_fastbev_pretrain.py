@@ -174,5 +174,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = None
+load_from = "work_dirs/mv_4d_fastbev_pretrain/20241106_102113/epoch_24.pth"
 resume=False

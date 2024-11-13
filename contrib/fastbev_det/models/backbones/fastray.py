@@ -9,7 +9,10 @@ from time import sleep
 import matplotlib.pyplot as plt
 import mmcv
 import pdb
-from ..necks import VoxelProjection_fish, VoxelProjection_pv, VoxelProjection_front
+from ..necks import VoxelProjection_fish, VoxelProjection_pv, VoxelProjection_front, VoxelProjection
+
+__all__ = ['FastRay_DP_v2', 'FastRay_DP', 'FastRay']
+
 
 @MODELS.register_module()
 class FastRay(BaseModule):
@@ -145,6 +148,10 @@ class FastRay_DP(FastRay):
         self.plugin_fish = VoxelProjection_fish()
         self.plugin_pv = VoxelProjection_pv()
         self.plugin_front = VoxelProjection_front()
+        self.dummy_conv = nn.Conv2d(3, 3, 1, 1)
+        with torch.no_grad():
+            self.dummy_conv.weight = nn.Parameter(torch.eye(3).view(3, 3, 1, 1))
+            self.dummy_conv.bias = nn.Parameter(torch.zeros(3))
 
     def forward(self, fish_data_imgs, pv_data_imgs, front_data_imgs,
                 fish_intrinsic, fish_extrinsic,
@@ -179,16 +186,61 @@ class FastRay_DP(FastRay):
     def pure_forward(self, img_feats_fish, img_feats_pv, img_feats_front
         ):
         # img_feats_fish =  img_feats_fish.permute(0,2,3,1)
-        img_bev_feats_fish = self.plugin_fish(img_feats_fish
+        img_bev_feats_fish = self.plugin_fish(self.dummy_conv(img_feats_fish)
                                                 )
         # img_feats_pv = img_feats_pv.permute(0,2,3,1)
-        img_bev_feats_pv = self.plugin_pv(img_feats_pv
+        img_bev_feats_pv = self.plugin_pv(self.dummy_conv(img_feats_pv)
                                                 )
         # img_feats_front = img_feats_front.permute(0,2,3,1)
-        img_bev_feats_front = self.plugin_front(img_feats_front
+        img_bev_feats_front = self.plugin_front(self.dummy_conv(img_feats_front)
                                                 )
         
         img_bev_feats = img_bev_feats_fish + img_bev_feats_pv + img_bev_feats_front
+        
+        # img_bev_feats = img_feats_fish + img_feats_pv + img_feats_front
+        
         # img_bev_feats = self.bev_feat_reducer(img_bev_feats)
         # return img_bev_feats.permute(0,3,1,2)
+        return img_bev_feats
+    
+
+@MODELS.register_module()
+class FastRay_DP_v2(FastRay):
+    def __init__(self, **kwargs):
+        super(FastRay_DP_v2, self).__init__(**kwargs)
+        self.plugin = VoxelProjection()
+        
+        self.dummy_conv = nn.Conv2d(3, 3, 1, 1)
+        with torch.no_grad():
+            self.dummy_conv.weight = nn.Parameter(torch.eye(3).view(3, 3, 1, 1))
+            self.dummy_conv.bias = nn.Parameter(torch.zeros(3))
+
+    def forward(self, fish_data_imgs, pv_data_imgs, front_data_imgs,
+                fish_intrinsic, fish_extrinsic,
+                pv_intrinsic, pv_extrinsic,
+                front_intrinsic, front_extrinsic
+        ):
+        img_feats_fish = self.get_cam_feats_fish(fish_data_imgs)
+        img_feats_pv = self.get_cam_feats_pv(pv_data_imgs)
+        img_feats_front = self.get_cam_feats_front(front_data_imgs)
+
+        img_depth_feats_fish, supervised_depth_feat_fish = self.depth_net_fish(img_feats_fish, fish_intrinsic, fish_extrinsic)
+
+        img_depth_feats_pv, supervised_depth_feat_pv = self.depth_net_pv(img_feats_pv, pv_intrinsic, pv_extrinsic)
+
+        img_depth_feats_front, supervised_depth_feat_front = self.depth_net_front(img_feats_front, front_intrinsic, front_extrinsic)
+
+        # C, H, W = img_depth_feats_fish.shape[-3:]
+        img_bev_feats = self.plugin(img_depth_feats_fish, img_depth_feats_pv, img_depth_feats_front
+                                                )
+    
+        img_bev_feats = self.bev_feat_reducer(img_bev_feats)
+        
+        return img_bev_feats
+    
+    def pure_forward(self, img_feats_fish, img_feats_pv, img_feats_front
+        ):
+        img_bev_feats = self.plugin(self.dummy_conv(img_feats_fish).permute(0,2,3,1), self.dummy_conv(img_feats_pv).permute(0,2,3,1), self.dummy_conv(img_feats_front).permute(0,2,3,1)
+                                                )
+        
         return img_bev_feats
