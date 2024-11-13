@@ -10,6 +10,8 @@ import mmcv
 import pdb
 from torch import Tensor
 from torch.onnx.symbolic_helper import parse_args
+from torch.nn.modules.utils import _ntuple
+
 
 @MODELS.register_module()
 class fastray_vt(BaseModule):
@@ -67,7 +69,7 @@ class ProjectPlugin(torch.autograd.Function):
         ProjectPlugin.output_size = tuple(output_size)
 
     @staticmethod
-    def symbolic(g, input, uu, vv, valid, density, length, outputsizeb_i=1, outputsizec_i=2016, outputsizeh_i=240, outputsizew_i=120):
+    def symbolic(g, input, uu, vv, valid, density, length, outputsizeb_i=1, outputsizec_i=3*6, outputsizeh_i=240, outputsizew_i=120):
         
         return g.op("custom::CustomProject", input, uu, vv, valid, density, voxelnum_i=length, outputsizeb_i=outputsizeb_i, outputsizec_i=outputsizec_i, outputsizeh_i=outputsizeh_i, outputsizew_i=outputsizew_i)
 
@@ -76,6 +78,42 @@ class ProjectPlugin(torch.autograd.Function):
 
         return torch.zeros(ProjectPlugin.output_size).cuda()
     
+class ProjectPlugin_v2(torch.autograd.Function):
+    output_size = None
+
+    @staticmethod
+    def set_output_size(output_size):
+        ProjectPlugin.output_size = tuple(output_size)
+
+    @staticmethod
+    def symbolic(g, input, uu, vv, valid, density, length, outputsizeb_i=1, outputsizec_i=512*6, outputsizeh_i=240, outputsizew_i=120):
+        
+        return g.op("custom::CustomProject", input, uu, vv, valid, density, voxelnum_i=length, outputsizeb_i=outputsizeb_i, outputsizec_i=outputsizec_i, outputsizeh_i=outputsizeh_i, outputsizew_i=outputsizew_i)
+
+    @staticmethod
+    def forward(ctx, input: Tensor, uu: Tensor, vv: Tensor, valid: Tensor, density: Tensor, length):
+
+        return torch.zeros(ProjectPlugin.output_size).cuda()    
+
+class ProjectPlugin_v3(torch.autograd.Function):
+    output_size = None
+
+    @staticmethod
+    def set_output_size(output_size):
+        ProjectPlugin.output_size = tuple(output_size)
+
+    @staticmethod
+    def symbolic(g, fish_input, pv_input, front_input, uu, vv, valid, density, length, outputsizeb_i=1, outputsizec_i=3*6, outputsizeh_i=240, outputsizew_i=120):
+        
+        return g.op("custom::CustomProject", fish_input, pv_input, front_input, uu, vv, valid, density, voxelnum_i=length, outputsizeb_i=outputsizeb_i, outputsizec_i=outputsizec_i, outputsizeh_i=outputsizeh_i, outputsizew_i=outputsizew_i)
+
+    @staticmethod
+    def forward(ctx, fish_input: Tensor, pv_input: Tensor, front_input: Tensor, uu: Tensor, vv: Tensor, valid: Tensor, density: Tensor, length):
+
+        return torch.zeros(ProjectPlugin.output_size).cuda()
+    
+
+
 class VoxelProjection_fish(nn.Module):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -85,21 +123,23 @@ class VoxelProjection_fish(nn.Module):
 
         self.length = 172800
 
-        self.uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_uu.npy")).float())
-        self.vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_vv.npy")).float())
-        self.valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_valid_map.npy")).float())
-        self.norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_norm_density_map.npy")).float())
+        # self.uu = torch.from_numpy(np.load("work_dirs/vt_debug/fish_uu.npy")).to(torch.float32)
+        # self.vv  = torch.from_numpy(np.load("work_dirs/vt_debug/fish_vv.npy")).to(torch.float32)
+        # self.valid = torch.from_numpy(np.load("work_dirs/vt_debug/fish_valid_map.npy")).to(torch.float32)
+        # self.norm_density_map = torch.from_numpy(np.load("work_dirs/vt_debug/fish_norm_density_map.npy")).to(torch.float32)
 
-        # self.uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_uu.npy")), requires_grad=False).cuda()
-        # self.vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_vv.npy")), requires_grad=False).cuda()
-        # self.valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_valid_map.npy")), requires_grad=False).cuda()
-        # self.norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/fish_norm_density_map.npy")), requires_grad=False).cuda()
+        self.uu = torch.from_numpy(np.load("work_dirs/vt_debug/fish_uu.npy")).to(torch.float16)
+        self.vv  = torch.from_numpy(np.load("work_dirs/vt_debug/fish_vv.npy")).to(torch.float16)
+        self.valid = torch.from_numpy(np.load("work_dirs/vt_debug/fish_valid_map.npy")).to(torch.float16)
+        self.norm_density_map = torch.from_numpy(np.load("work_dirs/vt_debug/fish_norm_density_map.npy")).to(torch.float16)
         
         
     def forward(self, input):
         img_bev_feats_fish = self.plugin.apply(input, self.uu, self.vv, 
                                                 self.valid, self.norm_density_map, self.length
                                                 )
+        # img_bev_feats_fish = self.plugin.apply(input)
+        
         # for k in range(4):
         #     uu_ = self.uu[k][self.valid[k]]
         #     vv_ = self.vv[k][self.valid[k]]
@@ -114,16 +154,21 @@ class VoxelProjection_pv(nn.Module):
         self.plugin.set_output_size([1, 2016, 240, 120])
         
         self.length = 172800
-        self.uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_uu.npy")).float())
-        self.vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_vv.npy")).float())
-        self.valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_valid_map.npy")).float())
-        self.norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/pv_norm_density_map.npy")).float())        
+        # self.uu = torch.from_numpy(np.load("work_dirs/vt_debug/pv_uu.npy")).to(torch.float32)
+        # self.vv  = torch.from_numpy(np.load("work_dirs/vt_debug/pv_vv.npy")).to(torch.float32)
+        # self.valid = torch.from_numpy(np.load("work_dirs/vt_debug/pv_valid_map.npy")).to(torch.float32)
+        # self.norm_density_map = torch.from_numpy(np.load("work_dirs/vt_debug/pv_norm_density_map.npy")).to(torch.float32)
+        self.uu = torch.from_numpy(np.load("work_dirs/vt_debug/pv_uu.npy")).to(torch.float16)
+        self.vv  = torch.from_numpy(np.load("work_dirs/vt_debug/pv_vv.npy")).to(torch.float16)
+        self.valid = torch.from_numpy(np.load("work_dirs/vt_debug/pv_valid_map.npy")).to(torch.float16)
+        self.norm_density_map = torch.from_numpy(np.load("work_dirs/vt_debug/pv_norm_density_map.npy")).to(torch.float16)
 
         
     def forward(self, input):
         img_bev_feats_fish = self.plugin.apply(input, self.uu, self.vv, 
                                                 self.valid, self.norm_density_map, self.length
                                                 )
+        # img_bev_feats_fish = self.plugin.apply(input)
     
         return img_bev_feats_fish
     
@@ -134,15 +179,58 @@ class VoxelProjection_front(nn.Module):
         self.plugin.set_output_size([1, 2016, 240, 120])
         
         self.length = 172800
-        self.uu = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_uu.npy")).float())
-        self.vv  = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_vv.npy")).float())
-        self.valid = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_valid_map.npy")).float())
-        self.norm_density_map = torch.nn.Parameter(torch.from_numpy(np.load("work_dirs/vt_debug/front_norm_density_map.npy")).float())        
+        # self.uu = torch.from_numpy(np.load("work_dirs/vt_debug/front_uu.npy")).to(torch.float32)
+        # self.vv  = torch.from_numpy(np.load("work_dirs/vt_debug/front_vv.npy")).to(torch.float32)
+        # self.valid = torch.from_numpy(np.load("work_dirs/vt_debug/front_valid_map.npy")).to(torch.float32)
+        # self.norm_density_map = torch.from_numpy(np.load("work_dirs/vt_debug/front_norm_density_map.npy")).to(torch.float32)
+
+        self.uu = torch.from_numpy(np.load("work_dirs/vt_debug/front_uu.npy")).to(torch.float16)
+        self.vv  = torch.from_numpy(np.load("work_dirs/vt_debug/front_vv.npy")).to(torch.float16)
+        self.valid = torch.from_numpy(np.load("work_dirs/vt_debug/front_valid_map.npy")).to(torch.float16)
+        self.norm_density_map = torch.from_numpy(np.load("work_dirs/vt_debug/front_norm_density_map.npy")).to(torch.float16)
 
         
     def forward(self, input):
         img_bev_feats_fish = self.plugin.apply(input, self.uu, self.vv, 
                                                 self.valid, self.norm_density_map, self.length
                                                 )
+        # img_bev_feats_fish = self.plugin.apply(input)
+    
+        return img_bev_feats_fish
+    
+
+class VoxelProjection(nn.Module):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.plugin = ProjectPlugin_v3()
+        self.plugin.set_output_size([1, 2016, 240, 120])
+        
+        self.length = 172800
+        
+        self.fish_uu = torch.from_numpy(np.load("work_dirs/vt_debug/fish_uu.npy")).to(torch.float32)
+        self.fish_vv  = torch.from_numpy(np.load("work_dirs/vt_debug/fish_vv.npy")).to(torch.float32)
+        self.fish_valid = torch.from_numpy(np.load("work_dirs/vt_debug/fish_valid_map.npy")).to(torch.float32)
+        self.fish_norm_density_map = torch.from_numpy(np.load("work_dirs/vt_debug/fish_norm_density_map.npy")).to(torch.float32)
+
+        self.pv_uu = torch.from_numpy(np.load("work_dirs/vt_debug/pv_uu.npy")).to(torch.float32)
+        self.pv_vv  = torch.from_numpy(np.load("work_dirs/vt_debug/pv_vv.npy")).to(torch.float32)
+        self.pv_valid = torch.from_numpy(np.load("work_dirs/vt_debug/pv_valid_map.npy")).to(torch.float32)
+        self.pv_norm_density_map = torch.from_numpy(np.load("work_dirs/vt_debug/pv_norm_density_map.npy")).to(torch.float32)
+        
+        self.front_uu = torch.from_numpy(np.load("work_dirs/vt_debug/front_uu.npy")).to(torch.float32)
+        self.front_vv  = torch.from_numpy(np.load("work_dirs/vt_debug/front_vv.npy")).to(torch.float32)
+        self.front_valid = torch.from_numpy(np.load("work_dirs/vt_debug/front_valid_map.npy")).to(torch.float32)
+        self.front_norm_density_map = torch.from_numpy(np.load("work_dirs/vt_debug/front_norm_density_map.npy")).to(torch.float32)
+        
+        self.uu = torch.concat([self.fish_uu, self.pv_uu, self.front_uu], dim=0)
+        self.vv = torch.concat([self.fish_vv, self.pv_vv, self.front_vv], dim=0)
+        self.valid = torch.concat([self.fish_valid, self.pv_valid, self.front_valid], dim=0)
+        self.norm_density_map = torch.concat([self.fish_norm_density_map, self.pv_norm_density_map, self.front_norm_density_map], dim=0)
+
+    def forward(self, fish_input, pv_input, front_input):
+        img_bev_feats_fish = self.plugin.apply(fish_input, pv_input, front_input, self.uu, self.vv, 
+                                                self.valid, self.norm_density_map, self.length
+                                                )
+        # img_bev_feats_fish = self.plugin.apply(input)
     
         return img_bev_feats_fish

@@ -1,7 +1,7 @@
 __base__ = '../../configs/default_runtime.py'
 default_scope = "prefusion"
 custom_imports = dict(
-    imports=['prefusion', 'contrib.fastbev_det', 'contrib.pretrain'],
+    imports=['prefusion', 'contrib.fastbev_det', 'contrib.pretrain', "contrib.fastray_planar"],
     allow_failed_imports=False
 )
 dataset_type_wrapper = "ConcatDataset"
@@ -13,7 +13,7 @@ avp_data_root = 'data/avp/'
 crop_size = (640, 1024)
 train_pipeline = [
     dict(type='mmseg.LoadImageFromFile'),
-    dict(type='LoadAnnotationsPretrain', with_depth=True, with_seg_mask=True, reduce_zero_label=True),
+    dict(type='LoadAnnotationsPretrain', with_depth=True, with_seg_mask=True, reduce_zero_label=False),
     dict(
         type='RandomResize',
         scale=crop_size,
@@ -27,21 +27,22 @@ train_pipeline = [
 
 val_pipeline = [
     dict(type='mmseg.LoadImageFromFile'),
-    dict(type='LoadAnnotationsPretrain', with_depth=True, with_seg_mask=True, reduce_zero_label=True),
+    dict(type='LoadAnnotationsPretrain', with_depth=True, with_seg_mask=True, reduce_zero_label=False),
     dict(
         type='Resize',
         scale=crop_size,
         keep_ratio=True),
     dict(type='PackSegInputs')
 ]
-batch_size = 14
+batch_size = 32
 
 dataset_4d = dict(
     type=dataset_type_4d,
     data_root=data_root,
     ann_file="mv_4d_infos_pretrain_train.pkl",
     pipeline=train_pipeline,
-    camera_types=["VCAMERA_FISHEYE_BACK", "VCAMERA_FISHEYE_FRONT", "VCAMERA_FISHEYE_LEFT", "VCAMERA_FISHEYE_RIGHT"]
+    camera_types=["VCAMERA_FISHEYE_BACK", "VCAMERA_FISHEYE_FRONT", "VCAMERA_FISHEYE_LEFT", "VCAMERA_FISHEYE_RIGHT"],
+    reduce_zero_label=False
 )
 
 dataset_avp = dict(
@@ -49,7 +50,8 @@ dataset_avp = dict(
         data_root=avp_data_root,
         ann_file="avp_train.pkl",
         pipeline=train_pipeline,
-        camera_types=["VCAMERA_FISHEYE_FRONT"]
+        camera_types=["VCAMERA_FISHEYE_FRONT"],
+        reduce_zero_label=False
 )
 
 train_dataloader = dict(
@@ -57,12 +59,14 @@ train_dataloader = dict(
     num_workers=16,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
-    batch_sampler=dict(type="SameSourceBatchSampler", drop_last=True),
-    dataset=dict(
-        type=dataset_type_wrapper,
-        datasets=[dataset_avp, dataset_4d]
-    )
+    # batch_sampler=dict(type="SameSourceBatchSampler", drop_last=True),
+    # dataset=dict(
+    #     type=dataset_type_wrapper,
+    #     datasets=[dataset_avp]
+    # )
+    dataset=dataset_avp
 )
+
 
 val_dataloader = dict(
     batch_size=batch_size,
@@ -72,26 +76,24 @@ val_dataloader = dict(
     dataset=dict(
         type=dataset_type_4d,
         data_root=data_root,
-        ann_file="mv_4d_infos_pretrain_val.pkl",
+        ann_file="mv_4d_infos_20230828_124528.pkl",
         pipeline=val_pipeline,
         camera_types=["VCAMERA_FISHEYE_BACK", "VCAMERA_FISHEYE_FRONT", "VCAMERA_FISHEYE_LEFT", "VCAMERA_FISHEYE_RIGHT"])
     )
-
-img_backbone_conf=dict(
-        type='VoVNet',
-        # model_type="vovnet57",
-        # out_indices=[4, 8],
-        model_type="vovnet39",
-        out_indices=[2, 3, 4, 5],
-        base_channels=32,
-        # init_cfg=dict(type='Pretrained', checkpoint="./work_dirs/backbone_checkpoint/vovnet57_match.pth")
+val_dataloader = dict(
+    batch_size=batch_size,
+    num_workers=16,
+    persistent_workers=True,
+    sampler=dict(type='DefaultSampler', shuffle=False),
+    dataset = dict(
+        type=dataset_type_avp,
+        data_root=avp_data_root,
+        ann_file="sub_t.pkl",
+        pipeline=val_pipeline,
+        camera_types=["VCAMERA_FISHEYE_FRONT"]
     )
-img_neck_conf=dict(
-    type='SECONDFPN',
-    in_channels=[128, 128, 128, 256],
-    upsample_strides=[1, 1, 1, 2],
-    out_channels=[64, 64, 64, 64],
 )
+
 
 data_preprocessor = dict(
     type='mmseg.SegDataPreProcessor',
@@ -100,52 +102,33 @@ data_preprocessor = dict(
     size_divisor=32,
     bgr_to_rgb=False,
     pad_val=0,
-    seg_pad_val=255)
+    seg_pad_val=1)
+
+camera_feat_channels = 128
 model = dict(
-    type='mmseg.EncoderDecoder',
+    type='SegEncoderDecoder',
     data_preprocessor=data_preprocessor,
-    backbone=dict(type='ImgBackboneNeck',
-                  img_backbone_conf=img_backbone_conf,
-                  img_neck_conf=img_neck_conf),
+    backbone=dict(type='VoVNetFPN',
+                  out_stride=8, 
+                  out_channels=camera_feat_channels),
     decode_head=dict(
-        type='DepthwiseSeparableASPPHead_v2',
-        in_channels=256,
-        in_index=0,
-        channels=128,
-        dilations=(1, 12, 24, 36),
-        c1_in_channels=256,
-        c1_channels=48,
-        dropout_ratio=0.1,
+        type='SegDecoder',
         num_classes=26,
-        align_corners=False,
-        loss_decode=dict(
-            type='mmseg.CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0)),
-    auxiliary_head=dict(
-        type='PrefusionFCNHead',
-        in_channels=256,
-        in_index=0,
-        channels=256,
-        num_convs=1,
-        concat_input=False,
-        dropout_ratio=0.1,
-        num_classes=26,
-        align_corners=False,
-        loss_decode=dict(
-            type='mmseg.CrossEntropyLoss', use_sigmoid=True, loss_weight=0.4)),
+        loss_decode=[
+            dict(type='PretrainSegLoss', use_sigmoid=True, loss_weight=2),
+            dict(type='PretrainFocalLoss', use_sigmoid=True, loss_weight=1.0),
+        ]
+        # loss_decode = dict(type='mmseg.CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0)
+        ),
     # model training and testing settings
     train_cfg=dict(),
     test_cfg=dict(mode='whole')
 )
 
-train_cfg = dict(type="mmengine.EpochBasedTrainLoop",max_epochs=24, val_interval=2)  # -1 note don't eval
+train_cfg = dict(type="mmengine.EpochBasedTrainLoop",max_epochs=24, val_interval=100)  # -1 note don't eval
 val_cfg = dict(type="mmengine.ValLoop")
 
 backend_args = None
-
-IMG_KEYS = [
-        'VCAMERA_FISHEYE_FRONT', 'VCAMERA_PERSPECTIVE_FRONT_LEFT', 'VCAMERA_PERSPECTIVE_BACK_LEFT', 'VCAMERA_FISHEYE_LEFT', 'VCAMERA_PERSPECTIVE_BACK', 'VCAMERA_FISHEYE_BACK', 
-        'VCAMERA_PERSPECTIVE_FRONT_RIGHT', 'VCAMERA_PERSPECTIVE_BACK_RIGHT', 'VCAMERA_FISHEYE_RIGHT', 'VCAMERA_PERSPECTIVE_FRONT'
-        ]
 
 val_evaluator = dict(type='mmseg.IoUMetric', iou_metrics=['mIoU'])
 
@@ -158,15 +141,15 @@ find_unused_parameters = True
 
 runner_type = 'GroupRunner'
 
-lr = 0.01  # total lr per gpu lr is lr/n 
+lr = 0.002  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(
     type='OptimWrapper',
-    optimizer=dict(type='SGD', lr=lr, weight_decay=0.0001),
+    optimizer=dict(type='AdamW', lr=lr, weight_decay=0.0001),
     clip_grad=dict(max_norm=35, norm_type=2),
-    paramwise_cfg=dict(
-        custom_keys={
-            'backbone': dict(lr_mult=2)
-        }),
+    # paramwise_cfg=dict(
+    #     custom_keys={
+    #         'backbone': dict(lr_mult=1)
+    #     }),
     # dtype="float16"  # it works only for arg --amp
     )
 param_scheduler = dict(type='MultiStepLR', milestones=[16, 20])
@@ -178,7 +161,7 @@ default_hooks = dict(
     timer=dict(type='mmengine.IterTimerHook'),
     logger=dict(type='LoggerHook', interval=5),
     param_scheduler=dict(type='ParamSchedulerHook'),
-    checkpoint=dict(type='ExperimentWiseCheckpointHook', interval=5))
+    checkpoint=dict(type='ExperimentWiseCheckpointHook', interval=2))
 
 custom_hooks = [
     dict(
@@ -191,5 +174,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = None
+load_from = "work_dirs/mv_4d_fastbev_pretrain/20241106_102113/epoch_24.pth"
 resume=False
