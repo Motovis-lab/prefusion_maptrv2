@@ -150,7 +150,7 @@ camera_intrinsic_configs = dict(
 )
 
 
-debug_mode = False
+debug_mode = True
 
 if debug_mode:
     batch_size = 1
