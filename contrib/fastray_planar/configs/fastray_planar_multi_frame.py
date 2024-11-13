@@ -180,8 +180,8 @@ else:
 train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='../MV4D-PARKING',
-    info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
+    data_root='/data/datasets/MvParking',
+    info_path='/data/datasets/MvParking/mv_4d_infos_20231028_150815.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -414,7 +414,10 @@ env_cfg = dict(
 
 # work_dir = "./work_dirs/fastray_planar_multi_frame_1107"
 # work_dir = "./work_dirs/fastray_planar_multi_frame_1107_infer"
-work_dir = "./work_dirs/fastray_planar_multi_frame_1112"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_1112"
+work_dir = "./work_dirs/fastray_planar_multi_frame_1112_infer"
 # load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
-load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
-# resume = True
+# load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
+load_from = "./work_dirs/fastray_planar_multi_frame_1112/epoch_50.pth"
+
+resume = False
