@@ -86,6 +86,7 @@ class Concat(nn.Module):
         return torch.cat(inputs, dim=self.dim)
 
 
+@MODELS.register_module()
 class EltwiseAdd(nn.Module):
     def __init__(self):
         super(EltwiseAdd, self).__init__()
@@ -152,7 +153,7 @@ class OSABlock(nn.Module):
 class VoVNetFPN(BaseModule):
     def __init__(self, out_stride=8, out_channels=128, init_cfg=None):
         super().__init__(init_cfg=init_cfg)
-        self.strides = [8, 16, 32]
+        self.strides = [4, 8, 16, 32]
         assert out_stride in self.strides
         self.out_stride = out_stride
 
@@ -171,9 +172,13 @@ class VoVNetFPN(BaseModule):
             self.p3_linear = ConvBN(384, 128, kernel_size=1, padding=0)
             self.p3_up = nn.ConvTranspose2d(128, 128, kernel_size=2, stride=2, padding=0, bias=False)
             self.p3_fusion = Concat()
+        if self.out_stride <= 4:
+            self.p2_linear = ConvBN(256, 96, kernel_size=1, padding=0)
+            self.p2_up = nn.ConvTranspose2d(96, 96, kernel_size=2, stride=2, padding=0, bias=False)
+            self.p2_fusion = Concat()
         
-        in_channels = {8: 256, 16: 384, 32: 192}
-        mid_channels = {8: 96, 16: 128, 32: 192}
+        in_channels = {4: 192, 8: 256, 16: 384, 32: 192}
+        mid_channels = {4: 96, 8: 96, 16: 128, 32: 192}
         self.out = OSABlock(
             in_channels[self.out_stride], mid_channels[self.out_stride], out_channels,
             stride=1, repeat=3, has_bn=False
@@ -193,6 +198,8 @@ class VoVNetFPN(BaseModule):
             out = self.p4_fusion(self.p4_up(out), osa4)
         if self.out_stride <= 8:
             out = self.p3_fusion(self.p3_up(self.p3_linear(out)), osa3)
+        if self.out_stride <= 4:
+            out = self.p2_fusion(self.p2_up(self.p2_linear(out)), osa2)
         
         out = self.out(out)
         
@@ -210,7 +217,7 @@ class FastRaySpatialTransform(BaseModule):
                  init_cfg=None):
         super().__init__(init_cfg=init_cfg)
         self.voxel_shape = voxel_shape
-        assert fusion_mode in ['weighted', 'sampled']
+        assert fusion_mode in ['weighted', 'sampled', 'bilinear_weighted']
         self.fusion_mode = fusion_mode
         self.bev_mode = bev_mode
     
@@ -259,6 +266,24 @@ class FastRaySpatialTransform(BaseModule):
                     valid_uu = camera_lookup['uu'][valid_map]
                     valid_vv = camera_lookup['vv'][valid_map]
                     voxel_feats[n, :, valid_map] = camera_feat[:, valid_vv, valid_uu]
+                if self.fusion_mode == 'bilinear_weighted':
+                    valid_map = camera_lookup['valid_map_bilinear']
+                    valid_norm_density_map = camera_lookup['norm_density_map'][valid_map]
+                    valid_uu_floor = camera_lookup['uu_floor'][valid_map]
+                    valid_uu_ceil = camera_lookup['uu_ceil'][valid_map]
+                    valid_vv_floor = camera_lookup['vv_floor'][valid_map]
+                    valid_vv_ceil = camera_lookup['vv_ceil'][valid_map]
+                    valid_uu_bilinear_weight = camera_lookup['uu_bilinear_weight'][valid_map].to(camera_feat.dtype)
+                    valid_vv_bilinear_weight = camera_lookup['vv_bilinear_weight'][valid_map].to(camera_feat.dtype)
+                    interpolated_camera_feat = valid_uu_bilinear_weight[None] * (
+                        camera_feat[:, valid_vv_floor, valid_uu_floor] * valid_vv_bilinear_weight[None] +
+                        camera_feat[:, valid_vv_ceil, valid_uu_floor] * (1 - valid_vv_bilinear_weight)[None]
+                    ) + (1 - valid_uu_bilinear_weight[None]) * (
+                        camera_feat[:, valid_vv_floor, valid_uu_ceil] * valid_vv_bilinear_weight[None] +
+                        camera_feat[:, valid_vv_ceil, valid_uu_ceil] * (1 - valid_vv_bilinear_weight)[None]
+                    )
+                    voxel_feats[n, :, valid_map] += valid_norm_density_map[None] * interpolated_camera_feat
+                    
         # reshape voxel_feats
         if self.bev_mode:
             return voxel_feats.reshape(N, C*Z, X, Y)
@@ -464,40 +489,37 @@ class VoxelStreamFusion(BaseModule):
 
 @MODELS.register_module()
 class VoxelConcatFusion(BaseModule):
-    def __init__(self, in_channels, bev_mode=False, init_cfg=None):
+    def __init__(self, in_channels, pre_nframes, bev_mode=False, init_cfg=None):
         super().__init__(init_cfg=init_cfg)
         self.bev_mode = bev_mode
         self.cat = Concat()
         if bev_mode:
             self.fuse = nn.Sequential(
-                nn.Conv2d(in_channels * 2, in_channels, kernel_size=3, padding=1),
+                nn.Conv2d(in_channels * (pre_nframes + 1), in_channels, kernel_size=3, padding=1),
                 nn.BatchNorm2d(in_channels)
             )
         else:
             self.fuse = nn.Sequential(
-                nn.Conv3d(in_channels * 2, in_channels, kernel_size=3, padding=1),
+                nn.Conv3d(in_channels * (pre_nframes + 1), in_channels, kernel_size=3, padding=1),
                 nn.BatchNorm3d(in_channels)
             )
     
-    def forward(self, voxel_feats_cur, voxel_feats_pre):
+    def forward(self, *aligned_voxel_feats_cat):
         """Temporal fusion of voxel current and previous features.
 
         Parameters
         ----------
-        voxel_feats_cur : torch.Tensor
-            current voxel features for measurement
-        voxel_feats_pre : torch.Tensor
-            previously predicted voxel features
+        aligned_voxel_feats_cat : List[torch.Tensor]
+            concated nframes of voxel features
 
         Returns
         -------
-        voxel_feats_updated : torch.Tensor
+        voxel_feats_fused : torch.Tensor
             updated voxel features
         """
-        assert voxel_feats_cur.shape == voxel_feats_pre.shape
-        cat = self.cat(voxel_feats_cur, voxel_feats_pre)
-        voxel_feats_updated = self.fuse(cat)
-        return voxel_feats_updated
+        cat = self.cat(*aligned_voxel_feats_cat)
+        voxel_feats_fused = self.fuse(cat)
+        return voxel_feats_fused
    
 
 
@@ -795,6 +817,84 @@ def draw_out_feats(
         plt.imshow(pred_reg)
         plt.title("parkingslot_3d pred_reg")
     
+
+    voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+    plt.subplot(3, 10, 27)
+    plt.xlim(voxel_range[2])
+    plt.ylim(voxel_range[1][::-1])
+    
+    gt_boxes_3d = batched_input_dict['transformables'][0]['bbox_3d']
+    
+    for element in gt_boxes_3d.elements:
+        center = element['translation'][:, 0]
+        xvec = element['size'][0] * element['rotation'][:, 0]
+        yvec = element['size'][1] * element['rotation'][:, 1]
+        corner_points = np.array([
+            center + 0.5 * xvec - 0.5 * yvec,
+            center + 0.5 * xvec + 0.5 * yvec,
+            center - 0.5 * xvec + 0.5 * yvec,
+            center - 0.5 * xvec - 0.5 * yvec
+        ], dtype=np.float32)
+        # print('gt: ', corner_points[:, :2])
+        plt.plot(corner_points[[0, 1, 2, 3, 0], 1], corner_points[[0, 1, 2, 3, 0], 0], 'g')
+    
+    # gt_boxes_3d = batched_input_dict['annotations']['bbox_3d']
+    plt.subplot(3, 10, 28)
+    plt.xlim(voxel_range[2])
+    plt.ylim(voxel_range[1][::-1])
+    pred_bbox_3d_0 = {
+        'cen': pred_bbox_3d['cen'][0].cpu().float().sigmoid(),
+        'seg': pred_bbox_3d['seg'][0].cpu().float().sigmoid(),
+        'reg': pred_bbox_3d['reg'][0].cpu().float()
+    }
+    pred_boxes_3d = get_bbox_3d(pred_bbox_3d_0)
+    
+    for element in pred_boxes_3d:
+        # if element['confs'][0] < 0.7:
+        #     continue
+        if element['area_score'] < 0.5:
+            continue
+        center = element['translation']
+        xvec = element['size'][0] * element['rotation'][:, 0]
+        yvec = element['size'][1] * element['rotation'][:, 1]
+        corner_points = np.array([
+            center + 0.5 * xvec - 0.5 * yvec,
+            center + 0.5 * xvec + 0.5 * yvec,
+            center - 0.5 * xvec + 0.5 * yvec,
+            center - 0.5 * xvec - 0.5 * yvec
+        ], dtype=np.float32)
+        # print('pred: ', corner_points[:, :2])
+        plt.text(center[1], center[0], '{:.2f}'.format(element['area_score']), color='r',
+                 ha='center', va='center')
+        plt.plot(corner_points[[0, 1, 2, 3, 0], 1], corner_points[[0, 1, 2, 3, 0], 0], 'r')
+    
+    plt.subplot(3, 10, 29)
+    plt.xlim(voxel_range[2])
+    plt.ylim(voxel_range[1][::-1])
+
+    gt_slots_3d = batched_input_dict['transformables'][0]['parkingslot_3d']
+    
+    for element in gt_slots_3d.elements:
+        points = element['points']
+        plt.plot(points[[1, 2, 3, 0], 1], points[[1, 2, 3, 0], 0], 'g')
+    
+    
+    plt.subplot(3, 10, 30)
+    plt.xlim(voxel_range[2])
+    plt.ylim(voxel_range[1][::-1])
+    
+    pred_parkingslot_3d_0 = {
+        'cen': pred_parkingslot_3d['cen'][0].cpu().float().sigmoid(),
+        'seg': pred_parkingslot_3d['seg'][0].cpu().float().sigmoid(),
+        'reg': pred_parkingslot_3d['reg'][0].cpu().float()
+    }
+    
+    pred_slots_3d = get_parkingslot_3d(pred_parkingslot_3d_0)
+    # print(pred_slots_3d)
+    for slot in pred_slots_3d:
+        # plt.text(points[0, 1], points[0, 0], '{:.2f}'.format(element['confs'][0]), color='r')
+        plt.plot(slot[[1, 2, 3, 0], 1], slot[[1, 2, 3, 0], 0], 'r')
+    
     plt.show()
 
 
@@ -811,6 +911,26 @@ def draw_aligned_voxel_feats(aligned_voxel_feats):
     plt.show()
 
 
+
+def get_bbox_3d(tensor_dict):
+    from prefusion.dataset.tensor_smith import PlanarBbox3D
+    pbox = PlanarBbox3D(
+        voxel_shape=(6, 320, 160),
+        voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+    )
+    return pbox.reverse(tensor_dict, pre_conf=0.3, ratio=1.0)
+    
+
+def get_parkingslot_3d(tensor_dict):
+    from prefusion.dataset.tensor_smith import PlanarParkingSlot3D
+    pslot = PlanarParkingSlot3D(
+        voxel_shape=(6, 320, 160),
+        voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+    )
+    return pslot.reverse(tensor_dict, pre_conf=0.5)
+
+
+
 @MODELS.register_module()
 class FastRayPlanarMultiFrameModel(BaseModel):
     
@@ -819,6 +939,7 @@ class FastRayPlanarMultiFrameModel(BaseModel):
                  backbones,
                  spatial_transform,
                  temporal_transform,
+                 voxel_fusion,
                  heads,
                  debug_mode=False,
                  loss_cfg=None,
@@ -836,7 +957,8 @@ class FastRayPlanarMultiFrameModel(BaseModel):
         self.spatial_transform = MODELS.build(spatial_transform)
         self.temporal_transform = MODELS.build(temporal_transform)
         # voxel fusion
-        self.voxel_fusion = EltwiseAdd()
+        # self.voxel_fusion = EltwiseAdd()
+        self.voxel_fusion = MODELS.build(voxel_fusion)
         # voxel encoder
         self.voxel_encoder = MODELS.build(heads['voxel_encoder'])
         # voxel heads
@@ -918,7 +1040,7 @@ class FastRayPlanarMultiFrameModel(BaseModel):
             ))
         if self.debug_mode:
             draw_aligned_voxel_feats(aligned_voxel_feats_cat)
-            draw_aligned_voxel_feats(list(self.cached_voxel_feats.values()))
+            # draw_aligned_voxel_feats(list(self.cached_voxel_feats.values()))
         # cache voxel features
         for pre_i in range(self.pre_nframes, 0, -1):
             self.cached_voxel_feats[f'pre_{pre_i}'] = (self.cached_voxel_feats[f'pre_{pre_i-1}']).clone().detach()

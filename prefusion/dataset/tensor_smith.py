@@ -377,6 +377,7 @@ class PlanarBbox3D(PlanarTensorSmith):
                         if self._is_in_bbox3d(delta_ij, sizes_i * ratio, unit_xvec_i, unit_yvec_i, unit_zvec_i):
                             kept_inds.append(j)
                             grouped_inds.append(j)
+        _, _, fx, fy = self.bev_intrinsics
         ## get mean bbox in group
         pred_bboxes_3d = []
         for group in kept_groups:
@@ -400,12 +401,18 @@ class PlanarBbox3D(PlanarTensorSmith):
             # rotation matrix
             mean_rmat = np.float32([mean_unit_xvec, unit_yvec, unit_zvec]).T
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get area score
+            mean_count = seg_classes[0, group].sum()
+            mean_area = mean_size[0] * mean_size[1] * fx * fy * min(ratio ** 2, 1)
+            area_score = mean_count / mean_area
+            # get center
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * unit_zvec * mean_size[2]
             mean_velocity = (velocities[:, group] * scores[group][None]).sum(1) / score_sum
             bbox_3d = {
                 'confs': mean_classes,
+                'area_score': area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
                 'translation': mean_center,
@@ -415,7 +422,7 @@ class PlanarBbox3D(PlanarTensorSmith):
         return pred_bboxes_3d
     
     
-    def reverse(self, tensor_dict, pre_conf=0.1):
+    def reverse(self, tensor_dict, pre_conf=0.1, ratio=0.7):
         """
         Parameters
         ----------
@@ -488,7 +495,8 @@ class PlanarBbox3D(PlanarTensorSmith):
         ## group nms
         boxes_3d = self._group_nms(
             seg_scores, cen_scores, seg_classes, 
-            centers, sizes, unit_xvecs, roll_vecs, velocities
+            centers, sizes, unit_xvecs, roll_vecs, velocities,
+            ratio=ratio
         )
 
         return boxes_3d
@@ -676,6 +684,7 @@ class PlanarRectangularCuboid(PlanarBbox3D):
                             kept_inds.append(j)
                             grouped_inds.append(j)
         ## get mean bbox in group
+        _, _, fx, fy = self.bev_intrinsics
         pred_bboxes_3d = []
         for group in kept_groups:
             # use score weighted mean
@@ -698,11 +707,16 @@ class PlanarRectangularCuboid(PlanarBbox3D):
             # rotation matrix
             mean_rmat = np.float32([mean_unit_xvec, unit_yvec, unit_zvec]).T
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get area score
+            mean_count = seg_classes[0, group].sum()
+            mean_area = mean_size[0] * mean_size[1] * fx * fy * min(ratio ** 2, 1)
+            area_score = mean_count / mean_area
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * unit_zvec * mean_size[2]
             bbox_3d = {
                 'confs': mean_classes,
+                'area_score': area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
                 'translation': mean_center
@@ -1000,6 +1014,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
                             kept_inds.append(j)
                             grouped_inds.append(j)
         ## get mean bbox in group
+        _, _, fx, fy = self.bev_intrinsics
         pred_pillars = []
         for group in kept_groups:
             # use score weighted mean
@@ -1019,11 +1034,16 @@ class PlanarSquarePillar(PlanarTensorSmith):
             # rotation matrix
             mean_rmat = np.float32([unit_xvec, unit_yvec, mean_unit_zvec]).T
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get area score
+            mean_count = seg_classes[0, group].sum()
+            mean_area = mean_size[0] * mean_size[1] * fx * fy * min(ratio ** 2, 1)
+            area_score = mean_count / mean_area
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[2]
             pillar_3d = {
                 'confs': mean_classes,
+                'area_score': area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
                 'translation': mean_center
@@ -1149,7 +1169,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
                     center[2]
                 ], dtype=np.float32))
                 l, w, h = element['size']
-                radius = max(l, w)  # l, w should be the same
+                radius = 0.5 * max(l, w)  # l, w should be the same
                 radii.append(radius)
                 heights.append(h)
                 # get class and attr index
@@ -1169,7 +1189,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
             num_attr_channels = 0
         seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
         cen_im = np.zeros((1, X, Y), dtype=np.float32)
-        reg_im = np.zeros((10, X, Y), dtype=np.float32)
+        reg_im = np.zeros((8, X, Y), dtype=np.float32)
         for unit_zvec, center, radius, height, class_ind, attr_list in zip(
             unit_zvecs, centers, radii, heights, class_inds, attr_lists
         ):
@@ -1211,7 +1231,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
         zvec_vertical = np.array([0, zvec[2], -zvec[1]])
         zvec_vertical /= np.linalg.norm(zvec_vertical)
         return all([
-            np.linalg.norm(delta_ij * zvec_vertical) < 0.5 * sizes[0],
+            np.linalg.norm(delta_ij * zvec_vertical) < sizes[0],
             np.linalg.norm(delta_ij * zvec) < 0.5 * sizes[1]
         ])
 
@@ -1238,6 +1258,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
                             kept_inds.append(j)
                             grouped_inds.append(j)
         ## get mean bbox in group
+        _, _, fx, fy = self.bev_intrinsics
         pred_cylinders = []
         for group in kept_groups:
             # use score weighted mean
@@ -1246,11 +1267,16 @@ class PlanarCylinder3D(PlanarTensorSmith):
             # get mean_unit_zvec
             mean_unit_zvec = (unit_zvecs[:, group] * scores[group][None]).sum(1) / score_sum
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get area score
+            mean_count = seg_classes[0, group].sum()
+            mean_area = mean_size[0] * mean_size[0] * fx * fy * min(ratio ** 2, 1) * np.pi
+            area_score = mean_count / mean_area
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[1]
             cylinder_3d = {
                 'confs': mean_classes,
+                'area_score': area_score,
                 'radius': mean_size[0],
                 'height': mean_size[1],
                 'zvec': mean_unit_zvec,
@@ -1401,7 +1427,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
                     center[2]
                 ], dtype=np.float32))
                 l, w, h = element['size']
-                radius = max(l, w)  # l, w should be the same
+                radius = 0.5 * max(l, w)  # l, w should be the same
                 radii.append(radius)
                 heights.append(h)
                 velocities.append(element['velocity'][:, 0])
@@ -1488,8 +1514,8 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
     @staticmethod
     def _is_in_cylinder3d(delta_ij, sizes, xvec, yvec, zvec):
         return all([
-            np.linalg.norm(delta_ij * xvec) < 0.5 * sizes[0],
-            np.linalg.norm(delta_ij * yvec) < 0.5 * sizes[0],
+            np.linalg.norm(delta_ij * xvec) < sizes[0],
+            np.linalg.norm(delta_ij * yvec) < sizes[0],
             np.linalg.norm(delta_ij * zvec) < 0.5 * sizes[1]
         ])
 
@@ -1518,6 +1544,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
                             kept_inds.append(j)
                             grouped_inds.append(j)
         ## get mean bbox in group
+        _, _, fx, fy = self.bev_intrinsics
         pred_cylinders = []
         for group in kept_groups:
             # use score weighted mean
@@ -1530,13 +1557,18 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             # rotation matrix
             mean_rmat = np.float32([unit_xvec, unit_yvec, mean_unit_zvec]).T
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get area score
+            mean_count = seg_classes[0, group].sum()
+            mean_area = mean_size[0] * mean_size[0] * fx * fy * min(ratio ** 2, 1) * np.pi
+            area_score = mean_count / mean_area
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[1]
             mean_velocity = (velocities[:, group] * scores[group][None]).sum(1) / score_sum
             cylinder_3d = {
                 'confs': mean_classes,
-                'size': mean_size[[0, 0, 1]],
+                'area_score': area_score,
+                'size': mean_size[[0, 0, 1]] * [2, 2, 1],
                 'rotation': mean_rmat,
                 'translation': mean_center,
                 'velocity': mean_velocity
@@ -2589,8 +2621,8 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
                     heights.append(None)
                 else:
                     heights.append(reg_pred[14][
-                        min(max(round(point[1]), 0), H), 
-                        min(max(round(point[0]), 0), W)
+                        min(max(round(point[1]), 0), H - 1), 
+                        min(max(round(point[0]), 0), W - 1)
                     ].mean())
             valid_heights = [height for height in heights if height is not None]
             if len(valid_heights) > 0:
