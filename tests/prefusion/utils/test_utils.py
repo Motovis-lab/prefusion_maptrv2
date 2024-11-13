@@ -2,10 +2,11 @@ import cv2
 import numpy as np
 from numpy.ma.testutils import assert_array_almost_equal
 import pytest
+import torch
 from copious.io.fs import mktmpdir
 from pypcd_imp import pypcd
 
-from prefusion.dataset.utils import read_pcd, make_seed, read_ego_mask, T4x4, get_reversed_mapping
+from prefusion.dataset.utils import read_pcd, make_seed, read_ego_mask, T4x4, get_reversed_mapping, unstack_batch_size
 
 
 @pytest.fixture
@@ -112,3 +113,37 @@ def test_get_reversed_mapping_3():
         "c1::attr1.True": "new_class_name1", 
         "c2::attr1.True": "new_class_name2", 
     }
+
+
+def test_unstack_batch_size_1():
+    batch_data = {"seg": torch.randn(2, 3, 24, 24), "reg": torch.randn(2, 4, 24, 24)}
+    unstacked_data = unstack_batch_size(batch_data)
+    assert_array_almost_equal(unstacked_data[0]["seg"], batch_data["seg"][0])
+    assert_array_almost_equal(unstacked_data[1]["seg"], batch_data["seg"][1])
+    assert_array_almost_equal(unstacked_data[0]["reg"], batch_data["reg"][0])
+    assert_array_almost_equal(unstacked_data[1]["reg"], batch_data["reg"][1])
+
+
+def test_unstack_batch_size_2():
+    batch_data = {"seg": torch.randn(1, 3, 24), "reg": torch.randn(1, 4, 24)}
+    unstacked_data = unstack_batch_size(batch_data)
+    assert_array_almost_equal(unstacked_data[0]["seg"], batch_data["seg"][0])
+    assert_array_almost_equal(unstacked_data[0]["reg"], batch_data["reg"][0])
+
+
+def test_unstack_batch_size_3():
+    batch_data = {"seg": torch.randn(2, 3), "reg": torch.randn(2, 4)}
+    unstacked_data = unstack_batch_size(batch_data)
+    assert_array_almost_equal(unstacked_data[0]["seg"], batch_data["seg"][0])
+    assert_array_almost_equal(unstacked_data[1]["seg"], batch_data["seg"][1])
+    assert_array_almost_equal(unstacked_data[0]["reg"], batch_data["reg"][0])
+    assert_array_almost_equal(unstacked_data[1]["reg"], batch_data["reg"][1])
+
+
+def test_unstack_batch_size_4():
+    with pytest.raises(AssertionError):
+        _ = unstack_batch_size(torch.randn(2, 3, 24, 24))
+    with pytest.raises(AssertionError):
+        _ = unstack_batch_size(torch.randn(2))
+    with pytest.raises(AssertionError):
+        _ = unstack_batch_size({"seg": torch.randn(6, 3, 24, 24), "reg": torch.randn(2, 4, 24, 24)})

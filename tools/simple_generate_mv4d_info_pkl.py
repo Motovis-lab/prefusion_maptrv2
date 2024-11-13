@@ -2,6 +2,7 @@ import argparse
 from typing import Dict, List, Tuple, Sequence, Any
 from pathlib import Path
 
+import pandas as pd
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from loguru import logger
@@ -105,7 +106,7 @@ def prepare_camera_mask(scene_root: Path) -> Dict:
 
 
 def prepare_depth_mode(scene_root: Path) -> Dict:
-    return {p.stem: "d" for p in (scene_root / "camera").iterdir()}
+    return {p.stem: "d" for p in (scene_root / "camera").iterdir() if not p.name.startswith(".")}
 
 
 def prepare_ego_poses(scene_root: Path) -> Dict[int, np.ndarray]:
@@ -142,9 +143,16 @@ def prepare_all_frame_infos(args, scene_root: Path, calib: dict) -> Dict:
 
 
 def read_common_ts(scene_root: Path) -> List[int]:
-    ts_info = read_json(scene_root / "4d_anno_infos" / "ts.json")
-    # TODO: should specify a list of sensors, the common ts will be the intersection of timestamps of these sensors
-    return [int(i["lidar"]) for i in ts_info]
+    try:
+        ts_info = read_json(scene_root / "4d_anno_infos" / "ts.json")
+        return [int(i["lidar"]) for i in ts_info]
+    except FileNotFoundError:
+        ts_info = read_json(scene_root / "4d_anno_infos" / "ts_full.json")
+        df = pd.DataFrame.from_records(ts_info)
+        hpr_cols = [c for c in df.columns if c.startswith('hpr_')]
+        camera_cols = [c for c in df.columns if c.startswith('camera')]
+        valid_ts = df[['lidar'] + hpr_cols + camera_cols].isnull().sum(axis=1) == 0
+        return df['lidar'][valid_ts].values.astype(int).tolist()
 
 
 def prepare_camera_image_paths(scene_root: Path, ts: int, calib: dict) -> Dict[str, str]:
@@ -169,25 +177,10 @@ def prepare_object_info(scene_root: Path, ts: int) -> Tuple[List[dict], List[dic
 
 
 def transform_velocity_to_ego_(boxes: List[Dict], ego_pose: Dict[str, np.ndarray]) -> None:
+    """box velo from upstream is assumed to be direction-vector in the world sys, so we need to transform it to ego sys"""
     rot_world_to_ego = np.linalg.inv(ego_pose["rotation"])
     for bx in boxes:
         bx["velocity"] = (bx["velocity"][None] @ rot_world_to_ego.T)[0]
-
-
-############################################################################################################################################
-# TODO: put rearrange_object_class_attr_ and unify_longer_shorter_edge_definition_ to Bbox3DLoader, and use config to control the behavior
-# rearrange_object_class_attr_:
-#   attr_translate = {
-#       "attr.traffic_facility.box.type",
-#       "attr.traffic_facility.soft_barrier.type",
-#       "attr.traffic_facility.hard_barrier.type"
-#       "attr.parking.indoor_column.shape"
-#   }
-#
-# unify_longer_shorter_edge_definition_:
-#     standard direction: X-axis perpendicular to the longer edge
-#     steps: check if X-axis not perpendicular to the longer edge, if yes, rotate the box (RotMat) by 90 deg, and switch scale[0] and scale[1]
-############################################################################################################################################
 
 
 def convert_box3d_format(box_info: Dict):

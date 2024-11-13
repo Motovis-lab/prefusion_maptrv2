@@ -39,8 +39,11 @@ RUN apt-get update \
    && apt-get clean \
    && rm -rf /var/lib/apt/lists/*
 
+# install pytorch3d
+RUN pip install --no-cache-dir --extra-index-url https://miropsota.github.io/torch_packages_builder pytorch3d==0.7.8+pt2.4.1cu121
+
 # install extra python packages
-RUN pip install --no-cache-dir copious==0.1.22
+RUN pip install --no-cache-dir copious==0.1.23
 
 WORKDIR /workspace
 

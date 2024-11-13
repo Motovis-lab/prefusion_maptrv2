@@ -12,7 +12,7 @@ def seg_iou(pred, label, dim=None):
     shape in (N, C, H, W) or (N, H, W) or (H, W)
     """
     if label.max() == 0:
-        return seg_iou(1 - pred, 1 - label)
+        return seg_iou(1 - pred, 1 - label, dim=dim)
     inter = (pred * label).sum(dim=dim) + 1
     union = (pred + label - pred * label).sum(dim=dim) + 1
     return inter / union

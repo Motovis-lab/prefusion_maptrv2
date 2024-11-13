@@ -104,6 +104,27 @@ class CameraImageSetLoader(TransformableLoader):
 
 
 @TRANSFORMABLE_LOADERS.register_module()
+class NuscenesCameraImageSetLoader(TransformableLoader):
+    def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraImageSet:
+        scene_info = scene_data["scene_info"]
+        frame_info = scene_data["frame_info"][index_info.frame_id]
+        camera_images = {
+            cam_id: CameraImage(
+                name=f"{name}:{cam_id}",
+                cam_id=cam_id,
+                cam_type=frame_info["camera_image"][cam_id]["calibration"]["camera_type"],
+                img=mmcv.imread(self.data_root / frame_info["camera_image"][cam_id]["path"]),
+                ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id]),
+                extrinsic=frame_info["camera_image"][cam_id]["calibration"]["extrinsic"],
+                intrinsic=frame_info["camera_image"][cam_id]["calibration"]["intrinsic"],
+                tensor_smith=tensor_smith,
+            )
+            for cam_id in frame_info["camera_image"]
+        }
+        return CameraImageSet(name, camera_images)
+
+
+@TRANSFORMABLE_LOADERS.register_module()
 class CameraDepthSetLoader(TransformableLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraDepthSet:
         scene_info = scene_data["scene_info"]
