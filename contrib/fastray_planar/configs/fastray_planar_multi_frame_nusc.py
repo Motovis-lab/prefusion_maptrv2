@@ -404,6 +404,8 @@ env_cfg = dict(
     dist_cfg=dict(backend='nccl'),
 )
 
+visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"), dict(type="TensorboardVisBackend")])
+
 import datetime
 today = datetime.datetime.now().strftime("%m%d")
 
@@ -412,8 +414,8 @@ today = datetime.datetime.now().strftime("%m%d")
 # work_dir = "./work_dirs/fastray_planar_multi_frame_1112"
 # work_dir = "./work_dirs/fastray_planar_multi_frame_1112"
 work_dir = f'./work_dirs/{experiment_name}_{today}'
-# load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
 # load_from = "./ckpts/fastray_planar_single_frame_nusc_4planar_types_1113_epoch_1.pth"
+load_from = "./ckpts/vovnet_seg_pretrain_epoch_24.pth"
 
 resume = False
