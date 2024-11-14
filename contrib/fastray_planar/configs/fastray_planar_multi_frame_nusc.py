@@ -94,8 +94,8 @@ if debug_mode:
     possible_group_sizes = 20
     persistent_workers = False
 else:
-    batch_size = 8
-    num_workers = 0
+    batch_size = 12
+    num_workers = 8
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
@@ -106,7 +106,7 @@ else:
         dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
     possible_group_sizes = 2
-    persistent_workers = False
+    persistent_workers = True
 
 ## Transformables
 transformables = dict(
@@ -325,18 +325,22 @@ bbox_3d_rect_cuboid_weight_scheme = dict(
 loss_cfg = dict(
     bbox_3d=dict(
         type='PlanarLoss',
+        seg_iou_method='linear',
         loss_name_prefix='bbox_3d',
         weight_scheme=bbox_3d_weight_scheme),
     bbox_3d_cylinder=dict(
         type='PlanarLoss',
+        seg_iou_method='linear',
         loss_name_prefix='bbox_3d_cylinder',
         weight_scheme=bbox_3d_cylinder_weight_scheme),
     bbox_3d_oriented_cylinder=dict(
         type='PlanarLoss',
+        seg_iou_method='linear',
         loss_name_prefix='bbox_3d_oriented_cylinder',
         weight_scheme=bbox_3d_oriented_cylinder_weight_scheme),
     bbox_3d_rect_cuboid=dict(
         type='PlanarLoss',
+        seg_iou_method='linear',
         loss_name_prefix='bbox_3d_rect_cuboid',
         weight_scheme=bbox_3d_rect_cuboid_weight_scheme),
 )
