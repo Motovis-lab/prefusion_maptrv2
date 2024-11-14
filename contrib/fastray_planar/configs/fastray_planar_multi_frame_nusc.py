@@ -2,7 +2,7 @@ default_scope = "prefusion"
 experiment_name = "fastray_planar_multi_frame_nusc"
 
 custom_imports = dict(
-    imports=["prefusion", "contrib.fastray_planar"], 
+    imports=["prefusion", "contrib.fastray_planar"],
     allow_failed_imports=False)
 
 
@@ -28,7 +28,7 @@ voxel_range = ([-3, 5], [50, -50], [50, -50])
 # voxel_range = ([-0.5, 2.5], [30, -12], [12, -12])
 
 voxel_feature_config = dict(
-    voxel_shape=voxel_shape, 
+    voxel_shape=voxel_shape,
     voxel_range=voxel_range,
     ego_distance_max=75,  # 50 * sqrt(2)
     ego_distance_step=5)
@@ -71,12 +71,12 @@ camera_resolution_configs=dict(
 #     new_cy = cy_if_no_crop - top_to_crop
 #     print((f"{cam_name}=" + "{:.3f}, " * 4).format(new_cx, new_cy, new_fx, new_fy))
 camera_intrinsic_configs = dict(
-    CAM_FRONT=[359.157, 76.263, 557.224, 557.224], 
-    CAM_FRONT_RIGHT=[355.506, 77.947, 554.773, 554.773], 
-    CAM_BACK_RIGHT=[355.191, 80.526, 554.186, 554.186], 
-    CAM_BACK=[364.857, 71.983, 356.057, 356.057], 
-    CAM_BACK_LEFT=[348.530, 76.821, 552.966, 552.966], 
-    CAM_FRONT_LEFT=[363.711, 71.091, 559.943, 559.943], 
+    CAM_FRONT=[359.157, 76.263, 557.224, 557.224],
+    CAM_FRONT_RIGHT=[355.506, 77.947, 554.773, 554.773],
+    CAM_BACK_RIGHT=[355.191, 80.526, 554.186, 554.186],
+    CAM_BACK=[364.857, 71.983, 356.057, 356.057],
+    CAM_BACK_LEFT=[348.530, 76.821, 552.966, 552.966],
+    CAM_FRONT_LEFT=[363.711, 71.091, 559.943, 559.943],
 )
 
 
@@ -87,15 +87,15 @@ if debug_mode:
     batch_size = 1
     num_workers = 0
     transforms = [
-        dict(type='RenderIntrinsic', 
+        dict(type='RenderIntrinsic',
              resolutions=camera_resolution_configs,
              intrinsics=camera_intrinsic_configs)
     ]
     possible_group_sizes = 20
     persistent_workers = False
 else:
-    batch_size = 12
-    num_workers = 8
+    batch_size = 8
+    num_workers = 4
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
@@ -197,7 +197,7 @@ val_dataset = dict(
     ),
     transformables=transformables,
     transforms=[
-        dict(type='RenderIntrinsic', 
+        dict(type='RenderIntrinsic',
              resolutions=camera_resolution_configs,
              intrinsics=camera_intrinsic_configs)
     ],
@@ -261,8 +261,8 @@ voxel_fusion = dict(
 
 # heads
 heads = dict(
-    voxel_encoder=dict(type='VoVNetEncoder', 
-                       in_channels=camera_feat_channels * voxel_shape[0], 
+    voxel_encoder=dict(type='VoVNetEncoder',
+                       in_channels=camera_feat_channels * voxel_shape[0],
                        mid_channels=128,
                        out_channels=128,
                        repeat=3),
@@ -271,9 +271,9 @@ heads = dict(
                  mid_channels=128,
                  cen_seg_channels=sum([
                     # cen: 0
-                    1, 
+                    1,
                     # seg: slice(1, 9)
-                    1 + len(train_dataset["transformables"]["bbox_3d"]["loader"]["class_mapping"]), # 
+                    1 + len(train_dataset["transformables"]["bbox_3d"]["loader"]["class_mapping"]), #
                     # cen: 9
                     1,
                     # seg: slice(10, 12)
@@ -377,7 +377,7 @@ val_cfg = dict(type="GroupBatchValLoop")
 val_evaluator = [
     dict(type="PlanarSegIou"),
     # dict(
-    #     type="PlanarBbox3DAveragePrecision", 
+    #     type="PlanarBbox3DAveragePrecision",
     #     transformable_name="bbox_3d" ,
     #     tensor_smith_cfg=val_dataset['transformables']['bbox_3d']['tensor_smith'],
     #     dictionary={"classes": ['class.vehicle.passenger_car']},
@@ -387,9 +387,9 @@ val_evaluator = [
 
 ## optimizer configs
 optim_wrapper = dict(
-    type='OptimWrapper', 
-    optimizer=dict(type='SGD', 
-                lr=0.01 * 0.5, 
+    type='OptimWrapper',
+    optimizer=dict(type='SGD',
+                lr=0.01 * 0.5,
                 momentum=0.9,
                 weight_decay=0.0001)
 )
@@ -414,6 +414,6 @@ today = datetime.datetime.now().strftime("%m%d")
 work_dir = f'./work_dirs/{experiment_name}_{today}'
 # load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
-load_from = "./ckpts/fastray_planar_single_frame_nusc_4planar_types_1113_epoch_1.pth"
+# load_from = "./ckpts/fastray_planar_single_frame_nusc_4planar_types_1113_epoch_1.pth"
 
 resume = False
