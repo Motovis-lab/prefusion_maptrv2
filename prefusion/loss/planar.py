@@ -25,7 +25,13 @@ class PlanarLoss(nn.Module):
     reduction_dim: Union[Tuple, List] = (0, 2, 3)
 
     def __init__(
-        self, *args, loss_name_prefix: str = None, weight_scheme: Dict[str, Dict] = None, auto_loss_init_value: float = 1e-5, **kwargs
+        self,
+        *args,
+        loss_name_prefix: str = None,
+        seg_iou_method: str = "log",
+        weight_scheme: Dict[str, Dict] = None,
+        auto_loss_init_value: float = 1e-5,
+        **kwargs,
     ) -> None:
         """Specially designed loss for planar data.
 
@@ -33,6 +39,9 @@ class PlanarLoss(nn.Module):
         ----------
         loss_name_prefix : str
             the name prefix of the loss (used to distinguish between different losses)
+
+        seg_iou_method : str
+            the method to use in the calculation of SegIOU Loss. Valid choices are ['log', 'linear']
 
         weight_scheme : dict, optional
             the weight scheme for different losses, e.g. seg, cen, reg
@@ -81,7 +90,7 @@ class PlanarLoss(nn.Module):
         self.total_loss_name = complete_loss_name(self.loss_name_prefix)
         self.weight_scheme = edict(weight_scheme)
         self.auto_loss_init_value = float(auto_loss_init_value)
-        self.iou_loss = SegIouLoss(pred_logits=True, reduction_dim=self.reduction_dim)
+        self.iou_loss = SegIouLoss(method=seg_iou_method, pred_logits=True, reduction_dim=self.reduction_dim)
         self.init_auto_loss_weight_(self.weight_scheme)
         self.unify_reg_partition_weights_()
 
@@ -100,7 +109,7 @@ class PlanarLoss(nn.Module):
         """Unify single value index to standard 2-value slice"""
         if "reg" not in self.weight_scheme or "partition_weights" not in self.weight_scheme["reg"]:
             return
-        
+
         for partition_name, partition_info in self.weight_scheme.reg.partition_weights.items():
             try:
                 _slice = slice(*partition_info.slice)
@@ -208,11 +217,13 @@ class PlanarLoss(nn.Module):
         **kwargs,
     ):
         if partition_weights is None:
-            partition_weights = edict({f"{c}": {"weight": 1.0, "slice": slice(c, c + 1)} for c in range(label.shape[1])})
+            partition_weights = edict(
+                {f"{c}": {"weight": 1.0, "slice": slice(c, c + 1)} for c in range(label.shape[1])}
+            )
 
         assert list(range(pred.shape[1])) == self.enumerate_slices(
             [p.slice for p in partition_weights.values()]
-        ), "partition weight slices doesn't meet MECE principle."
+        ), f"partition weight slices doesn't meet MECE principle. ({label.shape[1]=}, {pred.shape[1]=})"
         loss_dict = {}
         L = partial(complete_loss_name, self.loss_name_prefix)
         mask_sum = max(fg_mask.sum(), 1e-4)  # fg_mask is assumed to be from label (gt), so no need to worry about backward
