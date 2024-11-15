@@ -74,7 +74,7 @@ python tools/create_virtual_camera.py \
     --real-camera-type FisheyeCamera \
     --real-camera-ego-mask ${scene_root}/self_mask/camera/camera2.png \
     --real-camera-image-dir ${scene_root}/camera/camera2 \
-    --rotation-euler-angles -90 0 40 \
+    --rotation-euler-angles -90 0 45 \
     --virtual-camera-id VCAMERA_PERSPECTIVE_FRONT_LEFT \
     --virtual-camera-type PerspectiveCamera \
     --virtual-camera-size 512 320 \
@@ -90,7 +90,7 @@ python tools/create_virtual_camera.py \
     --real-camera-type FisheyeCamera \
     --real-camera-ego-mask ${scene_root}/self_mask/camera/camera4.png \
     --real-camera-image-dir ${scene_root}/camera/camera4 \
-    --rotation-euler-angles -90 0 -40 \
+    --rotation-euler-angles -90 0 -45 \
     --virtual-camera-id VCAMERA_PERSPECTIVE_FRONT_RIGHT \
     --virtual-camera-type PerspectiveCamera \
     --virtual-camera-size 512 320 \

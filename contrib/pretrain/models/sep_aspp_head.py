@@ -5,13 +5,50 @@ from prefusion.registry import MODELS
 from mmseg.models.utils import resize
 from .accuracy import accuracy
 from torch import nn as nn
+import torch
 
 
 __all__ = ['DepthwiseSeparableASPPHead_v2']
 
 @MODELS.register_module()
 class DepthwiseSeparableASPPHead_v2(DepthwiseSeparableASPPHead):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        if isinstance(kwargs['loss_decode'], dict):
+            self.loss_decode = MODELS.build(kwargs['loss_decode'])
+        elif isinstance(kwargs['loss_decode'], (list, tuple)):
+            self.loss_decode = nn.ModuleList()
+            for loss in kwargs['loss_decode']:
+                self.loss_decode.append(MODELS.build(loss))
     
+    def forward(self, inputs):
+        """Forward function."""
+        if isinstance(inputs, torch.Tensor):
+            inputs = [inputs]
+        x = self._transform_inputs(inputs)
+        aspp_outs = [
+            resize(
+                self.image_pool(x),
+                size=x.size()[2:],
+                mode='bilinear',
+                align_corners=self.align_corners)
+        ]
+        aspp_outs.extend(self.aspp_modules(x))
+        aspp_outs = torch.cat(aspp_outs, dim=1)
+        output = self.bottleneck(aspp_outs)
+        if self.c1_bottleneck is not None:
+            c1_output = self.c1_bottleneck(inputs[0])
+            output = resize(
+                input=output,
+                size=c1_output.shape[2:],
+                mode='bilinear',
+                align_corners=self.align_corners)
+            output = torch.cat([output, c1_output], dim=1)
+        output = self.sep_bottleneck(output)
+        output = self.cls_seg(output)
+        return output
+    
+
     def loss_by_feat(self, seg_logits: Tensor,
                      batch_data_samples: SampleList) -> dict:
         """Compute segmentation loss.
@@ -57,6 +94,6 @@ class DepthwiseSeparableASPPHead_v2(DepthwiseSeparableASPPHead):
                     weight=seg_weight,
                     ignore_index=self.ignore_index)
 
-        loss['acc_seg'] = accuracy(
-            seg_logits, seg_label, ignore_index=self.ignore_index)
+        # loss['acc_seg'] = accuracy(
+        #     seg_logits, seg_label, ignore_index=self.ignore_index)
         return loss
