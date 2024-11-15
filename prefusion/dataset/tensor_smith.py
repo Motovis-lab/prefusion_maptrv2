@@ -917,7 +917,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
             num_attr_channels = 0
         seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
         cen_im = np.zeros((1, X, Y), dtype=np.float32)
-        reg_im = np.zeros((20, X, Y), dtype=np.float32)
+        reg_im = np.zeros((11, X, Y), dtype=np.float32)
         for unit_xvec, unit_zvec, points_bev, center, size, class_ind, attr_list in zip(
             unit_xvecs, unit_zvecs, all_points_bev, centers, box_sizes, class_inds, attr_lists
         ):
@@ -2710,6 +2710,3 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
             mean_slots_3d.append(np.float32(mean_slot_3d))
         
         return mean_slots_3d
-            
-                
-
