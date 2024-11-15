@@ -2,7 +2,7 @@ from mmengine.model import BaseModel, BaseModule
 from torch.nn.modules import Module
 from prefusion.registry import MODELS
 import torch.nn as nn
-from contrib.fastray_planar.models_base import EltwiseAdd, ConvBN, OSABlock
+from contrib.fastray_planar.modules import EltwiseAdd, ConvBN, OSABlock
 import torch
 from mmseg.models.utils import resize
 import torch.nn.functional as F

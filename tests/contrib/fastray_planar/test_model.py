@@ -1,6 +1,6 @@
 import torch
 
-from contrib.fastray_planar.model import (
+from contrib.fastray_planar.models_base import (
     VoxelTemporalAlign,
     FastRaySpatialTransform,
 )
