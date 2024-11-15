@@ -33,7 +33,10 @@ def parse_arguments():
     parser.add_argument("--nusc-version", default="v1.0-mini")
     parser.add_argument("--nusc-data-root", type=Path, required=True)
     parser.add_argument("--info-pkl-save-dir", type=ensured_path, required=True)
-    parser.add_argument("--info-pkl-filename-prefix", default="nusc_")
+    parser.add_argument("--info-pkl-filename-prefix", default="nusc")
+    parser.add_argument("--train-scenes", nargs="*", default=splits.train)
+    parser.add_argument("--val-scenes", nargs="*", default=splits.val)
+    parser.add_argument("--test-scenes", nargs="*", default=splits.test)
     return edict({k: v for k, v in parser.parse_args()._get_kwargs()})
 
 
@@ -42,30 +45,57 @@ args = parse_arguments()
 
 def main():
     nusc = NuScenes(version=args.nusc_version, dataroot=args.nusc_data_root, verbose=True)
-    # train_scene_list = ["scene-0001", "scene-0004"]  # TODO: to replace with splits.train
-    # val_scene_list = ["scene-0003"]
-    train_scene_list = splits.train
-    val_scene_list = splits.val
-    train_infos = generate_info_pkl(nusc, train_scene_list)
-    val_infos = generate_info_pkl(nusc, val_scene_list)
-    save_pickle(train_infos, args.info_pkl_save_dir / f"{args.info_pkl_filename_prefix}train_info.pkl")
-    save_pickle(val_infos, args.info_pkl_save_dir / f"{args.info_pkl_filename_prefix}val_info.pkl")
+    nusc_map = load_map_info(nusc)
+    if args.nusc_version == "v1.0-test":
+        test_infos = generate_info_pkl(nusc, nusc_map["test"], args.test_scenes)
+        save_pickle(test_infos, args.info_pkl_save_dir / f"{args.info_pkl_filename_prefix}_test_info.pkl")
+    elif args.nusc_version == "v1.0-trainval":
+        train_infos = generate_info_pkl(nusc, nusc_map["train"], args.train_scenes)
+        val_infos = generate_info_pkl(nusc, nusc_map["val"], args.val_scenes)
+        save_pickle(train_infos, args.info_pkl_save_dir / f"{args.info_pkl_filename_prefix}_train_info.pkl")
+        save_pickle(val_infos, args.info_pkl_save_dir / f"{args.info_pkl_filename_prefix}_val_info.pkl")
 
 
-def generate_info_pkl(nusc, scenes):
+def load_map_info(nusc: NuScenes):
+    nusc_map = defaultdict(lambda: defaultdict(dict))
+    phases = ["train", "val", "test"]
+    for ph in phases:
+        filepath = args.nusc_data_root / f"nuscenes_map_infos_temporal_{ph}.pkl"
+        map_info = read_info_pkl(filepath)
+        for frame in map_info["infos"]:
+            if frame["scene_token"] not in nusc._token2ind['scene']:
+                continue
+            scene_id = nusc.get("scene", frame["scene_token"])["name"]
+            nusc_map[ph][scene_id][frame["timestamp"]] = frame["annotation"]
+    logger.info(f"Number of scenes loaded from map-info: {[(k, len(m)) for k, m in nusc_map.items()]}")
+    return nusc_map
+
+
+def read_info_pkl(filepath: Path):
+    try:
+        with open(filepath, "rb") as f:
+            return pickle.load(f)
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            f"Can't find {filepath.name} in {args.nusc_data_root}. "
+            f"Please prepare map pkl into {args.nusc_data_root} by running MapTRv2 script custom_nusc_map_converter.py"
+        )
+
+
+def generate_info_pkl(nusc: NuScenes, nusc_map, scenes):
     infos = {}
     for scene in tqdm(nusc.scene):
         if scene["name"] not in scenes:
             continue
-        infos[scene["name"]] = build_scene(nusc, scene["first_sample_token"])
+        infos[scene["name"]] = build_scene(nusc, nusc_map, scene["first_sample_token"])
     return infos
 
 
-def build_scene(nusc, first_sample_token):
+def build_scene(nusc: NuScenes, nusc_map, first_sample_token):
     return dict(
         scene_info=build_scene_info(),
         meta_info=build_meta_info(),
-        frame_info=build_frame_info(nusc, first_sample_token),
+        frame_info=build_frame_info(nusc, nusc_map, first_sample_token),
     )
 
 
@@ -89,7 +119,7 @@ def build_meta_info() -> Dict:
     }
 
 
-def build_frame_info(nusc, first_sample_token) -> Dict:
+def build_frame_info(nusc: NuScenes, nusc_map, first_sample_token) -> Dict:
     cur_sample = nusc.get("sample", first_sample_token)
     frame_info = defaultdict(lambda: defaultdict(dict))
 
@@ -101,6 +131,7 @@ def build_frame_info(nusc, first_sample_token) -> Dict:
             frame_info[ts]["camera_image"][cam_name] = build_camera_image(nusc, cur_sample, cam_name, lidar_ego_pose)
 
         frame_info[ts]["3d_boxes"] = build_3d_boxes(nusc, cur_sample, lidar_ego_pose)
+        frame_info[ts]["3d_polylines"] = build_3d_polylines(nusc, nusc_map, cur_sample, lidar_ego_pose)
         frame_info[ts]["ego_pose"] = lidar_ego_pose
         frame_info[ts]["timestamp_window"] = [None]
 
@@ -123,7 +154,7 @@ def build_camera_calibration(nusc_calibrated_sensor: Dict):
     return calib
 
 
-def build_ego_pose(nusc, cur_sample):
+def build_ego_pose(nusc: NuScenes, cur_sample):
     lidar_info = nusc.get("sample_data", cur_sample["data"]["LIDAR_TOP"])
     ego_pose = nusc.get("ego_pose", lidar_info["ego_pose_token"])
     rot_quat = np.array(ego_pose["rotation"])[[1, 2, 3, 0]]
@@ -138,7 +169,7 @@ def build_depth_mode(cam_name: str) -> str:
     return "d"
 
 
-def build_camera_image(nusc, cur_sample, cam_name, lidar_ego_pose: Dict) -> Path:
+def build_camera_image(nusc: NuScenes, cur_sample, cam_name, lidar_ego_pose: Dict) -> Path:
     """Build camera Image
 
     Parameters
@@ -212,7 +243,7 @@ def get_extrinsic_wrt_lidar_ego_pose_of_sync_ts(cam_calib, cam_ego_pose, lidar_e
     return (T_e2_c[:3, :3], T_e2_c[:3, 3])
 
 
-def build_3d_boxes(nusc, cur_sample, lidar_ego_pose):
+def build_3d_boxes(nusc: NuScenes, cur_sample, lidar_ego_pose):
     if "anns" not in cur_sample:
         return []
 
@@ -248,6 +279,27 @@ def build_3d_boxes(nusc, cur_sample, lidar_ego_pose):
         )
     return annos
 
+
+def build_3d_polylines(nusc: NuScenes, nusc_map: Dict[str, Dict[str, dict]], cur_sample, lidar_ego_pose):
+    scene_id = nusc.get("scene", cur_sample["scene_token"])["name"]
+    timestamp = cur_sample["timestamp"]
+    map_data = nusc_map[scene_id]
+    frame = map_data.get(timestamp)
+    if frame:
+        elements = []
+        for data_type, vertices_list in frame.items():
+            if data_type == "centerline":
+                continue
+            
+            for i, vertices in enumerate(vertices_list):
+                ele = {
+                    "class": data_type,
+                    "attr": {},
+                    "points": np.concatenate((vertices, np.zeros((len(vertices), 1))), axis=1),
+                    "track_id": f"{cur_sample['token']}-{data_type}-{i}",
+                }
+            
+            elements.append(ele)
 
 def save_pickle(data, save_path):
     with open(save_path, "wb") as f:
