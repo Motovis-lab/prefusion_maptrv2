@@ -292,14 +292,16 @@ def build_3d_polylines(nusc: NuScenes, nusc_map: Dict[str, Dict[str, dict]], cur
                 continue
             
             for i, vertices in enumerate(vertices_list):
+                rotated_vertices = vertices @ np.array([[0, 1], [-1, 0]]).T # 不知道为啥，这里要旋转一个 90度 结果看起来才正确
                 ele = {
                     "class": data_type,
                     "attr": {},
-                    "points": np.concatenate((vertices, np.zeros((len(vertices), 1))), axis=1),
+                    "points": np.concatenate((rotated_vertices, np.zeros((len(rotated_vertices), 1))), axis=1),
                     "track_id": f"{cur_sample['token']}-{data_type}-{i}",
                 }
             
             elements.append(ele)
+    return elements
 
 def save_pickle(data, save_path):
     with open(save_path, "wb") as f:
