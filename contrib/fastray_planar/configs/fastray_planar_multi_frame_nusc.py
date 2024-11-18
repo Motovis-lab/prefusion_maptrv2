@@ -233,9 +233,13 @@ bev_mode = True
 # backbones
 camera_feat_channels = 128
 backbones = dict(
-    pv_front=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels),
-    pv_sides=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels),
-    fisheyes=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels))
+    pv_sides=dict(
+        type='VoVNetFPN', 
+        out_stride=8, 
+        out_channels=camera_feat_channels, 
+        init_cfg=dict(type="Pretrained", checkpoint="./ckpts/vovnet_seg_pretrain_backbone_epoch_24.pth")
+    )
+)
 # spatial_transform
 spatial_transform = dict(
     type='FastRaySpatialTransform',
@@ -395,7 +399,7 @@ optim_wrapper = dict(
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[6, 9, 11])
+param_scheduler = dict(type='MultiStepLR', milestones=[5, 8, 10])
 
 
 env_cfg = dict(
@@ -416,6 +420,6 @@ today = datetime.datetime.now().strftime("%m%d")
 work_dir = f'./work_dirs/{experiment_name}_{today}'
 # load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
 # load_from = "./ckpts/fastray_planar_single_frame_nusc_4planar_types_1113_epoch_1.pth"
-load_from = "./ckpts/vovnet_seg_pretrain_epoch_24.pth"
+# load_from = "./ckpts/vovnet_seg_pretrain_epoch_24.pth"
 
 resume = False
