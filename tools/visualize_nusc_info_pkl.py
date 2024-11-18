@@ -42,8 +42,8 @@ def main():
     plot_bbox_bev(data, ensured_path(args.result_save_dir / "bbox_bev"))
     plot_bbox_2d(data, ensured_path(args.result_save_dir / "bbox_2d"))
     plot_bbox_velo(data, ensured_path(args.result_save_dir / "bbox_velo"))
-    # plot_polyline_bev(data, ensured_path(args.result_save_dir / "polyline_bev"))
-    # plot_polyline_2d(data, ensured_path(args.result_save_dir / "polyline_2d"))
+    plot_polyline_bev(data, ensured_path(args.result_save_dir / "polyline_bev"))
+    plot_polyline_2d(data, ensured_path(args.result_save_dir / "polyline_2d"))
 
 
 def _draw_rect(p0, p1, p5, p4, linewidth=1, color="r", alpha=1):
@@ -298,7 +298,7 @@ def check_im_coords_visibility_on_image(im_coords, im_size, conservative=True):
 
 def plot_bbox_bev(data, save_dir):
     data_args = [ (frame_info["3d_boxes"], frame_info["ego_pose"], save_dir / f"{frame_id}.png") for frame_id, frame_info in tqdm(data["frame_info"].items()) ]
-    maybe_multiprocessing(_plot_bbox_bev_of_single_frame, data_args, num_processes=args.num_workers, use_tqdm=True, tqdm_desc="plotting bbox")
+    maybe_multiprocessing(_plot_bbox_bev_of_single_frame, data_args, num_processes=args.num_workers, use_tqdm=True, tqdm_desc="plotting bbox bev")
 
 
 def plot_bbox_velo(data, save_dir):
@@ -325,15 +325,16 @@ def plot_bbox_2d(data, save_dir):
 
 def plot_polyline_bev(data, save_dir):
     data_args = [ (frame_info["3d_polylines"], frame_info["ego_pose"], save_dir / f"{frame_id}.png") for frame_id, frame_info in tqdm(data["frame_info"].items()) ]
-    maybe_multiprocessing(_plot_polyline_bev_of_single_frame, data_args, num_processes=args.num_workers, use_tqdm=True, tqdm_desc="plotting bbox")
+    maybe_multiprocessing(_plot_polyline_bev_of_single_frame, data_args, num_processes=args.num_workers, use_tqdm=True, tqdm_desc="plotting polyline bev")
 
 
 def plot_polyline_2d(data, save_dir):
-    calib = data["scene_info"]["calibration"]
     data_args = []
     for frame_id, frame_info in tqdm(data["frame_info"].items()):
-        for cam_id, im_rel_path in frame_info["camera_image"].items():
-            data_args.append( ( frame_info["3d_polylines"], calib[cam_id], args.data_root / im_rel_path, ensured_path(save_dir / cam_id) / f"{frame_id}.jpg", ) )
+        for cam_id, frame_cam_data in frame_info["camera_image"].items():
+            calib = frame_cam_data["calibration"]
+            im_rel_path = frame_cam_data["path"]
+            data_args.append( ( frame_info["3d_polylines"], calib, args.data_root / im_rel_path, ensured_path(save_dir / cam_id) / f"{frame_id}.jpg", ) )
     maybe_multiprocessing(_plot_polyline_2d_of_single_frame, data_args, num_processes=args.num_workers, use_tqdm=True, tqdm_desc="plotting polyline 2d")
 
 
