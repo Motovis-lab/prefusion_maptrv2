@@ -14,6 +14,8 @@ from mmengine.dataset.sampler import DefaultSampler
 from mmseg.models import FCNHead
 from mmseg.models.decode_heads import decode_head
 from mmseg.models.data_preprocessor import SegDataPreProcessor
+from timm.models.vision_transformer import PatchEmbed, Block
+from timm.models.vision_transformer import VisionTransformer
 
 cfg = Config.fromfile("contrib/pretrain/configs/mv_4d_fastbev_pretrain.py")
 

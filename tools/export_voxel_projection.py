@@ -33,7 +33,7 @@ model.forward = model.pure_forward
 # tmp = torch.stack([out[0], out[6], out[12]], dim=0).cpu().numpy()
 # plt.imsave("work_dirs/vt_debug/fish_out.jpg", tmp.transpose(1,2,0))
 
-save_root = "./work_dirs/deploy/voxel_projection_conv_img_permute.onnx"
+save_root = "./work_dirs/deploy/voxel_projection_conv_64_permute_int.onnx"
 
 torch.onnx.export(model, (input_fish, input_pv, input_front), save_root, opset_version=11,  # input must be tuple type
         input_names = ['input_fish', 'input_pv', 'input_front'],

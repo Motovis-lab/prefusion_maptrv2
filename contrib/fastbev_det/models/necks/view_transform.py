@@ -103,7 +103,7 @@ class ProjectPlugin_v3(torch.autograd.Function):
         ProjectPlugin.output_size = tuple(output_size)
 
     @staticmethod
-    def symbolic(g, fish_input, pv_input, front_input, uu, vv, valid, density, length, outputsizeb_i=1, outputsizec_i=3*6, outputsizeh_i=240, outputsizew_i=120):
+    def symbolic(g, fish_input, pv_input, front_input, uu, vv, valid, density, length, outputsizeb_i=1, outputsizec_i=64*6, outputsizeh_i=240, outputsizew_i=120):
         
         return g.op("custom::CustomProject", fish_input, pv_input, front_input, uu, vv, valid, density, voxelnum_i=length, outputsizeb_i=outputsizeb_i, outputsizec_i=outputsizec_i, outputsizeh_i=outputsizeh_i, outputsizew_i=outputsizew_i)
 
@@ -222,10 +222,10 @@ class VoxelProjection(nn.Module):
         self.front_valid = torch.from_numpy(np.load("work_dirs/vt_debug/front_valid_map.npy")).to(torch.float32)
         self.front_norm_density_map = torch.from_numpy(np.load("work_dirs/vt_debug/front_norm_density_map.npy")).to(torch.float32)
         
-        self.uu = torch.concat([self.fish_uu, self.pv_uu, self.front_uu], dim=0)
-        self.vv = torch.concat([self.fish_vv, self.pv_vv, self.front_vv], dim=0)
-        self.valid = torch.concat([self.fish_valid, self.pv_valid, self.front_valid], dim=0)
-        self.norm_density_map = torch.concat([self.fish_norm_density_map, self.pv_norm_density_map, self.front_norm_density_map], dim=0)
+        self.uu = torch.concat([self.fish_uu, self.pv_uu, self.front_uu], dim=0).to(torch.int32).requires_grad_(False)
+        self.vv = torch.concat([self.fish_vv, self.pv_vv, self.front_vv], dim=0).to(torch.int32).requires_grad_(False)
+        self.valid = torch.concat([self.fish_valid, self.pv_valid, self.front_valid], dim=0).to(torch.int32).requires_grad_(False)
+        self.norm_density_map = torch.concat([self.fish_norm_density_map, self.pv_norm_density_map, self.front_norm_density_map], dim=0).requires_grad_(False)
 
     def forward(self, fish_input, pv_input, front_input):
         img_bev_feats_fish = self.plugin.apply(fish_input, pv_input, front_input, self.uu, self.vv, 

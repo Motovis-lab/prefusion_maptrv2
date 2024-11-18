@@ -210,10 +210,10 @@ class FastRay_DP_v2(FastRay):
         super(FastRay_DP_v2, self).__init__(**kwargs)
         self.plugin = VoxelProjection()
         
-        self.dummy_conv = nn.Conv2d(3, 3, 1, 1)
-        with torch.no_grad():
-            self.dummy_conv.weight = nn.Parameter(torch.eye(3).view(3, 3, 1, 1))
-            self.dummy_conv.bias = nn.Parameter(torch.zeros(3))
+        self.dummy_conv = nn.Conv2d(3, 64, 1, 1)
+        # with torch.no_grad():
+        #     self.dummy_conv.weight = nn.Parameter(torch.eye(3).view(3, 3, 1, 1))
+        #     self.dummy_conv.bias = nn.Parameter(torch.zeros(3))
 
     def forward(self, fish_data_imgs, pv_data_imgs, front_data_imgs,
                 fish_intrinsic, fish_extrinsic,
