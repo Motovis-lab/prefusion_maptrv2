@@ -150,7 +150,7 @@ camera_intrinsic_configs = dict(
 )
 
 
-debug_mode = True
+debug_mode = False
 
 if debug_mode:
     batch_size = 1
@@ -181,7 +181,8 @@ train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='../MV4D-PARKING',
-    info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
+    # info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
+    info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -215,7 +216,8 @@ val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='../MV4D-PARKING',
-    info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
+    # info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
+        info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -275,8 +277,8 @@ backbones = dict(
 spatial_transform = dict(
     type='FastRaySpatialTransform',
     voxel_shape=voxel_shape,
-    fusion_mode='bilinear_weighted',
-    # fusion_mode='weighted',
+    # fusion_mode='bilinear_weighted',
+    fusion_mode='weighted',
     bev_mode=bev_mode)
 # temporal_transform
 temporal_transform = dict(
@@ -284,7 +286,8 @@ temporal_transform = dict(
     voxel_shape=voxel_shape,
     voxel_range=voxel_range,
     bev_mode=bev_mode,
-    interpolation='bilinear')
+    # interpolation='bilinear'
+)
 # voxel fusion
 pre_nframes = 1
 voxel_fusion = dict(type='EltwiseAdd')
@@ -373,7 +376,8 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
+# train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=25, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
 
 ## evaluator and metrics
@@ -398,7 +402,8 @@ optim_wrapper = dict(
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[24, 36, 48])
+# param_scheduler = dict(type='MultiStepLR', milestones=[24, 36, 48])
+param_scheduler = dict(type='MultiStepLR', milestones=[16, 22, 24])
 
 
 env_cfg = dict(
@@ -409,7 +414,8 @@ env_cfg = dict(
 
 # work_dir = "./work_dirs/fastray_planar_multi_frame_1107"
 # work_dir = "./work_dirs/fastray_planar_multi_frame_1107_infer"
-work_dir = "./work_dirs/fastray_planar_multi_frame_add_1112"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_add_1112"
+work_dir = "./work_dirs/fastray_planar_multi_frame_add_1117"
 # load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
 load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
 # resume = True

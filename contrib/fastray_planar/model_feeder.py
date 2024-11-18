@@ -36,13 +36,15 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
     def __init__(self, 
                  voxel_feature_config: dict, 
                  camera_feature_configs: dict,
+                 bilinear_interpolation: bool = True,
                  debug_mode: bool = False):
         super().__init__()
         self.voxel_feature_config = voxel_feature_config
         self.camera_feature_configs = camera_feature_configs
         self.voxel_lut_gen = VoxelLookUpTableGenerator(
             voxel_feature_config=self.voxel_feature_config,
-            camera_feature_configs=self.camera_feature_configs
+            camera_feature_configs=self.camera_feature_configs,
+            bilinear_interpolation=bilinear_interpolation
         )
         self.debug_mode = debug_mode
 
