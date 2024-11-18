@@ -12,7 +12,7 @@ default_camera_feature_config = dict(
     ray_distance_num_channel=64,
     ray_distance_start=0.25,
     ray_distance_step=0.25,
-    feature_downscale=8)
+    feature_downscale=8)  # TODO: change to 4
 
 camera_feature_configs = dict(
     CAM_FRONT=default_camera_feature_config,
@@ -120,47 +120,47 @@ transformables = dict(
         loader=dict(
             type="AdvancedBbox3DLoader",
             class_mapping=dict(
-                bicycle=["vehicle.bicycle"],
+                # bicycle=["vehicle.bicycle"],
                 car=["vehicle.car"],
-                construction_vehicle=["vehicle.construction"],
-                motorcycle=["vehicle.motorcycle"],
-                trailer=["vehicle.trailer"],
-                truck=["vehicle.truck"],
-                bus=["vehicle.bus.bendy", "vehicle.bus.rigid"],
+                # construction_vehicle=["vehicle.construction"],
+                # motorcycle=["vehicle.motorcycle"],
+                # trailer=["vehicle.trailer"],
+                # truck=["vehicle.truck"],
+                # bus=["vehicle.bus.bendy", "vehicle.bus.rigid"],
             ),
         ),
         tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
     ),
-    bbox_3d_cylinder=dict(
-        type='Bbox3D',
-        loader=dict(
-            type="AdvancedBbox3DLoader",
-            class_mapping=dict(
-                traffic_cone=["movable_object.trafficcone"]
-            ),
-        ),
-        tensor_smith=dict(type='PlanarCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
-    ),
-    bbox_3d_oriented_cylinder=dict(
-        type='Bbox3D',
-        loader=dict(
-            type="AdvancedBbox3DLoader",
-            class_mapping=dict(
-                pedestrian=["human.pedestrian.adult" ,"human.pedestrian.child" ,"human.pedestrian.construction_worker" ,"human.pedestrian.police_officer"],
-            ),
-        ),
-        tensor_smith=dict(type='PlanarOrientedCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
-    ),
-    bbox_3d_rect_cuboid=dict(
-        type='Bbox3D',
-        loader=dict(
-            type="AdvancedBbox3DLoader",
-            class_mapping=dict(
-                barrier=['movable_object.barrier']
-            ),
-        ),
-        tensor_smith=dict(type='PlanarRectangularCuboid', voxel_shape=voxel_shape, voxel_range=voxel_range)
-    ),
+    # bbox_3d_cylinder=dict(
+    #     type='Bbox3D',
+    #     loader=dict(
+    #         type="AdvancedBbox3DLoader",
+    #         class_mapping=dict(
+    #             traffic_cone=["movable_object.trafficcone"]
+    #         ),
+    #     ),
+    #     tensor_smith=dict(type='PlanarCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+    # ),
+    # bbox_3d_oriented_cylinder=dict(
+    #     type='Bbox3D',
+    #     loader=dict(
+    #         type="AdvancedBbox3DLoader",
+    #         class_mapping=dict(
+    #             pedestrian=["human.pedestrian.adult" ,"human.pedestrian.child" ,"human.pedestrian.construction_worker" ,"human.pedestrian.police_officer"],
+    #         ),
+    #     ),
+    #     tensor_smith=dict(type='PlanarOrientedCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+    # ),
+    # bbox_3d_rect_cuboid=dict(
+    #     type='Bbox3D',
+    #     loader=dict(
+    #         type="AdvancedBbox3DLoader",
+    #         class_mapping=dict(
+    #             barrier=['movable_object.barrier']
+    #         ),
+    #     ),
+    #     tensor_smith=dict(type='PlanarRectangularCuboid', voxel_shape=voxel_shape, voxel_range=voxel_range)
+    # ),
 )
 
 
@@ -192,6 +192,7 @@ val_dataset = dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
         camera_feature_configs=camera_feature_configs,
+        debug_mode=debug_mode,
     ),
     transformables=transformables,
     transforms=[dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs)],
@@ -228,10 +229,10 @@ camera_feat_channels = 128
 backbones = dict(
     pv_sides=dict(
         type='VoVNetFPN', 
-        out_stride=8, 
-        out_channels=camera_feat_channels, 
-        init_cfg=dict(type="Pretrained", checkpoint="./ckpts/vovnet_seg_pretrain_backbone_epoch_24.pth")
-    )
+        out_stride=8,   # TODO: change to 4
+        out_channels=camera_feat_channels,
+        init_cfg=dict(type="Pretrained", checkpoints="./ckpts/vovnet_seg_pretrain_backbone_epoch_24.pth")
+    ) 
 )
 # spatial_transform
 spatial_transform = dict(
@@ -254,20 +255,20 @@ heads = dict(
                     1,
                     # seg: slice(1, 9)
                     1 + len(train_dataset["transformables"]["bbox_3d"]["loader"]["class_mapping"]), #
-                    # cen: 9
-                    1,
-                    # seg: slice(10, 12)
-                    1 + len(train_dataset["transformables"]["bbox_3d_cylinder"]["loader"]["class_mapping"]),
-                    # cen: 12
-                    1,
-                    # seg: slice(13, 15)
-                    1 + len(train_dataset["transformables"]["bbox_3d_oriented_cylinder"]["loader"]["class_mapping"]),
-                    # cen: 15
-                    1,
-                    # seg: slice(16, 18)
-                    1 + len(train_dataset["transformables"]["bbox_3d_rect_cuboid"]["loader"]["class_mapping"]),
+                    # # cen: 9
+                    # 1,
+                    # # seg: slice(10, 12)
+                    # 1 + len(train_dataset["transformables"]["bbox_3d_cylinder"]["loader"]["class_mapping"]),
+                    # # cen: 12
+                    # 1,
+                    # # seg: slice(13, 15)
+                    # 1 + len(train_dataset["transformables"]["bbox_3d_oriented_cylinder"]["loader"]["class_mapping"]),
+                    # # cen: 15
+                    # 1,
+                    # # seg: slice(16, 18)
+                    # 1 + len(train_dataset["transformables"]["bbox_3d_rect_cuboid"]["loader"]["class_mapping"]),
                  ]),
-                 reg_channels=20 + 8 + 13 + 14),
+                 reg_channels=20), # + 8 + 13 + 14),
 )
 # loss configs
 bbox_3d_weight_scheme = dict(
@@ -312,21 +313,18 @@ loss_cfg = dict(
         seg_iou_method='linear',
         loss_name_prefix='bbox_3d',
         weight_scheme=bbox_3d_weight_scheme),
-    bbox_3d_cylinder=dict(
-        type='PlanarLoss',
-        seg_iou_method='linear',
-        loss_name_prefix='bbox_3d_cylinder',
-        weight_scheme=bbox_3d_cylinder_weight_scheme),
-    bbox_3d_oriented_cylinder=dict(
-        type='PlanarLoss',
-        seg_iou_method='linear',
-        loss_name_prefix='bbox_3d_oriented_cylinder',
-        weight_scheme=bbox_3d_oriented_cylinder_weight_scheme),
-    bbox_3d_rect_cuboid=dict(
-        type='PlanarLoss',
-        seg_iou_method='linear',
-        loss_name_prefix='bbox_3d_rect_cuboid',
-        weight_scheme=bbox_3d_rect_cuboid_weight_scheme),
+    # bbox_3d_cylinder=dict(
+    #     type='PlanarLoss',
+    #     loss_name_prefix='bbox_3d_cylinder',
+    #     weight_scheme=bbox_3d_cylinder_weight_scheme),
+    # bbox_3d_oriented_cylinder=dict(
+    #     type='PlanarLoss',
+    #     loss_name_prefix='bbox_3d_oriented_cylinder',
+    #     weight_scheme=bbox_3d_oriented_cylinder_weight_scheme),
+    # bbox_3d_rect_cuboid=dict(
+    #     type='PlanarLoss',
+    #     loss_name_prefix='bbox_3d_rect_cuboid',
+    #     weight_scheme=bbox_3d_rect_cuboid_weight_scheme),
 )
 
 # metric configs
@@ -347,7 +345,7 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=12, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=100, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
 
 ## evaluator and metrics
@@ -373,7 +371,8 @@ optim_wrapper = dict(
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[5, 8, 10])
+param_scheduler = dict(type='MultiStepLR', milestones=[50, 75, 90])
+# param_scheduler = dict(type='MultiStepLR', milestones=[5, 8, 10])
 
 
 env_cfg = dict(
