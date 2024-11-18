@@ -94,9 +94,9 @@ if debug_mode:
              intrinsics=camera_intrinsic_configs)
     ]
 else:
-    batch_size = 12
-    num_workers = 4
-    persistent_workers = True
+    batch_size = 1
+    num_workers = 0
+    persistent_workers = False
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
@@ -125,7 +125,7 @@ transformables = dict(
                 # construction_vehicle=["vehicle.construction"],
                 # motorcycle=["vehicle.motorcycle"],
                 # trailer=["vehicle.trailer"],
-                # truck=["vehicle.truck"],
+                truck=["vehicle.truck"],
                 # bus=["vehicle.bus.bendy", "vehicle.bus.rigid"],
             ),
         ),
@@ -169,7 +169,7 @@ train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/nuscenes',
-    info_path='/data/datasets/nuscenes/nusc_train_info.pkl',
+    info_path='/data/datasets/nuscenes/nusc_t1v1_train_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -187,7 +187,7 @@ val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/nuscenes',
-    info_path='/data/datasets/nuscenes/nusc_val_info.pkl',
+    info_path='/data/datasets/nuscenes/nusc_t1v1_train_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -231,14 +231,14 @@ backbones = dict(
         type='VoVNetFPN', 
         out_stride=8,   # TODO: change to 4
         out_channels=camera_feat_channels,
-        init_cfg=dict(type="Pretrained", checkpoints="./ckpts/vovnet_seg_pretrain_backbone_epoch_24.pth")
+        init_cfg=dict(type="Pretrained", checkpoint="./ckpts/vovnet_seg_pretrain_backbone_epoch_24.pth")
     ) 
 )
 # spatial_transform
 spatial_transform = dict(
     type='FastRaySpatialTransform',
     voxel_shape=voxel_shape,
-    fusion_mode='bilinear_weighted',
+    fusion_mode='bilinear_weighted',  # TODO: change to weighted
     bev_mode=bev_mode)
 # heads
 heads = dict(
@@ -254,19 +254,19 @@ heads = dict(
                     # cen: 0
                     1,
                     # seg: slice(1, 9)
-                    1 + len(train_dataset["transformables"]["bbox_3d"]["loader"]["class_mapping"]), #
+                    1 + len(transformables["bbox_3d"]["loader"]["class_mapping"]), #
                     # # cen: 9
                     # 1,
                     # # seg: slice(10, 12)
-                    # 1 + len(train_dataset["transformables"]["bbox_3d_cylinder"]["loader"]["class_mapping"]),
+                    # 1 + len(transformables["bbox_3d_cylinder"]["loader"]["class_mapping"]),
                     # # cen: 12
                     # 1,
                     # # seg: slice(13, 15)
-                    # 1 + len(train_dataset["transformables"]["bbox_3d_oriented_cylinder"]["loader"]["class_mapping"]),
+                    # 1 + len(transformables["bbox_3d_oriented_cylinder"]["loader"]["class_mapping"]),
                     # # cen: 15
                     # 1,
                     # # seg: slice(16, 18)
-                    # 1 + len(train_dataset["transformables"]["bbox_3d_rect_cuboid"]["loader"]["class_mapping"]),
+                    # 1 + len(transformables["bbox_3d_rect_cuboid"]["loader"]["class_mapping"]),
                  ]),
                  reg_channels=20), # + 8 + 13 + 14),
 )
@@ -345,7 +345,7 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=100, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=200, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
 
 ## evaluator and metrics
@@ -364,14 +364,14 @@ val_evaluator = [
 optim_wrapper = dict(
     type='OptimWrapper', 
     optimizer=dict(type='SGD', 
-                lr=0.01, 
+                lr=0.001,
                 momentum=0.9,
                 weight_decay=0.0001),
     # dtype='bfloat16'
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[50, 75, 90])
+param_scheduler = dict(type='MultiStepLR', milestones=[100, 150, 180])
 # param_scheduler = dict(type='MultiStepLR', milestones=[5, 8, 10])
 
 
@@ -387,7 +387,7 @@ import datetime
 today = datetime.datetime.now().strftime("%m%d")
 
 # load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
-# load_from = "./work_dirs/fastray_planar_single_frame_nusc_1111/epoch_99.pth"
+# load_from = "./work_dirs/fastray_planar_single_frame_nusc_1118/epoch_100.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1106_sampled/epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
