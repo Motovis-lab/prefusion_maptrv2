@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 __all__ = [
     "CameraImageSetLoader", "CameraDepthSetLoader", "CameraSegMaskSetLoader",
     "LidarPointsLoader", "EgoPoseSetLoader",
-    "Bbox3DLoader", "AdvancedBbox3DLoader",
+    "Bbox3DLoader", "AdvancedBbox3DLoader", "NuscenesCameraImageSetLoader",
     "Polyline3DLoader", "Polygon3DLoader", "ParkingSlot3DLoader",
     "OccSdfBevLoader", "SegBevLoader", "OccSdf3DLoader",
 ]

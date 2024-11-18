@@ -7,12 +7,12 @@ custom_imports = dict(
 
 
 ## camera and voxel feature configs
-
+feature_downscale = 4
 default_camera_feature_config = dict(
     ray_distance_num_channel=64,
     ray_distance_start=0.25,
     ray_distance_step=0.25,
-    feature_downscale=8)  # TODO: change to 4
+    feature_downscale=feature_downscale)
 
 camera_feature_configs = dict(
     CAM_FRONT=default_camera_feature_config,
@@ -94,8 +94,8 @@ if debug_mode:
              intrinsics=camera_intrinsic_configs)
     ]
 else:
-    batch_size = 1
-    num_workers = 0
+    batch_size = 8
+    num_workers = 4
     persistent_workers = False
     transforms = [
         dict(type='RandomRenderExtrinsic'),
@@ -229,16 +229,16 @@ camera_feat_channels = 128
 backbones = dict(
     pv_sides=dict(
         type='VoVNetFPN', 
-        out_stride=8,   # TODO: change to 4
+        out_stride=feature_downscale,
         out_channels=camera_feat_channels,
-        init_cfg=dict(type="Pretrained", checkpoint="./ckpts/vovnet_seg_pretrain_backbone_epoch_24.pth")
+        # init_cfg=dict(type="Pretrained", checkpoint="./ckpts/vovnet_seg_pretrain_backbone_epoch_24.pth")
     ) 
 )
 # spatial_transform
 spatial_transform = dict(
     type='FastRaySpatialTransform',
     voxel_shape=voxel_shape,
-    fusion_mode='bilinear_weighted',  # TODO: change to weighted
+    fusion_mode='bilinear_weighted',
     bev_mode=bev_mode)
 # heads
 heads = dict(
@@ -345,7 +345,7 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=200, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=500, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
 
 ## evaluator and metrics
@@ -364,14 +364,14 @@ val_evaluator = [
 optim_wrapper = dict(
     type='OptimWrapper', 
     optimizer=dict(type='SGD', 
-                lr=0.001,
+                lr=0.01,
                 momentum=0.9,
                 weight_decay=0.0001),
     # dtype='bfloat16'
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[100, 150, 180])
+param_scheduler = dict(type='MultiStepLR', milestones=[200, 400, 470])
 # param_scheduler = dict(type='MultiStepLR', milestones=[5, 8, 10])
 
 
@@ -387,7 +387,7 @@ import datetime
 today = datetime.datetime.now().strftime("%m%d")
 
 # load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
-# load_from = "./work_dirs/fastray_planar_single_frame_nusc_1118/epoch_100.pth"
+load_from = "./work_dirs/fastray_planar_single_frame_nusc_1118/epoch_200.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1106_sampled/epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
