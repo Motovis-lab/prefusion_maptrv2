@@ -181,7 +181,7 @@ class VoxelLookUpTableGenerator:
                 vv_floor[~valid_map_bilinear] = -1
                 uu_ceil[~valid_map_bilinear] = -1
                 vv_ceil[~valid_map_bilinear] = -1
-                LUT.update(dict(
+                LUT[key].update(dict(
                     uu_floor=uu_floor, vv_floor=vv_floor, 
                     uu_ceil=uu_ceil, vv_ceil=vv_ceil,
                     uu_bilinear_weight=uu_bilinear_weight, 
