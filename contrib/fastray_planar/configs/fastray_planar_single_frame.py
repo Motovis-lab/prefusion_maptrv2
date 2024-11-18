@@ -7,12 +7,14 @@ custom_imports = dict(
 
 
 ## camera and voxel feature configs
-
+feature_downscale = 4
 default_camera_feature_config = dict(
     ray_distance_num_channel=64,
     ray_distance_start=0.25,
     ray_distance_step=0.25,
-    feature_downscale=8)
+    feature_downscale=feature_downscale
+    # feature_downscale=8
+)
 
 camera_feature_configs = dict(
     VCAMERA_PERSPECTIVE_FRONT=default_camera_feature_config,
@@ -152,7 +154,7 @@ camera_intrinsic_configs = dict(
     # VCAMERA_PERSPECTIVE_FRONT='default',
 )
 
-debug_mode = True
+debug_mode = False
 
 if debug_mode:
     batch_size = 1
@@ -164,9 +166,9 @@ if debug_mode:
              intrinsics=camera_intrinsic_configs)
     ]
 else:
-    batch_size = 12
-    num_workers = 8
-    persistent_workers = True
+    batch_size = 4
+    num_workers = 4
+    persistent_workers = False
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
@@ -182,11 +184,13 @@ train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='../MV4D-PARKING',
-    info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
+    # info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
+    info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
         camera_feature_configs=camera_feature_configs,
+        bilinear_interpolation=False
     ),
     transformables=dict(
         camera_images=dict(type='CameraImageSet', tensor_smith=dict(type='CameraImageTensor')),
@@ -227,13 +231,14 @@ bev_mode = True
 # backbones
 camera_feat_channels = 128
 backbones = dict(
-    pv_front=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels),
-    pv_sides=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels),
-    fisheyes=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels))
+    pv_front=dict(type='VoVNetFPN', out_stride=feature_downscale, out_channels=camera_feat_channels),
+    pv_sides=dict(type='VoVNetFPN', out_stride=feature_downscale, out_channels=camera_feat_channels),
+    fisheyes=dict(type='VoVNetFPN', out_stride=feature_downscale, out_channels=camera_feat_channels))
 # spatial_transform
 spatial_transform = dict(
     type='FastRaySpatialTransform',
     voxel_shape=voxel_shape,
+    # fusion_mode='bilinear_weighted',
     fusion_mode='weighted',
     bev_mode=bev_mode)
 # heads
@@ -317,30 +322,34 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
+# train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=10, val_interval=-1)
+
 
 ## optimizer configs
 optim_wrapper = dict(
     type='OptimWrapper', 
     optimizer=dict(type='SGD', 
-                lr=0.01, 
+                lr=0.005, 
                 momentum=0.9,
                 weight_decay=0.0001),
     # dtype='bfloat16'
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[24, 36, 48])
+# param_scheduler = dict(type='MultiStepLR', milestones=[24, 36, 48])
+param_scheduler = dict(type='MultiStepLR', milestones=[6, 8, 9])
 
-env_cfg = dict(
-    cudnn_benchmark=False,
-    mp_cfg=dict(mp_start_method='fork', opencv_num_threads=0),
-    dist_cfg=dict(backend='nccl'),
-)
+# env_cfg = dict(
+#     cudnn_benchmark=False,
+#     mp_cfg=dict(mp_start_method='fork', opencv_num_threads=0),
+#     dist_cfg=dict(backend='nccl'),
+# )
 
 
-load_from = "./work_dirs/3scenes_singleframe_epoch_50.pth"
+# load_from = "./work_dirs/3scenes_singleframe_epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
+load_from = "./work_dirs/fastray_planar_single_frame_1117/epoch_2.pth"
 
 # load_from = "./work_dirs/fastray_planar_single_frame_1106_sampled/epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
@@ -350,6 +359,8 @@ load_from = "./work_dirs/3scenes_singleframe_epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1106_sampled_infer'
 # work_dir = './work_dirs/fastray_planar_single_frame_1107'
 # work_dir = './work_dirs/fastray_planar_single_frame_1107_infer'
-work_dir = './work_dirs/fastray_planar_single_frame_1111_infer'
+# work_dir = './work_dirs/fastray_planar_single_frame_1111_infer'
+# work_dir = './work_dirs/fastray_planar_single_frame_1117'
+work_dir = './work_dirs/fastray_planar_single_frame_1118'
 
 # resume = True

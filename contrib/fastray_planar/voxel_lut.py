@@ -58,7 +58,8 @@ class VoxelLookUpTableGenerator:
     '''
     def __init__(self, 
                  voxel_feature_config : dict, 
-                 camera_feature_configs : Dict[str, dict]):
+                 camera_feature_configs : Dict[str, dict],
+                 bilinear_interpolation=False):
         '''
         Parameters
         ----------
@@ -80,6 +81,7 @@ class VoxelLookUpTableGenerator:
         self.camera_feature_configs = camera_feature_configs
         self.voxel_shape = self.voxel_feature_config['voxel_shape']
         self.voxel_range = np.float32(self.voxel_feature_config['voxel_range'])
+        self.bilinear_interpolation = bilinear_interpolation
         # gen voxel_ego_points, in shape of (3, 4*320*160) <3, Z*X*Y>
         self.voxel_points = get_voxel_points_in_ego(self.voxel_shape, self.voxel_range)
     
@@ -148,18 +150,8 @@ class VoxelLookUpTableGenerator:
             vv = np.round(vv_float).astype(int)
             dd = np.round(dd_float).astype(int)
             dd[dd < ray_distance_num_channel] = ray_distance_num_channel - 1
-            # for bilinear interpolation rasterizing
-            uu_floor = np.floor(uu_float).astype(int)
-            vv_floor = np.floor(vv_float).astype(int)
-            uu_ceil = np.ceil(uu_float).astype(int)
-            vv_ceil = np.ceil(vv_float).astype(int)
-            uu_bilinear_weight = (np.ceil(uu_float) - uu_float)
-            vv_bilinear_weight = (np.ceil(vv_float) - vv_float)
             # get valid maps, Z*X*Y, 6*320*160
             valid_map = (uu >= 0) * (uu < resolution[0]) * (vv >= 0) * (vv < resolution[1]) * (camera_points[2] > 0)
-            # in some case, vv * valid_map will be out of range
-            uu[~valid_map] = -1
-            vv[~valid_map] = -1
             # add uv_mask
             uv_mask = cv2.resize(camera_image.ego_mask, resolution)
             valid_map *= uv_mask[vv * valid_map, uu * valid_map].astype(bool)
@@ -169,23 +161,33 @@ class VoxelLookUpTableGenerator:
             uu[~valid_map] = -1
             vv[~valid_map] = -1
             dd[~valid_map] = -1
-            # get valid maps for bilinear interpolation
-            valid_map_bilinear = (uu_floor >= 0) * (uu_ceil < resolution[0]) * (vv_floor >= 0) * (vv_ceil < resolution[1]) * (camera_points[2] > 0)
-            valid_map_bilinear *= uv_mask[vv * valid_map_bilinear, uu * valid_map_bilinear].astype(bool)
-            uu_floor[~valid_map_bilinear] = -1
-            vv_floor[~valid_map_bilinear] = -1
-            uu_ceil[~valid_map_bilinear] = -1
-            vv_ceil[~valid_map_bilinear] = -1
-            
             # allocate LUTS
             LUT[key] = dict(
-                uu=uu, vv=vv, dd=dd, valid_map=valid_map,
-                uu_floor=uu_floor, vv_floor=vv_floor, 
-                uu_ceil=uu_ceil, vv_ceil=vv_ceil,
-                uu_bilinear_weight=uu_bilinear_weight, 
-                vv_bilinear_weight=vv_bilinear_weight,
-                valid_map_bilinear=valid_map_bilinear
+                uu=uu, vv=vv, dd=dd, valid_map=valid_map
             )
+            ## bilinear interpolation
+            if self.bilinear_interpolation:
+                # for bilinear interpolation rasterizing
+                uu_floor = np.floor(uu_float).astype(int)
+                vv_floor = np.floor(vv_float).astype(int)
+                uu_ceil = np.ceil(uu_float).astype(int)
+                vv_ceil = np.ceil(vv_float).astype(int)
+                uu_bilinear_weight = (np.ceil(uu_float) - uu_float)
+                vv_bilinear_weight = (np.ceil(vv_float) - vv_float)
+                # get valid maps for bilinear interpolation
+                valid_map_bilinear = (uu_floor >= 0) * (uu_ceil < resolution[0]) * (vv_floor >= 0) * (vv_ceil < resolution[1]) * (camera_points[2] > 0)
+                valid_map_bilinear *= uv_mask[vv * valid_map_bilinear, uu * valid_map_bilinear].astype(bool)
+                uu_floor[~valid_map_bilinear] = -1
+                vv_floor[~valid_map_bilinear] = -1
+                uu_ceil[~valid_map_bilinear] = -1
+                vv_ceil[~valid_map_bilinear] = -1
+                LUT[key].update(dict(
+                    uu_floor=uu_floor, vv_floor=vv_floor, 
+                    uu_ceil=uu_ceil, vv_ceil=vv_ceil,
+                    uu_bilinear_weight=uu_bilinear_weight, 
+                    vv_bilinear_weight=vv_bilinear_weight,
+                    valid_map_bilinear=valid_map_bilinear
+                ))
             # gen voxel ray density for each camera, in shape of Z*X*Y
             density_map = np.zeros_like(distances_ego)
             for dist_ind in range(len(distance_bins) - 1):

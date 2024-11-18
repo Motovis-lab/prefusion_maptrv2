@@ -177,7 +177,7 @@ camera_intrinsic_configs = dict(
 )
 
 
-debug_mode = True
+debug_mode = False
 
 if debug_mode:
     batch_size = 1
@@ -187,10 +187,10 @@ if debug_mode:
              resolutions=camera_resolution_configs,
              intrinsics=camera_intrinsic_configs)
     ]
-    possible_group_sizes=20,
+    possible_group_sizes=2,
 else:
-    batch_size = 8
-    num_workers = 4
+    batch_size = 4
+    num_workers = 2
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
@@ -244,7 +244,7 @@ transformables=dict(
     polyline_3d=dict(
         type='Polyline3D', dictionary=dictionary_polylines,
         tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
-    polygons_3d=dict(
+    polygon_3d=dict(
         type='Polygon3D', dictionary=dictionary_polygons,
         tensor_smith=dict(type='PlanarPolygon3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
     parkingslot_3d=dict(
@@ -256,8 +256,8 @@ transformables=dict(
 train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='/data/datasets/MvParking',
-    info_path='/data/datasets/MvParking/mv_4d_infos_20231028_150815.pkl',
+    data_root='../MV4D-PARKING',
+    info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -275,7 +275,7 @@ val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='../MV4D-PARKING',
-    info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
+    info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -339,25 +339,22 @@ voxel_fusion = dict(
     bev_mode=bev_mode)
 
 # heads
-
-all_bbox_3d_cen_seg_channels = sum(
+all_bbox_3d_cen_seg_channels = sum([
     2 + 12,  # bbox_3d_heading
     2 + 10,  # bbox_3d_plane_heading
     2 + 6,   # bbox_3d_no_heading
     2 + 4,   # bbox_3d_square
     2 + 9,   # bbox_3d_cylinder
     2 + 1    # bbox_3d_oriented_cylinder
-)
-
-all_bbox_3d_reg_channels = sum(
+])
+all_bbox_3d_reg_channels = sum([
     20,  # bbox_3d_heading
     20,  # bbox_3d_plane_heading
     14,  # bbox_3d_no_heading
     11,  # bbox_3d_square
     8,   # bbox_3d_cylinder
     13   # bbox_3d_oriented_cylinder
-)
-
+])
 heads = dict(
     voxel_encoder=dict(type='VoVNetEncoder', 
                        in_channels=camera_feat_channels * voxel_shape[0], 
@@ -380,6 +377,7 @@ heads = dict(
                         cen_seg_channels=5,
                         reg_channels=15)
 )
+
 # loss configs
 bbox_3d_heading_weight_scheme = dict(
     cen=dict(loss_weight=0.5,
@@ -448,9 +446,9 @@ polygon_3d_weight_scheme = dict(
     reg=dict(loss_weight=1.0))
 
 parkingslot_3d_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
-             fg_weight=1.0,
-             bg_weight=1),
+    cen=dict(loss_weight=1,
+             fg_weight=2,
+             bg_weight=0.5),
     seg=dict(loss_weight=1.0,
              iou_loss_weight=1,
              dual_focal_loss_weight=2),
@@ -497,7 +495,7 @@ loss_cfg = dict(
 
 # integrated model config
 model = dict(
-    type='FastRayPlanarMultiFrameModel',
+    type='ParkingFastRayPlanarMultiFrameModel',
     camera_groups=camera_groups,
     backbones=backbones,
     spatial_transform=spatial_transform,
@@ -524,7 +522,7 @@ val_evaluator = [dict(type="PlanarSegIou"),]
 optim_wrapper = dict(
     type='OptimWrapper', 
     optimizer=dict(type='SGD', 
-                lr=0.01 * 0.5, 
+                lr=0.001, 
                 momentum=0.9,
                 weight_decay=0.0001)
 )
@@ -539,12 +537,8 @@ env_cfg = dict(
     dist_cfg=dict(backend='nccl'),
 )
 
-# work_dir = "./work_dirs/fastray_planar_multi_frame_1107"
-# work_dir = "./work_dirs/fastray_planar_multi_frame_1107_infer"
-# work_dir = "./work_dirs/fastray_planar_multi_frame_1112"
-work_dir = "./work_dirs/fastray_planar_multi_frame_1112_infer"
-# load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
-# load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
-load_from = "./work_dirs/fastray_planar_multi_frame_1112/epoch_50.pth"
+
+work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_1116"
+# load_from = "./work_dirs/fastray_planar_multi_frame_1112/epoch_50.pth"
 
 resume = False

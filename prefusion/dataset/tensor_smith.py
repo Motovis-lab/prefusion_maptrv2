@@ -2114,8 +2114,9 @@ class PlanarPolygon3D(PlanarTensorSmith):
         height_ims = []
 
         for polyline, class_ind, attr_list in zip(polylines, class_inds, attr_lists):
-            polyline_int = np.round(polyline).astype(int)
+            polyline_int = np.round(polyline).astype(int)[:, :2]
             # seg_bev_im
+            cv2.fillPoly(seg_im[0], [polyline_int], 1)
             cv2.fillPoly(seg_im[2 + class_ind], [polyline_int], 1)
             for attr_ind in attr_list:
                 cv2.fillPoly(seg_im[2 + num_class_channels + attr_ind], [polyline_int], 1)
@@ -2125,7 +2126,7 @@ class PlanarPolygon3D(PlanarTensorSmith):
                 polygon = expand_line_2d(line_bev, radius=0.5)
                 polygon_int = np.round(polygon).astype(int)
                 # edge_seg_bev_im
-                cv2.fillPoly(seg_im[0], [polygon_int], 1)
+                cv2.fillPoly(seg_im[1], [polygon_int], 1)
                 # line segment
                 line_im = cv2.fillPoly(np.zeros((X, Y)), [polygon_int], 1)
                 line_ims.append(line_im)
@@ -2165,7 +2166,7 @@ class PlanarPolygon3D(PlanarTensorSmith):
             height_im = np.zeros((X, Y))
 
         reg_im = np.concatenate([
-            seg_im * dist_im[None],
+            seg_im[1:2] * dist_im[None],
             vec_im,
             dir_im,
             height_im[None]

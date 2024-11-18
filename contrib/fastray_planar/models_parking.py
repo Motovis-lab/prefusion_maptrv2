@@ -1,11 +1,6 @@
 import torch
 import torch.nn as nn
 
-from functools import reduce
-
-from torch import Tensor
-from typing import Union, List, Dict, Optional
-
 from mmengine.model import BaseModel
 from mmengine.structures import BaseDataElement
 
@@ -187,36 +182,26 @@ class ParkingFastRayPlanarMultiFrameModel(BaseModel):
         
         if mode == 'tensor':
             return pred_dict
-        # if mode == 'loss':
-        #     gt_dict = batched_input_dict['annotations']
-        #     for branch in pred_dict:
-        #         gt_dict[branch], pred_dict[branch]
-        #     losses = self.compute_losses(gt_dict, pred_dict)
-        #     return losses
+        if mode == 'loss':
+            gt_dict = batched_input_dict['annotations']
+            losses = self.compute_losses(pred_dict, gt_dict)
+            return losses
 
-        # if mode == 'predict':
-        #     gt = batched_input_dict['annotations']
-        #     pred = {"bbox_3d": pred_bbox_3d, "polyline_3d": pred_polyline_3d, "parkingslot_3d": pred_parkingslot_3d}
-        #     losses = self.compute_losses(gt, pred)
-        #     return (
-        #         *[{trsfmbl_name: {t: v.cpu() for t, v in _pred.items()}} for trsfmbl_name, _pred in pred.items()],
-        #         BaseDataElement(loss=losses),
-        #     )
+        if mode == 'predict':
+            gt_dict = batched_input_dict['annotations']
+            losses = self.compute_losses(pred_dict, gt_dict)
+            return (
+                *[{trsfmbl_name: {t: v.cpu() for t, v in _pred.items()}} for trsfmbl_name, _pred in pred_dict.items()],
+                BaseDataElement(loss=losses),
+            )
 
-    # def compute_losses(self, gt: Dict, pred: Dict):
-    #     loss_bbox_3d = self.loss_bbox_3d(pred["bbox_3d"], gt['bbox_3d'])
-    #     loss_polyline_3d = self.loss_polyline_3d(pred["polyline_3d"], gt['polyline_3d'])
-    #     loss_parkingslot_3d = self.loss_parkingslot_3d(pred["parkingslot_3d"], gt['parkingslot_3d'])
+    def compute_losses(self, pred_dict, gt_dict):
+        losses = dict(loss=0)
+        for branch in self.losses_dict:
+            losses_branch = self.losses_dict[branch](pred_dict[branch], gt_dict[branch])
+            losses['loss'] += losses_branch[branch + '_loss']
+            if f'seg_iou_{branch}_loss' not in losses:
+                losses[f'{branch}_seg_iou_loss'] = 0
+            losses[f'{branch}_seg_iou_loss'] += losses_branch[f'{branch}_seg_iou_0_loss']            
 
-    #     total_loss = sum([loss_bbox_3d['bbox_3d_loss'],
-    #                         loss_polyline_3d['polyline_3d_loss'],
-    #                         loss_parkingslot_3d['parkingslot_3d_loss']])
-
-    #     losses = dict(
-    #         loss=total_loss,
-    #         seg_iou_loss_bbox_3d=loss_bbox_3d['bbox_3d_seg_iou_0_loss'],
-    #         seg_iou_loss_polyline_3d=loss_polyline_3d['polyline_3d_seg_iou_0_loss'],
-    #         seg_iou_loss_parkingslot_3d=loss_parkingslot_3d['parkingslot_3d_seg_iou_0_loss']
-    #     )
-
-    #     return losses
+        return losses
