@@ -203,17 +203,21 @@ val_dataset = dict(
 
 ## dataloader configs
 train_dataloader = dict(
+    sampler=dict(type='DefaultSampler'),
     num_workers=num_workers,
     collate_fn=dict(type="collate_dict"),
     dataset=train_dataset,
     persistent_workers=persistent_workers,
+    # pin_memory=True  # better for station or server
 )
 
 val_dataloader = dict(
+    sampler=dict(type='DefaultSampler'),
     num_workers=0,
     collate_fn=dict(type="collate_dict"),
     dataset=val_dataset,
     persistent_workers=False,
+    # pin_memory=True  # better for station or server
 )
 
 
