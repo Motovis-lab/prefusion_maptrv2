@@ -318,8 +318,8 @@ model = dict(
 )
 
 ## log_processor
-log_processor = dict(type='GroupAwareLogProcessor')
-default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
+# log_processor = dict(type='GroupAwareLogProcessor')
+# default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
 # train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
@@ -340,16 +340,17 @@ optim_wrapper = dict(
 # param_scheduler = dict(type='MultiStepLR', milestones=[24, 36, 48])
 param_scheduler = dict(type='MultiStepLR', milestones=[6, 8, 9])
 
-# env_cfg = dict(
-#     cudnn_benchmark=False,
-#     mp_cfg=dict(mp_start_method='fork', opencv_num_threads=0),
-#     dist_cfg=dict(backend='nccl'),
-# )
+env_cfg = dict(
+    cudnn_benchmark=True,
+    mp_cfg=dict(mp_start_method='fork', opencv_num_threads=0),
+    dist_cfg=dict(backend='nccl'),
+)
 
 
 # load_from = "./work_dirs/3scenes_singleframe_epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
-load_from = "./work_dirs/fastray_planar_single_frame_1117/epoch_2.pth"
+# load_from = "./work_dirs/fastray_planar_single_frame_1117/epoch_2.pth"
+load_from = "./work_dirs/fastray_planar_single_frame_1118/epoch_2.pth"
 
 # load_from = "./work_dirs/fastray_planar_single_frame_1106_sampled/epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
@@ -361,6 +362,7 @@ load_from = "./work_dirs/fastray_planar_single_frame_1117/epoch_2.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1107_infer'
 # work_dir = './work_dirs/fastray_planar_single_frame_1111_infer'
 # work_dir = './work_dirs/fastray_planar_single_frame_1117'
-work_dir = './work_dirs/fastray_planar_single_frame_1118'
+# work_dir = './work_dirs/fastray_planar_single_frame_1118'
+work_dir = './work_dirs/fastray_planar_single_frame_1119_debug'
 
 # resume = True
