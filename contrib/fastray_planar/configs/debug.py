@@ -87,17 +87,22 @@ if debug_mode:
     ]
 else:
     batch_size = 4
-    num_workers = 4
+    num_workers = 8
     persistent_workers = False
     transforms = [
-        dict(type='RandomRenderExtrinsic'),
-        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
-        dict(type='RandomRotateSpace'),
-        dict(type='RandomMirrorSpace'),
-        dict(type='RandomImageISP', prob=0.2),
-        dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
-        dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
+        dict(type='RenderIntrinsic', 
+             resolutions=camera_resolution_configs,
+             intrinsics=camera_intrinsic_configs)
     ]
+    # transforms = [
+    #     dict(type='RandomRenderExtrinsic'),
+    #     dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
+    #     dict(type='RandomRotateSpace'),
+    #     dict(type='RandomMirrorSpace'),
+    #     dict(type='RandomImageISP', prob=0.2),
+    #     dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
+    #     dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
+    # ]
 
 ## GroupBatchDataset configs
 train_dataset = dict(
@@ -144,6 +149,7 @@ train_dataloader = dict(
     collate_fn=dict(type="collate_dict"),
     dataset=train_dataset,
     persistent_workers=persistent_workers,
+    prefetch_factor=1
 )
 
 # val_dataloader = train_dataloader
