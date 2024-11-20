@@ -1232,7 +1232,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
             reg_im[6] = reg_im[6] * (1 - region_obj) + unit_zvec[1] * region_obj
             reg_im[7] = reg_im[7] * (1 - region_obj) + unit_zvec[2] * region_obj
             ## gen centerness
-            centerness = (radius_bev ** 2 - (reg_im[0] ** 2 + reg_im[1] ** 2)) / radius ** 2
+            centerness = (radius_bev ** 2 - (reg_im[0] ** 2 + reg_im[1] ** 2)) / radius_bev ** 2
             cen_im[0] = cen_im[0] * (1 - region_obj) + centerness * region_obj
         ## tensor
         tensor_data= {
@@ -1505,7 +1505,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             reg_im[11] = reg_im[11] * (1 - region_obj) + velocity[1] * region_obj
             reg_im[12] = reg_im[12] * (1 - region_obj) + velocity[2] * region_obj
             ## gen centerness
-            centerness = (radius_bev ** 2 - (reg_im[0] ** 2 + reg_im[1] ** 2)) / radius ** 2
+            centerness = (radius_bev ** 2 - (reg_im[0] ** 2 + reg_im[1] ** 2)) / radius_bev ** 2
             cen_im[0] = cen_im[0] * (1 - region_obj) + centerness * region_obj
         ## tensor
         tensor_data = {
