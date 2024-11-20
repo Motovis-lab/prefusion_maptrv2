@@ -28,7 +28,7 @@ voxel_range = ([-3, 5], [50, -50], [50, -50])
 # voxel_range = ([-0.5, 2.5], [30, -12], [12, -12])
 
 voxel_feature_config = dict(
-    voxel_shape=voxel_shape, 
+    voxel_shape=voxel_shape,
     voxel_range=voxel_range,
     ego_distance_max=75,  # 50 * sqrt(2)
     ego_distance_step=5)
@@ -89,28 +89,28 @@ if debug_mode:
     num_workers = 0
     persistent_workers = False
     transforms = [
-        dict(type='RenderIntrinsic', 
+        dict(type='RenderIntrinsic',
              resolutions=camera_resolution_configs,
              intrinsics=camera_intrinsic_configs)
     ]
 else:
     batch_size = 8
-    num_workers = 4
+    num_workers = 0
     persistent_workers = False
     transforms = [
-        dict(type='RandomRenderExtrinsic'),
+        # dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
-        dict(type='RandomRotateSpace'),
-        dict(type='RandomMirrorSpace'),
-        dict(type='RandomImageISP', prob=0.2),
-        dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
-        dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
+        # dict(type='RandomRotateSpace'),
+        # dict(type='RandomMirrorSpace'),
+        # dict(type='RandomImageISP', prob=0.2),
+        # dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
+        # dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
 
 ## Transformables
 transformables = dict(
     camera_images=dict(
-        type='CameraImageSet', 
+        type='CameraImageSet',
         loader=dict(type="NuscenesCameraImageSetLoader"),
         tensor_smith=dict(type='CameraImageTensor'),
     ),
@@ -120,27 +120,27 @@ transformables = dict(
         loader=dict(
             type="AdvancedBbox3DLoader",
             class_mapping=dict(
-                # bicycle=["vehicle.bicycle"],
+                bicycle=["vehicle.bicycle"],
                 car=["vehicle.car"],
-                # construction_vehicle=["vehicle.construction"],
-                # motorcycle=["vehicle.motorcycle"],
-                # trailer=["vehicle.trailer"],
+                construction_vehicle=["vehicle.construction"],
+                motorcycle=["vehicle.motorcycle"],
+                trailer=["vehicle.trailer"],
                 truck=["vehicle.truck"],
-                # bus=["vehicle.bus.bendy", "vehicle.bus.rigid"],
+                bus=["vehicle.bus.bendy", "vehicle.bus.rigid"],
             ),
         ),
         tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
     ),
-    # bbox_3d_cylinder=dict(
-    #     type='Bbox3D',
-    #     loader=dict(
-    #         type="AdvancedBbox3DLoader",
-    #         class_mapping=dict(
-    #             traffic_cone=["movable_object.trafficcone"]
-    #         ),
-    #     ),
-    #     tensor_smith=dict(type='PlanarCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
-    # ),
+    bbox_3d_cylinder=dict(
+        type='Bbox3D',
+        loader=dict(
+            type="AdvancedBbox3DLoader",
+            class_mapping=dict(
+                traffic_cone=["movable_object.trafficcone"]
+            ),
+        ),
+        tensor_smith=dict(type='PlanarCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+    ),
     # bbox_3d_oriented_cylinder=dict(
     #     type='Bbox3D',
     #     loader=dict(
@@ -168,8 +168,8 @@ transformables = dict(
 train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='/data/datasets/nuscenes',
-    info_path='/data/datasets/nuscenes/nusc_t1v1_train_info.pkl',
+    data_root='/ssd4/datasets/nuScenes',
+    info_path='/ssd4/datasets/nuScenes/nusc_t1v1_train_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -186,8 +186,8 @@ train_dataset = dict(
 val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='/data/datasets/nuscenes',
-    info_path='/data/datasets/nuscenes/nusc_t1v1_train_info.pkl',
+    data_root='/ssd4/datasets/nuScenes',
+    info_path='/ssd4/datasets/nuScenes/nusc_t1v1_train_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -228,11 +228,11 @@ bev_mode = True
 camera_feat_channels = 128
 backbones = dict(
     pv_sides=dict(
-        type='VoVNetFPN', 
+        type='VoVNetFPN',
         out_stride=feature_downscale,
         out_channels=camera_feat_channels,
         # init_cfg=dict(type="Pretrained", checkpoint="./ckpts/vovnet_seg_pretrain_backbone_epoch_24.pth")
-    ) 
+    )
 )
 # spatial_transform
 spatial_transform = dict(
@@ -242,8 +242,8 @@ spatial_transform = dict(
     bev_mode=bev_mode)
 # heads
 heads = dict(
-    voxel_encoder=dict(type='VoVNetEncoder', 
-                       in_channels=camera_feat_channels * voxel_shape[0], 
+    voxel_encoder=dict(type='VoVNetEncoder',
+                       in_channels=camera_feat_channels * voxel_shape[0],
                        mid_channels=128,
                        out_channels=128,
                        repeat=3),
@@ -254,11 +254,11 @@ heads = dict(
                     # cen: 0
                     1,
                     # seg: slice(1, 9)
-                    1 + len(transformables["bbox_3d"]["loader"]["class_mapping"]), #
-                    # # cen: 9
-                    # 1,
-                    # # seg: slice(10, 12)
-                    # 1 + len(transformables["bbox_3d_cylinder"]["loader"]["class_mapping"]),
+                    1 + len(transformables["bbox_3d"]["loader"]["class_mapping"]),
+                    # cen: 9
+                    1,
+                    # seg: slice(10, 12)
+                    1 + len(transformables["bbox_3d_cylinder"]["loader"]["class_mapping"]),
                     # # cen: 12
                     # 1,
                     # # seg: slice(13, 15)
@@ -268,7 +268,7 @@ heads = dict(
                     # # seg: slice(16, 18)
                     # 1 + len(transformables["bbox_3d_rect_cuboid"]["loader"]["class_mapping"]),
                  ]),
-                 reg_channels=20), # + 8 + 13 + 14),
+                 reg_channels=20+ 8), # + 13 + 14),
 )
 # loss configs
 bbox_3d_weight_scheme = dict(
@@ -313,10 +313,10 @@ loss_cfg = dict(
         seg_iou_method='linear',
         loss_name_prefix='bbox_3d',
         weight_scheme=bbox_3d_weight_scheme),
-    # bbox_3d_cylinder=dict(
-    #     type='PlanarLoss',
-    #     loss_name_prefix='bbox_3d_cylinder',
-    #     weight_scheme=bbox_3d_cylinder_weight_scheme),
+    bbox_3d_cylinder=dict(
+        type='PlanarLoss',
+        loss_name_prefix='bbox_3d_cylinder',
+        weight_scheme=bbox_3d_cylinder_weight_scheme),
     # bbox_3d_oriented_cylinder=dict(
     #     type='PlanarLoss',
     #     loss_name_prefix='bbox_3d_oriented_cylinder',
@@ -352,7 +352,7 @@ val_cfg = dict(type="GroupBatchValLoop")
 val_evaluator = [
     dict(type="PlanarSegIou"),
     # dict(
-    #     type="PlanarBbox3DAveragePrecision", 
+    #     type="PlanarBbox3DAveragePrecision",
     #     transformable_name="bbox_3d" ,
     #     tensor_smith_cfg=val_dataset['transformables']['bbox_3d']['tensor_smith'],
     #     dictionary={"classes": ['truck' ,'motorcycle' ,'car' ,'construction' ,'bicycle']},
@@ -362,16 +362,16 @@ val_evaluator = [
 
 ## optimizer configs
 optim_wrapper = dict(
-    type='OptimWrapper', 
-    optimizer=dict(type='SGD', 
-                lr=0.01,
+    type='OptimWrapper',
+    optimizer=dict(type='SGD',
+                lr=0.0005,
                 momentum=0.9,
                 weight_decay=0.0001),
     # dtype='bfloat16'
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[200, 400, 470])
+param_scheduler = dict(type='MultiStepLR', milestones=[300, 480])
 # param_scheduler = dict(type='MultiStepLR', milestones=[5, 8, 10])
 
 
@@ -387,8 +387,8 @@ import datetime
 today = datetime.datetime.now().strftime("%m%d")
 
 # load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
-load_from = "./work_dirs/fastray_planar_single_frame_nusc_1118/epoch_200.pth"
-# load_from = "./work_dirs/fastray_planar_single_frame_1106_sampled/epoch_50.pth"
+# load_from = "./ckpts/single_frame_nusc_1118_epoch_200.pth"
+load_from = "./work_dirs/fastray_planar_single_frame_nusc_1119/single_frame_nusc_1119_epoch_411.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
 # work_dir = './work_dirs/fastray_planar_single_frame_1105_infer'

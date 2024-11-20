@@ -20,14 +20,21 @@ RUN rm conda_installer.sh
 ENV PATH=/opt/conda/bin:$PATH
 ENV CUDA_HOME=/usr/local/cuda
 
-# install requirements
+# conda install critical libraries
+COPY .condarc /root/.condarc
+RUN conda install -y numba=0.60.0 numpy=1.26.4 scipy=1.14.1 pytorch=2.4.1 torchvision=0.19.1 torchaudio=2.4.1 pytorch-cuda=12.1 -c pytorch -c nvidia
+
+# pip install other libraries
 RUN pip config set global.index-url https://mirrors.bfsu.edu.cn/pypi/web/simple
-COPY requirements.txt /requirements.txt
-COPY mim-requirements.txt /mim-requirements.txt
 RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir -r /requirements.txt
+RUN pip install --no-cache-dir copious==0.1.23 easydict==1.13 nuscenes-devkit opencv-python-headless virtual-camera==0.0.4.3 open3d==0.18.0 transformers==4.45.2 pypcd-imp==0.1.5 mmengine==0.10.5 mmdet3d==1.4.0 mmdet==3.2.0 pytest==8.3.3 pytest-cov loguru tqdm
+
+# If not use docker build, we need to temporarily put cuda (of correct version) to /usr/loca/cuda or conda install cuda-toolkit cuda-cudart cuda-cccl libcublas libcusparse libcusolver
 RUN pip install --no-cache-dir flash-attn==0.2.2
+
+# Install mmcv
 RUN pip install --no-cache-dir openmim
+COPY mim-requirements.txt /mim-requirements.txt
 RUN mim install --no-cache-dir -r /mim-requirements.txt
 
 # RUN mv /etc/apt/sources.list.bak /etc/apt/sources.list
