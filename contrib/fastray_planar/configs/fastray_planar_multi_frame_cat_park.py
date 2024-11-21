@@ -117,7 +117,7 @@ mapping_cylinder_objects = dict(
 mapping_oriented_cylinder_objects = dict(
     # 1 = 1 class
     class_mapping={
-        'pedestrian': ['class.pedestiran.pedestiran'],
+        'pedestrian': ['class.pedestrian.pedestrian'],
     }
 )
 
@@ -177,11 +177,11 @@ camera_intrinsic_configs = dict(
 )
 
 
-debug_mode = False
+debug_mode = True
 
 if debug_mode:
     batch_size = 1
-    num_workers = 0
+    num_workers = 1
     transforms = [
         dict(type='RenderIntrinsic', 
              resolutions=camera_resolution_configs,
@@ -190,7 +190,7 @@ if debug_mode:
     possible_group_sizes=2,
 else:
     batch_size = 4
-    num_workers = 2
+    num_workers = 4
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
@@ -280,6 +280,7 @@ val_dataset = dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
         camera_feature_configs=camera_feature_configs,
+        debug_mode=debug_mode
     ),
     transformables=transformables,
     transforms=[
@@ -289,7 +290,7 @@ val_dataset = dict(
     ],
     phase="train",
     batch_size=batch_size,
-    possible_group_sizes=2,
+    possible_group_sizes=10,
     possible_frame_intervals=10,
 )
 
@@ -299,7 +300,7 @@ train_dataloader = dict(
     num_workers=num_workers,
     collate_fn=dict(type="collate_dict"),
     dataset=train_dataset,
-    # pin_memory=True  # better for station or server
+    pin_memory=True  # better for station or server
 )
 
 val_dataloader = dict(
@@ -307,7 +308,7 @@ val_dataloader = dict(
     num_workers=num_workers,
     collate_fn=dict(type="collate_dict"),
     dataset=val_dataset,
-    # pin_memory=True  # better for station or server
+    pin_memory=True  # better for station or server
 )
 
 
@@ -541,7 +542,8 @@ env_cfg = dict(
 )
 
 
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_1120"
-load_from = "./work_dirs/fastray_planar_single_frame_1119_debug/epoch_3.pth"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_1120"
+work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_1121_val"
+load_from = "./work_dirs/collected_models/parking_multi_frame_4.pth"
 
 resume = False
