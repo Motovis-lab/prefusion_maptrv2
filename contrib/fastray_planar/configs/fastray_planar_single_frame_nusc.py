@@ -98,13 +98,13 @@ else:
     num_workers = 4
     persistent_workers = False
     transforms = [
-        # dict(type='RandomRenderExtrinsic'),
+        dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
-        # dict(type='RandomRotateSpace'),
-        # dict(type='RandomMirrorSpace'),
-        # dict(type='RandomImageISP', prob=0.2),
-        # dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
-        # dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
+        dict(type='RandomRotateSpace'),
+        dict(type='RandomMirrorSpace'),
+        dict(type='RandomImageISP', prob=0.2),
+        dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
+        dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
 
 ## Transformables
@@ -168,8 +168,8 @@ transformables = dict(
 train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='/ssd4/datasets/nuScenes',
-    info_path='/ssd4/datasets/nuScenes/nusc_t1v1_train_info.pkl',
+    data_root='/data/datasets/nuScenes',
+    info_path='/data/datasets/nuScenes/nusc_train_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -186,8 +186,8 @@ train_dataset = dict(
 val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='/ssd4/datasets/nuScenes',
-    info_path='/ssd4/datasets/nuScenes/nusc_t1v1_train_info.pkl',
+    data_root='/data/datasets/nuScenes',
+    info_path='/data/datasets/nuScenes/nusc_val_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -204,7 +204,6 @@ val_dataset = dict(
 
 ## dataloader configs
 train_dataloader = dict(
-    sampler=dict(type='DefaultSampler'),
     num_workers=num_workers,
     sampler=dict(type="DefaultSampler"),
     collate_fn=dict(type="collate_dict"),
@@ -214,7 +213,6 @@ train_dataloader = dict(
 )
 
 val_dataloader = dict(
-    sampler=dict(type='DefaultSampler'),
     num_workers=0,
     sampler=dict(type="DefaultSampler"),
     collate_fn=dict(type="collate_dict"),
@@ -257,7 +255,7 @@ heads = dict(
                     1,
                     # seg: slice(1, 9)
                     1 + len(transformables["bbox_3d"]["loader"]["class_mapping"]),
-                    # cen: 9
+                    cen: 9
                     1,
                     # seg: slice(10, 12)
                     1 + len(transformables["bbox_3d_cylinder"]["loader"]["class_mapping"]),
@@ -270,7 +268,7 @@ heads = dict(
                     # seg: slice(16, 18)
                     1 + len(transformables["bbox_3d_rect_cuboid"]["loader"]["class_mapping"]),
                  ]),
-                 reg_channels=20+ 8 + 13 + 14),
+                 reg_channels=20), # + 8 + 13 + 14),
 )
 # loss configs
 bbox_3d_weight_scheme = dict(
@@ -350,7 +348,7 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=500, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
 
 ## evaluator and metrics
@@ -376,8 +374,7 @@ optim_wrapper = dict(
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[300, 480])
-# param_scheduler = dict(type='MultiStepLR', milestones=[5, 8, 10])
+param_scheduler = dict(type='MultiStepLR', milestones=[30, 48])
 
 
 env_cfg = dict(
@@ -393,7 +390,7 @@ today = datetime.datetime.now().strftime("%m%d")
 
 # load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
 # load_from = "./ckpts/single_frame_nusc_1118_epoch_200.pth"
-load_from = "./work_dirs/fastray_planar_single_frame_nusc_1120/single_frame_nusc_1120_epoch_500.pth"
+load_from = "./ckpts/single_frame_nusc_1121_epoch_1.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
 # work_dir = './work_dirs/fastray_planar_single_frame_1105_infer'

@@ -94,16 +94,16 @@ if debug_mode:
     possible_group_sizes = 20
     persistent_workers = False
 else:
-    batch_size = 6
+    batch_size = 8
     num_workers = 4
     transforms = [
-        # dict(type='RandomRenderExtrinsic'),
+        dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
-        # dict(type='RandomRotateSpace'),
-        # dict(type='RandomMirrorSpace'),
-        # dict(type='RandomImageISP', prob=0.2),
-        # dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
-        # dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
+        dict(type='RandomRotateSpace'),
+        dict(type='RandomMirrorSpace'),
+        dict(type='RandomImageISP', prob=0.2),
+        dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
+        dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
     possible_group_sizes = 2
     persistent_workers = True
@@ -169,8 +169,8 @@ transformables = dict(
 train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='/ssd4/datasets/nuScenes',
-    info_path='/ssd4/datasets/nuScenes/nusc_t1v1_train_info.pkl',
+    data_root='/data/datasets/nuScenes',
+    info_path='/data/datasets/nuScenes/nusc_train_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -188,8 +188,8 @@ train_dataset = dict(
 val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='/ssd4/datasets/nuScenes',
-    info_path='/ssd4/datasets/nuScenes/nusc_t1v1_train_info.pkl',
+    data_root='/data/datasets/nuScenes',
+    info_path='/data/datasets/nuScenes/nusc_val_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -210,7 +210,6 @@ val_dataset = dict(
 
 ## dataloader configs
 train_dataloader = dict(
-    sampler=dict(type='DefaultSampler'),
     num_workers=num_workers,
     sampler=dict(type="DefaultSampler"),
     collate_fn=dict(type="collate_dict"),
@@ -220,7 +219,6 @@ train_dataloader = dict(
 )
 
 val_dataloader = dict(
-    sampler=dict(type='DefaultSampler'),
     num_workers=0,
     sampler=dict(type="DefaultSampler"),
     collate_fn=dict(type="collate_dict"),
@@ -376,7 +374,7 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=500, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
 
 ## evaluator and metrics
@@ -401,7 +399,7 @@ optim_wrapper = dict(
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[300, 480])
+param_scheduler = dict(type='MultiStepLR', milestones=[30, 48])
 
 
 env_cfg = dict(
@@ -422,7 +420,7 @@ today = datetime.datetime.now().strftime("%m%d")
 work_dir = f'./work_dirs/{experiment_name}_{today}'
 # load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
 # load_from = "./ckpts/fastray_planar_single_frame_nusc_4planar_types_1113_epoch_1.pth"
-# load_from = "./ckpts/vovnet_seg_pretrain_epoch_24.pth"
-load_from = "./work_dirs/fastray_planar_single_frame_nusc_1120/single_frame_nusc_1120_epoch_500.pth"
+load_from = "./ckpts/single_frame_nusc_1121_epoch_1.pth"
+# load_from = "./work_dirs/fastray_planar_single_frame_nusc_1120/single_frame_nusc_1120_epoch_500.pth"
 
 resume = False

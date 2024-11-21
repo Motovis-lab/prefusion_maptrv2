@@ -133,7 +133,7 @@ def K3x3(cx, cy, fx, fy):
 def _plot_bbox_bev_of_single_frame(data_args):
     bbox_3d, ego_pose, save_path = data_args
     ego2world = T4x4(ego_pose["rotation"], ego_pose["translation"])
-    _ = plt.figure()
+    _ = plt.figure(figsize=(12, 12))
     _draw_axis(ego2world[:2, 3], *(ego2world[:2, :2].T * 2))  # scale := 2
     _draw_axis([0, 0], [1, 0], [0, 1])  # global axis
     for bbox in bbox_3d:
@@ -145,6 +145,8 @@ def _plot_bbox_bev_of_single_frame(data_args):
     plt.gca().set_aspect("equal")
     plt.gca().set_xlim([args.plot_range[0], args.plot_range[1]])
     plt.gca().set_ylim([args.plot_range[2], args.plot_range[3]])
+    plt.tight_layout()
+    plt.margins(0,0)
     plt.savefig(save_path)
     plt.close()
 
@@ -153,7 +155,7 @@ def _plot_bbox_velo_of_single_frame(cur_boxes, cur_pose, next_boxes, next_pose, 
     cur_ego2world = T4x4(cur_pose["rotation"], cur_pose["translation"])
     next_ego2world = T4x4(next_pose["rotation"], next_pose["translation"])
     
-    _ = plt.figure()
+    _ = plt.figure(figsize=(12, 12))
     
     _draw_axis(next_ego2world[:2, 3], *(next_ego2world[:2, :2].T * 2))  # scale := 2
     _draw_axis([0, 0], [1, 0], [0, 1])  # global axis
@@ -182,6 +184,8 @@ def _plot_bbox_velo_of_single_frame(cur_boxes, cur_pose, next_boxes, next_pose, 
     plt.gca().set_aspect("equal")
     plt.gca().set_xlim([args.plot_range[0], args.plot_range[1]])
     plt.gca().set_ylim([args.plot_range[2], args.plot_range[3]])
+    plt.tight_layout()
+    plt.margins(0,0)
     plt.savefig(save_path)
     plt.close()
 
@@ -189,7 +193,7 @@ def _plot_bbox_velo_of_single_frame(cur_boxes, cur_pose, next_boxes, next_pose, 
 def _plot_polyline_bev_of_single_frame(data_args):
     polylines, ego_pose, save_path = data_args
     ego2world = T4x4(ego_pose["rotation"], ego_pose["translation"])
-    _ = plt.figure()
+    _ = plt.figure(figsize=(12, 12))
     _draw_axis(ego2world[:2, 3], *(ego2world[:2, :2].T * 2))  # scale := 2
     _draw_axis([0, 0], [1, 0], [0, 1])  # global axis
     for pl in polylines:
@@ -201,6 +205,8 @@ def _plot_polyline_bev_of_single_frame(data_args):
     plt.gca().set_aspect("equal")
     plt.gca().set_xlim([args.plot_range[0], args.plot_range[1]])
     plt.gca().set_ylim([args.plot_range[2], args.plot_range[3]])
+    plt.tight_layout()
+    plt.margins(0,0)
     plt.savefig(save_path)
     plt.close()
 
