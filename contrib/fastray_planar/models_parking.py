@@ -117,9 +117,8 @@ class ParkingFastRayPlanarMultiFrameModel(BaseModel):
             aligned_voxel_feats_cat.append(self.temporal_transform(
                 self.cached_voxel_feats[f'pre_{pre_i+1}'], self.cached_delta_poses[f'pre_{pre_i+1}']
             ))
-        if self.debug_mode:
-            draw_aligned_voxel_feats(aligned_voxel_feats_cat)
-            # draw_aligned_voxel_feats(list(self.cached_voxel_feats.values()))
+        # if self.debug_mode:
+        #     draw_aligned_voxel_feats(aligned_voxel_feats_cat)
         # cache voxel features
         for pre_i in range(self.pre_nframes, 0, -1):
             self.cached_voxel_feats[f'pre_{pre_i}'] = (self.cached_voxel_feats[f'pre_{pre_i-1}']).clone().detach()
@@ -175,10 +174,8 @@ class ParkingFastRayPlanarMultiFrameModel(BaseModel):
                 reg=out_parkingslot_3d[1])
         )
         
-        # if self.debug_mode:
-        #     draw_pred_dict(batched_input_dict, 
-        #                    camera_tensors_dict,
-        #                    pred_dict)
+        if self.debug_mode:
+            draw_outputs(pred_dict, batched_input_dict)
         
         if mode == 'tensor':
             return pred_dict
