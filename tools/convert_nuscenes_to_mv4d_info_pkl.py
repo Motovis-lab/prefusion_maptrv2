@@ -300,7 +300,7 @@ def build_3d_polylines(nusc: NuScenes, nusc_map: Dict[str, Dict[str, dict]], cur
                     "track_id": f"{cur_sample['token']}-{data_type}-{i}",
                 }
             
-            elements.append(ele)
+                elements.append(ele)
     return elements
 
 def save_pickle(data, save_path):
