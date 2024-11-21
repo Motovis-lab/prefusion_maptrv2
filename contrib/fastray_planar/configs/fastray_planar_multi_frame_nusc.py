@@ -7,12 +7,12 @@ custom_imports = dict(
 
 
 ## camera and voxel feature configs
-
+feature_downscale = 4
 default_camera_feature_config = dict(
     ray_distance_num_channel=64,
     ray_distance_start=0.25,
     ray_distance_step=0.25,
-    feature_downscale=8)
+    feature_downscale=feature_downscale)
 
 camera_feature_configs = dict(
     CAM_FRONT=default_camera_feature_config,
@@ -94,16 +94,16 @@ if debug_mode:
     possible_group_sizes = 20
     persistent_workers = False
 else:
-    batch_size = 8
+    batch_size = 6
     num_workers = 4
     transforms = [
-        dict(type='RandomRenderExtrinsic'),
+        # dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
-        dict(type='RandomRotateSpace'),
-        dict(type='RandomMirrorSpace'),
-        dict(type='RandomImageISP', prob=0.2),
-        dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
-        dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
+        # dict(type='RandomRotateSpace'),
+        # dict(type='RandomMirrorSpace'),
+        # dict(type='RandomImageISP', prob=0.2),
+        # dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
+        # dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
     possible_group_sizes = 2
     persistent_workers = True
@@ -169,8 +169,8 @@ transformables = dict(
 train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='/data/datasets/nuscenes',
-    info_path='/data/datasets/nuscenes/nusc_train_info.pkl',
+    data_root='/ssd4/datasets/nuScenes',
+    info_path='/ssd4/datasets/nuScenes/nusc_t1v1_train_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -188,8 +188,8 @@ train_dataset = dict(
 val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='/data/datasets/nuscenes',
-    info_path='/data/datasets/nuscenes/nusc_val_info.pkl',
+    data_root='/ssd4/datasets/nuScenes',
+    info_path='/ssd4/datasets/nuScenes/nusc_t1v1_train_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -212,19 +212,21 @@ val_dataset = dict(
 train_dataloader = dict(
     sampler=dict(type='DefaultSampler'),
     num_workers=num_workers,
+    sampler=dict(type="DefaultSampler"),
     collate_fn=dict(type="collate_dict"),
     dataset=train_dataset,
     persistent_workers=persistent_workers,
-    # pin_memory=True  # better for station or server
+    pin_memory=True,
 )
 
 val_dataloader = dict(
     sampler=dict(type='DefaultSampler'),
     num_workers=0,
+    sampler=dict(type="DefaultSampler"),
     collate_fn=dict(type="collate_dict"),
     dataset=val_dataset,
     persistent_workers=False,
-    # pin_memory=True  # better for station or server
+    pin_memory=True,
 )
 
 
@@ -235,9 +237,9 @@ camera_feat_channels = 128
 backbones = dict(
     pv_sides=dict(
         type='VoVNetFPN', 
-        out_stride=8, 
+        out_stride=feature_downscale, 
         out_channels=camera_feat_channels, 
-        init_cfg=dict(type="Pretrained", checkpoint="./ckpts/vovnet_seg_pretrain_backbone_epoch_24.pth")
+        # init_cfg=dict(type="Pretrained", checkpoint="./ckpts/vovnet_seg_pretrain_backbone_epoch_24.pth")
     )
 )
 # spatial_transform
@@ -374,7 +376,7 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=12, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=500, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
 
 ## evaluator and metrics
@@ -393,13 +395,13 @@ val_evaluator = [
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='SGD',
-                lr=0.01 * 0.5,
+                lr=0.01,
                 momentum=0.9,
                 weight_decay=0.0001)
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[5, 8, 10])
+param_scheduler = dict(type='MultiStepLR', milestones=[300, 480])
 
 
 env_cfg = dict(
@@ -421,5 +423,6 @@ work_dir = f'./work_dirs/{experiment_name}_{today}'
 # load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
 # load_from = "./ckpts/fastray_planar_single_frame_nusc_4planar_types_1113_epoch_1.pth"
 # load_from = "./ckpts/vovnet_seg_pretrain_epoch_24.pth"
+load_from = "./work_dirs/fastray_planar_single_frame_nusc_1120/single_frame_nusc_1120_epoch_500.pth"
 
 resume = False

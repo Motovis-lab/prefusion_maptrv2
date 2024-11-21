@@ -39,10 +39,14 @@ RUN mim install --no-cache-dir -r /mim-requirements.txt
 
 # RUN mv /etc/apt/sources.list.bak /etc/apt/sources.list
 
-# install libgllib2.0
+# install libgllib2.0 and set TimeZone
 ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Shanghai
 RUN apt-get update \
-   && apt-get install -y libglib2.0-0 libxext6  \
+   && apt-get install -y libglib2.0-0 libxext6 tzdata  \
+   && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+   && echo $TZ > /etc/timezone \
+   && dpkg-reconfigure -f noninteractive tzdata \
    && apt-get clean \
    && rm -rf /var/lib/apt/lists/*
 

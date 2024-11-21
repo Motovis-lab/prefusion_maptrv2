@@ -95,7 +95,7 @@ if debug_mode:
     ]
 else:
     batch_size = 8
-    num_workers = 0
+    num_workers = 4
     persistent_workers = False
     transforms = [
         # dict(type='RandomRenderExtrinsic'),
@@ -141,26 +141,26 @@ transformables = dict(
         ),
         tensor_smith=dict(type='PlanarCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
     ),
-    # bbox_3d_oriented_cylinder=dict(
-    #     type='Bbox3D',
-    #     loader=dict(
-    #         type="AdvancedBbox3DLoader",
-    #         class_mapping=dict(
-    #             pedestrian=["human.pedestrian.adult" ,"human.pedestrian.child" ,"human.pedestrian.construction_worker" ,"human.pedestrian.police_officer"],
-    #         ),
-    #     ),
-    #     tensor_smith=dict(type='PlanarOrientedCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
-    # ),
-    # bbox_3d_rect_cuboid=dict(
-    #     type='Bbox3D',
-    #     loader=dict(
-    #         type="AdvancedBbox3DLoader",
-    #         class_mapping=dict(
-    #             barrier=['movable_object.barrier']
-    #         ),
-    #     ),
-    #     tensor_smith=dict(type='PlanarRectangularCuboid', voxel_shape=voxel_shape, voxel_range=voxel_range)
-    # ),
+    bbox_3d_oriented_cylinder=dict(
+        type='Bbox3D',
+        loader=dict(
+            type="AdvancedBbox3DLoader",
+            class_mapping=dict(
+                pedestrian=["human.pedestrian.adult" ,"human.pedestrian.child" ,"human.pedestrian.construction_worker" ,"human.pedestrian.police_officer"],
+            ),
+        ),
+        tensor_smith=dict(type='PlanarOrientedCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+    ),
+    bbox_3d_rect_cuboid=dict(
+        type='Bbox3D',
+        loader=dict(
+            type="AdvancedBbox3DLoader",
+            class_mapping=dict(
+                barrier=['movable_object.barrier']
+            ),
+        ),
+        tensor_smith=dict(type='PlanarRectangularCuboid', voxel_shape=voxel_shape, voxel_range=voxel_range)
+    ),
 )
 
 
@@ -206,19 +206,21 @@ val_dataset = dict(
 train_dataloader = dict(
     sampler=dict(type='DefaultSampler'),
     num_workers=num_workers,
+    sampler=dict(type="DefaultSampler"),
     collate_fn=dict(type="collate_dict"),
     dataset=train_dataset,
     persistent_workers=persistent_workers,
-    # pin_memory=True  # better for station or server
+    pin_memory=True,
 )
 
 val_dataloader = dict(
     sampler=dict(type='DefaultSampler'),
     num_workers=0,
+    sampler=dict(type="DefaultSampler"),
     collate_fn=dict(type="collate_dict"),
     dataset=val_dataset,
     persistent_workers=False,
-    # pin_memory=True  # better for station or server
+    pin_memory=True,
 )
 
 
@@ -259,16 +261,16 @@ heads = dict(
                     1,
                     # seg: slice(10, 12)
                     1 + len(transformables["bbox_3d_cylinder"]["loader"]["class_mapping"]),
-                    # # cen: 12
-                    # 1,
-                    # # seg: slice(13, 15)
-                    # 1 + len(transformables["bbox_3d_oriented_cylinder"]["loader"]["class_mapping"]),
-                    # # cen: 15
-                    # 1,
-                    # # seg: slice(16, 18)
-                    # 1 + len(transformables["bbox_3d_rect_cuboid"]["loader"]["class_mapping"]),
+                    # cen: 12
+                    1,
+                    # seg: slice(13, 15)
+                    1 + len(transformables["bbox_3d_oriented_cylinder"]["loader"]["class_mapping"]),
+                    # cen: 15
+                    1,
+                    # seg: slice(16, 18)
+                    1 + len(transformables["bbox_3d_rect_cuboid"]["loader"]["class_mapping"]),
                  ]),
-                 reg_channels=20+ 8), # + 13 + 14),
+                 reg_channels=20+ 8 + 13 + 14),
 )
 # loss configs
 bbox_3d_weight_scheme = dict(
@@ -315,16 +317,19 @@ loss_cfg = dict(
         weight_scheme=bbox_3d_weight_scheme),
     bbox_3d_cylinder=dict(
         type='PlanarLoss',
+        seg_iou_method='linear',
         loss_name_prefix='bbox_3d_cylinder',
         weight_scheme=bbox_3d_cylinder_weight_scheme),
-    # bbox_3d_oriented_cylinder=dict(
-    #     type='PlanarLoss',
-    #     loss_name_prefix='bbox_3d_oriented_cylinder',
-    #     weight_scheme=bbox_3d_oriented_cylinder_weight_scheme),
-    # bbox_3d_rect_cuboid=dict(
-    #     type='PlanarLoss',
-    #     loss_name_prefix='bbox_3d_rect_cuboid',
-    #     weight_scheme=bbox_3d_rect_cuboid_weight_scheme),
+    bbox_3d_oriented_cylinder=dict(
+        type='PlanarLoss',
+        seg_iou_method='linear',
+        loss_name_prefix='bbox_3d_oriented_cylinder',
+        weight_scheme=bbox_3d_oriented_cylinder_weight_scheme),
+    bbox_3d_rect_cuboid=dict(
+        type='PlanarLoss',
+        seg_iou_method='linear',
+        loss_name_prefix='bbox_3d_rect_cuboid',
+        weight_scheme=bbox_3d_rect_cuboid_weight_scheme),
 )
 
 # metric configs
@@ -364,7 +369,7 @@ val_evaluator = [
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='SGD',
-                lr=0.0005,
+                lr=0.01,
                 momentum=0.9,
                 weight_decay=0.0001),
     # dtype='bfloat16'
@@ -388,7 +393,7 @@ today = datetime.datetime.now().strftime("%m%d")
 
 # load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
 # load_from = "./ckpts/single_frame_nusc_1118_epoch_200.pth"
-load_from = "./work_dirs/fastray_planar_single_frame_nusc_1119/single_frame_nusc_1119_epoch_411.pth"
+load_from = "./work_dirs/fastray_planar_single_frame_nusc_1120/single_frame_nusc_1120_epoch_500.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
 # work_dir = './work_dirs/fastray_planar_single_frame_1105_infer'
