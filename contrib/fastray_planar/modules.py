@@ -532,6 +532,44 @@ class VoVNetEncoder(BaseModule):
 
 
 @MODELS.register_module()
+class VoxelEncoderFPN(BaseModule):
+    def __init__(self, 
+                 in_channels, 
+                 mid_channels_list, 
+                 out_channels,
+                 repeats=4,
+                 init_cfg=None):
+        super().__init__(init_cfg=init_cfg)
+        assert len(mid_channels_list) == 3
+        if type(repeats) is int:
+            repeats = (repeats, repeats, repeats)
+        else:
+            assert len(repeats) == 3
+        self.osa0 = OSABlock(in_channels, mid_channels_list[0], mid_channels_list[0], stride=1, repeat=repeats[0], final_dilation=2)
+        self.osa1 = OSABlock(mid_channels_list[0], mid_channels_list[1], mid_channels_list[1], stride=2, repeat=repeats[1], final_dilation=2)
+        self.osa2 = OSABlock(mid_channels_list[1], mid_channels_list[2], mid_channels_list[2], stride=2, repeat=repeats[2], final_dilation=2)
+
+        self.p1_linear = ConvBN(mid_channels_list[2], mid_channels_list[1], kernel_size=1, padding=0)
+        self.p1_up = nn.ConvTranspose2d(mid_channels_list[1], mid_channels_list[1], kernel_size=2, stride=2, padding=0, bias=False)
+        self.p1_fusion = Concat()
+        self.p0_linear = ConvBN(mid_channels_list[1] * 2, mid_channels_list[0], kernel_size=1, padding=0)
+        self.p0_up = nn.ConvTranspose2d(mid_channels_list[0], mid_channels_list[0], kernel_size=2, stride=2, padding=0, bias=False)
+        self.p0_fusion = Concat()
+
+        self.out = ConvBN(mid_channels_list[0] * 2, out_channels)
+    
+    def forward(self, x):
+        osa0 = self.osa0(x)
+        osa1 = self.osa1(osa0)
+        osa2 = self.osa2(osa1)
+
+        p1 = self.p1_fusion(osa1, self.p1_up(self.p1_linear(osa2)))
+        p0 = self.p0_fusion(osa0, self.p0_up(self.p0_linear(p1)))
+
+        return self.out(p0)
+
+
+@MODELS.register_module()
 class PlanarHead(BaseModule):
     def __init__(self, 
                  in_channels, 
@@ -557,6 +595,35 @@ class PlanarHead(BaseModule):
         self.reg = nn.Conv2d(mid_channels * repeat, 
                              reg_channels, 
                              kernel_size=1)
+    
+    def forward(self, x):
+        seg_feat = self.seg_tower(x)
+        cen_seg = self.cen_seg(seg_feat)
+        reg_feat = self.reg_tower(x)
+        reg = self.reg(reg_feat)
+        return cen_seg, reg
+
+
+@MODELS.register_module()
+class PlanarHeadSimple(BaseModule):
+    def __init__(self, 
+                 in_channels, 
+                 mid_channels, 
+                 cen_seg_channels,
+                 reg_channels,
+                 repeat=1,
+                 init_cfg=None):
+        super().__init__(init_cfg=init_cfg)
+        self.seg_tower = nn.Sequential(
+            ConvBN(in_channels, mid_channels),
+            * ([ConvBN(mid_channels, mid_channels)] * repeat),
+        )
+        self.reg_tower = nn.Sequential(
+            ConvBN(in_channels, mid_channels),
+            * ([ConvBN(mid_channels, mid_channels)] * repeat),
+        )
+        self.cen_seg = nn.Conv2d(mid_channels, cen_seg_channels, kernel_size=1)
+        self.reg = nn.Conv2d(mid_channels, reg_channels, kernel_size=1)
     
     def forward(self, x):
         seg_feat = self.seg_tower(x)
