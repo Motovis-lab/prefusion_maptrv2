@@ -170,7 +170,7 @@ train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/nuScenes',
-    info_path='/data/datasets/nuScenes/nusc_t200v1_train_info.pkl',
+    info_path='/data/datasets/nuScenes/nusc_train_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -189,11 +189,12 @@ val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/nuScenes',
-    info_path='/data/datasets/nuScenes/nusc_t200v1_val_info.pkl',
+    info_path='/data/datasets/nuScenes/nusc_val_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
         camera_feature_configs=camera_feature_configs,
+        debug_mode=debug_mode,
     ),
     transformables=transformables,
     transforms=[
@@ -242,7 +243,7 @@ backbones = dict(
         norm_cfg=dict(type='SyncBN', requires_grad=True),
         norm_eval=True,
         style='pytorch',        
-        init_cfg=dict(type='Pretrained', checkpoint='./ckpts/resnet50.pth'),
+        # init_cfg=dict(type='Pretrained', checkpoint='./ckpts/resnet50.pth'),
         fpn_lateral_channel=128,
         fpn_in_channels=[256, 512, 1024, 2048],
         out_stride=feature_downscale, 
@@ -402,7 +403,7 @@ val_evaluator = [
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='SGD',
-                lr=0.0001,
+                lr=0.01,
                 momentum=0.9,
                 weight_decay=0.0001)
 )
@@ -429,7 +430,7 @@ today = datetime.datetime.now().strftime("%m%d")
 work_dir = f'./work_dirs/{experiment_name}_{today}'
 # load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
 # load_from = "./ckpts/fastray_planar_single_frame_nusc_4planar_types_1113_epoch_1.pth"
-# load_from = "./ckpts/single_frame_nusc_1121_epoch_1.pth"
+load_from = "./ckpts/multi_frame_nusc_r50_1126_epoch_6.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_nusc_r50_1125/multi_frame_nusc_r50_epoch_1.pth"
 
 resume = False
