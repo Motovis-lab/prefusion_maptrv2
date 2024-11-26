@@ -481,22 +481,26 @@ def draw_outputs(pred_dict, batched_input_dict):
     transformables = batched_input_dict['transformables'][0]
     scene_frame_id = batched_input_dict['index_infos'][0].scene_frame_id
 
-    ncols = len(camera_tensors_dict)
-    nrows = len(pred_dict) + 1
+    ncols = (len(camera_tensors_dict) + 1) // 2
+    nrows = len(pred_dict) + 2
 
-    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 2, nrows * 4))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 2, nrows * 3))
     fig.suptitle(f'scene_frame_id: {scene_frame_id}')
 
     # plot camera images
     for i, cam_id in enumerate(camera_tensors_dict):
         img = camera_tensors_dict[cam_id].detach().cpu().numpy()[0].transpose(1, 2, 0)[..., ::-1] * 255 + 128
         img = img.astype(np.uint8)
-        axes[0, i].imshow(img)
-        axes[0, i].set_title(cam_id.replace('VCAMERA_', '').lower())
-    
+        irow = i // ncols
+        icol = i % ncols
+        axes[irow, icol].imshow(img)
+        axes[irow, icol].set_title(cam_id.replace('VCAMERA_', '').lower())
+    for i in range(icol + 1, ncols):
+        axes[1, icol].axis('off')
+
     # plot preds with labels
-    for irow, branch in enumerate(pred_dict):
-        irow += 1
+    for i, branch in enumerate(pred_dict):
+        irow = i + 2
         pred_dict_branch = pred_dict[branch]
         gt_dict_branch = gt_dict[branch]
         # extract batch_0
@@ -587,7 +591,7 @@ def draw_outputs(pred_dict, batched_input_dict):
                     axes[irow, icol].axis('off')
     
     
-    # plt.tight_layout()
+    plt.tight_layout()
     save_path = Path('work_dirs/result_pngs') / f'{scene_frame_id}.png'
     save_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(save_path)
