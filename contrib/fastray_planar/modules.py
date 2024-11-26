@@ -1,4 +1,4 @@
-
+import math
 import torch
 import torch.nn as nn
 
@@ -181,10 +181,10 @@ class VoVNetFPN(BaseModule):
         
     def forward(self, x):  # x: (N, 3, H, W)
         stem1 = self.stem1(x)
-        osa2 = self.osa2(stem1)
-        osa3 = self.osa3(osa2)
-        osa4 = self.osa4(osa3)
-        osa5 = self.osa5(osa4)
+        osa2 = self.osa2(stem1) # shape: (bs, 96, 64, 176)
+        osa3 = self.osa3(osa2) # shape: (bs, 128, 32, 88)
+        osa4 = self.osa4(osa3) # shape: (bs, 192, 16, 44)
+        osa5 = self.osa5(osa4) # shape: (bs, 192, 8, 22)
 
         if self.out_stride <= 32:
             out = osa5
@@ -198,6 +198,77 @@ class VoVNetFPN(BaseModule):
         out = self.out(out)
         
         return out
+
+
+@MODELS.register_module()
+class ResNetFPN(BaseModule):
+    def __init__(
+        self, 
+        out_stride=8, 
+        out_channels=128, 
+        fpn_lateral_channel=64, 
+        fpn_in_channels=(256, 512, 1024, 2048), 
+        init_cfg=None, 
+        **backbone_kwargs
+    ):
+        super().__init__(init_cfg=init_cfg)
+        self.strides = [4, 8, 16, 32]
+        assert out_stride in self.strides
+        self.out_stride = out_stride
+
+        # BACKBONE
+        backbone_kwargs["type"] = "mmdet.ResNet"
+        self.backbone = MODELS.build(backbone_kwargs)
+        self.fpn = MODELS.build(dict(
+            type="mmdet.FPN", 
+            norm_cfg=dict(type='mmdet.SyncBN', requires_grad=True),
+            in_channels=fpn_in_channels,
+            out_channels=fpn_lateral_channel,
+            num_outs=backbone_kwargs["num_stages"],
+        ))
+
+        self.out = OSABlock(fpn_lateral_channel, fpn_lateral_channel, out_channels, stride=1, repeat=3, has_bn=False)
+
+        # NECK
+        # if self.out_stride <= 16:
+        #     self.p4_up = nn.ConvTranspose2d(2048, 1024, kernel_size=2, stride=2, padding=0, bias=False)
+        #     self.p4_fusion = Concat()
+        # if self.out_stride <= 8:
+        #     self.p3_linear = ConvBN(2048, 512, kernel_size=1, padding=0)
+        #     self.p3_up = nn.ConvTranspose2d(512, 512, kernel_size=2, stride=2, padding=0, bias=False)
+        #     self.p3_fusion = Concat()
+        # if self.out_stride <= 4:
+        #     self.p2_linear = ConvBN(1024, 256, kernel_size=1, padding=0)
+        #     self.p2_up = nn.ConvTranspose2d(256, 256, kernel_size=2, stride=2, padding=0, bias=False)
+        #     self.p2_fusion = Concat()
+        
+        # in_channels = {4: 512, 8: 1024, 16: 2048, 32: 2048}
+        # mid_channels = {4: 128, 8: 256, 16: 512, 32: 1024}
+        # self.out = OSABlock(
+        #     in_channels[self.out_stride], mid_channels[self.out_stride], out_channels,
+        #     stride=1, repeat=3, has_bn=False
+        # )
+        
+        
+    def forward(self, x):  # x: (N, 3, H, W)
+        feats = self.backbone(x) # feats shape: [bs, 256, 64, 176], [bs, 512, 32, 88], [bs, 1024, 16, 44], [bs, 2048, 8, 22]
+        fpn_feats = self.fpn(feats)
+        out_feat_layer_idx = int(math.log2(self.out_stride) - 2)
+        out = fpn_feats[out_feat_layer_idx]
+
+        # if self.out_stride <= 32:
+        #     out = feats[3]
+        # if self.out_stride <= 16:
+        #     out = self.p4_fusion(self.p4_up(out), feats[2])
+        # if self.out_stride <= 8:
+        #     out = self.p3_fusion(self.p3_up(self.p3_linear(out)), feats[1])
+        # if self.out_stride <= 4:
+        #     out = self.p2_fusion(self.p2_up(self.p2_linear(out)), feats[0])
+        
+        out = self.out(out)
+        
+        return out
+
 
 
 @MODELS.register_module()
@@ -529,6 +600,75 @@ class VoVNetEncoder(BaseModule):
     
     def forward(self, x):
         return self.enc_tower(x)
+
+
+class ResModule(BaseModule):
+    def __init__(self, in_channels, mid_channels, out_channels, kernel_size=3, padding=1, stride=1):
+        super().__init__()
+        self.convbn1 = ConvBN(in_channels=in_channels, out_channels=mid_channels, kernel_size=kernel_size, padding=padding, stride=stride, has_relu=True)
+        self.convbn2 = ConvBN(in_channels=mid_channels, out_channels=out_channels, kernel_size=kernel_size, padding=padding, stride=stride, has_relu=False)
+        self.activation = nn.ReLU(inplace=True)
+    
+    def forward(self, x):
+        identity = x
+        x = self.convbn1(x)
+        x = self.convbn2(x)
+        x = identity + x
+        x = self.activation(x)
+        return x
+
+
+@MODELS.register_module()
+class M2BevEncoder(BaseModule):
+    def __init__(self, 
+                 in_channels, 
+                 shrink_channels,
+                 out_channels,
+                 repeat=7,
+                 init_cfg=None):
+        super().__init__(init_cfg=init_cfg)
+    
+        # if fuse is not None:
+        #     self.fuse = nn.Conv2d(fuse["in_channels"], fuse["out_channels"], kernel_size=1)
+        # else:
+        #     self.fuse = None
+        self.shrink = nn.Conv2d(in_channels, shrink_channels, kernel_size=1)
+        model = nn.ModuleList()
+        model.append(ResModule(in_channels=shrink_channels, mid_channels=shrink_channels, out_channels=shrink_channels))
+        model.append(ConvBN(
+                in_channels=shrink_channels,
+                out_channels=out_channels,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+                has_relu=True))
+        for i in range(repeat - 1):
+            model.append(ResModule(in_channels=out_channels, mid_channels=out_channels, out_channels=out_channels))
+            model.append(ConvBN(
+                    in_channels=out_channels,
+                    out_channels=out_channels,
+                    kernel_size=3,
+                    stride=1,
+                    padding=1,
+                    has_relu=True))
+        self.model = nn.Sequential(*model)
+        self.init_params()
+
+    def forward(self, x):
+        """Forward function.
+
+        Args:
+            x (torch.Tensor): of shape (N, C_in, N_x, N_y, N_z).
+
+        Returns:
+            list[torch.Tensor]: of shape (N, C_out, N_y, N_x).
+        """
+        x = self.shrink(x)
+        out = self.model.forward(x)
+        return out
+    
+    def init_params(self):
+        nn.init.xavier_normal_(self.shrink.weight.data)
 
 
 @MODELS.register_module()

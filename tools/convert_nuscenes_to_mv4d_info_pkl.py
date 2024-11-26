@@ -285,8 +285,8 @@ def build_3d_polylines(nusc: NuScenes, nusc_map: Dict[str, Dict[str, dict]], cur
     timestamp = cur_sample["timestamp"]
     map_data = nusc_map[scene_id]
     frame = map_data.get(timestamp)
+    elements = []
     if frame:
-        elements = []
         for data_type, vertices_list in frame.items():
             if data_type == "centerline":
                 continue
