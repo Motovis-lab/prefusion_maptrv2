@@ -201,18 +201,62 @@ class VoVNetFPN(BaseModule):
 
 
 @MODELS.register_module()
+class VoVNetSlimFPN(BaseModule):
+    def __init__(self, out_channels=80, init_cfg=None):
+        super().__init__(init_cfg=init_cfg)
+
+        # BACKBONE
+        self.stem1 = ConvBN(3, 64, stride=2)
+        self.osa2 = OSABlock(64, 64, 96, stride=2, repeat=3)
+        self.osa3 = OSABlock(96, 96, 128, stride=2, repeat=4, final_dilation=2)
+        self.osa4 = OSABlock(128, 128, 192, stride=2, repeat=5, final_dilation=2)
+        self.osa5 = OSABlock(192, 192, 192, stride=2, repeat=4, final_dilation=2)
+
+        # NECK
+        self.p4_up = nn.ConvTranspose2d(192, 192, kernel_size=2, stride=2, padding=0, bias=False)
+        self.p4_fusion = Concat()
+        self.p3_linear = ConvBN(384, 128, kernel_size=1, padding=0)
+        self.p3_up = nn.ConvTranspose2d(128, 128, kernel_size=2, stride=2, padding=0, bias=False)
+        self.p3_fusion = Concat()
+        self.out = OSABlock(256, 96, stride=1, repeat=3, has_bn=False, with_reduce=False)
+        self.up_linear = ConvBN(288, out_channels, kernel_size=1, padding=0)
+        self.up = nn.ConvTranspose2d(out_channels, out_channels, kernel_size=2, stride=2, padding=0, bias=True)
+        
+    def forward(self, x):  # x: (N, 3, H, W)
+        stem1 = self.stem1(x)
+        osa2 = self.osa2(stem1)
+        osa3 = self.osa3(osa2)
+        osa4 = self.osa4(osa3)
+        osa5 = self.osa5(osa4)
+
+        p4 = self.p4_fusion(self.p4_up(osa5), osa4)
+        p3 = self.p3_fusion(self.p3_up(self.p3_linear(p4)), osa3)
+        
+        out = self.up(self.up_linear(self.out(p3)))
+        
+        return out
+
+
+
+@MODELS.register_module()
 class FastRaySpatialTransform(BaseModule):
     
     def __init__(self, 
                  voxel_shape, 
                  fusion_mode='weighted', 
                  bev_mode=False, 
+                 reduce_channels=False,
+                 in_channels=None,
+                 out_channels=None,
                  init_cfg=None):
         super().__init__(init_cfg=init_cfg)
         self.voxel_shape = voxel_shape
         assert fusion_mode in ['weighted', 'sampled', 'bilinear_weighted']
         self.fusion_mode = fusion_mode
         self.bev_mode = bev_mode
+        self.reduce_channels = reduce_channels and bev_mode
+        if self.reduce_channels:
+            self.channel_reduction = nn.Conv2d(in_channels, out_channels, kernel_size=1)
     
     def forward(self, camera_feats_dict, camera_lookups):
         '''Output a 3d voxel tensor from 2d image features
@@ -279,7 +323,10 @@ class FastRaySpatialTransform(BaseModule):
                     
         # reshape voxel_feats
         if self.bev_mode:
-            return voxel_feats.reshape(N, C*Z, X, Y)
+            bev_feats = voxel_feats.reshape(N, C*Z, X, Y)
+            if self.reduce_channels:
+                bev_feats = self.channel_reduction(bev_feats)
+            return bev_feats
         else:
             return voxel_feats.reshape(N, C, Z, X, Y)
         
@@ -479,18 +526,24 @@ class VoxelStreamFusion(BaseModule):
 
 @MODELS.register_module()
 class VoxelConcatFusion(BaseModule):
-    def __init__(self, in_channels, pre_nframes, bev_mode=False, init_cfg=None):
+    def __init__(self, in_channels, pre_nframes, bev_mode=False, group_conv=False, init_cfg=None):
         super().__init__(init_cfg=init_cfg)
         self.bev_mode = bev_mode
         self.cat = Concat()
+        if group_conv:
+            groups = in_channels
+        else:
+            groups = 1
         if bev_mode:
             self.fuse = nn.Sequential(
-                nn.Conv2d(in_channels * (pre_nframes + 1), in_channels, kernel_size=3, padding=1),
+                nn.Conv2d(in_channels * (pre_nframes + 1), in_channels, 
+                          groups=groups, kernel_size=3, padding=1),
                 nn.BatchNorm2d(in_channels)
             )
         else:
             self.fuse = nn.Sequential(
-                nn.Conv3d(in_channels * (pre_nframes + 1), in_channels, kernel_size=3, padding=1),
+                nn.Conv3d(in_channels * (pre_nframes + 1), in_channels, 
+                          groups=groups, kernel_size=3, padding=1),
                 nn.BatchNorm3d(in_channels)
             )
     
@@ -537,7 +590,7 @@ class VoxelEncoderFPN(BaseModule):
                  in_channels, 
                  mid_channels_list, 
                  out_channels,
-                 repeats=4,
+                 repeats=3,
                  init_cfg=None):
         super().__init__(init_cfg=init_cfg)
         assert len(mid_channels_list) == 3
