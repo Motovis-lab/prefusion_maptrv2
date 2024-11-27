@@ -207,8 +207,7 @@ class ParkingFastRayPlanarMultiFrameModel(BaseModel):
 class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
     
     def __init__(self,
-                 camera_groups,
-                 backbones,
+                 backbone,
                  spatial_transform,
                  temporal_transform,
                  voxel_fusion,
@@ -223,8 +222,7 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
         super().__init__(data_preprocessor, init_cfg)
         self.debug_mode = debug_mode
         # backbone
-        self.camera_groups = camera_groups
-        self.backbone_fisheyes = MODELS.build(backbones['fisheyes'])
+        self.backbone = MODELS.build(backbone)
         # view transform and temporal transform
         self.spatial_transform = MODELS.build(spatial_transform)
         self.temporal_transform = MODELS.build(temporal_transform)
@@ -316,8 +314,7 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
         ## backbone
         camera_feats_dict = {}
         for cam_id in camera_tensors_dict:
-            if cam_id in self.camera_groups['fisheyes']:
-                camera_feats_dict[cam_id] = self.backbone_fisheyes(camera_tensors_dict[cam_id])
+            camera_feats_dict[cam_id] = self.backbone(camera_tensors_dict[cam_id])
         ## spatial transform: output shape can be 4D or 5D (N, C*Z, X, Y) or (N, C, Z, X, Y)
         bev_feats = self.spatial_transform(camera_feats_dict, camera_lookups)
         if len(bev_feats.shape) == 5:
@@ -395,6 +392,8 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
         for branch in self.losses_dict:
             losses_branch = self.losses_dict[branch](pred_dict[branch], gt_dict[branch])
             losses['loss'] += losses_branch[branch + '_loss']
-            losses.update(losses_branch)
+            if branch + '_seg_iou_0_loss' in losses_branch:
+                losses[branch + '_seg_iou_0_loss'] = losses_branch[branch + '_seg_iou_0_loss']
+            # losses.update(losses_branch)
 
         return losses

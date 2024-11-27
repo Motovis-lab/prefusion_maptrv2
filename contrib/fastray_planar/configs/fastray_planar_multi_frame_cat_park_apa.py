@@ -138,19 +138,18 @@ dictionary_polygons = dict(
 
 ## camera configs for model inputs
 
-camera_groups = dict(
-    fisheyes=['VCAMERA_FISHEYE_FRONT',
-              'VCAMERA_FISHEYE_LEFT',
-              'VCAMERA_FISHEYE_BACK',
-              'VCAMERA_FISHEYE_RIGHT'])
+fisheye_cameras=['VCAMERA_FISHEYE_FRONT',
+                 'VCAMERA_FISHEYE_LEFT',
+                 'VCAMERA_FISHEYE_BACK',
+                 'VCAMERA_FISHEYE_RIGHT']
 
-resolution_fisheyes = (640, 384)
+fisheye_resolution = (640, 384)
 
 camera_resolution_configs = dict(
-    VCAMERA_FISHEYE_FRONT=resolution_fisheyes,
-    VCAMERA_FISHEYE_LEFT=resolution_fisheyes,
-    VCAMERA_FISHEYE_BACK=resolution_fisheyes,
-    VCAMERA_FISHEYE_RIGHT=resolution_fisheyes)
+    VCAMERA_FISHEYE_FRONT=fisheye_resolution,
+    VCAMERA_FISHEYE_LEFT=fisheye_resolution,
+    VCAMERA_FISHEYE_BACK=fisheye_resolution,
+    VCAMERA_FISHEYE_RIGHT=fisheye_resolution)
 
 
 debug_mode = False
@@ -182,7 +181,7 @@ transformables=dict(
     camera_images=dict(
         type='CameraImageSet', 
         loader=dict(type='AdvancedCameraImageSetLoader',
-                    available_cameras=camera_groups['fisheyes']),
+                    available_cameras=fisheye_cameras),
         tensor_smith=dict(type='CameraImageTensor')),
     ego_poses=dict(type='EgoPoseSet'),
     bbox_3d_heading=dict(
@@ -290,10 +289,7 @@ val_dataloader = dict(
 bev_mode = True
 # backbones
 camera_feat_channels = 64
-backbones = dict(
-    pv_front=dict(type='VoVNetSlimFPN', out_channels=camera_feat_channels),
-    pv_sides=dict(type='VoVNetSlimFPN', out_channels=camera_feat_channels),
-    fisheyes=dict(type='VoVNetSlimFPN', out_channels=camera_feat_channels))
+backbone = dict(type='VoVNetSlimFPN', out_channels=camera_feat_channels)
 # spatial_transform
 spatial_transform = dict(
     type='FastRaySpatialTransform',
@@ -479,8 +475,7 @@ loss_cfg = dict(
 # integrated model config
 model = dict(
     type='ParkingFastRayPlanarMultiFrameModelAPA',
-    camera_groups=camera_groups,
-    backbones=backbones,
+    backbone=backbone,
     spatial_transform=spatial_transform,
     temporal_transform=temporal_transform,
     voxel_fusion=voxel_fusion,
@@ -522,6 +517,6 @@ env_cfg = dict(
 
 
 work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1127"
-# load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
+load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
 
 resume = False
