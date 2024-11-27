@@ -160,8 +160,8 @@ if debug_mode:
     transforms = [dict(type='RenderIntrinsic', resolutions=camera_resolution_configs)]
     possible_group_sizes=2,
 else:
-    batch_size = 4
-    num_workers = 4
+    batch_size = 8
+    num_workers = 8
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs),
@@ -232,8 +232,8 @@ train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='../MV4D-PARKING',
-    # info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
-    info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
+    info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
+    # info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
