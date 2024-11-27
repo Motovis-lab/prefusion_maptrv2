@@ -160,8 +160,8 @@ if debug_mode:
     transforms = [dict(type='RenderIntrinsic', resolutions=camera_resolution_configs)]
     possible_group_sizes=2,
 else:
-    batch_size = 8
-    num_workers = 8
+    batch_size = 4
+    num_workers = 6
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs),
