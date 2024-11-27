@@ -77,7 +77,7 @@ mapping_plane_heading_objects = dict(
 mapping_no_heading_objects = dict(
     # 6 = 6 classes
     class_mapping={
-        'wheel_stopper': ['class.wheeled_push_device.wheel_stopper'],
+        'wheel_stopper': ['class.parking.wheel_stopper'],
         'speed_bump': ['class.traffic_facility.speed_bump'],
         'water_filled_barrier': ['class.traffic_facility.soft_barrier::attr.traffic_facility.soft_barrier.type.water_filled_barrier'],
         'cement_pier': ['class.traffic_facility.hard_barrier::attr.traffic_facility.hard_barrier.type.cement_isolation_pier'],
@@ -276,6 +276,7 @@ val_dataset = dict(
     name="demo_parking",
     data_root='../MV4D-PARKING',
     info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
+    # info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -543,7 +544,8 @@ env_cfg = dict(
 
 
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_1120"
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_1121_val"
-load_from = "./work_dirs/collected_models/parking_multi_frame_4.pth"
+work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_1122_val"
+# load_from = "./work_dirs/collected_models/parking_multi_frame_14.pth"
+load_from = "./work_dirs/collected_models/parking_multi_frame_20.pth"
 
 resume = False
