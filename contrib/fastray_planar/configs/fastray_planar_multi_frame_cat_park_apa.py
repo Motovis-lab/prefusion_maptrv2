@@ -161,7 +161,7 @@ if debug_mode:
     possible_group_sizes=2,
 else:
     batch_size = 4
-    num_workers = 6
+    num_workers = 4
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs),
