@@ -82,9 +82,9 @@ class TransformableLoader:
 
 
 class CameraSetLoader(TransformableLoader):
-    def __init__(self, data_root: Path, available_cameras: List | str = 'all') -> None:
+    def __init__(self, data_root: Path, selected_cameras: List | str = 'all') -> None:
         super().__init__(data_root)
-        self.available_cameras = available_cameras
+        self.selected_cameras = selected_cameras
 
 
 @TRANSFORMABLE_LOADERS.register_module()
@@ -105,7 +105,7 @@ class CameraImageSetLoader(CameraSetLoader):
                 tensor_smith=tensor_smith,
             )
             for cam_id in frame_info["camera_image"]
-            if self.available_cameras == 'all' or cam_id in self.available_cameras
+            if self.selected_cameras == 'all' or cam_id in self.selected_cameras
         }
         return CameraImageSet(name, camera_images)
 
@@ -151,7 +151,7 @@ class CameraDepthSetLoader(CameraSetLoader):
                 tensor_smith=tensor_smith,
             )
             for cam_id in frame_info["camera_image_depth"]
-            if self.available_cameras == 'all' or cam_id in self.available_cameras
+            if self.selected_cameras == 'all' or cam_id in self.selected_cameras
         }
         return CameraDepthSet(name, camera_depths)
 
@@ -176,7 +176,7 @@ class CameraSegMaskSetLoader(CameraSetLoader):
                 tensor_smith=tensor_smith,
             )
             for cam_id in frame_info["camera_image_seg"]
-            if self.available_cameras == 'all' or cam_id in self.available_cameras
+            if self.selected_cameras == 'all' or cam_id in self.selected_cameras
         }
         return CameraSegMaskSet(name, camera_segs)
 

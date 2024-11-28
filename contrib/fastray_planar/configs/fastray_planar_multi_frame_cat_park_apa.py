@@ -181,7 +181,7 @@ transformables=dict(
     camera_images=dict(
         type='CameraImageSet', 
         loader=dict(type='CameraImageSetLoader',
-                    available_cameras=fisheye_cameras),
+                    selected_cameras=fisheye_cameras),
         tensor_smith=dict(type='CameraImageTensor')),
     ego_poses=dict(type='EgoPoseSet'),
     bbox_3d_heading=dict(
