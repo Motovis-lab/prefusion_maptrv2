@@ -152,13 +152,13 @@ camera_resolution_configs = dict(
     VCAMERA_FISHEYE_RIGHT=fisheye_resolution)
 
 
-debug_mode = False
+debug_mode = True
 
 if debug_mode:
     batch_size = 1
     num_workers = 1
     transforms = [dict(type='RenderIntrinsic', resolutions=camera_resolution_configs)]
-    possible_group_sizes=2,
+    possible_group_sizes = 2
 else:
     batch_size = 4
     num_workers = 4
@@ -171,7 +171,7 @@ else:
         dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
         dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
-    possible_group_sizes=2,
+    possible_group_sizes = 2
 
 
 ## GroupBatchDataset configs
@@ -251,8 +251,8 @@ val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='../MV4D-PARKING',
-    info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
-    # info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
+    # info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
+    info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -359,79 +359,152 @@ heads = dict(
 
 # loss configs
 bbox_3d_heading_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=5,
              fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
+             iou_loss_weight=5,
              dual_focal_loss_weight=10),
-    reg=dict(loss_weight=1.0))
+    reg=dict(loss_weight=1.0,
+             partition_weights={
+                "center_xy": {"weight": 2, "slice": (0, 2)},
+                "center_z": {"weight": 5, "slice": 2},
+                "size": {"weight": 5, "slice": (3, 6)},
+                "unit_xvec": {"weight": 10, "slice": (6, 9)},
+                "abs_xvec": {"weight": 20, "slice": (9, 14)},
+                "abs_roll_angle": {"weight": 5, "slice": (14, 17)},
+                "velo": {"weight": 5, "slice": (17, 20)},
+            })
+)
 
 bbox_3d_plane_heading_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=5,
              fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
+             iou_loss_weight=5,
              dual_focal_loss_weight=10),
-    reg=dict(loss_weight=1.0))
+    reg=dict(loss_weight=1.0,
+             partition_weights={
+                "center_xy": {"weight": 2, "slice": (0, 2)},
+                "center_z": {"weight": 5, "slice": 2},
+                "size": {"weight": 5, "slice": (3, 6)},
+                "unit_xvec": {"weight": 10, "slice": (6, 9)},
+                "abs_xvec": {"weight": 20, "slice": (9, 14)},
+                "abs_roll_angle": {"weight": 5, "slice": (14, 17)},
+                "velo": {"weight": 1, "slice": (17, 20)},
+            })
+)
 
 bbox_3d_no_heading_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=5,
              fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
+             iou_loss_weight=5,
              dual_focal_loss_weight=10),
-    reg=dict(loss_weight=1.0))
+    reg=dict(loss_weight=1.0,
+             partition_weights={
+                "center_xy": {"weight": 2, "slice": (0, 2)},
+                "center_z": {"weight": 5, "slice": 2},
+                "size": {"weight": 5, "slice": (3, 6)},
+                "abs_xvec": {"weight": 20, "slice": (6, 11)},
+                "abs_roll_angle": {"weight": 5, "slice": (11, 14)},
+            })
+)
 
 bbox_3d_square_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=5,
              fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
+             iou_loss_weight=5,
              dual_focal_loss_weight=10),
-    reg=dict(loss_weight=1.0))
+    reg=dict(loss_weight=1.0,
+             partition_weights={
+                "center_xy": {"weight": 2, "slice": (0, 2)},
+                "center_z": {"weight": 5, "slice": 2},
+                "size": {"weight": 5, "slice": (3, 6)},
+                "unit_zvec": {"weight": 20, "slice": (6, 9)},
+                "yaw_angle": {"weight": 5, "slice": (9, 11)},
+            })
+)
 
 bbox_3d_cylinder_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=5,
              fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
+             iou_loss_weight=5,
              dual_focal_loss_weight=10),
-    reg=dict(loss_weight=1.0))
+    reg=dict(loss_weight=1.0,
+             partition_weights={
+                "center_xy": {"weight": 2, "slice": (0, 2)},
+                "center_z": {"weight": 5, "slice": 2},
+                "size": {"weight": 5, "slice": (3, 5)},
+                "unit_zvec": {"weight": 20, "slice": (5, 8)},
+            })
+)
 
 bbox_3d_oriented_cylinder_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=5,
              fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
+             iou_loss_weight=5,
              dual_focal_loss_weight=10),
-    reg=dict(loss_weight=1.0))
+    reg=dict(loss_weight=1.0,
+             partition_weights={
+                "center_xy": {"weight": 2, "slice": (0, 2)},
+                "center_z": {"weight": 5, "slice": 2},
+                "size": {"weight": 5, "slice": (3, 5)},
+                "unit_zvec": {"weight": 20, "slice": (5, 8)},
+                "yaw_angle": {"weight": 5, "slice": (8, 10)},
+                "velo": {"weight": 5, "slice": (10, 13)},
+            })
+)
 
 polyline_3d_weight_scheme = dict(
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=2,
+             iou_loss_weight=5,
              dual_focal_loss_weight=10),
-    reg=dict(loss_weight=1.0))
+    reg=dict(loss_weight=1.0,
+             partition_weights={
+                "dist": {"weight": 2, "slice": (0, 1)},
+                "vec": {"weight": 2, "slice": (1, 3)},
+                "dir": {"weight": 20, "slice": (3, 6)},
+                "height": {"weight": 5, "slice": (6, 7)},
+            })
+)
 
 polygon_3d_weight_scheme = dict(
-    seg=dict(loss_weight=1.0,
-             iou_loss_weight=2,
+    seg=dict(loss_weight=2,
+             iou_loss_weight=5,
              dual_focal_loss_weight=10),
-    reg=dict(loss_weight=1.0))
+    reg=dict(loss_weight=0.5,
+             partition_weights={
+                "dist": {"weight": 2, "slice": (0, 1)},
+                "vec": {"weight": 2, "slice": (1, 3)},
+                "dir": {"weight": 20, "slice": (3, 6)},
+                "height": {"weight": 5, "slice": (6, 7)},
+            })
+)
 
 parkingslot_3d_weight_scheme = dict(
-    cen=dict(loss_weight=1,
+    cen=dict(loss_weight=5,
              fg_weight=2,
              bg_weight=0.5),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
+             iou_loss_weight=5,
              dual_focal_loss_weight=10),
-    reg=dict(loss_weight=1.0))
+    reg=dict(loss_weight=1,
+             partition_weights={
+                "dist": {"weight": 5, "slice": (0, 4)},
+                "dir": {"weight": 20, "slice": (4, 10)},
+                "vec": {"weight": 10, "slice": (10, 14)},
+                "height": {"weight": 5, "slice": (14, 15)},
+            })
+)
 
 loss_cfg = dict(
     bbox_3d_heading=dict(
@@ -516,7 +589,9 @@ env_cfg = dict(
 )
 
 
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1127"
-load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1127"
+work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1128_val"
+# load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
+load_from = "./work_dirs/collected_models/apa_epoch_10.pth"
 
 resume = False
