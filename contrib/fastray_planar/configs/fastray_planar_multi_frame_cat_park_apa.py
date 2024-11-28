@@ -180,7 +180,7 @@ else:
 transformables=dict(
     camera_images=dict(
         type='CameraImageSet', 
-        loader=dict(type='AdvancedCameraImageSetLoader',
+        loader=dict(type='CameraImageSetLoader',
                     available_cameras=fisheye_cameras),
         tensor_smith=dict(type='CameraImageTensor')),
     ego_poses=dict(type='EgoPoseSet'),

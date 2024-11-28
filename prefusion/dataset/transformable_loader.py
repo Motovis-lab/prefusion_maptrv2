@@ -42,7 +42,6 @@ __all__ = [
     "Bbox3DLoader", "AdvancedBbox3DLoader", "NuscenesCameraImageSetLoader",
     "Polyline3DLoader", "Polygon3DLoader", "ParkingSlot3DLoader",
     "OccSdfBevLoader", "SegBevLoader", "OccSdf3DLoader",
-    "AdvancedCameraImageSetLoader"
 ]
 
 
@@ -82,34 +81,14 @@ class TransformableLoader:
         raise NotImplementedError(f'Module [{type(self).__name__}] is missing the required "load" function')
 
 
-@TRANSFORMABLE_LOADERS.register_module()
-class CameraImageSetLoader(TransformableLoader):
-    def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraImageSet:
-        scene_info = scene_data["scene_info"]
-        frame_info = scene_data["frame_info"][index_info.frame_id]
-        calib = scene_data["scene_info"]["calibration"]
-        camera_images = {
-            cam_id: CameraImage(
-                name=f"{name}:{cam_id}",
-                cam_id=cam_id,
-                cam_type=calib[cam_id]["camera_type"],
-                img=mmcv.imread(self.data_root / frame_info["camera_image"][cam_id]),
-                ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id]),
-                extrinsic=calib[cam_id]["extrinsic"],
-                intrinsic=calib[cam_id]["intrinsic"],
-                tensor_smith=tensor_smith,
-            )
-            for cam_id in frame_info["camera_image"]
-        }
-        return CameraImageSet(name, camera_images)
-
-
-@TRANSFORMABLE_LOADERS.register_module()
-class AdvancedCameraImageSetLoader(TransformableLoader):
-    def __init__(self, data_root: Path, available_cameras: List) -> None:
+class CameraSetLoader(TransformableLoader):
+    def __init__(self, data_root: Path, available_cameras: List | str = 'all') -> None:
         super().__init__(data_root)
         self.available_cameras = available_cameras
 
+
+@TRANSFORMABLE_LOADERS.register_module()
+class CameraImageSetLoader(CameraSetLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraImageSet:
         scene_info = scene_data["scene_info"]
         frame_info = scene_data["frame_info"][index_info.frame_id]
@@ -126,10 +105,9 @@ class AdvancedCameraImageSetLoader(TransformableLoader):
                 tensor_smith=tensor_smith,
             )
             for cam_id in frame_info["camera_image"]
-            if cam_id in self.available_cameras
+            if self.available_cameras == 'all' or cam_id in self.available_cameras
         }
         return CameraImageSet(name, camera_images)
-
 
 
 @TRANSFORMABLE_LOADERS.register_module()
@@ -154,7 +132,7 @@ class NuscenesCameraImageSetLoader(TransformableLoader):
 
 
 @TRANSFORMABLE_LOADERS.register_module()
-class CameraDepthSetLoader(TransformableLoader):
+class CameraDepthSetLoader(CameraSetLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraDepthSet:
         scene_info = scene_data["scene_info"]
         frame_info = scene_data["frame_info"][index_info.frame_id]
@@ -173,12 +151,13 @@ class CameraDepthSetLoader(TransformableLoader):
                 tensor_smith=tensor_smith,
             )
             for cam_id in frame_info["camera_image_depth"]
+            if self.available_cameras == 'all' or cam_id in self.available_cameras
         }
         return CameraDepthSet(name, camera_depths)
 
 
 @TRANSFORMABLE_LOADERS.register_module()
-class CameraSegMaskSetLoader(TransformableLoader):
+class CameraSegMaskSetLoader(CameraSetLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> CameraSegMaskSet:
         scene_info = scene_data["scene_info"]
         frame_info = scene_data["frame_info"][index_info.frame_id]
@@ -197,6 +176,7 @@ class CameraSegMaskSetLoader(TransformableLoader):
                 tensor_smith=tensor_smith,
             )
             for cam_id in frame_info["camera_image_seg"]
+            if self.available_cameras == 'all' or cam_id in self.available_cameras
         }
         return CameraSegMaskSet(name, camera_segs)
 
