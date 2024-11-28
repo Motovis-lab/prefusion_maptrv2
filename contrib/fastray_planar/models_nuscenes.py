@@ -18,7 +18,7 @@ from .model_utils import *
 
 @MODELS.register_module()
 class NuscenesFastRayPlanarSingleFrameModel(BaseModel):
-    
+
     def __init__(self,
                  camera_groups,
                  backbones,
@@ -39,9 +39,6 @@ class NuscenesFastRayPlanarSingleFrameModel(BaseModel):
         self.voxel_encoder = MODELS.build(heads['voxel_encoder'])
         # voxel heads
         self.head_bbox_3d = MODELS.build(heads['bbox_3d'])
-        self.head_bbox_3d_cylinder = MODELS.build(heads['bbox_3d_cylinder'])
-        self.head_bbox_3d_oriented_cylinder = MODELS.build(heads['bbox_3d_oriented_cylinder'])
-        self.head_bbox_3d_rect_cuboid = MODELS.build(heads['bbox_3d_rect_cuboid'])
         # self.head_occ_sdf = MODELS.build(heads['occ_sdf'])
         # init losses
         self.loss_bbox_3d = MODELS.build(loss_cfg['bbox_3d'])
@@ -49,7 +46,7 @@ class NuscenesFastRayPlanarSingleFrameModel(BaseModel):
         self.loss_bbox_3d_oriented_cylinder = MODELS.build(loss_cfg['bbox_3d_oriented_cylinder'])
         self.loss_bbox_3d_rect_cuboid = MODELS.build(loss_cfg['bbox_3d_rect_cuboid'])
 
-    
+
     def forward(self, mode='tensor', **batched_input_dict):
         """
         >>> batched_input_dict = processed_frame_batch = {
@@ -96,70 +93,52 @@ class NuscenesFastRayPlanarSingleFrameModel(BaseModel):
         bev_feats = self.voxel_encoder(voxel_feats)
         # heads
         out_bbox_3d = self.head_bbox_3d(bev_feats)
-        out_bbox_3d_cylinder = self.head_bbox_3d_cylinder(bev_feats)
-        out_bbox_3d_oriented_cylinder = self.head_bbox_3d_oriented_cylinder(bev_feats)
-        out_bbox_3d_rect_cuboid = self.head_bbox_3d_rect_cuboid(bev_feats)
         # outputs
-        pred_bbox_3d = dict(
-            cen=out_bbox_3d[0][:, 0:1],
-            seg=out_bbox_3d[0][:, 1:],
-            reg=out_bbox_3d[1])
-        pred_bbox_3d_cylinder = dict(
-            cen=out_bbox_3d_cylinder[0][:, 0:1],
-            seg=out_bbox_3d_cylinder[0][:, 1:],
-            reg=out_bbox_3d_cylinder[1])
-        pred_bbox_3d_oriented_cylinder = dict(
-            cen=out_bbox_3d_oriented_cylinder[0][:, 0:1],
-            seg=out_bbox_3d_oriented_cylinder[0][:, 1:],
-            reg=out_bbox_3d_oriented_cylinder[1])
-        pred_bbox_3d_rect_cuboid = dict(
-            cen=out_bbox_3d_rect_cuboid[0][:, 0:1],
-            seg=out_bbox_3d_rect_cuboid[0][:, 1:],
-            reg=out_bbox_3d_rect_cuboid[1])
+        pred_dict = dict(
+            bbox_3d = dict(
+                cen=out_bbox_3d[0][:, 0:1],
+                seg=out_bbox_3d[0][:, 1:9],
+                reg=out_bbox_3d[1][:, 0:20]),
+            bbox_3d_cylinder = dict(
+                cen=out_bbox_3d[0][:, 9:10],
+                seg=out_bbox_3d[0][:, 10:12],
+                reg=out_bbox_3d[1][:, 20:28]),
+            bbox_3d_oriented_cylinder = dict(
+                cen=out_bbox_3d[0][:, 12:13],
+                seg=out_bbox_3d[0][:, 13:15],
+                reg=out_bbox_3d[1][:, 28:41]),
+            bbox_3d_rect_cuboid = dict(
+                cen=out_bbox_3d[0][:, 15:16],
+                seg=out_bbox_3d[0][:, 16:18],
+                reg=out_bbox_3d[1][:, 41:55]),
+        )
 
         if self.debug_mode:
-            draw_out_feats(batched_input_dict, 
+            draw_out_feats(batched_input_dict,
                            camera_tensors_dict,
-                           pred_bbox_3d,)
-        
+                           pred_bbox_3d=pred_dict['bbox_3d'],
+                           pred_bbox_3d_rect_cuboid=pred_dict['bbox_3d_rect_cuboid'],
+                           pred_bbox_3d_cylinder=pred_dict['bbox_3d_cylinder'],
+                           pred_bbox_3d_oriented_cylinder=pred_dict['bbox_3d_oriented_cylinder'])
+
         if mode == 'tensor':
-            return dict(
-                hidden_feats=self.voxel_feats_pre,
-                pred_bbox_3d=pred_bbox_3d,
-                pred_bbox_3d_cylinder=pred_bbox_3d_cylinder,
-                pred_bbox_3d_oriented_cylinder=pred_bbox_3d_oriented_cylinder,
-                pred_bbox_3d_rect_cuboid=pred_bbox_3d_rect_cuboid,
-            )
+            return pred_dict
         if mode == 'loss':
-            gt = batched_input_dict['annotations']
-            pred = {
-                "bbox_3d": pred_bbox_3d,
-                "bbox_3d_cylinder": pred_bbox_3d_cylinder,
-                "bbox_3d_oriented_cylinder": pred_bbox_3d_oriented_cylinder,
-                "bbox_3d_rect_cuboid": pred_bbox_3d_rect_cuboid,
-            }
-            losses = self.compute_losses(gt, pred)
+            losses = self.compute_losses(batched_input_dict['annotations'], pred_dict)
             return losses
 
         if mode == 'predict':
-            gt = batched_input_dict['annotations']
-            pred = {
-                "bbox_3d": pred_bbox_3d,
-                "bbox_3d_cylinder": pred_bbox_3d_cylinder,
-                "bbox_3d_oriented_cylinder": pred_bbox_3d_oriented_cylinder,
-                "bbox_3d_rect_cuboid": pred_bbox_3d_rect_cuboid,
-            }
-            losses = self.compute_losses(gt, pred)
+            losses = self.compute_losses(batched_input_dict['annotations'], pred_dict)
             return (
-                *[{trsfmbl_name: {t: v.cpu() for t, v in _pred.items()}} for trsfmbl_name, _pred in pred.items()],
+                *[{trsfmbl_name: {t: v.cpu() for t, v in _pred.items()}} for trsfmbl_name, _pred in pred_dict.items()],
                 BaseDataElement(loss=losses),
             )
 
-    def compute_losses(self, gt: Dict, pred: Dict):
-        loss_bbox_3d = self.loss_bbox_3d(pred["bbox_3d"], gt['bbox_3d'])
-        loss_bbox_3d_cylinder = self.loss_bbox_3d_cylinder(pred["bbox_3d_cylinder"], gt["bbox_3d_cylinder"])
-        loss_bbox_3d_oriented_cylinder = self.loss_bbox_3d_oriented_cylinder(pred["bbox_3d_oriented_cylinder"], gt["bbox_3d_oriented_cylinder"])
-        loss_bbox_3d_rect_cuboid = self.loss_bbox_3d_rect_cuboid(pred["bbox_3d_rect_cuboid"], gt["bbox_3d_rect_cuboid"])
+    def compute_losses(self, gt_dict: Dict, pred_dict: Dict):
+        loss_bbox_3d = self.loss_bbox_3d(pred_dict["bbox_3d"], gt_dict['bbox_3d'])
+        loss_bbox_3d_cylinder = self.loss_bbox_3d_cylinder(pred_dict["bbox_3d_cylinder"], gt_dict["bbox_3d_cylinder"])
+        loss_bbox_3d_oriented_cylinder = self.loss_bbox_3d_oriented_cylinder(pred_dict["bbox_3d_oriented_cylinder"], gt_dict["bbox_3d_oriented_cylinder"])
+        loss_bbox_3d_rect_cuboid = self.loss_bbox_3d_rect_cuboid(pred_dict["bbox_3d_rect_cuboid"], gt_dict["bbox_3d_rect_cuboid"])
 
         total_loss = sum([
             loss_bbox_3d['bbox_3d_loss'],
@@ -170,10 +149,18 @@ class NuscenesFastRayPlanarSingleFrameModel(BaseModel):
 
         losses = dict(
             loss=total_loss,
-            seg_iou_loss_bbox_3d=loss_bbox_3d['bbox_3d_seg_iou_0_loss'],
-            seg_iou_loss_bbox_3d_cylinder=loss_bbox_3d_cylinder['bbox_3d_cylinder_seg_iou_0_loss'],
-            seg_iou_loss_bbox_3d_oriented_cylinder=loss_bbox_3d_oriented_cylinder['bbox_3d_oriented_cylinder_seg_iou_0_loss'],
-            seg_iou_loss_bbox_3d_rect_cuboid=loss_bbox_3d_rect_cuboid['bbox_3d_rect_cuboid_seg_iou_0_loss'],
+            bbox_3d_seg_iou_loss=loss_bbox_3d['bbox_3d_seg_iou_0_loss'],
+            cylinder_seg_iou_loss=loss_bbox_3d_cylinder['bbox_3d_cylinder_seg_iou_0_loss'],
+            oriented_cylinder_seg_iou_loss=loss_bbox_3d_oriented_cylinder['bbox_3d_oriented_cylinder_seg_iou_0_loss'],
+            rect_cuboid_seg_iou_loss=loss_bbox_3d_rect_cuboid['bbox_3d_rect_cuboid_seg_iou_0_loss'],
+            bbox_3d_reg_loss=loss_bbox_3d['bbox_3d_reg_loss'],
+            cylinder_reg_loss=loss_bbox_3d_cylinder['bbox_3d_cylinder_reg_loss'],
+            oriented_cylinder_reg_loss=loss_bbox_3d_oriented_cylinder['bbox_3d_oriented_cylinder_reg_loss'],
+            rect_cuboid_reg_loss=loss_bbox_3d_rect_cuboid['bbox_3d_rect_cuboid_reg_loss'],
+            bbox_3d_cen_loss=loss_bbox_3d['bbox_3d_cen_loss'],
+            cylinder_cen_loss=loss_bbox_3d_cylinder['bbox_3d_cylinder_cen_loss'],
+            oriented_cylinder_cen_loss=loss_bbox_3d_oriented_cylinder['bbox_3d_oriented_cylinder_cen_loss'],
+            rect_cuboid_cen_loss=loss_bbox_3d_rect_cuboid['bbox_3d_rect_cuboid_cen_loss'],
         )
 
         return losses
@@ -181,7 +168,7 @@ class NuscenesFastRayPlanarSingleFrameModel(BaseModel):
 
 @MODELS.register_module()
 class NuscenesFastRayPlanarMultiFrameModel(BaseModel):
-    
+
     def __init__(self,
                  camera_groups,
                  backbones,
@@ -220,7 +207,7 @@ class NuscenesFastRayPlanarMultiFrameModel(BaseModel):
         self.loss_bbox_3d_oriented_cylinder = MODELS.build(loss_cfg['bbox_3d_oriented_cylinder'])
         self.loss_bbox_3d_rect_cuboid = MODELS.build(loss_cfg['bbox_3d_rect_cuboid'])
 
-    
+
     def forward(self, mode='tensor', **batched_input_dict):
         """
         >>> batched_input_dict = processed_frame_batch = {
@@ -297,65 +284,52 @@ class NuscenesFastRayPlanarMultiFrameModel(BaseModel):
         bev_feats = self.voxel_encoder(voxel_feats_fused)
         ## heads & outputs
         out_bbox_3d = self.head_bbox_3d(bev_feats)
-        pred_bbox_3d = dict(
-            cen=out_bbox_3d[0][:, 0:1],
-            seg=out_bbox_3d[0][:, 1:9],
-            reg=out_bbox_3d[1][:, 0:20])
-        pred_bbox_3d_cylinder = dict(
-            cen=out_bbox_3d[0][:, 9:10],
-            seg=out_bbox_3d[0][:, 10:12],
-            reg=out_bbox_3d[1][:, 20:28])
-        pred_bbox_3d_oriented_cylinder = dict(
-            cen=out_bbox_3d[0][:, 12:13],
-            seg=out_bbox_3d[0][:, 13:15],
-            reg=out_bbox_3d[1][:, 28:41])
-        pred_bbox_3d_rect_cuboid = dict(
-            cen=out_bbox_3d[0][:, 15:16],
-            seg=out_bbox_3d[0][:, 16:18],
-            reg=out_bbox_3d[1][:, 41:55])
+        pred_dict = dict(
+            bbox_3d = dict(
+                cen=out_bbox_3d[0][:, 0:1],
+                seg=out_bbox_3d[0][:, 1:9],
+                reg=out_bbox_3d[1][:, 0:20]),
+            bbox_3d_cylinder = dict(
+                cen=out_bbox_3d[0][:, 9:10],
+                seg=out_bbox_3d[0][:, 10:12],
+                reg=out_bbox_3d[1][:, 20:28]),
+            bbox_3d_oriented_cylinder = dict(
+                cen=out_bbox_3d[0][:, 12:13],
+                seg=out_bbox_3d[0][:, 13:15],
+                reg=out_bbox_3d[1][:, 28:41]),
+            bbox_3d_rect_cuboid = dict(
+                cen=out_bbox_3d[0][:, 15:16],
+                seg=out_bbox_3d[0][:, 16:18],
+                reg=out_bbox_3d[1][:, 41:55]),
+        )
+        
 
         if self.debug_mode:
-            draw_out_feats(batched_input_dict, 
+            draw_out_feats(batched_input_dict,
                            camera_tensors_dict,
-                           pred_bbox_3d)
-        
+                           pred_bbox_3d=pred_dict['bbox_3d'],
+                           pred_bbox_3d_rect_cuboid=pred_dict['bbox_3d_rect_cuboid'],
+                           pred_bbox_3d_cylinder=pred_dict['bbox_3d_cylinder'],
+                           pred_bbox_3d_oriented_cylinder=pred_dict['bbox_3d_oriented_cylinder'])
+
         if mode == 'tensor':
-            return dict(
-                pred_bbox_3d=pred_bbox_3d,
-                pred_bbox_3d_cylinder=pred_bbox_3d_cylinder,
-                pred_bbox_3d_oriented_cylinder=pred_bbox_3d_oriented_cylinder,
-                pred_bbox_3d_rect_cuboid=pred_bbox_3d_rect_cuboid,
-            )
+            return pred_dict
         if mode == 'loss':
-            gt = batched_input_dict['annotations']
-            pred = {
-                "bbox_3d": pred_bbox_3d,
-                "bbox_3d_cylinder": pred_bbox_3d_cylinder,
-                "bbox_3d_oriented_cylinder": pred_bbox_3d_oriented_cylinder,
-                "bbox_3d_rect_cuboid": pred_bbox_3d_rect_cuboid,
-            }
-            losses = self.compute_losses(gt, pred)
+            losses = self.compute_losses(batched_input_dict['annotations'], pred_dict)
             return losses
 
         if mode == 'predict':
-            gt = batched_input_dict['annotations']
-            pred = {
-                "bbox_3d": pred_bbox_3d,
-                "bbox_3d_cylinder": pred_bbox_3d_cylinder,
-                "bbox_3d_oriented_cylinder": pred_bbox_3d_oriented_cylinder,
-                "bbox_3d_rect_cuboid": pred_bbox_3d_rect_cuboid,
-            }
-            losses = self.compute_losses(gt, pred)
+            losses = self.compute_losses(batched_input_dict['annotations'], pred_dict)
             return (
-                *[{trsfmbl_name: {t: v.cpu() for t, v in _pred.items()}} for trsfmbl_name, _pred in pred.items()],
+                *[{trsfmbl_name: {t: v.cpu() for t, v in _pred.items()}} for trsfmbl_name, _pred in pred_dict.items()],
                 BaseDataElement(loss=losses),
             )
 
-    def compute_losses(self, gt: Dict, pred: Dict):
-        loss_bbox_3d = self.loss_bbox_3d(pred["bbox_3d"], gt['bbox_3d'])
-        loss_bbox_3d_cylinder = self.loss_bbox_3d_cylinder(pred["bbox_3d_cylinder"], gt["bbox_3d_cylinder"])
-        loss_bbox_3d_oriented_cylinder = self.loss_bbox_3d_oriented_cylinder(pred["bbox_3d_oriented_cylinder"], gt["bbox_3d_oriented_cylinder"])
-        loss_bbox_3d_rect_cuboid = self.loss_bbox_3d_rect_cuboid(pred["bbox_3d_rect_cuboid"], gt["bbox_3d_rect_cuboid"])
+    def compute_losses(self, gt_dict: Dict, pred_dict: Dict):
+        loss_bbox_3d = self.loss_bbox_3d(pred_dict["bbox_3d"], gt_dict['bbox_3d'])
+        loss_bbox_3d_cylinder = self.loss_bbox_3d_cylinder(pred_dict["bbox_3d_cylinder"], gt_dict["bbox_3d_cylinder"])
+        loss_bbox_3d_oriented_cylinder = self.loss_bbox_3d_oriented_cylinder(pred_dict["bbox_3d_oriented_cylinder"], gt_dict["bbox_3d_oriented_cylinder"])
+        loss_bbox_3d_rect_cuboid = self.loss_bbox_3d_rect_cuboid(pred_dict["bbox_3d_rect_cuboid"], gt_dict["bbox_3d_rect_cuboid"])
 
         total_loss = sum([
             loss_bbox_3d['bbox_3d_loss'],
@@ -366,11 +340,18 @@ class NuscenesFastRayPlanarMultiFrameModel(BaseModel):
 
         losses = dict(
             loss=total_loss,
-            seg_iou_loss_bbox_3d=loss_bbox_3d['bbox_3d_seg_iou_0_loss'],
-            seg_iou_loss_bbox_3d_cylinder=loss_bbox_3d_cylinder['bbox_3d_cylinder_seg_iou_0_loss'],
-            seg_iou_loss_bbox_3d_oriented_cylinder=loss_bbox_3d_oriented_cylinder['bbox_3d_oriented_cylinder_seg_iou_0_loss'],
-            seg_iou_loss_bbox_3d_rect_cuboid=loss_bbox_3d_rect_cuboid['bbox_3d_rect_cuboid_seg_iou_0_loss'],
+            bbox_3d_seg_iou_loss=loss_bbox_3d['bbox_3d_seg_iou_0_loss'],
+            cylinder_seg_iou_loss=loss_bbox_3d_cylinder['bbox_3d_cylinder_seg_iou_0_loss'],
+            oriented_cylinder_seg_iou_loss=loss_bbox_3d_oriented_cylinder['bbox_3d_oriented_cylinder_seg_iou_0_loss'],
+            rect_cuboid_seg_iou_loss=loss_bbox_3d_rect_cuboid['bbox_3d_rect_cuboid_seg_iou_0_loss'],
+            bbox_3d_reg_loss=loss_bbox_3d['bbox_3d_reg_loss'],
+            cylinder_reg_loss=loss_bbox_3d_cylinder['bbox_3d_cylinder_reg_loss'],
+            oriented_cylinder_reg_loss=loss_bbox_3d_oriented_cylinder['bbox_3d_oriented_cylinder_reg_loss'],
+            rect_cuboid_reg_loss=loss_bbox_3d_rect_cuboid['bbox_3d_rect_cuboid_reg_loss'],
+            bbox_3d_cen_loss=loss_bbox_3d['bbox_3d_cen_loss'],
+            cylinder_cen_loss=loss_bbox_3d_cylinder['bbox_3d_cylinder_cen_loss'],
+            oriented_cylinder_cen_loss=loss_bbox_3d_oriented_cylinder['bbox_3d_oriented_cylinder_cen_loss'],
+            rect_cuboid_cen_loss=loss_bbox_3d_rect_cuboid['bbox_3d_rect_cuboid_cen_loss'],
         )
 
         return losses
-    

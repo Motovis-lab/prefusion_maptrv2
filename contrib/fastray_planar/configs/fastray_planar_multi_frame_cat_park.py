@@ -6,12 +6,12 @@ custom_imports = dict(
 
 
 ## camera and voxel feature configs
-
+feature_downscale = 4
 default_camera_feature_config = dict(
     ray_distance_num_channel=64,
     ray_distance_start=0.25,
     ray_distance_step=0.25,
-    feature_downscale=8)
+    feature_downscale=feature_downscale)
 
 camera_feature_configs = dict(
     VCAMERA_PERSPECTIVE_FRONT=default_camera_feature_config,
@@ -295,15 +295,19 @@ val_dataset = dict(
 
 ## dataloader configs
 train_dataloader = dict(
+    sampler=dict(type='DefaultSampler'),
     num_workers=num_workers,
     collate_fn=dict(type="collate_dict"),
-    dataset=train_dataset
+    dataset=train_dataset,
+    # pin_memory=True  # better for station or server
 )
 
 val_dataloader = dict(
+    sampler=dict(type='DefaultSampler'),
     num_workers=num_workers,
     collate_fn=dict(type="collate_dict"),
-    dataset=val_dataset
+    dataset=val_dataset,
+    # pin_memory=True  # better for station or server
 )
 
 
@@ -312,9 +316,9 @@ bev_mode = True
 # backbones
 camera_feat_channels = 128
 backbones = dict(
-    pv_front=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels),
-    pv_sides=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels),
-    fisheyes=dict(type='VoVNetFPN', out_stride=8, out_channels=camera_feat_channels))
+    pv_front=dict(type='VoVNetFPN', out_stride=feature_downscale, out_channels=camera_feat_channels),
+    pv_sides=dict(type='VoVNetFPN', out_stride=feature_downscale, out_channels=camera_feat_channels),
+    fisheyes=dict(type='VoVNetFPN', out_stride=feature_downscale, out_channels=camera_feat_channels))
 # spatial_transform
 spatial_transform = dict(
     type='FastRaySpatialTransform',
@@ -532,13 +536,12 @@ param_scheduler = dict(type='MultiStepLR', milestones=[24, 36, 48])
 
 
 env_cfg = dict(
-    cudnn_benchmark=False,
     mp_cfg=dict(mp_start_method='fork', opencv_num_threads=0),
     dist_cfg=dict(backend='nccl'),
 )
 
 
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_1116"
-# load_from = "./work_dirs/fastray_planar_multi_frame_1112/epoch_50.pth"
+work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_1120"
+load_from = "./work_dirs/fastray_planar_single_frame_1119_debug/epoch_3.pth"
 
 resume = False

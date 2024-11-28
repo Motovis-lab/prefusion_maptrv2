@@ -110,9 +110,9 @@ def build_scene_info() -> Dict:
 def build_meta_info() -> Dict:
     return {
         "space_range": {
-            "map": [36, -12, -12, 12, 10, -10],
-            "det": [36, -12, -12, 12, 10, -10],
-            "occ": [36, -12, -12, 12, 10, -10],
+            "map": [50, -50, -50, 50, 5, -3],
+            "det": [50, -50, -50, 50, 5, -3],
+            "occ": [50, -50, -50, 50, 5, -3],
         },
         "time_range": 2,
         "time_unit": 0.001,
@@ -285,8 +285,8 @@ def build_3d_polylines(nusc: NuScenes, nusc_map: Dict[str, Dict[str, dict]], cur
     timestamp = cur_sample["timestamp"]
     map_data = nusc_map[scene_id]
     frame = map_data.get(timestamp)
+    elements = []
     if frame:
-        elements = []
         for data_type, vertices_list in frame.items():
             if data_type == "centerline":
                 continue
@@ -300,7 +300,7 @@ def build_3d_polylines(nusc: NuScenes, nusc_map: Dict[str, Dict[str, dict]], cur
                     "track_id": f"{cur_sample['token']}-{data_type}-{i}",
                 }
             
-            elements.append(ele)
+                elements.append(ele)
     return elements
 
 def save_pickle(data, save_path):

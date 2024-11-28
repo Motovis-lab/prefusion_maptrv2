@@ -210,9 +210,11 @@ train_dataset = dict(
 
 ## dataloader configs
 train_dataloader = dict(
+    sampler=dict(type='DefaultSampler'),
     num_workers=num_workers,
     collate_fn=dict(type="collate_dict"),
-    dataset=train_dataset
+    dataset=train_dataset,
+    # pin_memory=True  # better for station or server
 )
 
 # val_dataloader = train_dataloader

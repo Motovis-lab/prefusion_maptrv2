@@ -19,4 +19,4 @@ torchrun \
     $(dirname "$0")/train.py \
     $CONFIG \
     --launcher pytorch \
-    ${@:4}
+    ${@:3}

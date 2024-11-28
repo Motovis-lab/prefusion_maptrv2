@@ -37,86 +37,6 @@ voxel_feature_config = dict(
     ego_distance_max=40,
     ego_distance_step=5)
 
-## dictionaries and mappings for different types of tasks
-
-mapping_heading_objects = {
-    'passenger_car': [],
-    'bus': [],
-    'truck': [],
-    'ambulance': [],
-    'fire_engine': [],
-    'env_protect': [],
-    'tricycle':[],
-    'motorcycle':[],
-    'bicycle':[],
-    'cleaning_cart':[],
-    'shopping_cart':[],
-    'stroller':[]    
-}
-
-dictionary_heading_objects = dict(
-    classes=['passenger_car', 
-             'bus', 
-             'truck', 
-             'ambulance', 
-             'fire_engine', 
-             'env_protect',
-             'tricycle',
-             'motorcycle',
-             'bicycle',
-             'cleaning_cart',
-             'shopping_cart',
-             'stroller'],
-    attrs=['cycle.is_with_rider.true']
-)
-
-dictionary_plane_objects = dict(
-    classes=[],
-    attrs=[]
-)
-
-mapping_no_heading_objects = {
-    'speed_bump': []
-}
-
-dictionary_no_heading_objects = dict(
-    classes=['speed_bump'],
-    attrs=[]
-)
-
-dictionary_square_objects = dict(
-    classes=[],
-    attrs=[]
-)
-
-dictionary_cylinder_objects = dict(
-    classes=[],
-    attrs=[]
-)
-
-dictionary_oriented_cylinder_objects = dict(
-    classes=[],
-    attrs=[]
-)
-
-dictionary_polylines = dict(
-    classes=['class.road_marker.lane_line'],
-    attrs=['attr.road_marker.lane_line.type.regular',
-           'attr.road_marker.lane_line.type.wide',
-           'attr.road_marker.lane_line.type.stop_line',
-           'attr.common.color.single_color.yellow',
-           'attr.common.color.single_color.white',
-           'attr.road_marker.lane_line.style.dashed',
-           'attr.road_marker.lane_line.style.solid']
-)
-
-dictionary_polygons = dict(
-    classes=['class.road_marker.no_parking_zone',
-             'class.road_marker.crosswalk',
-             'class.road_marker.gore_area'],
-    attrs=[]
-)
-
 
 ## camera configs for model inputs
 
@@ -167,17 +87,22 @@ if debug_mode:
     ]
 else:
     batch_size = 4
-    num_workers = 4
+    num_workers = 8
     persistent_workers = False
     transforms = [
-        dict(type='RandomRenderExtrinsic'),
-        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
-        dict(type='RandomRotateSpace'),
-        dict(type='RandomMirrorSpace'),
-        dict(type='RandomImageISP', prob=0.2),
-        dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
-        dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
+        dict(type='RenderIntrinsic', 
+             resolutions=camera_resolution_configs,
+             intrinsics=camera_intrinsic_configs)
     ]
+    # transforms = [
+    #     dict(type='RandomRenderExtrinsic'),
+    #     dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
+    #     dict(type='RandomRotateSpace'),
+    #     dict(type='RandomMirrorSpace'),
+    #     dict(type='RandomImageISP', prob=0.2),
+    #     dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
+    #     dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
+    # ]
 
 ## GroupBatchDataset configs
 train_dataset = dict(
@@ -186,27 +111,30 @@ train_dataset = dict(
     data_root='../MV4D-PARKING',
     # info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
     info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
-    model_feeder=dict(
-        type="FastRayPlanarModelFeeder",
-        voxel_feature_config=voxel_feature_config,
-        camera_feature_configs=camera_feature_configs,
-        bilinear_interpolation=False
-    ),
+    # model_feeder=dict(
+    #     type="FastRayPlanarModelFeeder",
+    #     voxel_feature_config=voxel_feature_config,
+    #     camera_feature_configs=camera_feature_configs,
+    #     bilinear_interpolation=False
+    # ),
     transformables=dict(
         camera_images=dict(type='CameraImageSet', tensor_smith=dict(type='CameraImageTensor')),
         ego_poses=dict(type='EgoPoseSet'),
         bbox_3d=dict(
             type='Bbox3D', 
             dictionary=dict(classes=['class.vehicle.passenger_car']),
-            tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+            # tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+        ),
         polyline_3d=dict(
             type='Polyline3D',
             dictionary=dict(classes=['class.road_marker.lane_line']),
-            tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+            # tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+        ),
         parkingslot_3d=dict(
             type='ParkingSlot3D',
             dictionary=dict(classes=['class.parking.parking_slot']),
-            tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range))
+            # tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+        )
     ),
     transforms=transforms,
     phase="train",
@@ -217,12 +145,11 @@ train_dataset = dict(
 
 ## dataloader configs
 train_dataloader = dict(
-    sampler=dict(type='DefaultSampler'),
     num_workers=num_workers,
     collate_fn=dict(type="collate_dict"),
     dataset=train_dataset,
     persistent_workers=persistent_workers,
-    # pin_memory=True  # better for station or server
+    prefetch_factor=1
 )
 
 # val_dataloader = train_dataloader
@@ -365,6 +292,6 @@ load_from = "./work_dirs/fastray_planar_single_frame_1118/epoch_2.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1111_infer'
 # work_dir = './work_dirs/fastray_planar_single_frame_1117'
 # work_dir = './work_dirs/fastray_planar_single_frame_1118'
-work_dir = './work_dirs/fastray_planar_single_frame_1119_debug'
+work_dir = './work_dirs/debug_1120'
 
 # resume = True

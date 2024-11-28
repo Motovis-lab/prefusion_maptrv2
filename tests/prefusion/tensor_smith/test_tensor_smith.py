@@ -266,6 +266,7 @@ def test_planar_cylinder3d_generation_and_reverse():
     box3d.to_tensor()
     tensor_dict = box3d.tensor
     assert tensor_dict['seg'][0].max() == 1
+    assert (tensor_dict['cen'][0].min() >= 0) & (tensor_dict['cen'][0].max() <= 1)
     pred_bboxes_3d = pc.reverse(tensor_dict)
     np.testing.assert_almost_equal(
         pred_bboxes_3d[0]['height'],
@@ -310,6 +311,7 @@ def test_planar_oriented_cylinder3d_generation_and_reverse():
     box3d.to_tensor()
     tensor_dict = box3d.tensor
     assert tensor_dict['seg'][0].max() == 1
+    assert (tensor_dict['cen'][0].min() >= 0) & (tensor_dict['cen'][0].max() <= 1)
     pred_bboxes_3d = poc.reverse(tensor_dict)
     np.testing.assert_almost_equal(
         pred_bboxes_3d[0]['size'],
