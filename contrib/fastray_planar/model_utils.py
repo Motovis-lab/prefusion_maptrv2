@@ -481,10 +481,11 @@ def draw_outputs(pred_dict, batched_input_dict):
     transformables = batched_input_dict['transformables'][0]
     scene_frame_id = batched_input_dict['index_infos'][0].scene_frame_id
 
-    ncols = (len(camera_tensors_dict) + 1) // 2
-    nrows = len(pred_dict) + 2
+    ncols = max(4, (len(camera_tensors_dict) + 1) // 2)
+    irow_plus = (ncols + 1) // 4
+    nrows = len(pred_dict) + irow_plus
 
-    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 2, nrows * 3))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 2, nrows * 2))
     fig.suptitle(f'scene_frame_id: {scene_frame_id}')
 
     # plot camera images
@@ -500,7 +501,7 @@ def draw_outputs(pred_dict, batched_input_dict):
 
     # plot preds with labels
     for i, branch in enumerate(pred_dict):
-        irow = i + 2
+        irow = i + irow_plus
         pred_dict_branch = pred_dict[branch]
         gt_dict_branch = gt_dict[branch]
         # extract batch_0
