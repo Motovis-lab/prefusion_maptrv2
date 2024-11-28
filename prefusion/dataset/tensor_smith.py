@@ -131,6 +131,7 @@ class PlanarBbox3D(PlanarTensorSmith):
                  voxel_shape: tuple, 
                  voxel_range: Tuple[list, list, list], 
                  use_bottom_center=False,
+                 has_velocity: bool=True,
                  reverse_pre_conf: float=0.1,
                  reverse_nms_ratio: float=0.7):
         """
@@ -139,6 +140,7 @@ class PlanarBbox3D(PlanarTensorSmith):
         voxel_shape : tuple
         voxel_range : Tuple[List]
         use_bottom_center : bool
+        has_velocity : bool
         reverse_pre_conf : float
         reverse_nms_ratio : float
 
@@ -151,6 +153,7 @@ class PlanarBbox3D(PlanarTensorSmith):
         """
         super().__init__(voxel_shape, voxel_range)
         self.use_bottom_center = use_bottom_center
+        self.has_velocity = has_velocity
         self.reverse_pre_conf = reverse_pre_conf
         self.reverse_nms_ratio = reverse_nms_ratio
 
@@ -267,7 +270,10 @@ class PlanarBbox3D(PlanarTensorSmith):
         # maybe later, think about overlapped objects
         seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
         cen_im = np.zeros((1, X, Y), dtype=np.float32)
-        reg_im = np.zeros((20, X, Y), dtype=np.float32)
+        if self.has_velocity:
+            reg_im = np.zeros((20, X, Y), dtype=np.float32)
+        else:
+            reg_im = np.zeros((17, X, Y), dtype=np.float32)
         for unit_xvec, unit_yvec, points_bev, center, size, velo, class_ind, attr_list in zip(
             unit_xvecs, unit_yvecs, all_points_bev, centers, box_sizes, velocities, class_inds, attr_lists
         ):
@@ -304,9 +310,10 @@ class PlanarBbox3D(PlanarTensorSmith):
             reg_im[15] = reg_im[15] * (1 - region_box) + abs(sin_roll) * region_box
             reg_im[16] = reg_im[16] * (1 - region_box) + cos_roll * sin_roll * region_box
             # 17, 18, 19: velocity
-            reg_im[17] = reg_im[17] * (1 - region_box) + velo[0] * region_box
-            reg_im[18] = reg_im[18] * (1 - region_box) + velo[1] * region_box
-            reg_im[19] = reg_im[19] * (1 - region_box) + velo[2] * region_box
+            if self.has_velocity:
+                reg_im[17] = reg_im[17] * (1 - region_box) + velo[0] * region_box
+                reg_im[18] = reg_im[18] * (1 - region_box) + velo[1] * region_box
+                reg_im[19] = reg_im[19] * (1 - region_box) + velo[2] * region_box
             ## gen centerness
             center_line_l = np.float32([points_bev[[0, 1]].mean(0), points_bev[[2, 3]].mean(0)])
             center_line_w = np.float32([points_bev[[1, 2]].mean(0), points_bev[[0, 3]].mean(0)])
@@ -416,15 +423,15 @@ class PlanarBbox3D(PlanarTensorSmith):
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * unit_zvec * mean_size[2]
-            mean_velocity = (velocities[:, group] * scores[group][None]).sum(1) / score_sum
             bbox_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
-                'translation': mean_center,
-                'velocity': mean_velocity,
+                'translation': mean_center
             }
+            if self.has_velocity: 
+                bbox_3d['velocity'] = (velocities[:, group] * scores[group][None]).sum(1) / score_sum
             pred_bboxes_3d.append(bbox_3d)
         return pred_bboxes_3d
     
@@ -496,7 +503,10 @@ class PlanarBbox3D(PlanarTensorSmith):
         roll_vecs = np.array([cos_rolls, sin_rolls])
         roll_vecs /= np.maximum(np.linalg.norm(roll_vecs), 1e-6)
         # 17, 18, 19: velocities
-        velocities = reg_values[[17, 18, 19]]
+        if self.has_velocity:
+            velocities = reg_values[[17, 18, 19]]
+        else:
+            velocities = None
         
         ## group nms
         boxes_3d = self._group_nms(
@@ -1369,6 +1379,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
                  voxel_shape: tuple, 
                  voxel_range: Tuple[list, list, list], 
                  use_bottom_center: bool=False,
+                 has_velocity: bool=True,
                  reverse_pre_conf: float=0.1,
                  reverse_nms_ratio: float=1):
         """
@@ -1377,6 +1388,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
         voxel_shape : tuple
         voxel_range : Tuple[List]
         use_bottom_center : bool
+        has_velocity : bool
         reverse_pre_conf : float
         reverse_nms_ratio : float
 
@@ -1389,6 +1401,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
         """
         super().__init__(voxel_shape, voxel_range)
         self.use_bottom_center = use_bottom_center
+        self.has_velocity = has_velocity
         self.reverse_pre_conf = reverse_pre_conf
         self.reverse_nms_ratio = reverse_nms_ratio
         
@@ -1471,7 +1484,10 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             num_attr_channels = 0
         seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
         cen_im = np.zeros((1, X, Y), dtype=np.float32)
-        reg_im = np.zeros((13, X, Y), dtype=np.float32)
+        if self.has_velocity:
+            reg_im = np.zeros((13, X, Y), dtype=np.float32)
+        else:
+            reg_im = np.zeros((10, X, Y), dtype=np.float32)
         for unit_xvec, unit_zvec, center, radius, height, velocity, class_ind, attr_list in zip(
             unit_xvecs, unit_zvecs, centers, radii, heights, velocities, class_inds, attr_lists
         ):
@@ -1501,9 +1517,10 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             reg_im[8] = reg_im[8] * (1 - region_obj) + np.cos(yaw_angle) * region_obj
             reg_im[9] = reg_im[9] * (1 - region_obj) + np.sin(yaw_angle) * region_obj
             # 10, 11, 12: velocity
-            reg_im[10] = reg_im[10] * (1 - region_obj) + velocity[0] * region_obj
-            reg_im[11] = reg_im[11] * (1 - region_obj) + velocity[1] * region_obj
-            reg_im[12] = reg_im[12] * (1 - region_obj) + velocity[2] * region_obj
+            if self.has_velocity:
+                reg_im[10] = reg_im[10] * (1 - region_obj) + velocity[0] * region_obj
+                reg_im[11] = reg_im[11] * (1 - region_obj) + velocity[1] * region_obj
+                reg_im[12] = reg_im[12] * (1 - region_obj) + velocity[2] * region_obj
             ## gen centerness
             centerness = np.clip(radius_bev ** 2 - (reg_im[0] ** 2 + reg_im[1] ** 2) / radius_bev ** 2, 0, 1)
             cen_im[0] = cen_im[0] * (1 - region_obj) + centerness * region_obj
@@ -1587,15 +1604,15 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[1]
-            mean_velocity = (velocities[:, group] * scores[group][None]).sum(1) / score_sum
             cylinder_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
                 'size': mean_size[[0, 0, 1]] * [2, 2, 1],
                 'rotation': mean_rmat,
-                'translation': mean_center,
-                'velocity': mean_velocity
+                'translation': mean_center
             }
+            if self.has_velocity:
+                cylinder_3d['velocity'] = (velocities[:, group] * scores[group][None]).sum(1) / score_sum
             pred_cylinders.append(cylinder_3d)
         return pred_cylinders
     
@@ -1650,7 +1667,10 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
         vecs_yaw = np.array([cos_yaws, sin_yaws])
         vecs_yaw /= np.maximum(np.linalg.norm(vecs_yaw), 1e-6)
         # 10, 11, 12: velocities
-        velocities = reg_values[[10, 11, 12]]
+        if self.has_velocity:
+            velocities = reg_values[[10, 11, 12]]
+        else:
+            velocities = None
         
         ## group nms
         cylinders_3d = self._group_nms(

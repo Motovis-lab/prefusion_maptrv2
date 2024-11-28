@@ -87,7 +87,7 @@ if debug_mode:
     ]
 else:
     batch_size = 4
-    num_workers = 8
+    num_workers = 4
     persistent_workers = False
     transforms = [
         dict(type='RenderIntrinsic', 
@@ -279,19 +279,8 @@ env_cfg = dict(
 # load_from = "./work_dirs/3scenes_singleframe_epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1107/epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1117/epoch_2.pth"
-load_from = "./work_dirs/fastray_planar_single_frame_1118/epoch_2.pth"
+# load_from = "./work_dirs/fastray_planar_single_frame_1118/epoch_2.pth"
 
-# load_from = "./work_dirs/fastray_planar_single_frame_1106_sampled/epoch_50.pth"
-# load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
-# work_dir = './work_dirs/fastray_planar_single_frame_1104'
-# work_dir = './work_dirs/fastray_planar_single_frame_1105_infer'
-# work_dir = './work_dirs/fastray_planar_single_frame_1106_sampled'
-# work_dir = './work_dirs/fastray_planar_single_frame_1106_sampled_infer'
-# work_dir = './work_dirs/fastray_planar_single_frame_1107'
-# work_dir = './work_dirs/fastray_planar_single_frame_1107_infer'
-# work_dir = './work_dirs/fastray_planar_single_frame_1111_infer'
-# work_dir = './work_dirs/fastray_planar_single_frame_1117'
-# work_dir = './work_dirs/fastray_planar_single_frame_1118'
-work_dir = './work_dirs/debug_1120'
+work_dir = './work_dirs/debug_1122'
 
 # resume = True

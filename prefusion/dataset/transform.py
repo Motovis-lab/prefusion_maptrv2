@@ -108,6 +108,10 @@ class Transformable:
         return self
     
     @transform_method
+    def render_camera(self, *args, **kwargs):
+        return self
+    
+    @transform_method
     def flip_3d(self, *args, **kwargs):
         return self
     
@@ -164,6 +168,11 @@ class CameraTransformable(Transformable, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def render_extrinsic(self, *args, **kwargs):
         pass
+
+    @transform_method
+    @abc.abstractmethod
+    def render_camera(self, *args, **kwargs):
+        return self
     
     @transform_method
     @abc.abstractmethod
@@ -417,6 +426,22 @@ class CameraImage(CameraTransformable):
         self.extrinsic = (R_new, t_new)
         
         return self
+    
+    def render_camera(self, camera_new, **kwargs):
+        resolution = self.img.shape[:2][::-1]
+        camera_class = getattr(vc, self.cam_type)
+        camera_old = camera_class(
+            resolution,
+            self.extrinsic,
+            self.intrinsic,
+            ego_mask=self.ego_mask
+        )
+        self.img, self.ego_mask = vc.render_image(self.img, camera_old, camera_new)
+        self.extrinsic = camera_new.extrinsic
+        self.intrinsic = camera_new.intrinsic
+        self.cam_type = camera_new.__class__.__name__
+        
+        return self
 
 
     def flip_3d(self, flip_mat, **kwargs):
@@ -552,6 +577,24 @@ class CameraSegMask(CameraTransformable):
             self.img, camera_old, camera_new, interpolation=cv2.INTER_NEAREST
         )
         self.extrinsic = (R_new, t_new)
+        
+        return self
+    
+    def render_camera(self, camera_new, **kwargs):
+        resolution = self.img.shape[:2][::-1]
+        camera_class = getattr(vc, self.cam_type)
+        camera_old = camera_class(
+            resolution,
+            self.extrinsic,
+            self.intrinsic,
+            ego_mask=self.ego_mask
+        )
+        self.img, self.ego_mask = vc.render_image(
+            self.img, camera_old, camera_new, interpolation=cv2.INTER_NEAREST
+        )
+        self.extrinsic = camera_new.extrinsic
+        self.intrinsic = camera_new.intrinsic
+        self.cam_type = camera_new.__class__.__name__
         
         return self
 
@@ -694,6 +737,28 @@ class CameraDepth(CameraTransformable):
             # TODO: get real points from depth then remap to image
             raise NotImplementedError
         self.extrinsic = (R_new, t_new)
+        
+        return self
+    
+    def render_camera(self, camera_new, **kwargs):
+        resolution = self.img.shape[:2][::-1]
+        camera_class = getattr(vc, self.cam_type)
+        camera_old = camera_class(
+            resolution,
+            self.extrinsic,
+            self.intrinsic,
+            ego_mask=self.ego_mask
+        )
+        if self.depth_mode == 'd':
+            self.img, self.ego_mask = vc.render_image(
+                self.img, camera_old, camera_new, interpolation=cv2.INTER_NEAREST
+            )
+        else:
+            # TODO: get real points from depth then remap to image
+            raise NotImplementedError
+        self.extrinsic = camera_new.extrinsic
+        self.intrinsic = camera_new.intrinsic
+        self.cam_type = camera_new.__class__.__name__
         
         return self
 
@@ -1615,6 +1680,73 @@ class RenderExtrinsic(Transform):
                 if cam_id in self.cam_ids:
                     transformable.render_extrinsic(self.del_extrinsics[cam_id])
         return transformables
+
+
+class RenderVirtualCamera(Transform):
+    
+    def __init__(self, camera_settings: dict, scope="frame"):
+        """
+        Notes
+        -----
+        The extrinsic parameters must be in original ego system, 
+        in which the camera is calibrated.
+
+        Parameters
+        ----------
+        camera_settings : dict
+            ```python
+            {<cam_id>: dict(cam_type='PerspectiveCamera' | 'FisheyeCamera',
+                            resolution=(W, H),
+                            euler_angles=[<ang>, <ang>, <ang>], # ego x-y-z euler angles,
+                            translation=[<x>, <y>, <z>],
+                            intrinsic='auto' or (cx, cy, fx, fy, *dist_params)),
+            ...}
+            ```
+        scope : str, optional
+            seed scope, by default "frame"
+        """
+        super().__init__(scope=scope)
+        self.cam_ids = list(camera_settings.keys())
+        for cam_id in self.cam_ids:
+            assert camera_settings[cam_id]['cam_type'] in ['PerspectiveCamera', 'FisheyeCamera']
+        self.cameras = {}
+        for cam_id in self.cam_ids:
+            resolution = camera_settings[cam_id]['resolution']
+            extrinsic = (
+                Rotation.from_euler('xyz', camera_settings[cam_id]['euler_angles'], degrees=True).as_matrix(),
+                np.array(camera_settings[cam_id]['translation'])
+            )
+            intrinsic = camera_settings[cam_id]['intrinsic']
+            cam_type = camera_settings[cam_id]['cam_type']
+            if intrinsic == 'auto': 
+                W, H = resolution
+                if cam_type == 'PerspectiveCamera':
+                    cx = (W - 1) / 2
+                    cy = (H - 1) / 2
+                    fx = fy = W / 2
+                    intrinsic = (cx, cy, fx, fy)
+                if cam_type == 'FisheyeCamera':
+                    cx = (W - 1) / 2
+                    cy = (H - 1) / 2
+                    fx = fy = W / 4
+                    intrinsic = (cx, cy, fx, fy, 0.1, 0, 0, 0)
+            camera_class = getattr(vc, camera_settings[cam_id]['cam_type'])
+            self.cameras[cam_id] = camera_class(resolution, extrinsic, intrinsic)            
+    
+    def __call__(self, *transformables, **kwargs):
+        for transformable in transformables:
+            if isinstance(transformable, (CameraImageSet, CameraSegMaskSet, CameraDepthSet)):
+                for t_sub in transformable.transformables.values():
+                    cam_id = t_sub.cam_id
+                    if cam_id in self.cam_ids:
+                        t_sub.render_camera(self.cameras[cam_id])
+            elif isinstance(transformable, (CameraImage, CameraSegMask, CameraDepth)):
+                cam_id = transformable.cam_id
+                if cam_id in self.cam_ids:
+                    transformable.render_camera(self.cameras[cam_id])
+        return transformables
+
+
 
 
 class RandomRenderExtrinsic(RandomTransform):

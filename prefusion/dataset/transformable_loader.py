@@ -81,8 +81,14 @@ class TransformableLoader:
         raise NotImplementedError(f'Module [{type(self).__name__}] is missing the required "load" function')
 
 
+class CameraSetLoader(TransformableLoader):
+    def __init__(self, data_root: Path, selected_cameras: List | str = 'all') -> None:
+        super().__init__(data_root)
+        self.selected_cameras = selected_cameras
+
+
 @TRANSFORMABLE_LOADERS.register_module()
-class CameraImageSetLoader(TransformableLoader):
+class CameraImageSetLoader(CameraSetLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraImageSet:
         scene_info = scene_data["scene_info"]
         frame_info = scene_data["frame_info"][index_info.frame_id]
@@ -99,6 +105,7 @@ class CameraImageSetLoader(TransformableLoader):
                 tensor_smith=tensor_smith,
             )
             for cam_id in frame_info["camera_image"]
+            if self.selected_cameras == 'all' or cam_id in self.selected_cameras
         }
         return CameraImageSet(name, camera_images)
 
@@ -125,7 +132,7 @@ class NuscenesCameraImageSetLoader(TransformableLoader):
 
 
 @TRANSFORMABLE_LOADERS.register_module()
-class CameraDepthSetLoader(TransformableLoader):
+class CameraDepthSetLoader(CameraSetLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraDepthSet:
         scene_info = scene_data["scene_info"]
         frame_info = scene_data["frame_info"][index_info.frame_id]
@@ -144,12 +151,13 @@ class CameraDepthSetLoader(TransformableLoader):
                 tensor_smith=tensor_smith,
             )
             for cam_id in frame_info["camera_image_depth"]
+            if self.selected_cameras == 'all' or cam_id in self.selected_cameras
         }
         return CameraDepthSet(name, camera_depths)
 
 
 @TRANSFORMABLE_LOADERS.register_module()
-class CameraSegMaskSetLoader(TransformableLoader):
+class CameraSegMaskSetLoader(CameraSetLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> CameraSegMaskSet:
         scene_info = scene_data["scene_info"]
         frame_info = scene_data["frame_info"][index_info.frame_id]
@@ -168,6 +176,7 @@ class CameraSegMaskSetLoader(TransformableLoader):
                 tensor_smith=tensor_smith,
             )
             for cam_id in frame_info["camera_image_seg"]
+            if self.selected_cameras == 'all' or cam_id in self.selected_cameras
         }
         return CameraSegMaskSet(name, camera_segs)
 

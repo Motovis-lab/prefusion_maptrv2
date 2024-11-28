@@ -8,31 +8,25 @@ custom_imports = dict(
 ## camera and voxel feature configs
 feature_downscale = 4
 default_camera_feature_config = dict(
-    ray_distance_num_channel=64,
-    ray_distance_start=0.25,
-    ray_distance_step=0.25,
+    ray_distance_num_channel=32,
+    ray_distance_start=0.5,
+    ray_distance_step=0.5,
     feature_downscale=feature_downscale)
 
 camera_feature_configs = dict(
-    VCAMERA_PERSPECTIVE_FRONT=default_camera_feature_config,
-    VCAMERA_PERSPECTIVE_FRONT_LEFT=default_camera_feature_config,
-    VCAMERA_PERSPECTIVE_FRONT_RIGHT=default_camera_feature_config,
-    VCAMERA_PERSPECTIVE_BACK_LEFT=default_camera_feature_config,
-    VCAMERA_PERSPECTIVE_BACK_RIGHT=default_camera_feature_config,
-    VCAMERA_PERSPECTIVE_BACK=default_camera_feature_config,
     VCAMERA_FISHEYE_FRONT=default_camera_feature_config,
     VCAMERA_FISHEYE_LEFT=default_camera_feature_config,
     VCAMERA_FISHEYE_BACK=default_camera_feature_config,
     VCAMERA_FISHEYE_RIGHT=default_camera_feature_config)
 
-voxel_shape = (6, 320, 160)  # Z, X, Y in ego system
-voxel_range = ([-0.5, 2.5], [36, -12], [12, -12])
+voxel_shape = (8, 160, 120)  # Z, X, Y in ego system
+voxel_range = ([-1, 3], [12, -12], [9, -9])
 
 voxel_feature_config = dict(
     voxel_shape=voxel_shape, 
     voxel_range=voxel_range,
-    ego_distance_max=40,
-    ego_distance_step=5)
+    ego_distance_max=16,
+    ego_distance_step=2)
 
 ## dictionaries and mappings for different types of tasks
 
@@ -145,36 +139,18 @@ dictionary_polygons = dict(
 ## camera configs for model inputs
 
 camera_groups = dict(
-    pv_front=['VCAMERA_PERSPECTIVE_FRONT'],
-    pv_sides=['VCAMERA_PERSPECTIVE_FRONT_LEFT',
-              'VCAMERA_PERSPECTIVE_FRONT_RIGHT',
-              'VCAMERA_PERSPECTIVE_BACK_LEFT',
-              'VCAMERA_PERSPECTIVE_BACK_RIGHT',
-              'VCAMERA_PERSPECTIVE_BACK'],
     fisheyes=['VCAMERA_FISHEYE_FRONT',
               'VCAMERA_FISHEYE_LEFT',
               'VCAMERA_FISHEYE_BACK',
               'VCAMERA_FISHEYE_RIGHT'])
 
-resolution_pv_front = (640, 320)
-resolution_pv_sides = (512, 320)
-resolution_fisheyes = (512, 320)
+resolution_fisheyes = (640, 384)
 
 camera_resolution_configs = dict(
-    VCAMERA_PERSPECTIVE_FRONT=resolution_pv_front,
-    VCAMERA_PERSPECTIVE_FRONT_LEFT=resolution_pv_sides,
-    VCAMERA_PERSPECTIVE_FRONT_RIGHT=resolution_pv_sides,
-    VCAMERA_PERSPECTIVE_BACK_LEFT=resolution_pv_sides,
-    VCAMERA_PERSPECTIVE_BACK_RIGHT=resolution_pv_sides,
-    VCAMERA_PERSPECTIVE_BACK=resolution_pv_sides,
     VCAMERA_FISHEYE_FRONT=resolution_fisheyes,
     VCAMERA_FISHEYE_LEFT=resolution_fisheyes,
     VCAMERA_FISHEYE_BACK=resolution_fisheyes,
     VCAMERA_FISHEYE_RIGHT=resolution_fisheyes)
-
-camera_intrinsic_configs = dict(
-    VCAMERA_PERSPECTIVE_FRONT=[319.5, 159.5, 640, 640],
-)
 
 
 debug_mode = True
@@ -182,18 +158,14 @@ debug_mode = True
 if debug_mode:
     batch_size = 1
     num_workers = 1
-    transforms = [
-        dict(type='RenderIntrinsic', 
-             resolutions=camera_resolution_configs,
-             intrinsics=camera_intrinsic_configs)
-    ]
+    transforms = [dict(type='RenderIntrinsic', resolutions=camera_resolution_configs)]
     possible_group_sizes=2,
 else:
     batch_size = 4
     num_workers = 4
     transforms = [
         dict(type='RandomRenderExtrinsic'),
-        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
+        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs),
         dict(type='RandomRotateSpace'),
         dict(type='RandomMirrorSpace'),
         dict(type='RandomImageISP', prob=0.2),
@@ -284,11 +256,7 @@ val_dataset = dict(
         debug_mode=debug_mode
     ),
     transformables=transformables,
-    transforms=[
-        dict(type='RenderIntrinsic', 
-             resolutions=camera_resolution_configs,
-             intrinsics=camera_intrinsic_configs)
-    ],
+    transforms=[dict(type='RenderIntrinsic', resolutions=camera_resolution_configs)],
     phase="train",
     batch_size=batch_size,
     possible_group_sizes=10,
@@ -316,18 +284,21 @@ val_dataloader = dict(
 ## model configs
 bev_mode = True
 # backbones
-camera_feat_channels = 128
+camera_feat_channels = 64
 backbones = dict(
-    pv_front=dict(type='VoVNetFPN', out_stride=feature_downscale, out_channels=camera_feat_channels),
-    pv_sides=dict(type='VoVNetFPN', out_stride=feature_downscale, out_channels=camera_feat_channels),
-    fisheyes=dict(type='VoVNetFPN', out_stride=feature_downscale, out_channels=camera_feat_channels))
+    pv_front=dict(type='VoVNetSlimFPN', out_channels=camera_feat_channels),
+    pv_sides=dict(type='VoVNetSlimFPN', out_channels=camera_feat_channels),
+    fisheyes=dict(type='VoVNetSlimFPN', out_channels=camera_feat_channels))
 # spatial_transform
 spatial_transform = dict(
     type='FastRaySpatialTransform',
     voxel_shape=voxel_shape,
     fusion_mode='bilinear_weighted',
     # fusion_mode='weighted',
-    bev_mode=bev_mode)
+    bev_mode=bev_mode,
+    reduce_channels=True,
+    in_channels=camera_feat_channels * voxel_shape[0],
+    out_channels=64)
 # temporal_transform
 temporal_transform = dict(
     type='VoxelTemporalAlign',
@@ -335,12 +306,17 @@ temporal_transform = dict(
     voxel_range=voxel_range,
     bev_mode=bev_mode,
     interpolation='bilinear')
-# voxel fusion
+## voxel encoder
+voxel_encoder=dict(type='VoxelEncoderFPN', 
+    in_channels=64, 
+    mid_channels_list=[64, 96, 128],
+    out_channels=64,
+    repeats=[3, 3, 3]),
+# temporal fusion
 pre_nframes = 1
-# voxel_fusion = dict(type='EltwiseAdd')
 voxel_fusion = dict(
     type='VoxelConcatFusion',
-    in_channels=camera_feat_channels * voxel_shape[0],
+    in_channels=64,
     pre_nframes=pre_nframes,
     bev_mode=bev_mode)
 
@@ -362,24 +338,19 @@ all_bbox_3d_reg_channels = sum([
     13   # bbox_3d_oriented_cylinder
 ])
 heads = dict(
-    voxel_encoder=dict(type='VoVNetEncoder', 
-                       in_channels=camera_feat_channels * voxel_shape[0], 
-                       mid_channels=128,
-                       out_channels=128,
-                       repeat=3),
-    bbox_3d=dict(type='PlanarHead',
-                 in_channels=128,
-                 mid_channels=128,
+    occ_bev=dict(type='PlanarHeadSimple',
+                 in_channels=64,
+                 mid_channels=64,
                  cen_seg_channels=all_bbox_3d_cen_seg_channels,
                  reg_channels=all_bbox_3d_reg_channels),
-    polyline_3d=dict(type='PlanarHead',
-                     in_channels=128,
-                     mid_channels=128,
+    polyline_3d=dict(type='PlanarHeadSimple',
+                     in_channels=64,
+                     mid_channels=64,
                      cen_seg_channels=1 + 8 + 2 + 4,
                      reg_channels=7 + 7),
-    parkingslot_3d=dict(type='PlanarHead',
-                        in_channels=128,
-                        mid_channels=128,
+    parkingslot_3d=dict(type='PlanarHeadSimple',
+                        in_channels=64,
+                        mid_channels=64,
                         cen_seg_channels=5,
                         reg_channels=15)
 )
@@ -501,7 +472,7 @@ loss_cfg = dict(
 
 # integrated model config
 model = dict(
-    type='ParkingFastRayPlanarMultiFrameModel',
+    type='ParkingFastRayPlanarMultiFrameModelAPA',
     camera_groups=camera_groups,
     backbones=backbones,
     spatial_transform=spatial_transform,
@@ -518,7 +489,7 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=20, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
 
 ## evaluator and metrics
@@ -534,7 +505,7 @@ optim_wrapper = dict(
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[24, 36, 48])
+param_scheduler = dict(type='MultiStepLR', milestones=[10, 15, 18])
 
 
 env_cfg = dict(
@@ -543,9 +514,7 @@ env_cfg = dict(
 )
 
 
-# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_1120"
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_1122_val"
-# load_from = "./work_dirs/collected_models/parking_multi_frame_14.pth"
+work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1127"
 load_from = "./work_dirs/collected_models/parking_multi_frame_20.pth"
 
 resume = False
