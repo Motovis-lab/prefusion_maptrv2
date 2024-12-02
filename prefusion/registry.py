@@ -55,6 +55,7 @@ HOOKS = Registry(
 DATASETS = Registry(
     'dataset', parent=MMENGINE_DATASETS, locations=['prefusion']
 )
+DATASET_TOOLS = Registry('dataset_tool')
 DATA_SAMPLERS = Registry(
     'data sampler',
     parent=MMENGINE_DATA_SAMPLERS,

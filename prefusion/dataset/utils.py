@@ -58,6 +58,13 @@ def _sign(x):
     return 2 * (x > 0) - 1
 
 
+def divide(dividend, divisor, drop_last=False):
+    if drop_last:
+        return dividend // divisor
+    else:
+        return int(np.ceil(dividend / divisor))
+
+
 def make_seed(base_number: int, *variables, base=17) -> int:
     """Create a new Integer seed based on `base_number` and extra varying input values such as i=0,1,2,...; j=0,1,2,... 
 

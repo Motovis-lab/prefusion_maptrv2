@@ -1,5 +1,5 @@
 from prefusion.registry import DATASETS, MODELS
-from prefusion.runner import GroupRunner
+from prefusion.runner import GroupBatchRunner
 from prefusion.registry import RUNNERS
 import matplotlib.pyplot as plt
 import ipdb
