@@ -457,7 +457,7 @@ def test_subepoch_manager_drop_last_false_false():
     mgr.init(13)
     assert mgr.num_total_group_batches == 5
     assert mgr.num_subepochs == 3
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
     assert mgr.cur_subepoch_idx == 0
     assert mgr.translate_index(1) == 1
     assert mgr.cur_subepoch_idx == 0
@@ -465,17 +465,18 @@ def test_subepoch_manager_drop_last_false_false():
         _ = mgr.translate_index(2)
     mgr.to_next_sub_epoch()
     assert mgr.cur_subepoch_idx == 1
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
     assert mgr.translate_index(0) == 2
     assert mgr.translate_index(1) == 3
     with pytest.raises(IndexError):
         _ = mgr.translate_index(3)
     mgr.to_next_sub_epoch()
     assert mgr.cur_subepoch_idx == 2
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 1
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 1
     assert mgr.translate_index(0) == 4
+    assert mgr.translate_index(1) == 3
     with pytest.raises(IndexError):
-        _ = mgr.translate_index(1)
+        _ = mgr.translate_index(2)
     with pytest.raises(EndOfAllSubEpochs):
         mgr.to_next_sub_epoch()
 
@@ -485,7 +486,7 @@ def test_subepoch_manager_drop_last_false_true():
     mgr.init(13)
     assert mgr.num_total_group_batches == 5
     assert mgr.num_subepochs == 2
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
     assert mgr.cur_subepoch_idx == 0
     assert mgr.translate_index(1) == 1
     assert mgr.cur_subepoch_idx == 0
@@ -493,7 +494,7 @@ def test_subepoch_manager_drop_last_false_true():
         _ = mgr.translate_index(2)
     mgr.to_next_sub_epoch()
     assert mgr.cur_subepoch_idx == 1
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
     assert mgr.translate_index(0) == 2
     assert mgr.translate_index(1) == 3
     with pytest.raises(IndexError):
@@ -507,22 +508,23 @@ def test_subepoch_manager_drop_last_true_false():
     mgr.init(16)
     assert mgr.num_total_group_batches == 5
     assert mgr.num_subepochs == 3
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
     assert mgr.cur_subepoch_idx == 0
     assert mgr.translate_index(1) == 1
     with pytest.raises(IndexError):
         _ = mgr.translate_index(2)
     mgr.to_next_sub_epoch()
     assert mgr.cur_subepoch_idx == 1
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
     with pytest.raises(IndexError):
         _ = mgr.translate_index(3)
     mgr.to_next_sub_epoch()
     assert mgr.cur_subepoch_idx == 2
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 1
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 1
     assert mgr.translate_index(0) == 4
+    assert mgr.translate_index(1) == 3
     with pytest.raises(IndexError):
-        _ = mgr.translate_index(1)
+        _ = mgr.translate_index(2)
     with pytest.raises(EndOfAllSubEpochs):
         mgr.to_next_sub_epoch()
 
@@ -532,14 +534,14 @@ def test_subepoch_manager_drop_last_true_true():
     mgr.init(16)
     assert mgr.num_total_group_batches == 5
     assert mgr.num_subepochs == 2
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
     assert mgr.cur_subepoch_idx == 0
     assert mgr.translate_index(1) == 1
     with pytest.raises(IndexError):
         _ = mgr.translate_index(2)
     mgr.to_next_sub_epoch()
     assert mgr.cur_subepoch_idx == 1
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
     with pytest.raises(IndexError):
         _ = mgr.translate_index(3)
     with pytest.raises(EndOfAllSubEpochs):
@@ -551,7 +553,7 @@ def test_subepoch_manager_reset():
     mgr.init(16)
     assert mgr.num_total_group_batches == 4
     assert mgr.num_subepochs == 2
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
     assert mgr.cur_subepoch_idx == 0
     assert mgr.translate_index(0) == 0
     assert mgr.translate_index(1) == 1
@@ -561,23 +563,24 @@ def test_subepoch_manager_reset():
     assert mgr.cur_subepoch_idx == 1
     assert mgr.translate_index(0) == 2
     assert mgr.translate_index(1) == 3
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
     with pytest.raises(EndOfAllSubEpochs):
         mgr.to_next_sub_epoch()
     mgr.reset(13)
     assert mgr.num_total_group_batches == 3
     assert mgr.num_subepochs == 2
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
     assert mgr.cur_subepoch_idx == 0
     assert mgr.translate_index(1) == 1
     with pytest.raises(IndexError):
         _ = mgr.translate_index(2)
     mgr.to_next_sub_epoch()
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 1
     assert mgr.cur_subepoch_idx == 1
     assert mgr.translate_index(0) == 2
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 1
+    assert mgr.translate_index(1) == 1
     with pytest.raises(IndexError):
-        _ = mgr.translate_index(1)
+        _ = mgr.translate_index(2)
     with pytest.raises(EndOfAllSubEpochs):
         mgr.to_next_sub_epoch()
 
@@ -587,7 +590,7 @@ def test_subepoch_manager_translate_index():
     mgr.init(19)
     assert mgr.num_total_group_batches == 10
     assert mgr.num_subepochs == 3
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 4
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 4
     assert mgr.translate_index(0) == 0
     assert mgr.translate_index(1) == 1
     assert mgr.translate_index(2) == 2
@@ -595,7 +598,7 @@ def test_subepoch_manager_translate_index():
     with pytest.raises(IndexError):
         _ = mgr.translate_index(4)
     mgr.to_next_sub_epoch()
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 4
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 4
     assert mgr.translate_index(0) == 4
     assert mgr.translate_index(1) == 5
     assert mgr.translate_index(2) == 6
@@ -603,11 +606,13 @@ def test_subepoch_manager_translate_index():
     with pytest.raises(IndexError):
         _ = mgr.translate_index(4)
     mgr.to_next_sub_epoch()
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
     assert mgr.translate_index(0) == 8
     assert mgr.translate_index(1) == 9
+    assert mgr.translate_index(2) == 2
+    assert mgr.translate_index(3) == 7
     with pytest.raises(IndexError):
-        _ = mgr.translate_index(2)
+        _ = mgr.translate_index(4)
     with pytest.raises(EndOfAllSubEpochs):
         mgr.to_next_sub_epoch()
 
@@ -617,20 +622,24 @@ def test_subepoch_manager_visited():
     mgr.init(16)
     assert mgr.num_total_group_batches == 5
     assert mgr.num_subepochs == 2
-    assert mgr._get_num_group_batches_available_to_visit() == 4
-    assert mgr.get_num_group_batches_in_cur_subepoch() == 2
-    np.testing.assert_almost_equal(mgr.visited, np.zeros(4, dtype=bool))
+    assert mgr._get_num_group_batches_available_to_visit() == 6
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
+    np.testing.assert_almost_equal(mgr.visited, np.zeros(6, dtype=bool))
     assert mgr.translate_index(0) == 0
-    np.testing.assert_almost_equal(mgr.visited, np.array([True, False, False, False], dtype=bool))
+    np.testing.assert_almost_equal(mgr.visited, np.array([True, False, False, False, False, False], dtype=bool))
     assert mgr.translate_index(1) == 1
-    np.testing.assert_almost_equal(mgr.visited, np.array([True, True, False, False], dtype=bool))
+    np.testing.assert_almost_equal(mgr.visited, np.array([True, True, False, False, False, False], dtype=bool))
     mgr.to_next_sub_epoch()
     assert mgr.translate_index(0) == 2
-    assert mgr._get_num_group_batches_available_to_visit() == 4
-    np.testing.assert_almost_equal(mgr.visited, np.array([True, True, True, False], dtype=bool))
+    assert mgr._get_num_group_batches_available_to_visit() == 6
+    np.testing.assert_almost_equal(mgr.visited, np.array([True, True, True, False, False, False], dtype=bool))
     assert mgr.translate_index(1) == 3
-    np.testing.assert_almost_equal(mgr.visited, np.array([True, True, True, True], dtype=bool))
-    mgr.reset(18)
+    np.testing.assert_almost_equal(mgr.visited, np.array([True, True, True, True, False, False], dtype=bool))
+    
+    with pytest.warns(UserWarning) as warning_info:
+        mgr.reset(18)
+    assert str(warning_info[0].message) == "Some group batches are not visited! (group_batch_index: [4, 5])"
+
     assert mgr.num_total_group_batches == 6
     assert mgr.num_subepochs == 3
     assert mgr._get_num_group_batches_available_to_visit() == 6
