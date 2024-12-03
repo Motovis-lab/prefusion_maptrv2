@@ -624,36 +624,36 @@ def test_subepoch_manager_visited():
     assert mgr.num_subepochs == 2
     assert mgr._get_num_group_batches_available_to_visit() == 6
     assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
-    np.testing.assert_almost_equal(mgr.visited, np.zeros(6, dtype=bool))
+    assert mgr.visited.todict() == {}
     assert mgr.translate_index(0) == 0
-    np.testing.assert_almost_equal(mgr.visited, np.array([True, False, False, False, False, False], dtype=bool))
+    assert set(mgr.visited.todict()) == {0}
     assert mgr.translate_index(1) == 1
-    np.testing.assert_almost_equal(mgr.visited, np.array([True, True, False, False, False, False], dtype=bool))
+    assert set(mgr.visited.todict()) == {0, 1}
     mgr.to_next_sub_epoch()
     assert mgr.translate_index(0) == 2
     assert mgr._get_num_group_batches_available_to_visit() == 6
-    np.testing.assert_almost_equal(mgr.visited, np.array([True, True, True, False, False, False], dtype=bool))
+    assert set(mgr.visited.todict()) == {0, 1, 2}
     assert mgr.translate_index(1) == 3
-    np.testing.assert_almost_equal(mgr.visited, np.array([True, True, True, True, False, False], dtype=bool))
+    assert set(mgr.visited.todict()) == {0, 1, 2, 3}
     
     with pytest.warns(UserWarning) as warning_info:
         mgr.reset(18)
-    assert str(warning_info[0].message) == "Some group batches are not visited! (group_batch_index: [4, 5])"
+    assert str(warning_info[0].message) == "Some group batches are not visited! (group_batch_index: {4, 5})"
 
     assert mgr.num_total_group_batches == 6
     assert mgr.num_subepochs == 3
     assert mgr._get_num_group_batches_available_to_visit() == 6
-    np.testing.assert_almost_equal(mgr.visited, np.zeros(6, dtype=bool))
+    assert mgr.visited.todict() == {}
     assert mgr.translate_index(0) == 0
-    np.testing.assert_almost_equal(mgr.visited, np.array([True, False, False, False, False, False], dtype=bool))
+    assert set(mgr.visited.todict()) == {0}
     assert mgr.translate_index(1) == 1
-    np.testing.assert_almost_equal(mgr.visited, np.array([True, True, False, False, False, False], dtype=bool))
+    assert set(mgr.visited.todict()) == {0, 1}
     mgr.to_next_sub_epoch()
     assert mgr.translate_index(1) == 3
-    np.testing.assert_almost_equal(mgr.visited, np.array([True, True, False, True, False, False], dtype=bool))
+    assert set(mgr.visited.todict()) == {0, 1, 3}
     mgr.to_next_sub_epoch()
     assert mgr.translate_index(0) == 4
-    np.testing.assert_almost_equal(mgr.visited, np.array([True, True, False, True, True, False], dtype=bool))
+    assert set(mgr.visited.todict()) == {0, 1, 3, 4}
     with pytest.warns(UserWarning) as warning_info:
         mgr.reset(6)
-    assert str(warning_info[0].message) == "Some group batches are not visited! (group_batch_index: [2, 5])"
+    assert str(warning_info[0].message) == "Some group batches are not visited! (group_batch_index: {2, 5})"
