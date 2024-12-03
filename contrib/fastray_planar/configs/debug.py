@@ -87,7 +87,7 @@ if debug_mode:
     ]
 else:
     batch_size = 4
-    num_workers = 4
+    num_workers = 8
     persistent_workers = False
     transforms = [
         dict(type='RenderIntrinsic', 
@@ -109,31 +109,31 @@ train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='../MV4D-PARKING',
-    # info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
-    info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
-    # model_feeder=dict(
-    #     type="FastRayPlanarModelFeeder",
-    #     voxel_feature_config=voxel_feature_config,
-    #     camera_feature_configs=camera_feature_configs,
-    #     bilinear_interpolation=False
-    # ),
+    info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
+    # info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
+    model_feeder=dict(
+        type="FastRayPlanarModelFeeder",
+        voxel_feature_config=voxel_feature_config,
+        camera_feature_configs=camera_feature_configs,
+        bilinear_interpolation=False
+    ),
     transformables=dict(
         camera_images=dict(type='CameraImageSet', tensor_smith=dict(type='CameraImageTensor')),
         ego_poses=dict(type='EgoPoseSet'),
         bbox_3d=dict(
             type='Bbox3D', 
             dictionary=dict(classes=['class.vehicle.passenger_car']),
-            # tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+            tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
         ),
         polyline_3d=dict(
             type='Polyline3D',
             dictionary=dict(classes=['class.road_marker.lane_line']),
-            # tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+            tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
         ),
         parkingslot_3d=dict(
             type='ParkingSlot3D',
             dictionary=dict(classes=['class.parking.parking_slot']),
-            # tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+            tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
         )
     ),
     transforms=transforms,
@@ -281,6 +281,6 @@ env_cfg = dict(
 # load_from = "./work_dirs/fastray_planar_single_frame_1117/epoch_2.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1118/epoch_2.pth"
 
-work_dir = './work_dirs/debug_1122'
+work_dir = './work_dirs/debug_1129'
 
 # resume = True

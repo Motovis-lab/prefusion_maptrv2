@@ -15,7 +15,8 @@ def get_data(dataloader):
     for group_idx, group_batch in tqdm(enumerate(dataloader), total=total_size):
         for frame_idx, frame_batch in enumerate(group_batch):
             idx = group_idx * 1 + frame_idx
-            time.sleep(0.001)
+            time.sleep(0.01)
+            del frame_batch
             # print(f'{idx}/{total_size}')
     print('DONE!')
             
