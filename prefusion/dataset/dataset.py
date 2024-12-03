@@ -1,13 +1,11 @@
 # Written by AlphaLFC. All rights reserved.
-
 import os
 import copy
 import random
-import warnings
 import logging
 import functools
 from pathlib import Path
-from typing import List, Tuple, Dict, Union, TYPE_CHECKING, Callable
+from typing import List, Tuple, Dict, Union, TYPE_CHECKING
 from collections import defaultdict
 
 import mmengine
@@ -15,6 +13,7 @@ import numpy as np
 from mmengine.logging import print_log
 from torch.utils.data import Dataset
 from prefusion.registry import DATASETS, MMENGINE_FUNCTIONS, TENSOR_SMITHS, DATASET_TOOLS
+from prefusion.dataset.subepoch_manager import SubEpochManager, EndOfAllSubEpochs
 from prefusion.dataset.transformable_loader import (
     TransformableLoader,
     CameraImageSetLoader,
@@ -305,131 +304,6 @@ class GroupSampler:
         return all_groups
 
 
-class EndOfAllSubEpochs(Exception):
-    pass
-
-
-@DATASET_TOOLS.register_module()
-class SubEpochManager:
-    def __init__(
-        self,
-        batch_size: int,
-        num_group_batches_per_subepoch: int,
-        drop_last_group_batch: bool = False,
-        drop_last_subepoch: bool = False,
-        verbose: bool = True,
-    ):
-        """SubEpochManager stores and manages the state of sub epochs. This feature is mainly used in the case
-        that one wants to train an original epoch as a series of sub epochs.
-
-        Parameters
-        ----------
-        batch_size : int
-            batch_size
-        num_group_batches_per_subepoch : int
-            number of groups in one sub epoch
-        drop_last_group_batch : bool, optional
-            whether to drop the last group batch when splitting subepochs, by default False
-        drop_last_subepoch : bool, optional
-            Whether to drop the last subepoch if the subepoch's length doesn't meet `num_group_batches_per_subepoch`.
-            If False, the last subepoch will be padded with index from the previous subepochs to make its length equal to `num_group_batches_per_subepoch`.
-            In other words, no matter it is True or False, the last subepoch will always have the same length as other subepochs.
-            So, drop_last_subepoch's value only affects self.num_subepochs.
-            By default False.
-        """
-        self.batch_size = batch_size
-        self.num_group_batches_per_subepoch = num_group_batches_per_subepoch
-        self.drop_last_group_batch = drop_last_group_batch
-        self.drop_last_subepoch = drop_last_subepoch
-        self.verbose = verbose
-
-    def get_actual_num_group_batches_in_cur_subepoch(self) -> int:
-        """It's different from self.num_group_batches_per_subepoch when considering the last subepoch.
-        For the last subepoch, it calculates the actual number of group batches in the last subepoch (i.e. no padding).
-        """
-        if self.cur_subepoch_idx < self.num_subepochs - 1:
-            return self.num_group_batches_per_subepoch
-        dropped = self.num_total_group_batches % self.num_group_batches_per_subepoch if self.drop_last_subepoch else 0
-        num_used_group_batches = self.num_group_batches_per_subepoch * (self.num_subepochs - 1)
-        num_group_batches_in_the_last_subepoch = self.num_total_group_batches - num_used_group_batches - dropped
-        return num_group_batches_in_the_last_subepoch
-
-    def translate_index(self, idx: int) -> int:
-        """Translate the index of a group batch in the current subepoch to the index of the group batch in the whole dataset.
-
-        Parameters
-        ----------
-        idx : int
-            the index of a group batch in the current subepoch
-
-        Returns
-        -------
-        int
-            the index of the group batch in the whole dataset
-
-        Raises
-        ------
-        IndexError
-        """
-        if idx >= self.num_group_batches_per_subepoch:
-            raise IndexError
-        
-        if idx < self.get_actual_num_group_batches_in_cur_subepoch():
-            translated_index = idx + self.cur_subepoch_idx * self.num_group_batches_per_subepoch
-        else:
-            prev_subepoch_idx = idx % self.cur_subepoch_idx # prev_subepoch_idx is entailed to be less than self.cur_subepoch_idx
-            translated_index = idx + prev_subepoch_idx * self.num_group_batches_per_subepoch
-
-        self.visited[translated_index] = True
-        return translated_index
-
-    def to_next_sub_epoch(self) -> None:
-        if self.verbose:
-            _print_log(f"cur_subepoch_idx is {self.cur_subepoch_idx}, moving to the next subepoch.")
-        self.cur_subepoch_idx += 1
-        if self.cur_subepoch_idx == self.num_subepochs: # finished all the subepochs
-            if self.verbose:
-                _print_log(f"Reached the end of all subepochs.")
-            raise EndOfAllSubEpochs
-
-    def reset(self, num_total_groups: int) -> None:
-        """Resets the state of the SubEpochManager
-
-        Parameters
-        ----------
-        num_total_groups : int
-            total number of groups that generated by GroupSampler.
-        """
-        self.num_total_groups = num_total_groups
-        self.num_total_group_batches = divide(self.num_total_groups, self.batch_size, drop_last=self.drop_last_group_batch)
-        assert self.num_group_batches_per_subepoch <= self.num_total_group_batches, "num_group_batches_per_subepoch should be no larger than num_total_group_batches"
-        self.num_subepochs = divide(self.num_total_group_batches, self.num_group_batches_per_subepoch, drop_last=self.drop_last_subepoch)
-        self.cur_subepoch_idx = 0
-        if hasattr(self, "visited"):
-            self._check_visited_indices()
-        self.visited = np.zeros(self._get_num_group_batches_available_to_visit(), dtype=bool)
-        if self.verbose:
-            _print_log(f"Reset SubEpochManager state to {self}")
-
-    init: Callable = reset
-
-    def _check_visited_indices(self):
-        if not self.visited.all():
-            indices_not_visited = np.nonzero(~self.visited)[0]
-            warnings.warn(f"Some group batches are not visited! (group_batch_index: {indices_not_visited.tolist()})", UserWarning)
-
-    def _get_num_group_batches_available_to_visit(self) -> int:
-        return int(np.ceil(self.num_total_groups / self.batch_size))
-
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}("
-            f"num_total_group_batches={self.num_total_group_batches} "
-            f"num_subepochs={self.num_subepochs} "
-            f"cur_subepoch_idx={self.cur_subepoch_idx}"
-            f")"
-        )
-
 
 @DATASETS.register_module()
 class GroupBatchDataset(Dataset):
@@ -635,6 +509,20 @@ class GroupBatchDataset(Dataset):
         try: # training on sub-epochs
             self.subepoch_manager.to_next_sub_epoch()
         except EndOfAllSubEpochs:
+            # from mmengine.dist import get_dist_info
+            # from loguru import logger
+            # rank, _ = get_dist_info()
+            # logger.debug(f"[rank{rank}] id={id(self.subepoch_manager)}")
+            # logger.debug(f"[rank{rank}] drop_last_group_batch={self.subepoch_manager.drop_last_group_batch}")
+            # logger.debug(f"[rank{rank}] drop_last_subepoch={self.subepoch_manager.drop_last_subepoch}")
+            # logger.debug(f"[rank{rank}] num_total_groups={self.subepoch_manager.num_total_groups}")
+            # logger.debug(f"[rank{rank}] num_total_group_batches={self.subepoch_manager.num_total_group_batches}")
+            # logger.debug(f"[rank{rank}] num_group_batches_per_subepoch={self.subepoch_manager.num_group_batches_per_subepoch}")
+            # logger.debug(f"[rank{rank}] batch_size={self.subepoch_manager.batch_size}")
+            # logger.debug(f"[rank{rank}] num_subepochs={self.subepoch_manager.num_subepochs}")
+            # logger.debug(f"[rank{rank}] id(visited)={id(self.subepoch_manager.visited)}")
+            # logger.debug(f"[rank{rank}] visited={self.subepoch_manager.visited.todict().keys()}")
+
             self._sample_groups()
             self.subepoch_manager.reset(len(self.groups))
 
