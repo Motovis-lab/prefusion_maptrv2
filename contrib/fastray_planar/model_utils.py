@@ -549,7 +549,7 @@ def draw_outputs(pred_dict, batched_input_dict):
                 axes[irow, 3].set_title(f'pred_bboxes')
                 results = tensor_smith.reverse(pred_dict_branch_0)
                 for element in results:
-                    if element['area_score'] < 0.3:
+                    if element['score'] < 0.7:
                         continue
                     center = element['translation']
                     xvec = element['size'][0] * element['rotation'][:, 0]
