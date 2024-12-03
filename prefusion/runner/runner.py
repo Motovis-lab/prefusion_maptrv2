@@ -4,7 +4,7 @@ from mmengine.dist import master_only
 import os.path as osp
 
 @RUNNERS.register_module()
-class GroupRunner(Runner):
+class GroupBatchRunner(Runner):
     
     @master_only
     def dump_config(self) -> None:

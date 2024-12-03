@@ -6,7 +6,7 @@ import torch
 from copious.io.fs import mktmpdir
 from pypcd_imp import pypcd
 
-from prefusion.dataset.utils import read_pcd, make_seed, read_ego_mask, T4x4, get_reversed_mapping, unstack_batch_size
+from prefusion.dataset.utils import read_pcd, make_seed, read_ego_mask, T4x4, get_reversed_mapping, unstack_batch_size, divide
 
 
 @pytest.fixture
@@ -147,3 +147,16 @@ def test_unstack_batch_size_4():
         _ = unstack_batch_size(torch.randn(2))
     with pytest.raises(AssertionError):
         _ = unstack_batch_size({"seg": torch.randn(6, 3, 24, 24), "reg": torch.randn(2, 4, 24, 24)})
+
+
+def test_divide():
+    assert divide(5, 4, drop_last=True) == 1
+    assert divide(5, 4, drop_last=False) == 2
+    assert divide(6, 3, drop_last=True) == 2
+    assert divide(6, 3, drop_last=False) == 2
+    assert divide(1, 1, drop_last=True) == 1
+    assert divide(1, 1, drop_last=False) == 1
+    assert divide(8, 8, drop_last=True) == 1
+    assert divide(8, 8, drop_last=False) == 1
+    assert divide(2, 7, drop_last=True) == 0
+    assert divide(2, 7, drop_last=False) == 1

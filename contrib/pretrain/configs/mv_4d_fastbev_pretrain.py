@@ -139,7 +139,7 @@ env_cfg = dict(
 )
 find_unused_parameters = True
 
-runner_type = 'GroupRunner'
+runner_type = 'GroupBatchRunner'
 
 lr = 0.002  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(

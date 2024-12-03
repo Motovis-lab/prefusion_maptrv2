@@ -55,6 +55,7 @@ RUN pip install --no-cache-dir --extra-index-url https://miropsota.github.io/tor
 
 # install extra python packages
 RUN pip install --no-cache-dir copious==0.1.23
+RUN pip install --no-cache-dir redis==5.2.0
 
 WORKDIR /workspace
 

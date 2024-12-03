@@ -1,16 +1,19 @@
 # Written by AlphaLFC. All rights reserved.
-
 import os
 import copy
 import random
+import logging
+import functools
 from pathlib import Path
 from typing import List, Tuple, Dict, Union, TYPE_CHECKING
 from collections import defaultdict
 
 import mmengine
 import numpy as np
+from mmengine.logging import print_log
 from torch.utils.data import Dataset
-from prefusion.registry import DATASETS, MMENGINE_FUNCTIONS, TENSOR_SMITHS
+from prefusion.registry import DATASETS, MMENGINE_FUNCTIONS, TENSOR_SMITHS, DATASET_TOOLS
+from prefusion.dataset.subepoch_manager import SubEpochManager, EndOfAllSubEpochs
 from prefusion.dataset.transformable_loader import (
     TransformableLoader,
     CameraImageSetLoader,
@@ -41,7 +44,7 @@ from prefusion.dataset.transform import (
     SegBev,
 )
 
-from .utils import build_transforms, build_model_feeder, build_tensor_smith, build_transformable_loader
+from .utils import build_transforms, build_model_feeder, build_tensor_smith, build_transformable_loader, divide
 
 if TYPE_CHECKING:
     from .tensor_smith import TensorSmith
@@ -67,6 +70,8 @@ def collate_dict(batch):
 
 
 GroupBatch = List[List[Dict]]
+
+_print_log = functools.partial(print_log, logger='current')
 
 
 def generate_groups(
@@ -299,6 +304,7 @@ class GroupSampler:
         return all_groups
 
 
+
 @DATASETS.register_module()
 class GroupBatchDataset(Dataset):
     """
@@ -329,6 +335,7 @@ class GroupBatchDataset(Dataset):
         transformables: dict,
         transforms: List[Union[dict, "Transform"]] = None,
         model_feeder: Union["BaseModelFeeder", dict] = None,
+        subepoch_manager: Union["SubEpochManager", dict] = None,
         phase: str = "train",
         indices_path: Union[str, Path] = None,
         batch_size: int = 1,
@@ -353,6 +360,8 @@ class GroupBatchDataset(Dataset):
         - possible_group_sizes (int or list, optional): Size of sequence group; can be a single integer or a list (e.g., [5, 10]); default is 3.
         - possible_frame_intervals (int or list, optional): Interval between frames; default is 1.
         - group_backtime_prob (float): Probability of grouping backtime frames.
+        - subepoch_manager (SubEpochManager or dict): Only works for training. If set, only `num_group_batches_per_subepoch` will be trained in a epoch and the 
+                                                      rest of data will be spit out in the next epoch. 
         - seed_dataset (int): Random seed for dataset
 
         Notes:
@@ -372,6 +381,7 @@ class GroupBatchDataset(Dataset):
         self.transformables = transformables
         self.transforms = build_transforms(transforms)
         self.model_feeder = build_model_feeder(model_feeder)
+        self.subepoch_manager = DATASET_TOOLS.build(subepoch_manager) if subepoch_manager and self.phase == "train" else None
 
         if indices_path is not None:
             indices = [line.strip() for line in open(indices_path, "w")]
@@ -384,9 +394,17 @@ class GroupBatchDataset(Dataset):
         self.group_backtime_prob = group_backtime_prob
 
         self.seed_dataset = seed_dataset
-
         self.group_sampler = GroupSampler(self.scene_frame_inds, possible_group_sizes, possible_frame_intervals, seed=seed_dataset)
-        self.groups = self.group_sampler.sample(self.phase, output_str_index=False)
+
+        self._sample_groups()
+
+        if self.subepoch_manager is not None:
+            _print_log(
+                "Since you have set SubEpochManager, "
+                "you should consider set a larger max_epochs for your training.", 
+                level=logging.WARNING
+            )
+            self.subepoch_manager.init(len(self.groups))
 
     @staticmethod
     def _prepare_scene_frame_inds(info: Dict, indices: List[str] = None) -> Dict[str, List[str]]:
@@ -409,6 +427,10 @@ class GroupBatchDataset(Dataset):
 
         return available_indices
     
+    def _sample_groups(self):
+        self.groups = self.group_sampler.sample(self.phase, output_str_index=False)
+        self.num_total_group_batches = divide(len(self.groups), self.batch_size, drop_last=self.drop_last)
+
     @property
     def group_size(self):
         return self.group_sampler.group_size
@@ -465,11 +487,9 @@ class GroupBatchDataset(Dataset):
         return tensor_smith
 
     def __len__(self):
-        if self.drop_last:
-            return len(self.groups) // self.batch_size
-        else:
-            return int(np.ceil(len(self.groups) / self.batch_size))
-    
+        if self.subepoch_manager is None:
+            return self.num_total_group_batches
+        return self.subepoch_manager.num_group_batches_per_subepoch
 
     @staticmethod
     def _batch_groups(group_batch_ind, groups, batch_size):
@@ -481,12 +501,34 @@ class GroupBatchDataset(Dataset):
             batched_groups.append(groups[group_idx])
         return batched_groups
 
+    def post_epoch_processing(self):
+        if self.subepoch_manager is None: # training on the normal epoch settings
+            self._sample_groups()
+            return
+
+        try: # training on sub-epochs
+            self.subepoch_manager.to_next_sub_epoch()
+        except EndOfAllSubEpochs:
+            # from mmengine.dist import get_dist_info
+            # from loguru import logger
+            # rank, _ = get_dist_info()
+            # logger.debug(f"[rank{rank}] id={id(self.subepoch_manager)}")
+            # logger.debug(f"[rank{rank}] drop_last_group_batch={self.subepoch_manager.drop_last_group_batch}")
+            # logger.debug(f"[rank{rank}] drop_last_subepoch={self.subepoch_manager.drop_last_subepoch}")
+            # logger.debug(f"[rank{rank}] num_total_groups={self.subepoch_manager.num_total_groups}")
+            # logger.debug(f"[rank{rank}] num_total_group_batches={self.subepoch_manager.num_total_group_batches}")
+            # logger.debug(f"[rank{rank}] num_group_batches_per_subepoch={self.subepoch_manager.num_group_batches_per_subepoch}")
+            # logger.debug(f"[rank{rank}] batch_size={self.subepoch_manager.batch_size}")
+            # logger.debug(f"[rank{rank}] num_subepochs={self.subepoch_manager.num_subepochs}")
+            # logger.debug(f"[rank{rank}] id(visited)={id(self.subepoch_manager.visited)}")
+            # logger.debug(f"[rank{rank}] visited={self.subepoch_manager.visited.todict().keys()}")
+
+            self._sample_groups()
+            self.subepoch_manager.reset(len(self.groups))
 
     def __getitem__(self, idx) -> GroupBatch:
-
-        if idx >= len(self):
-            self.groups = self.group_sampler.sample(self.phase, output_str_index=False)
-            raise IndexError
+        if self.subepoch_manager is not None:
+            idx = self.subepoch_manager.translate_index(idx)
 
         batched_groups = self._batch_groups(idx, self.groups, self.batch_size)
 
@@ -522,3 +564,9 @@ class GroupBatchDataset(Dataset):
 
     def _build_transformable(self, name: str, scene_data: Dict, index_info: IndexInfo, loader: "TransformableLoader", tensor_smith: "TensorSmith" = None, **kwargs) -> "Transformable":
         return loader.load(name, scene_data, index_info, tensor_smith=tensor_smith, **kwargs)
+
+
+@DATASETS.register_module()
+class ClassBalancedGroupSampler:
+    def __init__( self, annotation_loaders: Union[TransformableLoader, List[TransformableLoader]] = Bbox3DLoader, ):
+        pass

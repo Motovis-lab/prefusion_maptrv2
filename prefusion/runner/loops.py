@@ -63,6 +63,9 @@ class GroupBatchTrainLoop(EpochBasedTrainLoop):
             for frame_idx, frame_batch in enumerate(group_batch):
                 idx = group_idx * self.dataloader.dataset.group_size + frame_idx
                 self.run_iter(idx, frame_batch)
+        
+        if hasattr(self.dataloader.dataset, "post_epoch_processing"):
+            self.dataloader.dataset.post_epoch_processing()
 
         self.runner.call_hook('after_train_epoch')
         self._epoch += 1
