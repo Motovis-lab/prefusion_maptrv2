@@ -165,7 +165,7 @@ else:
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs),
-        dict(type='RandomRotateSpace'),
+        dict(type='RandomRotateSpace', angles=(0, 0, 90), prob_inverse_cameras_rotation=0),
         dict(type='RandomMirrorSpace'),
         dict(type='RandomImageISP', prob=0.2),
         dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
@@ -557,6 +557,7 @@ model = dict(
     loss_cfg=loss_cfg,
     debug_mode=debug_mode,
     pre_nframes=pre_nframes,
+    voxel_fusion_before_encoder=True
 )
 
 ## log_processor
@@ -590,8 +591,15 @@ env_cfg = dict(
 
 
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1127"
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1128_val"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1128_val"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1129_val"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1129"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1130"
+work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1201"
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
-load_from = "./work_dirs/collected_models/apa_epoch_10.pth"
+# load_from = "./work_dirs/collected_models/apa_epoch_10.pth"
+# load_from = "./work_dirs/collected_models/apa_epoch_20_enhanced.pth"
+# load_from = "./work_dirs/collected_models/apa_epoch_20_better.pth"
+load_from = "./work_dirs/collected_models/apa_epoch_14_tf.pth"
 
 resume = False
