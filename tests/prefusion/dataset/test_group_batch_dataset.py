@@ -618,7 +618,7 @@ def test_subepoch_manager_translate_index():
 
 
 def test_subepoch_manager_visited():
-    mgr = SubEpochManager(3, 2, drop_last_group_batch=True, drop_last_subepoch=True)
+    mgr = SubEpochManager(3, 2, drop_last_group_batch=True, drop_last_subepoch=True, debug_mode=True)
     mgr.init(16)
     assert mgr.num_total_group_batches == 5
     assert mgr.num_subepochs == 2
