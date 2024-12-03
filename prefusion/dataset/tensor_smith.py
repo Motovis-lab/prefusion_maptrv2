@@ -426,6 +426,7 @@ class PlanarBbox3D(PlanarTensorSmith):
             bbox_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
+                'score': mean_classes[0] * area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
                 'translation': mean_center
@@ -732,6 +733,7 @@ class PlanarRectangularCuboid(PlanarBbox3D):
             bbox_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
+                'score': mean_classes[0] * area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
                 'translation': mean_center
@@ -1065,6 +1067,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
             pillar_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
+                'score': mean_classes[0] * area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
                 'translation': mean_center
@@ -1304,6 +1307,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
             cylinder_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
+                'score': mean_classes[0] * area_score,
                 'radius': mean_size[0],
                 'height': mean_size[1],
                 'zvec': mean_unit_zvec,
@@ -1607,6 +1611,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             cylinder_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
+                'score': mean_classes[0] * area_score,
                 'size': mean_size[[0, 0, 1]] * [2, 2, 1],
                 'rotation': mean_rmat,
                 'translation': mean_center
@@ -2210,8 +2215,9 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
     def __init__(self, 
                  voxel_shape: tuple, 
                  voxel_range: Tuple[list, list, list],
-                 reverse_pre_conf: float=0.3,
-                 reverse_dist_thresh: float=1):
+                 reverse_pre_conf: float=0.5,
+                 reverse_dist_thresh: float=1.2,
+                 reverse_conf_thresh: float=0.5):
         """
         Parameters
         ----------
@@ -2219,6 +2225,7 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
         voxel_range : Tuple[List]
         reverse_pre_conf : float
         reverse_dist_thresh : float
+        reverse_conf_thresh : float
 
         Examples
         --------
@@ -2230,6 +2237,7 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
         super().__init__(voxel_shape, voxel_range)
         self.reverse_pre_conf = reverse_pre_conf
         self.reverse_dist_thresh = reverse_dist_thresh
+        self.reverse_conf_thresh = reverse_conf_thresh
     
     @staticmethod
     def _get_height_map(
@@ -2722,13 +2730,14 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
             # get 3d points
             mean_slot_3d = []
             for point, height in zip(mean_slot, heights):
-                mean_slot_3d.append(
-                    [(point[1] - cx) / fx, 
-                     (point[0] - cy) / fy, 
-                     height, 
-                     point[2]]
-                )
-            mean_slots_3d.append(np.float32(mean_slot_3d))
+                mean_slot_3d.append([(point[1] - cx) / fx, 
+                                     (point[0] - cy) / fy, 
+                                     height, 
+                                     point[2]])
+            mean_slot_3d = np.float32(mean_slot_3d)
+            conf = mean_slot_3d[:, 3].mean()
+            if conf > self.reverse_conf_thresh:
+                mean_slots_3d.append(mean_slot_3d)
         
         return mean_slots_3d
 
@@ -2750,16 +2759,10 @@ class PlanarPolyline3DSeg(PlanarTensorSmith):
         -----
         ```
         seg_im  # 分割图
-        reg_im  # 回归图
-            0: dist_im  # 每个分割图上的点到最近线段的垂直距离
-            1,2: vert_vec_im  # 每个分割图上的点到最近线段的向量
-            3,4,5: abs_dir_im  # 每个分割图上的点所在线段的广义单位方向，|nx|, |ny|, nx * ny
-            6 height_im # 每个分割图上的点的高度分布图
         ```
         """
         Z, X, Y = self.voxel_shape
         cx, cy, fx, fy = self.bev_intrinsics
-        points_grid_bev = self.points_grid_bev
 
         polylines = []
         class_inds = []
