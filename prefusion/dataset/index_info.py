@@ -1,3 +1,5 @@
+__all__ = ["IndexInfo"]
+
 class IndexInfo:
     def __init__(self, scene_id: str, frame_id: str, prev: "IndexInfo" = None, next: "IndexInfo" = None):
         self.scene_id = scene_id
