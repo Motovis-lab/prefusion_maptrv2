@@ -371,14 +371,22 @@ class ParkingSlot3DLoader(TransformableLoader):
 
 @TRANSFORMABLE_LOADERS.register_module()
 class OccSdfBevLoader(TransformableLoader):
+    def __init__(self, data_root: Path, src_view_range: List = None) -> None:
+        super().__init__(data_root)
+        self.src_view_range = src_view_range
+
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> OccSdfBev:
         frame = scene_data["frame_info"][index_info.frame_id]
         occ_path = frame["occ_sdf"]["occ_bev"]
         sdf_path = frame["occ_sdf"]["sdf_bev"]
         height_path = frame["occ_sdf"]["height_bev"]
+        if self.src_view_range is None:
+            src_view_range = scene_data["meta_info"]["space_range"]["occ"]
+        else:
+            src_view_range = self.src_view_range
         return OccSdfBev(
             name=name,
-            src_view_range=scene_data["meta_info"]["space_range"]["occ"],  # ego system,
+            src_view_range=src_view_range,  # ego system,
             occ=mmcv.imread(occ_path),
             sdf=mmcv.imread(sdf_path),
             height=mmcv.imread(height_path),

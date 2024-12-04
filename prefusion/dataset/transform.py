@@ -1135,7 +1135,7 @@ class OccSdfBev(SpatialTransformable):
     def __init__(
         self,
         name: str, 
-        src_view_range: dict,
+        src_voxel_range: dict,
         occ: np.ndarray,
         sdf: np.ndarray,
         height: np.ndarray,
@@ -1145,26 +1145,18 @@ class OccSdfBev(SpatialTransformable):
     ):
         """OccSdfBev is a transformable contains occ, sdf and ground height info in a BEV view (a 2D spatial view).
 
-        back, front, right, left, bottom, up  
-        ||    ||     ||     ||    ||      ||
-        xmin, xmax,  ymin,  ymax, zmin,   zmax
-
-        bev: backward-right-up (H, W, Z)
-        ego: x-y-z, forward-left-up
-
         Parameters
         ----------
         name : str
             arbitrary string, will be set to each Transformable object to distinguish it with others
-        src_view_range : dict
-            view range of the bev view: [back, front, right, left, bottom, up], # in ego system
+        src_voxel_range : dict
+            voxel_range=([-0.5, 2.5], [-12, 36], [12, -12])
         occ : np.ndarray
-            occ info, of shape (C, H, W), where C denote the nubmer of occ classes, H and W denote the height and width: 
-            H <=> (xmin, xmax), W <=> (ymin, ymax)
+            occ info, of shape (C, X, Y), where C denote the nubmer of occ classes
         sdf : np.ndarray
-            sdf info, of shape (1, H, W)
+            sdf info, of shape (1, X, Y)
         height : np.ndarray
-            height of the ground, of shape (1, H, W)
+            height of the ground, of shape (1, X, Y)
         dictionary : dict
             the dictionary for the occ classes
         mask : np.ndarray, optional
@@ -1174,7 +1166,7 @@ class OccSdfBev(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.src_view_range = src_view_range
+        self.src_voxel_range = src_voxel_range
         self.occ = occ
         self.sdf = sdf
         self.height = height
@@ -1186,17 +1178,18 @@ class OccSdfBev(SpatialTransformable):
         self._ego_points = self._unproject_bev_to_ego()
 
     def _calc_bev_intrinsic(self):
-        H, W = self._bev_shape
-        fx = H / (self.src_view_range[0] - self.src_view_range[1])
-        fy = W / (self.src_view_range[2] - self.src_view_range[3])
-        cx = - self.src_view_range[1] * fx - 0.5
-        cy = - self.src_view_range[3] * fy - 0.5
-        return [cx, cy, fx, fy]
+        X, Y = self._bev_shape
+        fx = X / (self.src_voxel_range[1][1] - self.src_voxel_range[1][0])
+        fy = Y / (self.src_voxel_range[2][1] - self.src_voxel_range[2][0])
+        cx = - self.src_voxel_range[1][0] * fx - 0.5
+        cy = - self.src_voxel_range[2][0] * fy - 0.5
+
+        return cx, cy, fx, fy
 
     def _unproject_bev_to_ego(self):
-        H, W = self._bev_shape
         cx, cy, fx, fy = self._bev_intrinsic
-        uu, vv = np.meshgrid(np.arange(W), np.arange(H))
+        X, Y = self._bev_shape
+        vv, uu = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
         xx = (vv - cx) / fx
         yy = (uu - cy) / fy
         zz = self.height[0]

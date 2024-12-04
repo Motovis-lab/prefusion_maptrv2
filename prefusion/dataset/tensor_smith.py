@@ -15,7 +15,7 @@ from .utils import (
 )
 from .transform import (
     CameraImage, CameraSegMask, CameraDepth,
-    Bbox3D, Polyline3D, SegBev, ParkingSlot3D
+    Bbox3D, Polyline3D, OccSdfBev, ParkingSlot3D
 )
 
 __all__ = [
@@ -27,7 +27,7 @@ __all__ = [
     "PlanarSquarePillar", 
     "PlanarCylinder3D", 
     "PlanarOrientedCylinder3D",
-    "PlanarSegBev", 
+    "PlanarOccSdfBev", 
     "PlanarPolyline3D", 
     "PlanarPolygon3D", 
     "PlanarParkingSlot3D",
@@ -1689,8 +1689,8 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
 
 
 @TENSOR_SMITHS.register_module()
-class PlanarSegBev(PlanarTensorSmith):
-    def __call__(self, transformable: SegBev):
+class PlanarOccSdfBev(PlanarTensorSmith):
+    def __call__(self, transformable: OccSdfBev):
         raise NotImplementedError
 
 
