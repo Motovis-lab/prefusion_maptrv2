@@ -177,10 +177,11 @@ train_dataset = dict(
         debug_mode=debug_mode),
     transformables=transformables,
     transforms=transforms,
-    phase="train",
+    group_sampler=dict(type="IndexGroupSampler",
+                       phase="train",
+                       possible_group_sizes=1,
+                       possible_frame_intervals=1),
     batch_size=batch_size,
-    possible_group_sizes=1,
-    possible_frame_intervals=1,
 )
 
 val_dataset = dict(
@@ -196,10 +197,11 @@ val_dataset = dict(
     ),
     transformables=transformables,
     transforms=[dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs)],
-    phase="val",
+    group_sampler=dict(type="IndexGroupSampler",
+                       phase="val",
+                       possible_group_sizes=1,
+                       possible_frame_intervals=1),
     batch_size=batch_size,
-    possible_group_sizes=1,
-    possible_frame_intervals=1,
 )
 
 ## dataloader configs

@@ -15,6 +15,8 @@ from prefusion.registry import DATASET_TOOLS
 from .utils import divide
 
 
+__all__ = ['EndOfAllSubEpochs', 'SubEpochManager']
+
 _print_log = functools.partial(print_log, logger='current')
 
 

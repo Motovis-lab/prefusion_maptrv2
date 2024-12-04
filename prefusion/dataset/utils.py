@@ -7,12 +7,14 @@ import mmcv
 import numpy as np
 from pypcd_imp import pypcd
 
-from prefusion.registry import TRANSFORMS, MODEL_FEEDERS, TRANSFORMABLE_LOADERS, TENSOR_SMITHS
+from prefusion.registry import TRANSFORMS, MODEL_FEEDERS, TRANSFORMABLE_LOADERS, TENSOR_SMITHS, DATASET_TOOLS, GROUP_SAMPLERS
 
 if TYPE_CHECKING:
     from .transform import Transform
     from .model_feeder import BaseModelFeeder
     from .transformable_loader import TransformableLoader
+    from .subepoch_manager import SubEpochManager
+    from .group_sampler import GroupSampler
 
 INF_DIST = 1e8
 
@@ -129,6 +131,24 @@ def build_model_feeder(model_feeder: Union["BaseModelFeeder", dict]) -> "BaseMod
     if isinstance(model_feeder, dict):
         return MODEL_FEEDERS.build(model_feeder)
     return model_feeder
+
+
+def build_group_sampler(group_sampler: Union["GroupSampler", dict]) -> "GroupSampler":
+    if group_sampler is None:
+        raise ValueError("Group sampler is mandantory for dataset.")
+    group_sampler = copy.deepcopy(group_sampler)
+    if isinstance(group_sampler, dict):
+        return GROUP_SAMPLERS.build(group_sampler)
+    return group_sampler
+
+
+def build_subepoch_manager(subepoch_manager: Union["SubEpochManager", dict], phase: str):
+    if subepoch_manager is None or phase != "train":
+        return None
+    subepoch_manager = copy.deepcopy(subepoch_manager)
+    if isinstance(subepoch_manager, dict):
+        subepoch_manager = DATASET_TOOLS.build(subepoch_manager)
+    return subepoch_manager
 
 def read_pcd(path: Union[str, Path], intensity: bool = True) -> np.ndarray:
     """read pcd file
