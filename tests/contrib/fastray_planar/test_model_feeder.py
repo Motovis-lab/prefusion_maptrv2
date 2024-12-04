@@ -3,8 +3,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from prefusion.dataset.index_info import IndexInfo
 from prefusion.dataset import (
-    IndexInfo, 
     CameraImage, CameraImageSet, CameraImageTensor,
     Bbox3D, PlanarBbox3D,
     EgoPose, EgoPoseSet

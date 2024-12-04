@@ -94,7 +94,7 @@ if debug_mode:
     possible_group_sizes = 20
     persistent_workers = False
 else:
-    batch_size = 8
+    batch_size = 6
     num_workers = 4
     transforms = [
         dict(type='RandomRenderExtrinsic'),
@@ -170,7 +170,7 @@ train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/nuScenes',
-    info_path='/data/datasets/nuScenes/nusc_train_info.pkl',
+    info_path='/data/datasets/nuScenes/nusc_t2v1_train_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -180,14 +180,16 @@ train_dataset = dict(
     transforms=transforms,
     subepoch_manager=dict(type="SubEpochManager",
                           batch_size=batch_size,
-                          num_group_batches_per_subepoch=1000,
+                          num_group_batches_per_subepoch=4,
                           drop_last_group_batch=False,
                           drop_last_subepoch=False,
-                          verbose=True),
-    phase="train",
+                          verbose=True,
+                          debug_mode=True),
+    group_sampler=dict(type="IndexGroupSampler",
+                       phase="train",
+                       possible_group_sizes=possible_group_sizes,
+                       possible_frame_intervals=10),
     batch_size=batch_size,
-    possible_group_sizes=possible_group_sizes,
-    possible_frame_intervals=10,
 )
 
 
@@ -195,7 +197,7 @@ val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/nuScenes',
-    info_path='/data/datasets/nuScenes/nusc_val_info.pkl',
+    info_path='/data/datasets/nuScenes/nusc_t2v1_val_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -207,10 +209,11 @@ val_dataset = dict(
              resolutions=camera_resolution_configs,
              intrinsics=camera_intrinsic_configs)
     ],
-    phase="val",
+    group_sampler=dict(type="IndexGroupSampler",
+                       phase="val",
+                       possible_group_sizes=possible_group_sizes,
+                       possible_frame_intervals=10),
     batch_size=batch_size,
-    possible_group_sizes=possible_group_sizes,
-    possible_frame_intervals=10,
 )
 
 

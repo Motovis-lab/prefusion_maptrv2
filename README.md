@@ -47,7 +47,8 @@
   - resume
 - Dataset及相关组件
   - GroupBatchDataset
-  - DistributedGroupSampler
+  - GroupSampler
+  - SubEpochManager
   - collate_fn 
   - Transforms
   - Transformables

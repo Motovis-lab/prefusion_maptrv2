@@ -211,10 +211,11 @@ train_dataloader = dict(
                 prob=0.0001,
             ),
         ],
-        phase="train",
+        group_sampler=dict(type="IndexGroupSampler",
+                           phase="train",
+                           possible_group_sizes=[1],
+                           possible_frame_intervals=[1]),
         batch_size=batch_size,
-        possible_group_sizes=[1],
-        possible_frame_intervals=[1],
     ),
 )
 

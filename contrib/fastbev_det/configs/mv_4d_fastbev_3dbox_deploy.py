@@ -167,10 +167,11 @@ train_dataloader = dict(
         info_path=data_root + 'mv_4d_infos_val.pkl',
         transformables=transformables,
         transforms=train_pipeline,
-        phase='train',
+        group_sampler=dict(type="IndexGroupSampler",
+                           phase="train",
+                           possible_group_sizes=[1],
+                           possible_frame_intervals=[1]),
         batch_size=batch_size, 
-        possible_group_sizes=[1],
-        possible_frame_intervals=[1]
         ),
     )
 
@@ -187,10 +188,11 @@ val_dataloader = dict(
         info_path=data_root + 'mv_4d_infos_val.pkl',
         transformables=transformables,
         transforms=val_pipeline,
-        phase='val',
+        group_sampler=dict(type="IndexGroupSampler",
+                           phase="val",
+                           possible_group_sizes=[1],
+                           possible_frame_intervals=[1]),
         batch_size=batch_size, 
-        possible_group_sizes=[1],
-        possible_frame_intervals=[1]
         ),
     )
 
