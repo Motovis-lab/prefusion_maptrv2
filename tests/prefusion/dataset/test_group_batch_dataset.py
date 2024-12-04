@@ -3,7 +3,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from prefusion.dataset.dataset import GroupBatchDataset, GroupSampler, IndexInfo, generate_groups
+from prefusion.dataset.index_info import IndexInfo
+from prefusion.dataset.group_sampler import IndexGroupSampler, generate_groups
+from prefusion.dataset.dataset import GroupBatchDataset
+from prefusion.dataset.subepoch_manager import SubEpochManager, EndOfAllSubEpochs
 from prefusion.dataset.model_feeder import BaseModelFeeder
 from prefusion.registry import TRANSFORMABLE_LOADERS
 
@@ -168,8 +171,8 @@ def test_generate_groups_static_method_6():
 
 def test_group_sampler_sample_train_groups_1scene(scene_frame_inds):
     _scene_frame_inds = {sid: values for sid, values in scene_frame_inds.items() if sid == "20231101_160337"}
-    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=4, possible_frame_intervals=1, seed=42)
-    train_groups = gbs.sample_train_groups()
+    gbs = IndexGroupSampler("train", possible_group_sizes=4, possible_frame_intervals=1, seed=42)
+    train_groups = gbs.sample_train_groups(_scene_frame_inds)
     assert train_groups == [ 
         ['20231101_160337/1698825818864', '20231101_160337/1698825818964', '20231101_160337/1698825819064', '20231101_160337/1698825819164'],
         ['20231101_160337/1698825818064', '20231101_160337/1698825818164', '20231101_160337/1698825818264', '20231101_160337/1698825818364'],
@@ -179,8 +182,8 @@ def test_group_sampler_sample_train_groups_1scene(scene_frame_inds):
     ]
 
 def test_group_sampler_sample_train_groups_more_scenes(scene_frame_inds):
-    gbs = GroupSampler(scene_frame_inds, possible_group_sizes=4, possible_frame_intervals=1, seed=42)
-    train_groups = gbs.sample_train_groups()
+    gbs = IndexGroupSampler("train", possible_group_sizes=4, possible_frame_intervals=1, seed=42)
+    train_groups = gbs.sample_train_groups(scene_frame_inds)
     assert train_groups == [
         ['20230823_110018/1692759640764', '20230823_110018/1692759640864', '20230823_110018/1692759640964', '20230823_110018/1692759641064'],
         ['20231101_160337/1698825818864', '20231101_160337/1698825818964', '20231101_160337/1698825819064', '20231101_160337/1698825819164'],
@@ -197,8 +200,8 @@ def test_group_sampler_sample_train_groups_more_scenes(scene_frame_inds):
 
 def test_group_sampler_sample_val_groups_1scene(scene_frame_inds):
     _scene_frame_inds = {sid: values for sid, values in scene_frame_inds.items() if sid == "20231101_160337"}
-    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=4, possible_frame_intervals=1, seed=42)
-    assert gbs.sample_val_groups() == [
+    gbs = IndexGroupSampler("val", possible_group_sizes=4, possible_frame_intervals=1, seed=42)
+    assert gbs.sample_val_groups(_scene_frame_inds) == [
         [ "20231101_160337/1698825817664", "20231101_160337/1698825817764", "20231101_160337/1698825817864", "20231101_160337/1698825817964", ],
         [ "20231101_160337/1698825818064", "20231101_160337/1698825818164", "20231101_160337/1698825818264", "20231101_160337/1698825818364", ],
         [ "20231101_160337/1698825818464", "20231101_160337/1698825818564", "20231101_160337/1698825818664", "20231101_160337/1698825818764", ],
@@ -208,8 +211,8 @@ def test_group_sampler_sample_val_groups_1scene(scene_frame_inds):
 
 def test_group_sampler_sample_val_groups_frm_intvl1_simple():
     _scene_frame_inds = {"Scn": [f"Scn/{i:02}" for i in range(17)]}
-    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=4, possible_frame_intervals=1, seed=42)
-    assert gbs.sample_val_groups() == [
+    gbs = IndexGroupSampler("val", possible_group_sizes=4, possible_frame_intervals=1, seed=42)
+    assert gbs.sample_val_groups(_scene_frame_inds) == [
         ['Scn/00', 'Scn/01', 'Scn/02', 'Scn/03'], 
         ['Scn/04', 'Scn/05', 'Scn/06', 'Scn/07'], 
         ['Scn/08', 'Scn/09', 'Scn/10', 'Scn/11'], 
@@ -219,8 +222,8 @@ def test_group_sampler_sample_val_groups_frm_intvl1_simple():
 
 def test_group_sampler_sample_val_groups_frm_intvl2_simple():
     _scene_frame_inds = {"Scn": [f"Scn/{i:02}" for i in range(17)]}
-    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=4, possible_frame_intervals=2, seed=42)
-    val_groups = gbs.sample_val_groups()
+    gbs = IndexGroupSampler("val", possible_group_sizes=4, possible_frame_intervals=2, seed=42)
+    val_groups = gbs.sample_val_groups(_scene_frame_inds)
     assert val_groups == [
         ['Scn/00', 'Scn/02', 'Scn/04', 'Scn/06'], 
         ['Scn/01', 'Scn/03', 'Scn/05', 'Scn/07'], 
@@ -232,8 +235,8 @@ def test_group_sampler_sample_val_groups_frm_intvl2_simple():
 
 def test_group_sampler_sample_val_groups_frm_intvl2_grp_intvl_just_fit():
     _scene_frame_inds = {"Scn": [f"Scn/{i:02}" for i in range(20)]}
-    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=10, possible_frame_intervals=2, seed=42)
-    assert gbs.sample_val_groups() == [
+    gbs = IndexGroupSampler("val", possible_group_sizes=10, possible_frame_intervals=2, seed=42)
+    assert gbs.sample_val_groups(_scene_frame_inds) == [
         ['Scn/00', 'Scn/02', 'Scn/04', 'Scn/06', 'Scn/08', 'Scn/10', 'Scn/12', 'Scn/14', 'Scn/16', 'Scn/18'], 
         ['Scn/01', 'Scn/03', 'Scn/05', 'Scn/07', 'Scn/09', 'Scn/11', 'Scn/13', 'Scn/15', 'Scn/17', 'Scn/19'], 
     ]
@@ -241,8 +244,8 @@ def test_group_sampler_sample_val_groups_frm_intvl2_grp_intvl_just_fit():
 
 def test_group_sampler_sample_val_groups_frm_intvl2(scene_frame_inds):
     _scene_frame_inds = {sid: values for sid, values in scene_frame_inds.items() if sid == "20231101_160337"}
-    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=4, possible_frame_intervals=2, seed=42)
-    val_groups = gbs.sample_val_groups()
+    gbs = IndexGroupSampler("val", possible_group_sizes=4, possible_frame_intervals=2, seed=42)
+    val_groups = gbs.sample_val_groups(_scene_frame_inds)
     assert val_groups == [
         ['20231101_160337/1698825817664', '20231101_160337/1698825817864', '20231101_160337/1698825818064', '20231101_160337/1698825818264'],
         ['20231101_160337/1698825817764', '20231101_160337/1698825817964', '20231101_160337/1698825818164', '20231101_160337/1698825818364'],
@@ -254,17 +257,17 @@ def test_group_sampler_sample_val_groups_frm_intvl2(scene_frame_inds):
 
 def test_group_sampler_sample_val_groups_frm_intvl2_grp_sz10(scene_frame_inds):
     _scene_frame_inds = {sid: values for sid, values in scene_frame_inds.items() if sid == "20231101_160337"}
-    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=10, possible_frame_intervals=2, seed=42)
+    gbs = IndexGroupSampler("val", possible_group_sizes=10, possible_frame_intervals=2, seed=42)
 
-    val_groups = gbs.sample_val_groups()
+    val_groups = gbs.sample_val_groups(_scene_frame_inds)
     assert val_groups == [
         ['20231101_160337/1698825817664', '20231101_160337/1698825817764', '20231101_160337/1698825817964', '20231101_160337/1698825818164', '20231101_160337/1698825818364', '20231101_160337/1698825818564', '20231101_160337/1698825818764', '20231101_160337/1698825818964', '20231101_160337/1698825819164', '20231101_160337/1698825819264'],
         ['20231101_160337/1698825817664', '20231101_160337/1698825817864', '20231101_160337/1698825818064', '20231101_160337/1698825818264', '20231101_160337/1698825818464', '20231101_160337/1698825818664', '20231101_160337/1698825818864', '20231101_160337/1698825819064', '20231101_160337/1698825819264', '20231101_160337/1698825819264'],
     ]
 
 def test_group_sampler_sample_scene_groups(scene_frame_inds):
-    gbs = GroupSampler(scene_frame_inds, possible_group_sizes=4, possible_frame_intervals=1, seed=42)
-    assert gbs.sample_scene_groups() == [
+    gbs = IndexGroupSampler("test_scene_by_scene", possible_group_sizes=4, possible_frame_intervals=1, seed=42)
+    assert gbs.sample_scene_groups(scene_frame_inds) == [
         [ "20231101_160337/1698825817664", "20231101_160337/1698825817764", "20231101_160337/1698825817864", "20231101_160337/1698825817964", "20231101_160337/1698825818064", "20231101_160337/1698825818164", "20231101_160337/1698825818264", "20231101_160337/1698825818364", "20231101_160337/1698825818464", "20231101_160337/1698825818564", "20231101_160337/1698825818664", "20231101_160337/1698825818764", "20231101_160337/1698825818864", "20231101_160337/1698825818964", "20231101_160337/1698825819064", "20231101_160337/1698825819164", "20231101_160337/1698825819264", ],
         [ "20231101_160337_subset/1698825818164", "20231101_160337_subset/1698825818264", "20231101_160337_subset/1698825818364", "20231101_160337_subset/1698825818464", "20231101_160337_subset/1698825818564", "20231101_160337_subset/1698825818664", "20231101_160337_subset/1698825818764", "20231101_160337_subset/1698825818864", ],
         [ "20230823_110018/1692759640764", "20230823_110018/1692759640864", "20230823_110018/1692759640964", "20230823_110018/1692759641064", "20230823_110018/1692759641164", "20230823_110018/1692759641264", "20230823_110018/1692759641364", "20230823_110018/1692759641464", "20230823_110018/1692759641564", "20230823_110018/1692759641664", "20230823_110018/1692759641764", ]
@@ -305,7 +308,7 @@ def test_group_sampler_convert_groups_to_info():
         ['Scn/08', 'Scn/10', 'Scn/12', 'Scn/14'], 
         ['Scn/09', 'Scn/11', 'Scn/13', 'Scn/15'],
     ]
-    groups_as_index_info = GroupSampler._convert_groups_to_info(groups)
+    groups_as_index_info = IndexGroupSampler._convert_groups_to_info(groups)
     def ii(scene_frame_str, prev=None, next=None):
         return IndexInfo.from_str(scene_frame_str, prev=prev, next=next)
 
@@ -319,8 +322,8 @@ def test_group_sampler_convert_groups_to_info():
     
 def test_cur_train_group_size():
     _scene_frame_inds = {"Scn": [f"Scn/{i:02}" for i in range(17)]}
-    gbs = GroupSampler(_scene_frame_inds, possible_group_sizes=[2, 4, 8], possible_frame_intervals=1, seed=52)
-    assert gbs.sample_train_groups() == [
+    gbs = IndexGroupSampler("train", possible_group_sizes=[2, 4, 8], possible_frame_intervals=1, seed=52)
+    assert gbs.sample_train_groups(_scene_frame_inds) == [
         ['Scn/10', 'Scn/11', 'Scn/12', 'Scn/13'], 
         ['Scn/02', 'Scn/03', 'Scn/04', 'Scn/05'], 
         ['Scn/13', 'Scn/14', 'Scn/15', 'Scn/16'], 
@@ -329,7 +332,7 @@ def test_cur_train_group_size():
     ]
     assert gbs.group_size == 4
     gbs.seed = 42
-    assert gbs.sample_train_groups() == [
+    assert gbs.sample_train_groups(_scene_frame_inds) == [
         ['Scn/01', 'Scn/02', 'Scn/03', 'Scn/04', 'Scn/05', 'Scn/06', 'Scn/07', 'Scn/08'], 
         ['Scn/00', 'Scn/01', 'Scn/02', 'Scn/03', 'Scn/04', 'Scn/05', 'Scn/06', 'Scn/07'], 
         ['Scn/09', 'Scn/10', 'Scn/11', 'Scn/12', 'Scn/13', 'Scn/14', 'Scn/15', 'Scn/16'], 
@@ -387,10 +390,8 @@ def test_load_all_transformables():
         ),
         transforms=[DummyTransform(scope="group")],
         model_feeder=BaseModelFeeder(),
-        phase="val",
-        possible_frame_intervals=2,
+        group_sampler=IndexGroupSampler(phase="val", possible_group_sizes=[4], possible_frame_intervals=[2]),
         batch_size=2,
-        possible_group_sizes=4,
     )
 
     all_transformables = dataset.load_all_transformables(index_info)
@@ -436,10 +437,8 @@ def test_load_all_transformables_customized_loader():
         ),
         transforms=[DummyTransform(scope="group")],
         model_feeder=BaseModelFeeder(),
-        phase="val",
-        possible_frame_intervals=2,
+        group_sampler=IndexGroupSampler(phase="val", possible_group_sizes=[4], possible_frame_intervals=[2]),
         batch_size=2,
-        possible_group_sizes=4,
     )
 
     all_transformables = dataset.load_all_transformables(index_info)
@@ -450,3 +449,210 @@ def test_load_all_transformables_customized_loader():
        [-6.78401337e-04,  9.99973246e-01, -7.28335824e-03],
        [-5.12440759e-04,  7.28301133e-03,  9.99973347e-01]]))
     np.testing.assert_almost_equal(ego_pose[1], np.array([-0.02978186,  0.7788203 ,  0.01499793]))
+
+
+def test_subepoch_manager_drop_last_false_false():
+    mgr = SubEpochManager(3, 2, drop_last_group_batch=False, drop_last_subepoch=False)
+    mgr.init(13)
+    assert mgr.num_total_group_batches == 5
+    assert mgr.num_subepochs == 3
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.cur_subepoch_idx == 0
+    assert mgr.translate_index(1) == 1
+    assert mgr.cur_subepoch_idx == 0
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(2)
+    mgr.to_next_sub_epoch()
+    assert mgr.cur_subepoch_idx == 1
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.translate_index(0) == 2
+    assert mgr.translate_index(1) == 3
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(3)
+    mgr.to_next_sub_epoch()
+    assert mgr.cur_subepoch_idx == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 1
+    assert mgr.translate_index(0) == 4
+    assert mgr.translate_index(1) == 3
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(2)
+    with pytest.raises(EndOfAllSubEpochs):
+        mgr.to_next_sub_epoch()
+
+
+def test_subepoch_manager_drop_last_false_true():
+    mgr = SubEpochManager(3, 2, drop_last_group_batch=False, drop_last_subepoch=True)
+    mgr.init(13)
+    assert mgr.num_total_group_batches == 5
+    assert mgr.num_subepochs == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.cur_subepoch_idx == 0
+    assert mgr.translate_index(1) == 1
+    assert mgr.cur_subepoch_idx == 0
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(2)
+    mgr.to_next_sub_epoch()
+    assert mgr.cur_subepoch_idx == 1
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.translate_index(0) == 2
+    assert mgr.translate_index(1) == 3
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(3)
+    with pytest.raises(EndOfAllSubEpochs):
+        mgr.to_next_sub_epoch()
+
+
+def test_subepoch_manager_drop_last_true_false():
+    mgr = SubEpochManager(3, 2, drop_last_group_batch=True, drop_last_subepoch=False)
+    mgr.init(16)
+    assert mgr.num_total_group_batches == 5
+    assert mgr.num_subepochs == 3
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.cur_subepoch_idx == 0
+    assert mgr.translate_index(1) == 1
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(2)
+    mgr.to_next_sub_epoch()
+    assert mgr.cur_subepoch_idx == 1
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(3)
+    mgr.to_next_sub_epoch()
+    assert mgr.cur_subepoch_idx == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 1
+    assert mgr.translate_index(0) == 4
+    assert mgr.translate_index(1) == 3
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(2)
+    with pytest.raises(EndOfAllSubEpochs):
+        mgr.to_next_sub_epoch()
+
+
+def test_subepoch_manager_drop_last_true_true():
+    mgr = SubEpochManager(3, 2, drop_last_group_batch=True, drop_last_subepoch=True)
+    mgr.init(16)
+    assert mgr.num_total_group_batches == 5
+    assert mgr.num_subepochs == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.cur_subepoch_idx == 0
+    assert mgr.translate_index(1) == 1
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(2)
+    mgr.to_next_sub_epoch()
+    assert mgr.cur_subepoch_idx == 1
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(3)
+    with pytest.raises(EndOfAllSubEpochs):
+        mgr.to_next_sub_epoch()
+
+
+def test_subepoch_manager_reset():
+    mgr = SubEpochManager(5, 2, drop_last_group_batch=False, drop_last_subepoch=False)
+    mgr.init(16)
+    assert mgr.num_total_group_batches == 4
+    assert mgr.num_subepochs == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.cur_subepoch_idx == 0
+    assert mgr.translate_index(0) == 0
+    assert mgr.translate_index(1) == 1
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(2)
+    mgr.to_next_sub_epoch()
+    assert mgr.cur_subepoch_idx == 1
+    assert mgr.translate_index(0) == 2
+    assert mgr.translate_index(1) == 3
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
+    with pytest.raises(EndOfAllSubEpochs):
+        mgr.to_next_sub_epoch()
+    mgr.reset(13)
+    assert mgr.num_total_group_batches == 3
+    assert mgr.num_subepochs == 2
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.cur_subepoch_idx == 0
+    assert mgr.translate_index(1) == 1
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(2)
+    mgr.to_next_sub_epoch()
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 1
+    assert mgr.cur_subepoch_idx == 1
+    assert mgr.translate_index(0) == 2
+    assert mgr.translate_index(1) == 1
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(2)
+    with pytest.raises(EndOfAllSubEpochs):
+        mgr.to_next_sub_epoch()
+
+
+def test_subepoch_manager_translate_index():
+    mgr = SubEpochManager(2, 4, drop_last_group_batch=False, drop_last_subepoch=False)
+    mgr.init(19)
+    assert mgr.num_total_group_batches == 10
+    assert mgr.num_subepochs == 3
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 4
+    assert mgr.translate_index(0) == 0
+    assert mgr.translate_index(1) == 1
+    assert mgr.translate_index(2) == 2
+    assert mgr.translate_index(3) == 3
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(4)
+    mgr.to_next_sub_epoch()
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 4
+    assert mgr.translate_index(0) == 4
+    assert mgr.translate_index(1) == 5
+    assert mgr.translate_index(2) == 6
+    assert mgr.translate_index(3) == 7
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(4)
+    mgr.to_next_sub_epoch()
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.translate_index(0) == 8
+    assert mgr.translate_index(1) == 9
+    assert mgr.translate_index(2) == 2
+    assert mgr.translate_index(3) == 7
+    with pytest.raises(IndexError):
+        _ = mgr.translate_index(4)
+    with pytest.raises(EndOfAllSubEpochs):
+        mgr.to_next_sub_epoch()
+
+
+def test_subepoch_manager_visited():
+    mgr = SubEpochManager(3, 2, drop_last_group_batch=True, drop_last_subepoch=True, debug_mode=True)
+    mgr.init(16)
+    assert mgr.num_total_group_batches == 5
+    assert mgr.num_subepochs == 2
+    assert mgr._get_num_group_batches_available_to_visit() == 6
+    assert mgr.get_actual_num_group_batches_in_cur_subepoch() == 2
+    assert mgr.visited.todict() == {}
+    assert mgr.translate_index(0) == 0
+    assert set(mgr.visited.todict()) == {0}
+    assert mgr.translate_index(1) == 1
+    assert set(mgr.visited.todict()) == {0, 1}
+    mgr.to_next_sub_epoch()
+    assert mgr.translate_index(0) == 2
+    assert mgr._get_num_group_batches_available_to_visit() == 6
+    assert set(mgr.visited.todict()) == {0, 1, 2}
+    assert mgr.translate_index(1) == 3
+    assert set(mgr.visited.todict()) == {0, 1, 2, 3}
+    
+    with pytest.warns(UserWarning) as warning_info:
+        mgr.reset(18)
+    assert str(warning_info[0].message) == "Some group batches are not visited! (group_batch_index: {4, 5})"
+
+    assert mgr.num_total_group_batches == 6
+    assert mgr.num_subepochs == 3
+    assert mgr._get_num_group_batches_available_to_visit() == 6
+    assert mgr.visited.todict() == {}
+    assert mgr.translate_index(0) == 0
+    assert set(mgr.visited.todict()) == {0}
+    assert mgr.translate_index(1) == 1
+    assert set(mgr.visited.todict()) == {0, 1}
+    mgr.to_next_sub_epoch()
+    assert mgr.translate_index(1) == 3
+    assert set(mgr.visited.todict()) == {0, 1, 3}
+    mgr.to_next_sub_epoch()
+    assert mgr.translate_index(0) == 4
+    assert set(mgr.visited.todict()) == {0, 1, 3, 4}
+    with pytest.warns(UserWarning) as warning_info:
+        mgr.reset(6)
+    assert str(warning_info[0].message) == "Some group batches are not visited! (group_batch_index: {2, 5})"

@@ -33,7 +33,7 @@ from prefusion.dataset.transform import (
 
 
 if TYPE_CHECKING:
-    from prefusion.dataset import IndexInfo
+    from prefusion.dataset.index_info import IndexInfo
 
 
 __all__ = [

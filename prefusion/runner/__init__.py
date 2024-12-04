@@ -1,2 +1,2 @@
 from .loops import *
-from .runner import GroupRunner
+from .runner import GroupBatchRunner

@@ -5,7 +5,7 @@ import mmcv
 import numpy as np
 from prefusion.dataset.transformable_loader import TransformableLoader
 from prefusion.registry import TRANSFORMABLE_LOADERS
-from prefusion.dataset import IndexInfo
+from prefusion.dataset.index_info import IndexInfo
 from prefusion.dataset.transform import (
     Transformable,
     CameraImage, 

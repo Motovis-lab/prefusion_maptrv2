@@ -19,3 +19,4 @@ pytest==8.3.3
 pytest-cov
 loguru
 tqdm
+redis==5.2.0
