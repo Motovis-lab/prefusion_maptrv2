@@ -321,7 +321,7 @@ docker build -t prefusion:lastest .
 Pull from Dockerhub
 
 ```bash
-docker pull brianlan/prefusion:v2
+docker pull brianlan/prefusion:v8
 ```
 
 Run with docker
