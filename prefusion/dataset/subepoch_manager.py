@@ -122,7 +122,6 @@ class IndicesVisittingLogger:
 class SubEpochManager:
     def __init__(
         self,
-        batch_size: int,
         num_group_batches_per_subepoch: int,
         drop_last_group_batch: bool = False,
         drop_last_subepoch: bool = False,
@@ -149,7 +148,7 @@ class SubEpochManager:
         debug_mode: bool, optional
             if debug_mode=True, will store the translated idx to visited. By default False.
         """
-        self.batch_size = batch_size
+        self.batch_size = None
         self.num_group_batches_per_subepoch = num_group_batches_per_subepoch
         self.drop_last_group_batch = drop_last_group_batch
         self.drop_last_subepoch = drop_last_subepoch
@@ -157,6 +156,9 @@ class SubEpochManager:
         self.debug_mode = debug_mode
         if self.debug_mode:
             self.visited = IndicesVisittingLogger()
+
+    def set_batch_size(self, batch_size: int):
+        self.batch_size = batch_size
 
     def get_actual_num_group_batches_in_cur_subepoch(self) -> int:
         """It's different from self.num_group_batches_per_subepoch when considering the last subepoch.
@@ -226,6 +228,7 @@ class SubEpochManager:
             self._check_visited_indices()
             self.visited.clear()
 
+        assert self.batch_size is not None, "batch_size must be set before using SubEpochManager"
         self.num_total_groups = num_total_groups
         self.num_total_group_batches = divide(self.num_total_groups, self.batch_size, drop_last=self.drop_last_group_batch)
         assert self.num_group_batches_per_subepoch <= self.num_total_group_batches, "num_group_batches_per_subepoch should be no larger than num_total_group_batches"

@@ -1,10 +1,12 @@
 import pytest
 
 from prefusion.dataset.subepoch_manager import SubEpochManager, EndOfAllSubEpochs
+from prefusion.dataset.utils import build_subepoch_manager
 
 
 def test_subepoch_manager_drop_last_false_false():
-    mgr = SubEpochManager(3, 2, drop_last_group_batch=False, drop_last_subepoch=False)
+    mgr = SubEpochManager(2, drop_last_group_batch=False, drop_last_subepoch=False)
+    mgr.set_batch_size(3)
     mgr.init(13)
     assert mgr.num_total_group_batches == 5
     assert mgr.num_subepochs == 3
@@ -33,7 +35,8 @@ def test_subepoch_manager_drop_last_false_false():
 
 
 def test_subepoch_manager_drop_last_false_true():
-    mgr = SubEpochManager(3, 2, drop_last_group_batch=False, drop_last_subepoch=True)
+    mgr = SubEpochManager(2, drop_last_group_batch=False, drop_last_subepoch=True)
+    mgr.set_batch_size(3)
     mgr.init(13)
     assert mgr.num_total_group_batches == 5
     assert mgr.num_subepochs == 2
@@ -55,7 +58,8 @@ def test_subepoch_manager_drop_last_false_true():
 
 
 def test_subepoch_manager_drop_last_true_false():
-    mgr = SubEpochManager(3, 2, drop_last_group_batch=True, drop_last_subepoch=False)
+    mgr = SubEpochManager(2, drop_last_group_batch=True, drop_last_subepoch=False)
+    mgr.set_batch_size(3)
     mgr.init(16)
     assert mgr.num_total_group_batches == 5
     assert mgr.num_subepochs == 3
@@ -81,7 +85,8 @@ def test_subepoch_manager_drop_last_true_false():
 
 
 def test_subepoch_manager_drop_last_true_true():
-    mgr = SubEpochManager(3, 2, drop_last_group_batch=True, drop_last_subepoch=True)
+    mgr = SubEpochManager(2, drop_last_group_batch=True, drop_last_subepoch=True)
+    mgr.set_batch_size(3)
     mgr.init(16)
     assert mgr.num_total_group_batches == 5
     assert mgr.num_subepochs == 2
@@ -100,7 +105,8 @@ def test_subepoch_manager_drop_last_true_true():
 
 
 def test_subepoch_manager_reset():
-    mgr = SubEpochManager(5, 2, drop_last_group_batch=False, drop_last_subepoch=False)
+    mgr = SubEpochManager(2, drop_last_group_batch=False, drop_last_subepoch=False)
+    mgr.set_batch_size(5)
     mgr.init(16)
     assert mgr.num_total_group_batches == 4
     assert mgr.num_subepochs == 2
@@ -137,7 +143,8 @@ def test_subepoch_manager_reset():
 
 
 def test_subepoch_manager_translate_index():
-    mgr = SubEpochManager(2, 4, drop_last_group_batch=False, drop_last_subepoch=False)
+    mgr = SubEpochManager(4, drop_last_group_batch=False, drop_last_subepoch=False)
+    mgr.set_batch_size(2)
     mgr.init(19)
     assert mgr.num_total_group_batches == 10
     assert mgr.num_subepochs == 3
@@ -169,7 +176,8 @@ def test_subepoch_manager_translate_index():
 
 
 def test_subepoch_manager_visited():
-    mgr = SubEpochManager(3, 2, drop_last_group_batch=True, drop_last_subepoch=True, debug_mode=True)
+    mgr = SubEpochManager(2, drop_last_group_batch=True, drop_last_subepoch=True, debug_mode=True)
+    mgr.set_batch_size(3)
     mgr.init(16)
     assert mgr.num_total_group_batches == 5
     assert mgr.num_subepochs == 2

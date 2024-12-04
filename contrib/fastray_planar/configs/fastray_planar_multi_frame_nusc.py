@@ -179,7 +179,6 @@ train_dataset = dict(
     transformables=transformables,
     transforms=transforms,
     subepoch_manager=dict(type="SubEpochManager",
-                          batch_size=batch_size,
                           num_group_batches_per_subepoch=4,
                           drop_last_group_batch=False,
                           drop_last_subepoch=False,

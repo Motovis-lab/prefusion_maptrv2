@@ -1,5 +1,7 @@
 import abc
 import random
+from pathlib import Path
+from collections import defaultdict
 from typing import List, Tuple, Dict, Union, TYPE_CHECKING
 
 import numpy as np
@@ -101,7 +103,15 @@ def generate_groups(
 
 @GROUP_SAMPLERS.register_module()
 class IndexGroupSampler:
-    def __init__(self, phase: str, possible_group_sizes: Union[int, Tuple[int]], possible_frame_intervals: Union[int, Tuple[int]] = 1, seed: int = None):
+    def __init__(
+        self, 
+        phase: str, 
+        possible_group_sizes: Union[int, Tuple[int]], 
+        possible_frame_intervals: Union[int, Tuple[int]] = 1, 
+        indices_path: Union[str, Path] = None,
+        seed: int = None,
+        **kwargs,
+    ):
         """Sample groups
 
         Parameters
@@ -116,6 +126,8 @@ class IndexGroupSampler:
             Interval between frames; default is 1.
             if int, will always use this value as frame_interval;
             if Tuple[int], during train phase, will random pick a value as the frame_interval for a given epoch.
+        indices_path : Union[str, Path], optional
+            Specified file of indices to load; if None, all frames are automatically fetched from the info_path.
         seed : int, optional
             Random seed for randomization operations. It's usually for testing and debugging purpose.
         """
@@ -124,17 +136,22 @@ class IndexGroupSampler:
         self.possible_group_sizes = [possible_group_sizes] if isinstance(possible_group_sizes, int) else possible_group_sizes
         self.possible_frame_intervals = [possible_frame_intervals] if isinstance(possible_frame_intervals, int) else possible_frame_intervals
         self._cur_train_group_size = self.possible_group_sizes[0]  # train group size of current epoch
+        self.indices_path = indices_path
         self.seed = seed
 
-    @property
-    def group_size(self) -> int:
-        return self._cur_train_group_size
-
-    def sample(self, scene_frame_inds: Dict[str, List[str]], output_str_index: bool = False) -> List[List["IndexInfo"]]:
-        """_summary_
+    @staticmethod
+    def _prepare_scene_frame_inds(info: Dict, indices: List[str] = None) -> Dict[str, List[str]]:
+        """prepare scene_frame_inds for later usage
 
         Parameters
         ----------
+        info : Dict
+            the full info (pkl) of the dataset
+        indices : List[str], optional
+            _description_, by default None
+
+        Returns
+        -------
         scene_frame_inds : Dict[str, List[str]]
             e.g.  
             ```
@@ -143,13 +160,52 @@ class IndexGroupSampler:
               "20230823_110018": [ "20230823_110018/1692759640764", "20230823_110018/1692759640864"],
             }
             ```
-        output_str_index: bool, optional
+        """
+        if indices is None:
+            indices = {}
+            for scene_id in info:
+                frame_list = sorted(info[scene_id]["frame_info"].keys())
+                if frame_list:
+                    indices[scene_id] = [f"{scene_id}/{frame_id}" for frame_id in frame_list]
+            return indices
 
+        available_indices = defaultdict(list)
+        for index in indices:
+            scene_id, frame_id = index.split("/")
+            if scene_id in info:
+                if frame_id in info[scene_id]["frame_info"]:
+                    available_indices[scene_id].append(index)
+        for scene_id in available_indices:
+            available_indices[scene_id] = sorted(available_indices[scene_id])
+
+        return available_indices
+
+    @property
+    def group_size(self) -> int:
+        return self._cur_train_group_size
+
+    def sample(self, info: Dict, output_str_index: bool = False, **kwargs) -> List[List["IndexInfo"]]:
+        """Sample groups
+
+        Parameters
+        ----------
+        info : Dict
+            the full info (pkl) of the dataset
+        output_str_index: bool, optional
+            whether to output str index or IndexInfo; default is False.
         Returns
         -------
         _type_
             _description_
         """
+        # generate scene_frame_inds
+        if self.indices_path is not None:
+            indices = [line.strip() for line in open(self.indices_path, "w")]
+            scene_frame_inds = self._prepare_scene_frame_inds(info, indices=indices)
+        else:
+            scene_frame_inds = self._prepare_scene_frame_inds(info)
+
+        # sample groups
         match self.phase:
             case "train":
                 groups = self.sample_train_groups(scene_frame_inds)

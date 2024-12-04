@@ -1,18 +1,16 @@
 # Written by AlphaLFC. All rights reserved.
 import os
 import copy
-import random
 import logging
 import functools
 from pathlib import Path
 from typing import List, Dict, Union, TYPE_CHECKING
-from collections import defaultdict
 
 import mmengine
 from mmengine.logging import print_log
 from torch.utils.data import Dataset
-from prefusion.registry import DATASETS, MMENGINE_FUNCTIONS, TENSOR_SMITHS, DATASET_TOOLS, GROUP_SAMPLERS
-from prefusion.dataset.subepoch_manager import SubEpochManager, EndOfAllSubEpochs
+from prefusion.registry import DATASETS, MMENGINE_FUNCTIONS, TENSOR_SMITHS
+from prefusion.dataset.subepoch_manager import EndOfAllSubEpochs
 from prefusion.dataset.transformable_loader import (
     TransformableLoader,
     CameraImageSetLoader,
@@ -59,6 +57,7 @@ if TYPE_CHECKING:
     from .model_feeder import BaseModelFeeder
     from .transform import Transformable
     from .index_info import IndexInfo
+    from .subepoch_manager import SubEpochManager
     from .group_sampler import GroupSampler
 
 __all__ = ["GroupBatchDataset"]
@@ -112,7 +111,6 @@ class GroupBatchDataset(Dataset):
         model_feeder: Union["BaseModelFeeder", dict] = None,
         subepoch_manager: Union["SubEpochManager", dict] = None,
         group_sampler: Union["GroupSampler", dict] = None,
-        indices_path: Union[str, Path] = None,
         batch_size: int = 1,
         drop_last: bool = False,
         group_backtime_prob: float = 0.0,
@@ -127,7 +125,6 @@ class GroupBatchDataset(Dataset):
         - info_path (str): Path to the information file.
         - transformables (dict): Dict of transformable definitions.
         - transforms (list): Transform classes for preprocessing transformables. Build by TRANSFORMS.
-        - indices_path (str, optional): Specified file of indices to load; if None, all frames are automatically fetched from the info_path.
         - batch_size (int, optional): Batch size; defualt is 1.
         - group_backtime_prob (float): Probability of grouping backtime frames.
         - subepoch_manager (SubEpochManager or dict): Only works for training. If set, only `num_group_batches_per_subepoch` will be trained in a epoch and the 
@@ -149,54 +146,27 @@ class GroupBatchDataset(Dataset):
         self.transformables = transformables
         self.transforms = build_transforms(transforms)
         self.model_feeder = build_model_feeder(model_feeder)
-        self.group_sampler = build_group_sampler(group_sampler) 
-        self.subepoch_manager = build_subepoch_manager(subepoch_manager, self.group_sampler.phase)
-
-        if indices_path is not None:
-            indices = [line.strip() for line in open(indices_path, "w")]
-            self.scene_frame_inds = self._prepare_scene_frame_inds(self.info, indices=indices)
-        else:
-            self.scene_frame_inds = self._prepare_scene_frame_inds(self.info)
-
+        self.group_sampler = build_group_sampler(group_sampler)
+        self.subepoch_manager = None
         self.batch_size = batch_size
         self.drop_last = drop_last
         self.group_backtime_prob = group_backtime_prob
-
         self.seed_dataset = seed_dataset
 
         self._sample_groups()
 
-        if self.subepoch_manager is not None:
-            _print_log(
-                "Since you have set SubEpochManager, "
-                "you should consider set a larger max_epochs for your training.", 
-                level=logging.WARNING
-            )
-            self.subepoch_manager.init(len(self.groups))
-
-    @staticmethod
-    def _prepare_scene_frame_inds(info: Dict, indices: List[str] = None) -> Dict[str, List[str]]:
-        if indices is None:
-            indices = {}
-            for scene_id in info:
-                frame_list = sorted(info[scene_id]["frame_info"].keys())
-                if frame_list:
-                    indices[scene_id] = [f"{scene_id}/{frame_id}" for frame_id in frame_list]
-            return indices
-
-        available_indices = defaultdict(list)
-        for index in indices:
-            scene_id, frame_id = index.split("/")
-            if scene_id in info:
-                if frame_id in info[scene_id]["frame_info"]:
-                    available_indices[scene_id].append(index)
-        for scene_id in available_indices:
-            available_indices[scene_id] = sorted(available_indices[scene_id])
-
-        return available_indices
+        if self.group_sampler.phase == "train":
+            self.subepoch_manager = build_subepoch_manager(subepoch_manager, batch_size)
+            if self.subepoch_manager is not None:
+                _print_log(
+                    "Since you have set SubEpochManager, "
+                    "you should consider set a larger max_epochs for your training.", 
+                    level=logging.WARNING
+                )
+                self.subepoch_manager.init(len(self.groups))
     
     def _sample_groups(self):
-        self.groups = self.group_sampler.sample(self.scene_frame_inds, output_str_index=False)
+        self.groups = self.group_sampler.sample(self.info, output_str_index=False)
         self.num_total_group_batches = divide(len(self.groups), self.batch_size, drop_last=self.drop_last)
 
     @property
