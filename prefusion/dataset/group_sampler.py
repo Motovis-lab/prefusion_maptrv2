@@ -3,7 +3,7 @@ import copy
 import random
 import warnings
 from pathlib import Path
-from functools import lru_cache
+from cachetools import cached, Cache
 from collections import defaultdict, UserList, Counter
 from typing import List, Tuple, Dict, Union, TYPE_CHECKING
 
@@ -23,11 +23,7 @@ __all__ = ["IndexGroupSampler", "ClassBalancedGroupSampler"]
 
 
 class Group(UserList):
-    def __init__(self, initlist):
-        super().__init__(initlist)
-        self.frm_lvl_cnt = Counter() # frame-level counter
-        self.scn_lvl_cnt = Counter() # scene-level counter
-
+    pass
 
 def generate_groups(
     total_num_frames: int, 
@@ -316,39 +312,49 @@ class ClassBalancedGroupSampler(GroupSampler):
         possible_group_sizes: Union[int, Tuple[int]], 
         possible_frame_intervals: Union[int, Tuple[int]] = 1, 
         seed: int = None,
-        transformables: Dict[str, "Transformable"] = None,
+        transformable_cfg: Dict[str, "Transformable"] = None,
+        cbgs_cfg: Dict = None,
         num_processes: int = 0,
         **kwargs
     ):
         super().__init__(phase, possible_group_sizes, possible_frame_intervals, seed)
         assert phase == "train", "ClassBalancedGroupSampler is only designed for train phase."
-        assert transformables is not None, "transformables cannot be None, it's for loading annotation data that has class info."
-        self.transformables = transformables
+        assert transformable_cfg is not None, "transformables cannot be None, it's for loading annotation data that has class info."
+        assert cbgs_cfg is not None, "cbgs_cfg cannot be None."
+        self.transformable_cfgcfg = transformable_cfg
         self.num_processes = num_processes
         self._base_group_sampler = IndexGroupSampler(phase, possible_group_sizes, possible_frame_intervals, seed)
         self.default_data_root = None
 
     def sample(self, data_root: Path, info: Dict, **kwargs) -> List[List["IndexInfo"]]:
-        # TODO: [] 1. generate initial groups (make sure each group shouldn't lose the track of scene_id)
-        # TODO: [] 2. calculate occurred classes for each group
-        # TODO: [] 3. expand groups according to the class distribution
-        # TODO: [] 4. re calculate occurred tags for each scene
-        # TODO: [] 5. expand scenes according to tag distribution (e.g. expand groups that in the rare scenes)
+        # TODO: [x] 1. generate initial groups (make sure each group shouldn't lose the track of scene_id)
+        # TODO: [ ] 2. calculate occurred classes for each group
+        # TODO: [ ] 3. expand groups according to the class distribution
+        # TODO: [ ] 4. re calculate occurred tags for each scene
+        # TODO: [ ] 5. expand scenes according to tag distribution (e.g. expand groups that in the rare scenes)
         self.default_data_root = data_root
         groups = self._base_group_sampler.sample(data_root, info)
-        all_stats = defaultdict(list)
-        for scene_id, scene_data in groups:
-            for frame_id, frame_data in scene_data:
-                input_dict = {
-                    # "index_info": index_info,
-                    # "transformables": self.load_all_transformables(info, index_info),
-                }
-                all_stats.append(input_dict)
+        for group in groups:
+            self.count_frame_level_class_occurrence_(data_root, info, group)
+            self.count_scene_level_class_occurrence_(data_root, info, group)
+    
+    def count_frame_level_class_occurrence_(self, data_root: Path, info: Dict, group: Group):
+        cnt = Counter()
+        for index_info in group:
+            transformables = self.load_all_transformables(info, index_info)
+            for _, transformable in transformables.items():
+                cnt.update([ele['class'] for ele in transformable.elements])
+                cnt.update([attr_val for ele in transformable.elements for attr_val in ele['attr']])
+        group.frm_lvl_cnt = cnt
+
+    def count_scene_level_tag_occurrence_(self, data_root: Path, info: Dict, group: Group):
+        pass
+        # scn_lvl_cnt = Counter() # scene-level counter
 
     def load_all_transformables(self, info: Dict, index_info: "IndexInfo") -> dict:
         transformables = {}
-        for name in self.transformables:
-            _t_cfg = copy.deepcopy(self.transformables[name])
+        for name in self.transformable_cfgcfg:
+            _t_cfg = copy.deepcopy(self.transformable_cfgcfg[name])
             transformable_type = _t_cfg.pop("type")
             loader_cfg = _t_cfg.pop("loader", None)
             loader = self._build_transformable_loader(loader_cfg, transformable_type)
@@ -357,7 +363,7 @@ class ClassBalancedGroupSampler(GroupSampler):
         
         return transformables
     
-    @lru_cache(maxsize=None)
+    @cached(cache=Cache(maxsize=float('inf')), key=lambda self_, cfg, type_: (str(sorted((cfg or {}).items())), type_))
     def _build_transformable_loader(self, loader_cfg, transformable_type: str) -> "TransformableLoader":
         if loader_cfg:
             loader_cfg.setdefault("data_root", self.default_data_root)  # fallback with default data_root from Dataset
