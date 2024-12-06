@@ -1,10 +1,17 @@
 from pathlib import Path
+from typing import Dict, List
 
 import numpy as np
 import pytest
 
 from prefusion.dataset.index_info import IndexInfo
-from prefusion.dataset.group_sampler import IndexGroupSampler, generate_groups
+from prefusion.dataset.group_sampler import (
+    IndexGroupSampler, 
+    ClassBalancedGroupSampler, 
+    generate_groups, 
+    convert_str_index_to_index_info, 
+    get_scene_frame_inds,
+)
 
 
 @pytest.fixture
@@ -252,7 +259,7 @@ def test_group_sampler_convert_groups_to_info():
         ['Scn/08', 'Scn/10', 'Scn/12', 'Scn/14'], 
         ['Scn/09', 'Scn/11', 'Scn/13', 'Scn/15'],
     ]
-    groups_as_index_info = IndexGroupSampler._convert_groups_to_info(groups)
+    groups_as_index_info = convert_str_index_to_index_info(groups)
     def ii(scene_frame_str, prev=None, next=None):
         return IndexInfo.from_str(scene_frame_str, prev=prev, next=next)
 
@@ -284,51 +291,6 @@ def test_cur_train_group_size():
     assert gbs.group_size == 8
 
 
-import pytest
-
-from prefusion.dataset.index_info import IndexInfo
-from prefusion.dataset.dataset import GroupBatchDataset
-from prefusion.dataset.group_sampler import generate_groups, IndexGroupSampler
-
-
-
-@pytest.fixture
-def info_pkl_path():
-    return {
-        'scene-0001': {'frame_info': {
-            "101": {
-                '3d_boxes': {
-
-                }, 
-                '3d_polylines': {
-                    
-                }
-            }
-        }},
-        'scene-0004': {'frame_info': {
-            
-        }},
-    }
-
-
-def test_generate_cbgs_groups(info_pkl_path):
-    pass
-    # gbs = GroupSampler(scene_frame_inds, possible_group_sizes=4, possible_frame_intervals=1, seed=42)
-    # train_groups = gbs.sample_train_groups()
-    # assert train_groups == [
-    #     ['20230823_110018/1692759640764', '20230823_110018/1692759640864', '20230823_110018/1692759640964', '20230823_110018/1692759641064'],
-    #     ['20231101_160337/1698825818864', '20231101_160337/1698825818964', '20231101_160337/1698825819064', '20231101_160337/1698825819164'],
-    #     ['20231101_160337/1698825818464', '20231101_160337/1698825818564', '20231101_160337/1698825818664', '20231101_160337/1698825818764'],
-    #     ['20230823_110018/1692759641164', '20230823_110018/1692759641264', '20230823_110018/1692759641364', '20230823_110018/1692759641464'],
-    #     ['20231101_160337_subset/1698825818164', '20231101_160337_subset/1698825818264', '20231101_160337_subset/1698825818364', '20231101_160337_subset/1698825818464'],
-    #     ['20231101_160337_subset/1698825818564', '20231101_160337_subset/1698825818664', '20231101_160337_subset/1698825818764', '20231101_160337_subset/1698825818864'],
-    #     ['20230823_110018/1692759641464', '20230823_110018/1692759641564', '20230823_110018/1692759641664', '20230823_110018/1692759641764'],
-    #     ['20231101_160337/1698825818964', '20231101_160337/1698825819064', '20231101_160337/1698825819164', '20231101_160337/1698825819264'],
-    #     ['20231101_160337/1698825817664', '20231101_160337/1698825817764', '20231101_160337/1698825817864', '20231101_160337/1698825817964'],
-    #     ['20231101_160337/1698825818064', '20231101_160337/1698825818164', '20231101_160337/1698825818264', '20231101_160337/1698825818364'],
-    # ]
-
-
 @pytest.fixture
 def mock_info():
     return {
@@ -338,16 +300,191 @@ def mock_info():
     }
 
 
-def test_prepare_indices_with_no_indices_provided(mock_info):
-    indices = IndexGroupSampler._prepare_scene_frame_inds(mock_info)
+def test_get_scene_frame_inds_with_no_indices_provided(mock_info):
+    indices = get_scene_frame_inds(mock_info)
     assert indices == {
         "20230901_000000": ["20230901_000000/1692759619664", "20230901_000000/1692759619764"],
         "20231023_222222": ["20231023_222222/1692759621364"],
     }
 
 
-def test_prepare_indices_with_indices_provided(mock_info):
-    indices = IndexGroupSampler._prepare_scene_frame_inds(mock_info, ["20230901_000000/1692759619664"])
+def test_get_scene_frame_inds_with_indices_provided(mock_info):
+    indices = get_scene_frame_inds(mock_info, ["20230901_000000/1692759619664"])
     assert indices == {
         "20230901_000000": ["20230901_000000/1692759619664"],
     }
+
+
+dummy_sz = np.ones(3, dtype=np.float32).tolist()
+dummy_rot = np.eye(3, dtype=np.float32)
+dummy_pos = np.zeros(3, dtype=np.float32)
+dummy_pts = np.arange(12, dtype=np.float32).reshape(-1, 3)
+
+def generate_dummy_box(track_id: str, obj_type: str, door_open: bool = None, barrier_type: str = None):
+    bx = {'track_id': track_id, 'class': obj_type, 'size': dummy_sz, 'rotation': dummy_rot, 'translation': dummy_pos}
+    if obj_type in ["car", "bus", "truck"] and door_open is not None:
+        bx['attr'] = {"door_open": door_open}
+    if obj_type == "barrier" and barrier_type is not None:
+        bx['attr'] = {"barrier_type": barrier_type}
+    return bx
+
+
+def generate_dummy_polyline(track_id: str, obj_type: str, color='yellow'):
+    return {'track_id': track_id, 'class': obj_type, 'points': dummy_pts, 'attr': {'color': color}}
+
+
+def generate_dummy_boxes(prefix: str, cfg: Dict[str, int], door_open: bool = None, barrier_type: str = None) -> List[Dict]:
+    return [generate_dummy_box(f"{prefix}_{t}_{i}", obj_type, door_open=door_open, barrier_type=barrier_type) 
+            for t, (obj_type, num) in enumerate(cfg.items()) for i in range(num)]
+
+
+def generate_dummy_polylines(prefix: str, cfg: Dict[str, int], color='yellow') -> List[Dict]:
+    return [generate_dummy_polyline(f"{prefix}_{t}_{i}", obj_type, color=color) 
+            for t, (obj_type, num) in enumerate(cfg.items()) for i in range(num)]
+
+
+@pytest.fixture
+def dataset_info_pkl():
+    return {
+        'scene-0001': {'frame_info': {
+            "101": {
+                '3d_boxes': generate_dummy_boxes("101b", dict(barrier=1, car=2, truck=1, bicycle=1), barrier_type="soft"),
+                '3d_polylines': generate_dummy_polylines("101p", dict(parking_slot=1, laneline=1), color='yellow'),
+            },
+            "102": {
+                '3d_boxes': generate_dummy_boxes("102b", dict(barrier=1, car=3, truck=2, bicycle=1, pedestrian=1), barrier_type="hard"),
+            },
+            "103": {
+                '3d_polylines': generate_dummy_polylines("103p", dict(laneline=1), color='yellow'),
+            },
+            "104": {
+                '3d_boxes': generate_dummy_boxes("104b", dict(pedestrian=1, barrier=2, truck=1, car=2), barrier_type="hard"),
+                '3d_polylines': generate_dummy_polylines("104p", dict(parking_slot=3), color='white'),
+            },
+            "105": {
+                '3d_boxes': generate_dummy_boxes("105b", dict(pedestrian=1, barrier=2, truck=1, bicycle=1), door_open=True, barrier_type="hard"),
+                '3d_polylines': generate_dummy_polylines("105p", dict(parking_slot=1, laneline=1), color='yellow'),
+            },
+            "106": {
+                '3d_boxes': generate_dummy_boxes("106b", dict(car=5, truck=2)),
+                '3d_polylines': generate_dummy_polylines("106p", dict(laneline=1), color='white'),
+            },
+        }},
+        'scene-0004': {'frame_info': {
+            "401": {
+                '3d_boxes': generate_dummy_boxes("401b", dict(car=2, bus=1, bicycle=2)),
+                '3d_polylines': generate_dummy_polylines("401p", dict(parking_slot=1, laneline=1), color='yellow'),
+            },
+            "402": {
+                '3d_boxes': generate_dummy_boxes("402b", dict(car=3, truck=1, bicycle=1, pedestrian=1)),
+            },
+            "403": {
+                '3d_polylines': generate_dummy_polylines("403p", dict(access_aisle=1), color='yellow'),
+            },
+            "404": {
+                '3d_boxes': generate_dummy_boxes("404b", dict(pedestrian=1, car=2, bus=1)),
+                '3d_polylines': generate_dummy_polylines("404p", dict(parking_slot=1), color='yellow'),
+            },
+            "405": {
+                '3d_boxes': generate_dummy_boxes("405b", dict(pedestrian=1, barrier=1, bus=1, bicycle=1), door_open=True, barrier_type="soft"),
+                '3d_polylines': generate_dummy_polylines("405p", dict(laneline=2), color='yellow'),
+            },
+            "406": {
+                '3d_polylines': generate_dummy_polylines("406p", dict(parking_slot=2), color='white'),
+            },
+            "407": {
+                '3d_polylines': generate_dummy_polylines("407p", dict(parking_slot=2, laneline=2), color='white'),
+            },
+            "408": {
+                'dummy_objets': generate_dummy_boxes("409b", dict(xxx=1, yyy=2, zzz=3)),
+            },
+            "409": {
+                '3d_boxes': generate_dummy_boxes("408b", dict(car=3, bus=1, bicycle=1, pedestrian=1)),
+            },
+            "410": {
+                '3d_boxes': generate_dummy_boxes("410b", dict(car=1, bus=2, bicycle=2), door_open=False),
+            },
+            "411": {
+                '3d_boxes': generate_dummy_boxes("411b", dict(pedestrian=2, car=4, bicycle=1)),
+            },
+            "412": {
+                '3d_boxes': generate_dummy_boxes("412b", dict(car=3, bus=1)),
+            },
+        }},
+    }
+
+
+@pytest.fixture
+def transformable_cfg():
+    return dict(
+        bbox_3d=dict(
+            type='Bbox3D',
+            loader=dict(
+                type="AdvancedBbox3DLoader",
+                class_mapping=dict(
+                    car=["car"],
+                    bus=["bus"],
+                    truck=["truck"],
+                    pedestrian=["pedestrian"],
+                    bicycle=["bicycle"],
+                    barrier_soft=['barrier_type::soft'],
+                    barrier_hard=['barrier_type::hard'],
+                ),
+                attr_mapping=dict(
+                    door_open=["door_open"],
+                ),
+            ),
+        ),
+        polyline_3d=dict(
+            type='Polyline3D',
+            dictionary=dict(
+                classes=['parking_slot', 'laneline', 'access_aisle'],
+                attr=['color'],
+            ),
+        ),
+    )
+
+
+@pytest.fixture
+def cbgs_cfg():
+    pass
+
+
+def test_index_group_sampler(dataset_info_pkl):
+    gbs = IndexGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42)
+    groups = gbs.sample("/doesntcare", dataset_info_pkl, phase='train')
+    assert [[f.frame_id for f in group] for group in groups] == [
+        ['401', '402', '403'], # ├─ car=5, bus=1, truck=1, pedestrian=1, bicycle=3
+                               # ├─ parking_slot=1, laneline=1, access_aisle=1
+                               # └─ color@yellow=3
+
+        ['403', '404', '405'], # ├─ car=2, bus=2, pedestrian=2, bicycle=1, barrier_soft=1
+                               # ├─ parking_slot=1, laneline=2, access_aisle=1
+                               # └─ color@yellow=4, door_open@True=2
+
+        ['409', '410', '411'], # ├─ car=8, bus=3, pedestrian=3, bicycle=4
+                               # └─ door_open@False=3
+
+        ['410', '411', '412'], # ├─ car=8, bus=3, pedestrian=2, bicycle=3
+                               # └─ door_open@False=3
+
+        ['104', '105', '106'], # ├─ car=7, truck=4, pedestrian=2, bicycle=1, barrier_hard=4
+                               # ├─ parking_slot=4, laneline=2
+                               # └─ color@yellow=2, color@white=4, door_open@True=1
+
+        ['406', '407', '408'], # ├─ parking_slot=4, laneline=2
+                               # └─ color@white=6
+
+        ['101', '102', '103'], # ├─ car=5, truck=3, pedestrian=1, bicycle=2, barrier_hard=1, barrier_soft=1
+                               # ├─ parking_slot=1, laneline=2
+                               # └─ color@yellow=3
+
+        ['103', '104', '105']] # ├─ car=2, truck=2, pedestrian=2, bicycle=1, barrier_hard=4
+                               # ├─ parking_slot=4, laneline=2
+                               # └─ color@yellow=3, color@white=3, door_open@True=1
+
+
+def test_generate_cbgs_groups(dataset_info_pkl, transformable_cfg, cbgs_cfg):
+    gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformables=transformable_cfg)
+    groups = gbs.sample("/doesntcare", dataset_info_pkl, phase='train')
+    assert groups == []

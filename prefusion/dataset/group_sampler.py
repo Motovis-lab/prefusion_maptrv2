@@ -1,19 +1,32 @@
 import abc
+import copy
 import random
+import warnings
 from pathlib import Path
-from collections import defaultdict
+from functools import lru_cache
+from collections import defaultdict, UserList, Counter
 from typing import List, Tuple, Dict, Union, TYPE_CHECKING
 
 import numpy as np
 from prefusion.registry import GROUP_SAMPLERS
 from prefusion.dataset.transformable_loader import Bbox3DLoader
 from prefusion.dataset.index_info import IndexInfo
+from prefusion.dataset.transformable_loader import Bbox3DLoader, Polyline3DLoader, Polygon3DLoader, ParkingSlot3DLoader
+from prefusion.dataset.transform import Bbox3D, Polyline3D, Polygon3D, ParkingSlot3D
+from prefusion.dataset.utils import build_transformable_loader
 
 if TYPE_CHECKING:
     from .dataset import TransformableLoader
     from .transform import Transformable
 
 __all__ = ["IndexGroupSampler", "ClassBalancedGroupSampler"]
+
+
+class Group(UserList):
+    def __init__(self, initlist):
+        super().__init__(initlist)
+        self.frm_lvl_cnt = Counter() # frame-level counter
+        self.scn_lvl_cnt = Counter() # scene-level counter
 
 
 def generate_groups(
@@ -101,15 +114,93 @@ def generate_groups(
     return np.unique(ind_lists, axis=0)
 
 
-@GROUP_SAMPLERS.register_module()
-class IndexGroupSampler:
+def get_scene_frame_inds(info: Dict, indices: List[str] = None) -> Dict[str, List[str]]:
+    """prepare scene_frame_inds for later usage
+
+    Parameters
+    ----------
+    info : Dict
+        the full info (pkl) of the dataset
+    indices : List[str], optional
+        _description_, by default None
+
+    Returns
+    -------
+    scene_frame_inds : Dict[str, List[str]]
+        e.g.  
+        ```
+        {
+            "20231101_160337": [ "20231101_160337/1698825817664", "20231101_160337/1698825817764"],
+            "20230823_110018": [ "20230823_110018/1692759640764", "20230823_110018/1692759640864"],
+        }
+        ```
+    """
+    if indices is None:
+        indices = {}
+        for scene_id in info:
+            frame_list = sorted(info[scene_id]["frame_info"].keys())
+            if frame_list:
+                indices[scene_id] = [f"{scene_id}/{frame_id}" for frame_id in frame_list]
+        return indices
+
+    available_indices = defaultdict(list)
+    for index in indices:
+        scene_id, frame_id = index.split("/")
+        if scene_id in info:
+            if frame_id in info[scene_id]["frame_info"]:
+                available_indices[scene_id].append(index)
+    for scene_id in available_indices:
+        available_indices[scene_id] = sorted(available_indices[scene_id])
+
+    return available_indices
+
+
+def convert_str_index_to_index_info(groups: List[List[str]]) -> List[List["IndexInfo"]]:
+    index_info_groups = []
+    for grp in groups:
+        index_info_grp = []
+        prev = None
+        for i, scn_frm_str in enumerate(grp):
+            cur = IndexInfo.from_str(scn_frm_str, prev=prev)
+            prev = cur
+            index_info_grp.append(cur)
+        index_info_groups.append(index_info_grp)
+    return index_info_groups
+
+class GroupSampler:
     def __init__(
         self, 
         phase: str, 
         possible_group_sizes: Union[int, Tuple[int]], 
         possible_frame_intervals: Union[int, Tuple[int]] = 1, 
-        indices_path: Union[str, Path] = None,
         seed: int = None,
+        **kwargs,
+    ):
+        assert phase.lower() in ["train", "val", "test", "test_scene_by_scene"]
+        self.phase = phase.lower()
+        self.possible_group_sizes = [possible_group_sizes] if isinstance(possible_group_sizes, int) else possible_group_sizes
+        self.possible_frame_intervals = [possible_frame_intervals] if isinstance(possible_frame_intervals, int) else possible_frame_intervals
+        self._cur_train_group_size = self.possible_group_sizes[0]  # train group size of current epoch
+        self.seed = seed
+
+    @property
+    def group_size(self) -> int:
+        return self._cur_train_group_size
+
+    @abc.abstractmethod
+    def sample(self, data_root: Path, info: Dict, **kwargs) -> List[List["IndexInfo"]]:
+        raise NotImplementedError
+
+
+@GROUP_SAMPLERS.register_module()
+class IndexGroupSampler(GroupSampler):
+    def __init__(
+        self, 
+        phase: str, 
+        possible_group_sizes: Union[int, Tuple[int]], 
+        possible_frame_intervals: Union[int, Tuple[int]] = 1, 
+        seed: int = None,
+        indices_path: Union[str, Path] = None,
         **kwargs,
     ):
         """Sample groups
@@ -131,79 +222,32 @@ class IndexGroupSampler:
         seed : int, optional
             Random seed for randomization operations. It's usually for testing and debugging purpose.
         """
-        assert phase.lower() in ["train", "val", "test", "test_scene_by_scene"]
-        self.phase = phase.lower()
-        self.possible_group_sizes = [possible_group_sizes] if isinstance(possible_group_sizes, int) else possible_group_sizes
-        self.possible_frame_intervals = [possible_frame_intervals] if isinstance(possible_frame_intervals, int) else possible_frame_intervals
-        self._cur_train_group_size = self.possible_group_sizes[0]  # train group size of current epoch
+        super().__init__(phase, possible_group_sizes, possible_frame_intervals, seed)
         self.indices_path = indices_path
-        self.seed = seed
 
-    @staticmethod
-    def _prepare_scene_frame_inds(info: Dict, indices: List[str] = None) -> Dict[str, List[str]]:
-        """prepare scene_frame_inds for later usage
-
-        Parameters
-        ----------
-        info : Dict
-            the full info (pkl) of the dataset
-        indices : List[str], optional
-            _description_, by default None
-
-        Returns
-        -------
-        scene_frame_inds : Dict[str, List[str]]
-            e.g.  
-            ```
-            {
-              "20231101_160337": [ "20231101_160337/1698825817664", "20231101_160337/1698825817764"],
-              "20230823_110018": [ "20230823_110018/1692759640764", "20230823_110018/1692759640864"],
-            }
-            ```
-        """
-        if indices is None:
-            indices = {}
-            for scene_id in info:
-                frame_list = sorted(info[scene_id]["frame_info"].keys())
-                if frame_list:
-                    indices[scene_id] = [f"{scene_id}/{frame_id}" for frame_id in frame_list]
-            return indices
-
-        available_indices = defaultdict(list)
-        for index in indices:
-            scene_id, frame_id = index.split("/")
-            if scene_id in info:
-                if frame_id in info[scene_id]["frame_info"]:
-                    available_indices[scene_id].append(index)
-        for scene_id in available_indices:
-            available_indices[scene_id] = sorted(available_indices[scene_id])
-
-        return available_indices
-
-    @property
-    def group_size(self) -> int:
-        return self._cur_train_group_size
-
-    def sample(self, info: Dict, output_str_index: bool = False, **kwargs) -> List[List["IndexInfo"]]:
+    def sample(self, data_root: Path, info: Dict, output_str_index: bool = False, **kwargs) -> List[List["IndexInfo"]]:
         """Sample groups
 
         Parameters
         ----------
         info : Dict
             the full info (pkl) of the dataset
-        output_str_index: bool, optional
+        output_str_index: bool, optional, deprecated
             whether to output str index or IndexInfo; default is False.
         Returns
         -------
-        _type_
-            _description_
+        List[List["IndexInfo"]]
+            Generated groups
         """
+        if output_str_index:
+            warnings.warn("Outputting groups as string indices is deprecated.", DeprecationWarning)
+
         # generate scene_frame_inds
         if self.indices_path is not None:
             indices = [line.strip() for line in open(self.indices_path, "w")]
-            scene_frame_inds = self._prepare_scene_frame_inds(info, indices=indices)
+            scene_frame_inds = get_scene_frame_inds(info, indices=indices)
         else:
-            scene_frame_inds = self._prepare_scene_frame_inds(info)
+            scene_frame_inds = get_scene_frame_inds(info)
 
         # sample groups
         match self.phase:
@@ -214,20 +258,7 @@ class IndexGroupSampler:
             case "test_scene_by_scene" :
                 groups = self.sample_scene_groups(scene_frame_inds)
         if not output_str_index:
-            return self._convert_groups_to_info(groups)
-
-    @staticmethod
-    def _convert_groups_to_info(groups: List[List[str]]) -> List[List["IndexInfo"]]:
-        index_info_groups = []
-        for grp in groups:
-            index_info_grp = []
-            prev = None
-            for i, frm in enumerate(grp):
-                cur = IndexInfo.from_str(frm, prev=prev)
-                prev = cur
-                index_info_grp.append(cur)
-            index_info_groups.append(index_info_grp)
-        return index_info_groups
+            return convert_str_index_to_index_info(groups)
 
     def sample_train_groups(self, scene_frame_inds: Dict[str, List[str]]) -> List[List[str]]:
         if self.seed: random.seed(self.seed)
@@ -262,7 +293,7 @@ class IndexGroupSampler:
                 if self.seed: random.seed(self.seed)
                 frame_interval = random.choice(self.possible_frame_intervals)
             inds_list = generate_groups(len(frame_ids), group_size, frame_interval, start_ind=start_ind, random_start_ind=random_start_ind, seed=seed)
-            groups = [[frame_ids[i] for i in inds] for inds in inds_list]
+            groups = [Group([frame_ids[i] for i in inds]) for inds in inds_list]
             all_groups.extend(groups)
         if shuffle:
             if self.seed: random.seed(self.seed)
@@ -271,6 +302,66 @@ class IndexGroupSampler:
 
 
 @GROUP_SAMPLERS.register_module()
-class ClassBalancedGroupSampler:
-    def __init__( self, annotation_loaders: Union["TransformableLoader", List["TransformableLoader"]] = Bbox3DLoader, ):
-        pass
+class ClassBalancedGroupSampler(GroupSampler):
+    DEFAULT_LOADERS = {
+        Bbox3D.__name__: Bbox3DLoader,
+        Polyline3D.__name__: Polyline3DLoader,
+        Polygon3D.__name__: Polygon3DLoader,
+        ParkingSlot3D.__name__: ParkingSlot3DLoader,
+    }
+
+    def __init__(
+        self, 
+        phase: str, 
+        possible_group_sizes: Union[int, Tuple[int]], 
+        possible_frame_intervals: Union[int, Tuple[int]] = 1, 
+        seed: int = None,
+        transformables: Dict[str, "Transformable"] = None,
+        num_processes: int = 0,
+        **kwargs
+    ):
+        super().__init__(phase, possible_group_sizes, possible_frame_intervals, seed)
+        assert phase == "train", "ClassBalancedGroupSampler is only designed for train phase."
+        assert transformables is not None, "transformables cannot be None, it's for loading annotation data that has class info."
+        self.transformables = transformables
+        self.num_processes = num_processes
+        self._base_group_sampler = IndexGroupSampler(phase, possible_group_sizes, possible_frame_intervals, seed)
+        self.default_data_root = None
+
+    def sample(self, data_root: Path, info: Dict, **kwargs) -> List[List["IndexInfo"]]:
+        # TODO: [] 1. generate initial groups (make sure each group shouldn't lose the track of scene_id)
+        # TODO: [] 2. calculate occurred classes for each group
+        # TODO: [] 3. expand groups according to the class distribution
+        # TODO: [] 4. re calculate occurred tags for each scene
+        # TODO: [] 5. expand scenes according to tag distribution (e.g. expand groups that in the rare scenes)
+        self.default_data_root = data_root
+        groups = self._base_group_sampler.sample(data_root, info)
+        all_stats = defaultdict(list)
+        for scene_id, scene_data in groups:
+            for frame_id, frame_data in scene_data:
+                input_dict = {
+                    # "index_info": index_info,
+                    # "transformables": self.load_all_transformables(info, index_info),
+                }
+                all_stats.append(input_dict)
+
+    def load_all_transformables(self, info: Dict, index_info: "IndexInfo") -> dict:
+        transformables = {}
+        for name in self.transformables:
+            _t_cfg = copy.deepcopy(self.transformables[name])
+            transformable_type = _t_cfg.pop("type")
+            loader_cfg = _t_cfg.pop("loader", None)
+            loader = self._build_transformable_loader(loader_cfg, transformable_type)
+            scene_data = info[index_info.scene_id]
+            transformables[name] = loader.load(name, scene_data, index_info, **_t_cfg)
+        
+        return transformables
+    
+    @lru_cache(maxsize=None)
+    def _build_transformable_loader(self, loader_cfg, transformable_type: str) -> "TransformableLoader":
+        if loader_cfg:
+            loader_cfg.setdefault("data_root", self.default_data_root)  # fallback with default data_root from Dataset
+        else:
+            loader_cfg = dict(type=self.DEFAULT_LOADERS[transformable_type], data_root=self.default_data_root)
+        loader = build_transformable_loader(loader_cfg)
+        return loader
