@@ -43,5 +43,18 @@ class IndexInfo:
 
     @classmethod
     def from_str(self, index_str: str, prev: "IndexInfo" = None, next: "IndexInfo" = None, sep: str = "/"):
+        """Create IndexInfo instance from index string.
+
+        Parameters
+        ----------
+        index_str : str
+            expected format: `scene_id/frame_id`
+        prev : IndexInfo, optional
+            previous index_info, by default None
+        next : IndexInfo, optional
+            next index_info, by default None
+        sep : str, optional
+            separator, by default "/"
+        """
         scene_id, frame_id = index_str.split(sep)
         return IndexInfo(scene_id, frame_id, prev=prev, next=next)

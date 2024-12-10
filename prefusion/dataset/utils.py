@@ -1,6 +1,7 @@
-from typing import List, Union, Dict, TYPE_CHECKING
-from pathlib import Path
 import copy
+from typing import List, Union, Dict, TYPE_CHECKING, Any
+from pathlib import Path
+from cachetools import cached, Cache
 
 import torch
 import mmcv
@@ -96,6 +97,7 @@ def get_cam_type(name):
         raise ValueError('Unknown camera type')
 
 
+@cached(cache=Cache(maxsize=float('inf')), key=lambda cfg: str(sorted((cfg or {}).items())))
 def build_tensor_smith(tensor_smith: dict = None):
     tensor_smith = copy.deepcopy(tensor_smith)
     if isinstance(tensor_smith, dict):

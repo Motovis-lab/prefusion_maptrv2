@@ -3,6 +3,7 @@ import os
 import copy
 import logging
 import functools
+from cachetools import cached, Cache
 from pathlib import Path
 from typing import List, Dict, Union, TYPE_CHECKING
 
@@ -61,12 +62,6 @@ if TYPE_CHECKING:
     from .group_sampler import GroupSampler
 
 __all__ = ["GroupBatchDataset"]
-
-
-def get_frame_index(sequence, timestamp):
-    for t in sequence:
-        if timestamp <= t:
-            return t
 
 
 @MMENGINE_FUNCTIONS.register_module()
@@ -166,7 +161,7 @@ class GroupBatchDataset(Dataset):
                 self.subepoch_manager.init(len(self.groups))
     
     def _sample_groups(self):
-        self.groups = self.group_sampler.sample(self.info, output_str_index=False)
+        self.groups = self.group_sampler.sample(self.data_root, self.info)
         self.num_total_group_batches = divide(len(self.groups), self.batch_size, drop_last=self.drop_last)
 
     @property
@@ -199,8 +194,8 @@ class GroupBatchDataset(Dataset):
         
         return transformables
     
-
-    def _build_transformable_loader(self, loader_cfg, transformable_type: str) -> TransformableLoader:
+    @cached(cache=Cache(maxsize=float('inf')), key=lambda self_, cfg, type_: (str(sorted((cfg or {}).items())), type_))
+    def _build_transformable_loader(self, loader_cfg: dict, transformable_type: str) -> TransformableLoader:
         if loader_cfg:
             loader_cfg.setdefault("data_root", self.data_root)  # fallback with default data_root from Dataset
         else:
