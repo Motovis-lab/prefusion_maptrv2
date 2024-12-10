@@ -1690,8 +1690,73 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
 
 @TENSOR_SMITHS.register_module()
 class PlanarOccSdfBev(PlanarTensorSmith):
+    def __init__(self, 
+                 voxel_shape: tuple, 
+                 voxel_range: Tuple[list, list, list],
+                 sdf_range: tuple=(-0.1, 5)):
+        """
+        Parameters
+        ----------
+        voxel_shape : tuple
+        voxel_range : Tuple[List]
+        sdf_range : tuple
+
+        Examples
+        --------
+        - voxel_shape=(6, 320, 160)
+        - voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        - Z, X, Y = voxel_shape
+
+        """
+        super().__init__(voxel_shape, voxel_range)
+        self.sdf_range = sdf_range
+
     def __call__(self, transformable: OccSdfBev):
-        raise NotImplementedError
+        """
+        Parameters
+        ----------
+        transformable : OccSdfBev
+
+        Returns
+        -------
+        tensor_dict : dict
+
+        Notes
+        -----
+        ```
+        seg_im  # 分割图
+        reg_im  # 回归图
+            0: truncated sdf
+            1: height_im
+        ```
+        """
+        # unproject dst_bev to ego
+        cx, cy, fx, fy = self.bev_intrinsics
+        ww, hh = self.points_grid_bev
+        xx = (hh - cx) / fx
+        yy = (ww - cy) / fy
+
+        # project ego to src_bev
+        cx_, cy_, fx_, fy_ = transformable._bev_intrinsics
+        hh_ = xx * fx_ + cx_
+        ww_ = yy * fy_ + cy_
+        
+        # bgr, b: unknown, g: freespace, r: occupied
+        occ = cv2.remap(transformable.occ, ww_, hh_, interpolation=cv2.INTER_NEAREST)
+        sdf = cv2.remap(transformable.sdf, ww_, hh_, interpolation=cv2.INTER_LINEAR)
+        sdf = np.clip(sdf, *self.sdf_range)
+        height = cv2.remap(transformable.height, ww_, hh_, interpolation=cv2.INTER_LINEAR)
+        mask = cv2.remap(transformable.mask, ww_, hh_, interpolation=cv2.INTER_NEAREST)
+        
+        seg_im = np.concatenate([occ.transpose(2, 0, 1) / 255, mask[None]], axis=0)
+        reg_im = np.concatenate([sdf[None], height[None]], axis=0)
+
+        tensor_data = {
+            'seg': torch.tensor(seg_im, dtype=torch.float32),
+            'reg': torch.tensor(reg_im, dtype=torch.float32)
+        }
+        
+        return tensor_data
 
 
 
