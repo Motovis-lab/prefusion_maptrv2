@@ -10,6 +10,7 @@ from typing import List, Tuple, Dict, Union, TYPE_CHECKING, Sequence
 
 import numpy as np
 import pandas as pd
+from loguru import logger
 from prefusion.registry import GROUP_SAMPLERS
 from prefusion.dataset.transformable_loader import Bbox3DLoader
 from prefusion.dataset.index_info import IndexInfo
@@ -320,7 +321,7 @@ class IndexGroupSampler(GroupSampler):
 
 @GROUP_SAMPLERS.register_module()
 class ClassBalancedGroupSampler(GroupSampler):
-    DEFAULT_LOADERS = {
+    SUPPORTED_LOADERS = {
         Bbox3D.__name__: Bbox3DLoader,
         Polyline3D.__name__: Polyline3DLoader,
         Polygon3D.__name__: Polygon3DLoader,
@@ -362,17 +363,32 @@ class ClassBalancedGroupSampler(GroupSampler):
 
         return cbgs_cfg
 
+    @staticmethod
+    def _to_df(groups: List[Group], colname: str = "cnt", fill_value: float = 0.0) -> pd.DataFrame:
+        return pd.DataFrame([getattr(grp, colname) for grp in groups]).fillna(fill_value)
+
     def sample(self, data_root: Path, info: Dict, **kwargs) -> List[Group["IndexInfo"]]:
-        # TODO: [x] 1. generate initial groups (make sure each group shouldn't lose the track of scene_id)
-        # TODO: [x] 2. calculate occurred classes for each group
-        # TODO: [x] 3. expand groups according to the class distribution
-        # TODO: [ ] 4. re calculate occurred tags for each scene
-        # TODO: [ ] 5. expand scenes according to tag distribution (e.g. expand groups that in the rare scenes)
         self.default_data_root = data_root
         groups = self._base_group_sampler.sample(data_root, info)
         groups = self.count_class_and_attr_occurrence(data_root, info, groups)
-        sampled_groups = self.oversample(groups)
-        return groups + sampled_groups
+        sampled_groups = self.iterative_sample_minority_groups(groups)
+        total_groups = groups + sampled_groups
+        self.print_cbgs_report(groups, total_groups)
+        return total_groups
+    
+    @staticmethod
+    def print_cbgs_report(groups_before: List[Group], groups_after: List[Group]):
+        logger.info(
+            "\n============== CBGS Report ==============\n"
+            f"### Before ###\n"
+            f" - Number of groups: {len(groups_before)}\n"
+            f" - Number of groups per class:\n"
+            f"{ClassBalancedGroupSampler._to_df(groups_before).sum(axis=0)}\n"
+            f"\n### After ###\n"
+            f" - Number of groups: {len(groups_after)}\n"
+            f" - Number of groups per class:\n"
+            f"{ClassBalancedGroupSampler._to_df(groups_after).sum(axis=0)}\n"
+        )
 
     def count_class_and_attr_occurrence(self, data_root: Path, info: Dict, groups: List[Group]) -> List[Group]:
         for group in groups:
@@ -417,9 +433,9 @@ class ClassBalancedGroupSampler(GroupSampler):
             case _:
                 return group.frm_cnt
 
-    def oversample(self, groups: List[Group]) -> List[Group]:
+    def iterative_sample_minority_groups(self, groups: List[Group]) -> List[Group]:
         # Calculate class distribution
-        groups_df = pd.DataFrame([grp.cnt for grp in groups]).fillna(0.0)
+        groups_df = self._to_df(groups)
         cnt_per_class = groups_df.sum(axis=0)
         max_class = cnt_per_class.idxmax()
 
@@ -429,7 +445,7 @@ class ClassBalancedGroupSampler(GroupSampler):
         minority_classes = class_stats_df[class_stats_df.ratio < self.cbgs_cfg["desired_ratio"]].sort_values("cnt").index.tolist() # NOTE: it's sorted by `cnt`
 
         if not minority_classes:
-            return groups
+            return []
 
         # Oversample the minority classes to the same level
         sep = 1
@@ -438,26 +454,26 @@ class ClassBalancedGroupSampler(GroupSampler):
         while len(target_classes) > 0:
             target_class = target_classes[0] # class with minimum cnt in target_classes
             if self.cbgs_cfg["update_stats_during_oversampling"]:
-                sampled_groups.extend(self.oversample_classes(groups + sampled_groups, oversampling_classes, target_class, target_ratio=1.0))
-                groups_df = pd.DataFrame([grp.cnt for grp in groups + sampled_groups]).fillna(0.0)
+                sampled_groups.extend(self.sample_minority_groups(groups + sampled_groups, oversampling_classes, target_class, target_ratio=1.0))
+                groups_df = self._to_df(groups + sampled_groups)
                 class_stats_df = groups_df.sum(axis=0).to_frame(name="cnt")
             else:
-                sampled_groups.extend(self.oversample_classes(groups, oversampling_classes, target_class, target_ratio=1.0))
+                sampled_groups.extend(self.sample_minority_groups(groups, oversampling_classes, target_class, target_ratio=1.0))
         
             sep += 1
             oversampling_classes, target_classes = minority_classes[:sep], minority_classes[sep:]
 
         # Final Oversampling referring to the max class
         if self.cbgs_cfg["update_stats_during_oversampling"]:
-            sampled_groups.extend(self.oversample_classes(groups + sampled_groups, oversampling_classes, max_class, target_ratio=self.cbgs_cfg["desired_ratio"]))
+            sampled_groups.extend(self.sample_minority_groups(groups + sampled_groups, oversampling_classes, max_class, target_ratio=self.cbgs_cfg["desired_ratio"]))
         else:
-            sampled_groups.extend(self.oversample_classes(groups, oversampling_classes, max_class, target_ratio=self.cbgs_cfg["desired_ratio"]))
+            sampled_groups.extend(self.sample_minority_groups(groups, oversampling_classes, max_class, target_ratio=self.cbgs_cfg["desired_ratio"]))
 
         return sampled_groups
 
 
-    def oversample_classes(self, groups: List[Group], minority_classes: List[str], target_class: str, target_ratio: float = 1.0) -> List[Group]:
-        groups_df = pd.DataFrame([grp.cnt for grp in groups]).fillna(0.0)
+    def sample_minority_groups(self, groups: List[Group], minority_classes: List[str], target_class: str, target_ratio: float = 1.0) -> List[Group]:
+        groups_df = self._to_df(groups)
         cnt_per_class = groups_df.sum(axis=0)
         gap_cnt = int(math.ceil(cnt_per_class[target_class] * target_ratio - max([cnt_per_class[c] for c in minority_classes])))
         groups_df = groups_df.drop_duplicates() # oversamping in the following step should only select groups from the original pool (while calculating gap may based on updated groups)
@@ -477,6 +493,8 @@ class ClassBalancedGroupSampler(GroupSampler):
             _t_cfg = copy.deepcopy(self.transformable_cfg[name])
             transformable_type = _t_cfg.pop("type")
             loader_cfg = _t_cfg.pop("loader", None)
+            if transformable_type not in self.SUPPORTED_LOADERS:
+                continue
             loader = self._build_transformable_loader(loader_cfg, transformable_type)
             scene_data = info[index_info.scene_id]
             transformables[name] = loader.load(name, scene_data, index_info, **_t_cfg)
@@ -488,15 +506,14 @@ class ClassBalancedGroupSampler(GroupSampler):
         if loader_cfg:
             loader_cfg.setdefault("data_root", self.default_data_root)  # fallback with default data_root from Dataset
         else:
-            loader_cfg = dict(type=self.DEFAULT_LOADERS[transformable_type], data_root=self.default_data_root)
+            loader_cfg = dict(type=self.SUPPORTED_LOADERS[transformable_type], data_root=self.default_data_root)
         loader = build_transformable_loader(loader_cfg)
         return loader
 
 
-
 @GROUP_SAMPLERS.register_module()
-class SceneLevelClassBalancedGroupSampler(GroupSampler):
-    DEFAULT_LOADERS = {
+class SceneLevelBalancedGroupSampler(GroupSampler):
+    SUPPORTED_LOADERS = {
         Bbox3D.__name__: Bbox3DLoader,
         Polyline3D.__name__: Polyline3DLoader,
         Polygon3D.__name__: Polygon3DLoader,
@@ -518,4 +535,6 @@ class SceneLevelClassBalancedGroupSampler(GroupSampler):
         self._base_group_sampler = ClassBalancedGroupSampler(phase, possible_group_sizes, possible_frame_intervals, seed)
 
     def sample(self, data_root: Path, info: Dict, **kwargs) -> List[Group]:
+        # TODO: [ ] 1. calculate occurred tags for each scene based on the groups generated by self._base_group_sampler
+        # TODO: [ ] 2. expand scenes according to tag distribution (e.g. expand groups that in the rare scenes)
         raise NotImplementedError

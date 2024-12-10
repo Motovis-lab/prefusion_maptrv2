@@ -184,10 +184,12 @@ train_dataset = dict(
                           drop_last_subepoch=False,
                           verbose=True,
                           debug_mode=True),
-    group_sampler=dict(type="IndexGroupSampler",
+    group_sampler=dict(type="ClassBalancedGroupSampler",
                        phase="train",
                        possible_group_sizes=possible_group_sizes,
-                       possible_frame_intervals=10),
+                       possible_frame_intervals=10,
+                       transformable_cfg=transformables,
+                       cbgs_cfg=dict(desired_ratio=0.5)),
     batch_size=batch_size,
 )
 

@@ -471,6 +471,11 @@ def transformable_cfg():
                 attr=['color'],
             ),
         ),
+        camera_images=dict(
+            type='CameraImageSet',
+            loader=dict(type="NuscenesCameraImageSetLoader"),
+            tensor_smith=dict(type='CameraImageTensor')
+        ),
     )
 
 
@@ -573,7 +578,7 @@ def test_oversample_classes_1(dataset_info_pkl, transformable_cfg):
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
     groups = gbs._base_group_sampler.sample("/any_data_root", dataset_info_pkl, phase='train')
     groups = gbs.count_class_and_attr_occurrence("/any_data_root", dataset_info_pkl, groups)
-    sampled_groups = gbs.oversample_classes(groups, ["barrier_soft", "access_aisle"], "barrier_hard", target_ratio=1.0)
+    sampled_groups = gbs.sample_minority_groups(groups, ["barrier_soft", "access_aisle"], "barrier_hard", target_ratio=1.0)
     assert len(sampled_groups) == 6
     assert sampled_groups[0].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
     assert sampled_groups[1].cnt == {'car': 2, 'truck': 2, 'pedestrian': 1, 'bicycle': 2, 'barrier_hard': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 2}
@@ -588,7 +593,7 @@ def test_oversample_classes_2(dataset_info_pkl, transformable_cfg):
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
     groups = gbs._base_group_sampler.sample("/any_data_root", dataset_info_pkl, phase='train')
     groups = gbs.count_class_and_attr_occurrence("/any_data_root", dataset_info_pkl, groups)
-    sampled_groups = gbs.oversample_classes(groups, ["barrier_soft", "access_aisle", "barrier_hard"], "car", target_ratio=0.3)
+    sampled_groups = gbs.sample_minority_groups(groups, ["barrier_soft", "access_aisle", "barrier_hard"], "car", target_ratio=0.3)
     assert len(sampled_groups) == 3
     assert sampled_groups[0].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
     assert sampled_groups[1].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
@@ -602,12 +607,22 @@ def _calc_class_distribution(groups):
     cnt_per_class.loc[:, "ratio"] = cnt_per_class.cnt / cnt_per_class.loc[max_class].cnt
     return cnt_per_class
 
+
+def test_oversample_0(dataset_info_pkl, transformable_cfg):
+    cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.1, "update_stats_during_oversampling": False}
+    gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
+    groups = gbs._base_group_sampler.sample("/any_data_root", dataset_info_pkl, phase='train')
+    groups = gbs.count_class_and_attr_occurrence("/any_data_root", dataset_info_pkl, groups)
+    sampled_groups = gbs.iterative_sample_minority_groups(groups)
+    assert len(sampled_groups) == 0
+
+
 def test_oversample_1(dataset_info_pkl, transformable_cfg):
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.3, "update_stats_during_oversampling": False}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
     groups = gbs._base_group_sampler.sample("/any_data_root", dataset_info_pkl, phase='train')
     groups = gbs.count_class_and_attr_occurrence("/any_data_root", dataset_info_pkl, groups)
-    sampled_groups = gbs.oversample(groups)
+    sampled_groups = gbs.iterative_sample_minority_groups(groups)
     assert len(sampled_groups) == 9
     assert sampled_groups[0].cnt == {'car': 2, 'bus': 1, 'truck': 1, 'pedestrian': 1, 'bicycle': 2, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
     assert sampled_groups[1].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
@@ -618,16 +633,14 @@ def test_oversample_1(dataset_info_pkl, transformable_cfg):
     assert sampled_groups[6].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
     assert sampled_groups[7].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
     assert sampled_groups[8].cnt == {'car': 1, 'truck': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_hard': 2, 'parking_slot': 2, 'laneline': 2}
-    before = _calc_class_distribution(groups)
-    after = _calc_class_distribution(groups + sampled_groups)
-    pass
+
 
 def test_oversample_2(dataset_info_pkl, transformable_cfg):
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.5, "update_stats_during_oversampling": False}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
     groups = gbs._base_group_sampler.sample("/any_data_root", dataset_info_pkl, phase='train')
     groups = gbs.count_class_and_attr_occurrence("/any_data_root", dataset_info_pkl, groups)
-    sampled_groups = gbs.oversample(groups)
+    sampled_groups = gbs.iterative_sample_minority_groups(groups)
     assert len(sampled_groups) == 21
     # [access_aisle, barrier_soft] => barrier_hard
     assert sampled_groups[0].cnt == {'car': 2, 'bus': 1, 'truck': 1, 'pedestrian': 1, 'bicycle': 2, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
@@ -658,9 +671,6 @@ def test_oversample_2(dataset_info_pkl, transformable_cfg):
     assert sampled_groups[19].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
     assert sampled_groups[20].cnt == {'car': 1, 'truck': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_hard': 2, 'parking_slot': 2, 'laneline': 2}
 
-    before = _calc_class_distribution(groups)
-    after = _calc_class_distribution(groups + sampled_groups)
-    pass
 
 
 def test_oversample_update_stats_1(dataset_info_pkl, transformable_cfg):
@@ -668,7 +678,7 @@ def test_oversample_update_stats_1(dataset_info_pkl, transformable_cfg):
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
     groups = gbs._base_group_sampler.sample("/any_data_root", dataset_info_pkl, phase='train')
     groups = gbs.count_class_and_attr_occurrence("/any_data_root", dataset_info_pkl, groups)
-    sampled_groups = gbs.oversample(groups)
+    sampled_groups = gbs.iterative_sample_minority_groups(groups)
     assert len(sampled_groups) == 9
     assert sampled_groups[0].cnt == {'car': 2, 'bus': 1, 'truck': 1, 'pedestrian': 1, 'bicycle': 2, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
     assert sampled_groups[1].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
@@ -680,17 +690,13 @@ def test_oversample_update_stats_1(dataset_info_pkl, transformable_cfg):
     assert sampled_groups[7].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
     assert sampled_groups[8].cnt == {'car': 1, 'truck': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_hard': 2, 'parking_slot': 2, 'laneline': 2}
 
-    before = _calc_class_distribution(groups)
-    after = _calc_class_distribution(groups + sampled_groups)
-    pass
-
 
 def test_oversample_update_stats_2(dataset_info_pkl, transformable_cfg):
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.5, "update_stats_during_oversampling": True}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
     groups = gbs._base_group_sampler.sample("/any_data_root", dataset_info_pkl, phase='train')
     groups = gbs.count_class_and_attr_occurrence("/any_data_root", dataset_info_pkl, groups)
-    sampled_groups = gbs.oversample(groups)
+    sampled_groups = gbs.iterative_sample_minority_groups(groups)
     assert len(sampled_groups) == 62
     i = 0
     # [access_aisle, barrier_soft] => barrier_hard
@@ -765,10 +771,6 @@ def test_oversample_update_stats_2(dataset_info_pkl, transformable_cfg):
     assert sampled_groups[i].cnt == {'car': 3, 'bus': 2, 'pedestrian': 1, 'bicycle': 2} ; i += 1
     assert sampled_groups[i].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1} ; i += 1
     assert sampled_groups[i].cnt == {'car': 2, 'bus': 1, 'truck': 1, 'pedestrian': 1, 'bicycle': 2, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1} ; i += 1
-
-    before = _calc_class_distribution(groups)
-    after = _calc_class_distribution(groups + sampled_groups)
-    pass
 
 
 def test_generate_cbgs_groups(dataset_info_pkl, transformable_cfg, cbgs_cfg):
