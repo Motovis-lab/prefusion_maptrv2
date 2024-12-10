@@ -1138,8 +1138,8 @@ class OccSdfBev(SpatialTransformable):
         name: str, 
         src_voxel_range: dict,
         occ: np.ndarray,
-        sdf: np.ndarray,
         height: np.ndarray,
+        sdf: np.ndarray = None,
         mask: np.ndarray = None,
         tensor_smith: "TensorSmith" = None
     ):
