@@ -300,3 +300,39 @@ class PlanarSegIou(BaseMetric):
         metric_df.loc[:, "seg_iou"] = metric_df['intersection'] / metric_df['union']
         full_result = metric_df.reset_index()[['transformable_name', 'seg_iou']].to_dict('records')
         return {r['transformable_name']: r['seg_iou'] for r in full_result}
+
+
+@METRICS.register_module()
+class PlanarAverageDistance(BaseMetric):
+    def __init__(self):
+        super().__init__(prefix="average_distance")
+
+    def process(self, data_batch, data_samples):
+        pass
+
+    def compute_metrics(self, results):
+        pass
+
+
+@METRICS.register_module()
+class PlanarAverageAngle(BaseMetric):
+    def __init__(self):
+        super().__init__(prefix="average_angle")
+
+    def process(self, data_batch, data_samples):
+        pass
+
+    def compute_metrics(self, results):
+        pass
+
+
+@METRICS.register_module()
+class PlanarAverageSDF(BaseMetric):
+    def __init__(self):
+        super().__init__(prefix="average_sdf")
+
+    def process(self, data_batch, data_samples):
+        pass
+
+    def compute_metrics(self, results):
+        pass
