@@ -12,6 +12,7 @@ from typing import List, Tuple, Dict, Union, TYPE_CHECKING, Sequence
 import numpy as np
 import pandas as pd
 from loguru import logger
+from tabulate import tabulate
 from prefusion.registry import GROUP_SAMPLERS
 from prefusion.dataset.transformable_loader import Bbox3DLoader
 from prefusion.dataset.index_info import IndexInfo
@@ -357,21 +358,21 @@ class ClassBalancedGroupSampler(GroupSampler):
         groups = self.count_class_and_attr_occurrence(data_root, info, groups)
         sampled_groups = self.iterative_sample_minority_groups(groups)
         total_groups = groups + sampled_groups
-        self.print_cbgs_report(groups, total_groups)
+        self.print_cbgs_report(groups, total_groups, self.cbgs_cfg)
         return total_groups
     
     @staticmethod
-    def print_cbgs_report(groups_before: List[Group], groups_after: List[Group]):
+    def print_cbgs_report(groups_before: List[Group], groups_after: List[Group], cbgs_cfg: Dict):
+        num_groups = pd.DataFrame({"before": [len(groups_before)], "after": [len(groups_after)]})
+        before = ClassBalancedGroupSampler._to_df(groups_before).sum(axis=0)
+        after = ClassBalancedGroupSampler._to_df(groups_after).sum(axis=0)
+        combined = pd.DataFrame({"before": before, "after": after})
         logger.info(
             "\n============== CBGS Report ==============\n"
-            f"### Before ###\n"
-            f" - Number of groups: {len(groups_before)}\n"
-            f" - Number of groups per class:\n"
-            f"{ClassBalancedGroupSampler._to_df(groups_before).sum(axis=0)}\n"
-            f"\n### After ###\n"
-            f" - Number of groups: {len(groups_after)}\n"
-            f" - Number of groups per class:\n"
-            f"{ClassBalancedGroupSampler._to_df(groups_after).sum(axis=0)}\n"
+            f"### Number of Groups ###\n"
+            f"{tabulate(num_groups.values, headers=num_groups.columns, tablefmt='psql')}\n\n"
+            f"### Occurrence ({cbgs_cfg['counter_type']}) per Class ###\n"
+            f"{tabulate(combined, headers='keys', tablefmt='psql')}\n"
         )
 
     def count_class_and_attr_occurrence(self, data_root: Path, info: Dict, groups: List[Group]) -> List[Group]:
