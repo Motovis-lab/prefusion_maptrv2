@@ -3,6 +3,7 @@ import copy
 import math
 import random
 import warnings
+from itertools import cycle
 from pathlib import Path
 from cachetools import cached, Cache
 from collections import defaultdict, UserList, Counter
@@ -166,23 +167,6 @@ def convert_str_index_to_index_info(groups: List[Union[List[str], Group[str]]]) 
             index_info_grp.append(cur)
         index_info_groups.append(Group(index_info_grp))
     return index_info_groups
-
-
-class CircularList:
-    def __init__(self, seq: Sequence):
-        self.list = list(seq)
-        self.index = 0
-
-    def __len__(self):
-        return len(self.list)
-    
-    def __repr__(self):
-        return repr(self.list)
-
-    def get(self):
-        data = self.list[self.index]
-        self.index = (self.index + 1) % len(self.list)
-        return data
 
 
 class GroupSampler:
@@ -481,8 +465,8 @@ class ClassBalancedGroupSampler(GroupSampler):
         for minor_cls in minority_classes:
             colname = f"{minor_cls}_{target_class}_ratio"
             groups_df.loc[:, colname] = groups_df[minor_cls] / (groups_df[target_class] + 1e-4)
-            candidates = CircularList(groups_df[groups_df[colname] > 1e-6][colname].sort_values(ascending=False).index)
-            _group_indices = [candidates.get() for _ in range(0, gap_cnt)]
+            candidates = cycle(groups_df[groups_df[colname] > 1e-6][colname].sort_values(ascending=False).index)
+            _group_indices = [next(candidates) for _ in range(0, gap_cnt)]
             sampled_groups.extend([copy.deepcopy(groups[idx]) for idx in _group_indices])
 
         return sampled_groups

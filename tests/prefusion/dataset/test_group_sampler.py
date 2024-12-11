@@ -8,7 +8,6 @@ from prefusion.dataset.index_info import IndexInfo
 from prefusion.dataset.group_sampler import (
     IndexGroupSampler, 
     ClassBalancedGroupSampler, 
-    CircularList,
     generate_groups, 
     convert_str_index_to_index_info, 
     get_scene_frame_inds,
@@ -798,13 +797,3 @@ def test_generate_cbgs_groups(dataset_info_pkl, transformable_cfg, cbgs_cfg):
     assert groups[i].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1} ; i += 1
     assert groups[i].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1} ; i += 1
     assert groups[i].cnt == {'car': 1, 'truck': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_hard': 2, 'parking_slot': 2, 'laneline': 2} ; i += 1
-
-
-def test_circular_list():
-    cl = CircularList((3, 0, -1.5, -2.1))
-    assert len(cl) == 4
-    assert cl.get() == 3
-    assert cl.get() == 0
-    assert cl.get() == -1.5
-    assert cl.get() == -2.1
-    assert cl.get() == 3
