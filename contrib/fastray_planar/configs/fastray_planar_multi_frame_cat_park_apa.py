@@ -224,7 +224,11 @@ transformables=dict(
         tensor_smith=dict(type='PlanarPolygon3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
     parkingslot_3d=dict(
         type='ParkingSlot3D', dictionary=dict(classes=['class.parking.parking_slot']),
-        tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range))
+        tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+    # occ_sdf_bev=dict(
+    #     type='OccSdfBev',
+    #     src_voxel_range=[[-1, 3], [-12.8, 38.4], [25.6, -25.6]],
+    #     tensor_smith=dict(type='PlanarOccSdfBev', voxel_shape=voxel_shape, voxel_range=voxel_range)),
 )
 
 # datasets
@@ -246,14 +250,21 @@ train_dataset = dict(
                        possible_group_sizes=possible_group_sizes,
                        possible_frame_intervals=10),
     batch_size=batch_size,
+    subepoch_manager=dict(type="SubEpochManager",
+                          batch_size=batch_size,
+                          num_group_batches_per_subepoch=500,
+                          drop_last_group_batch=False,
+                          drop_last_subepoch=False,
+                          verbose=True,
+                          debug_mode=True),
 )
 
 val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='../MV4D-PARKING',
-    # info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
-    info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
+    info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
+    # info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -356,7 +367,12 @@ heads = dict(
                         in_channels=64,
                         mid_channels=64,
                         cen_seg_channels=5,
-                        reg_channels=15)
+                        reg_channels=15),
+    # occ_sdf_bev=dict(type='PlanarHeadSimple',
+    #                  in_channels=64,
+    #                  mid_channels=64,
+    #                  cen_seg_channels=3,
+    #                  reg_channels=2)
 )
 
 # loss configs
@@ -508,6 +524,17 @@ parkingslot_3d_weight_scheme = dict(
             })
 )
 
+# occ_sdf_bev_weight_scheme = dict(
+#     seg=dict(loss_weight=1.0,
+#              iou_loss_weight=5,
+#              dual_focal_loss_weight=10),
+#     reg=dict(loss_weight=10,
+#              partition_weights={
+#                 "sdf": {"weight": 1, "slice": (0, 1)},
+#                 "height": {"weight": 1, "slice": (1, 2)},
+#             })
+# )
+
 loss_cfg = dict(
     bbox_3d_heading=dict(
         type='PlanarLoss',
@@ -544,7 +571,11 @@ loss_cfg = dict(
     parkingslot_3d=dict(
         type='PlanarLoss',
         loss_name_prefix='parkingslot_3d',
-        weight_scheme=parkingslot_3d_weight_scheme)
+        weight_scheme=parkingslot_3d_weight_scheme),
+    # occ_sdf_bev=dict(
+    #     type='PlanarLoss',
+    #     loss_name_prefix='occ_sdf_bev',
+    #     weight_scheme=occ_sdf_bev_weight_scheme),
 )
 
 # integrated model config
@@ -597,7 +628,8 @@ env_cfg = dict(
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1129_val"
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1129"
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1130"
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1201"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1201"
+work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1204"
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
 # load_from = "./work_dirs/collected_models/apa_epoch_10.pth"
 # load_from = "./work_dirs/collected_models/apa_epoch_20_enhanced.pth"
