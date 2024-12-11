@@ -367,6 +367,8 @@ class ClassBalancedGroupSampler(GroupSampler):
         before = ClassBalancedGroupSampler._to_df(groups_before).sum(axis=0)
         after = ClassBalancedGroupSampler._to_df(groups_after).sum(axis=0)
         combined = pd.DataFrame({"before": before, "after": after})
+        combined.loc[:, "before_ratio"] = combined.before.div(combined.before.max())
+        combined.loc[:, "after_ratio"] = combined.after.div(combined.after.max())
         logger.info(
             "\n============== CBGS Report ==============\n"
             f"### Number of Groups ###\n"
