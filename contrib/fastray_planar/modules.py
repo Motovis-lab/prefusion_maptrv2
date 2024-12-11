@@ -201,42 +201,6 @@ class VoVNetFPN(BaseModule):
 
 
 @MODELS.register_module()
-class VoVNetSlimFPN(BaseModule):
-    def __init__(self, out_channels=80, init_cfg=None):
-        super().__init__(init_cfg=init_cfg)
-
-        # BACKBONE
-        self.stem1 = ConvBN(3, 64, stride=2)
-        self.osa2 = OSABlock(64, 64, 96, stride=2, repeat=3)
-        self.osa3 = OSABlock(96, 96, 128, stride=2, repeat=4, final_dilation=2)
-        self.osa4 = OSABlock(128, 128, 192, stride=2, repeat=5, final_dilation=2)
-        self.osa5 = OSABlock(192, 192, 192, stride=2, repeat=4, final_dilation=2)
-
-        # NECK
-        self.p4_up = nn.ConvTranspose2d(192, 192, kernel_size=2, stride=2, padding=0, bias=False)
-        self.p4_fusion = Concat()
-        self.p3_linear = ConvBN(384, 128, kernel_size=1, padding=0)
-        self.p3_up = nn.ConvTranspose2d(128, 128, kernel_size=2, stride=2, padding=0, bias=False)
-        self.p3_fusion = Concat()
-        self.out = OSABlock(256, 96, stride=1, repeat=3, has_bn=False, with_reduce=False)
-        self.up_linear = ConvBN(288, out_channels, kernel_size=1, padding=0)
-        self.up = nn.ConvTranspose2d(out_channels, out_channels, kernel_size=2, stride=2, padding=0, bias=True)
-        
-    def forward(self, x):  # x: (N, 3, H, W)
-        stem1 = self.stem1(x)
-        osa2 = self.osa2(stem1)
-        osa3 = self.osa3(osa2)
-        osa4 = self.osa4(osa3)
-        osa5 = self.osa5(osa4)
-
-        p4 = self.p4_fusion(self.p4_up(osa5), osa4)
-        p3 = self.p3_fusion(self.p3_up(self.p3_linear(p4)), osa3)
-        
-        out = self.up(self.up_linear(self.out(p3)))
-        return out
-
-
-@MODELS.register_module()
 class ResNetFPN(BaseModule):
     def __init__(
         self, 
@@ -255,22 +219,45 @@ class ResNetFPN(BaseModule):
         # BACKBONE
         backbone_kwargs["type"] = "mmdet.ResNet"
         self.backbone = MODELS.build(backbone_kwargs)
-        self.fpn = MODELS.build(dict(
-            type="mmdet.FPN", 
-            norm_cfg=dict(type='mmdet.SyncBN', requires_grad=True),
-            in_channels=fpn_in_channels,
-            out_channels=fpn_lateral_channel,
-            num_outs=backbone_kwargs["num_stages"],
-        ))
 
-        self.out = OSABlock(fpn_lateral_channel, fpn_lateral_channel, out_channels, stride=1, repeat=3, has_bn=False)
+        # NECK (FPN)
+        if self.out_stride <= 16:
+            self.p4_up = nn.ConvTranspose2d(2048, 1024, kernel_size=2, stride=2, padding=0, bias=False)
+            self.p4_fusion = Concat()
+        if self.out_stride <= 8:
+            self.p3_linear = ConvBN(2048, 512, kernel_size=1, padding=0)
+            self.p3_up = nn.ConvTranspose2d(512, 512, kernel_size=2, stride=2, padding=0, bias=False)
+            self.p3_fusion = Concat()
+        if self.out_stride <= 4:
+            self.p2_linear = ConvBN(1024, 256, kernel_size=1, padding=0)
+            self.p2_up = nn.ConvTranspose2d(256, 256, kernel_size=2, stride=2, padding=0, bias=False)
+            self.p2_fusion = Concat()
+        
+        in_channels = {4: 512, 8: 1024, 16: 2048, 32: 2048}
+        mid_channels = {4: 128, 8: 256, 16: 512, 32: 1024}
+        self.out = OSABlock(
+            in_channels[self.out_stride], mid_channels[self.out_stride], out_channels,
+            stride=1, repeat=3, has_bn=False
+        )
+
         
     def forward(self, x):  # x: (N, 3, H, W)
         feats = self.backbone(x) # feats shape: [bs, 256, 64, 176], [bs, 512, 32, 88], [bs, 1024, 16, 44], [bs, 2048, 8, 22]
-        fpn_feats = self.fpn(feats)
-        out_feat_layer_idx = int(math.log2(self.out_stride) - 2)
-        out = fpn_feats[out_feat_layer_idx]        
+        # fpn_feats = self.fpn(feats)
+        # out_feat_layer_idx = int(math.log2(self.out_stride) - 2)
+        # out = fpn_feats[out_feat_layer_idx]
+
+        if self.out_stride <= 32:
+            out = feats[3]
+        if self.out_stride <= 16:
+            out = self.p4_fusion(self.p4_up(out), feats[2])
+        if self.out_stride <= 8:
+            out = self.p3_fusion(self.p3_up(self.p3_linear(out)), feats[1])
+        if self.out_stride <= 4:
+            out = self.p2_fusion(self.p2_up(self.p2_linear(out)), feats[0])
+        
         out = self.out(out)
+        
         return out
 
 
@@ -282,18 +269,12 @@ class FastRaySpatialTransform(BaseModule):
                  voxel_shape, 
                  fusion_mode='weighted', 
                  bev_mode=False, 
-                 reduce_channels=False,
-                 in_channels=None,
-                 out_channels=None,
                  init_cfg=None):
         super().__init__(init_cfg=init_cfg)
         self.voxel_shape = voxel_shape
         assert fusion_mode in ['weighted', 'sampled', 'bilinear_weighted']
         self.fusion_mode = fusion_mode
         self.bev_mode = bev_mode
-        self.reduce_channels = reduce_channels and bev_mode
-        if self.reduce_channels:
-            self.channel_reduction = nn.Conv2d(in_channels, out_channels, kernel_size=1)
     
     def forward(self, camera_feats_dict, camera_lookups):
         '''Output a 3d voxel tensor from 2d image features
@@ -360,10 +341,7 @@ class FastRaySpatialTransform(BaseModule):
                     
         # reshape voxel_feats
         if self.bev_mode:
-            bev_feats = voxel_feats.reshape(N, C*Z, X, Y)
-            if self.reduce_channels:
-                bev_feats = self.channel_reduction(bev_feats)
-            return bev_feats
+            return voxel_feats.reshape(N, C*Z, X, Y)
         else:
             return voxel_feats.reshape(N, C, Z, X, Y)
         
@@ -685,44 +663,6 @@ class M2BevEncoder(BaseModule):
 
 
 @MODELS.register_module()
-class VoxelEncoderFPN(BaseModule):
-    def __init__(self, 
-                 in_channels, 
-                 mid_channels_list, 
-                 out_channels,
-                 repeats=3,
-                 init_cfg=None):
-        super().__init__(init_cfg=init_cfg)
-        assert len(mid_channels_list) == 3
-        if type(repeats) is int:
-            repeats = (repeats, repeats, repeats)
-        else:
-            assert len(repeats) == 3
-        self.osa0 = OSABlock(in_channels, mid_channels_list[0], mid_channels_list[0], stride=1, repeat=repeats[0], final_dilation=2)
-        self.osa1 = OSABlock(mid_channels_list[0], mid_channels_list[1], mid_channels_list[1], stride=2, repeat=repeats[1], final_dilation=2)
-        self.osa2 = OSABlock(mid_channels_list[1], mid_channels_list[2], mid_channels_list[2], stride=2, repeat=repeats[2], final_dilation=2)
-
-        self.p1_linear = ConvBN(mid_channels_list[2], mid_channels_list[1], kernel_size=1, padding=0)
-        self.p1_up = nn.ConvTranspose2d(mid_channels_list[1], mid_channels_list[1], kernel_size=2, stride=2, padding=0, bias=False)
-        self.p1_fusion = Concat()
-        self.p0_linear = ConvBN(mid_channels_list[1] * 2, mid_channels_list[0], kernel_size=1, padding=0)
-        self.p0_up = nn.ConvTranspose2d(mid_channels_list[0], mid_channels_list[0], kernel_size=2, stride=2, padding=0, bias=False)
-        self.p0_fusion = Concat()
-
-        self.out = ConvBN(mid_channels_list[0] * 2, out_channels)
-    
-    def forward(self, x):
-        osa0 = self.osa0(x)
-        osa1 = self.osa1(osa0)
-        osa2 = self.osa2(osa1)
-
-        p1 = self.p1_fusion(osa1, self.p1_up(self.p1_linear(osa2)))
-        p0 = self.p0_fusion(osa0, self.p0_up(self.p0_linear(p1)))
-
-        return self.out(p0)
-
-
-@MODELS.register_module()
 class PlanarHead(BaseModule):
     def __init__(self, 
                  in_channels, 
@@ -748,35 +688,6 @@ class PlanarHead(BaseModule):
         self.reg = nn.Conv2d(mid_channels * repeat, 
                              reg_channels, 
                              kernel_size=1)
-    
-    def forward(self, x):
-        seg_feat = self.seg_tower(x)
-        cen_seg = self.cen_seg(seg_feat)
-        reg_feat = self.reg_tower(x)
-        reg = self.reg(reg_feat)
-        return cen_seg, reg
-
-
-@MODELS.register_module()
-class PlanarHeadSimple(BaseModule):
-    def __init__(self, 
-                 in_channels, 
-                 mid_channels, 
-                 cen_seg_channels,
-                 reg_channels,
-                 repeat=1,
-                 init_cfg=None):
-        super().__init__(init_cfg=init_cfg)
-        self.seg_tower = nn.Sequential(
-            ConvBN(in_channels, mid_channels),
-            * ([ConvBN(mid_channels, mid_channels)] * repeat),
-        )
-        self.reg_tower = nn.Sequential(
-            ConvBN(in_channels, mid_channels),
-            * ([ConvBN(mid_channels, mid_channels)] * repeat),
-        )
-        self.cen_seg = nn.Conv2d(mid_channels, cen_seg_channels, kernel_size=1)
-        self.reg = nn.Conv2d(mid_channels, reg_channels, kernel_size=1)
     
     def forward(self, x):
         seg_feat = self.seg_tower(x)
