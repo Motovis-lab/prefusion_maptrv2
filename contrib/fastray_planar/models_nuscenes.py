@@ -202,10 +202,9 @@ class NuscenesFastRayPlanarMultiFrameModel(BaseModel):
         self.cached_voxel_feats = {}
         self.cached_delta_poses = {}
         # init losses
-        self.loss_bbox_3d = MODELS.build(loss_cfg['bbox_3d'])
-        self.loss_bbox_3d_cylinder = MODELS.build(loss_cfg['bbox_3d_cylinder'])
-        self.loss_bbox_3d_oriented_cylinder = MODELS.build(loss_cfg['bbox_3d_oriented_cylinder'])
-        self.loss_bbox_3d_rect_cuboid = MODELS.build(loss_cfg['bbox_3d_rect_cuboid'])
+        self.losses_dict = {}
+        for branch in loss_cfg:
+            self.losses_dict[branch] = MODELS.build(loss_cfg[branch])
 
 
     def forward(self, mode='tensor', **batched_input_dict):
@@ -315,7 +314,7 @@ class NuscenesFastRayPlanarMultiFrameModel(BaseModel):
         if mode == 'tensor':
             return pred_dict
         if mode == 'loss':
-            losses = self.compute_losses(batched_input_dict['annotations'], pred_dict)
+            losses = self.compute_losses(batched_input_dict['annotations'], pred_dict, batched_input_dict['index_infos'][0].frame_id)
             return losses
 
         if mode == 'predict':
@@ -325,33 +324,40 @@ class NuscenesFastRayPlanarMultiFrameModel(BaseModel):
                 BaseDataElement(loss=losses),
             )
 
-    def compute_losses(self, gt_dict: Dict, pred_dict: Dict):
-        loss_bbox_3d = self.loss_bbox_3d(pred_dict["bbox_3d"], gt_dict['bbox_3d'])
-        loss_bbox_3d_cylinder = self.loss_bbox_3d_cylinder(pred_dict["bbox_3d_cylinder"], gt_dict["bbox_3d_cylinder"])
-        loss_bbox_3d_oriented_cylinder = self.loss_bbox_3d_oriented_cylinder(pred_dict["bbox_3d_oriented_cylinder"], gt_dict["bbox_3d_oriented_cylinder"])
-        loss_bbox_3d_rect_cuboid = self.loss_bbox_3d_rect_cuboid(pred_dict["bbox_3d_rect_cuboid"], gt_dict["bbox_3d_rect_cuboid"])
-
-        total_loss = sum([
-            loss_bbox_3d['bbox_3d_loss'],
-            loss_bbox_3d_cylinder['bbox_3d_cylinder_loss'],
-            loss_bbox_3d_oriented_cylinder['bbox_3d_oriented_cylinder_loss'],
-            loss_bbox_3d_rect_cuboid['bbox_3d_rect_cuboid_loss'],
-        ])
-
-        losses = dict(
-            loss=total_loss,
-            bbox_3d_seg_iou_loss=loss_bbox_3d['bbox_3d_seg_iou_0_loss'],
-            cylinder_seg_iou_loss=loss_bbox_3d_cylinder['bbox_3d_cylinder_seg_iou_0_loss'],
-            oriented_cylinder_seg_iou_loss=loss_bbox_3d_oriented_cylinder['bbox_3d_oriented_cylinder_seg_iou_0_loss'],
-            rect_cuboid_seg_iou_loss=loss_bbox_3d_rect_cuboid['bbox_3d_rect_cuboid_seg_iou_0_loss'],
-            bbox_3d_reg_loss=loss_bbox_3d['bbox_3d_reg_loss'],
-            cylinder_reg_loss=loss_bbox_3d_cylinder['bbox_3d_cylinder_reg_loss'],
-            oriented_cylinder_reg_loss=loss_bbox_3d_oriented_cylinder['bbox_3d_oriented_cylinder_reg_loss'],
-            rect_cuboid_reg_loss=loss_bbox_3d_rect_cuboid['bbox_3d_rect_cuboid_reg_loss'],
-            bbox_3d_cen_loss=loss_bbox_3d['bbox_3d_cen_loss'],
-            cylinder_cen_loss=loss_bbox_3d_cylinder['bbox_3d_cylinder_cen_loss'],
-            oriented_cylinder_cen_loss=loss_bbox_3d_oriented_cylinder['bbox_3d_oriented_cylinder_cen_loss'],
-            rect_cuboid_cen_loss=loss_bbox_3d_rect_cuboid['bbox_3d_rect_cuboid_cen_loss'],
-        )
-
+    def compute_losses(self, gt_dict: Dict, pred_dict: Dict, ts='-1'):
+        losses = dict(loss=0)
+        for branch in self.losses_dict:
+            losses_branch = self.losses_dict[branch](pred_dict[branch], gt_dict[branch])
+            losses['loss'] += losses_branch[branch + '_loss']
+            # losses.update(losses_branch)
+            for loss_item, loss_value in losses_branch.items():
+                if loss_item == branch + '_loss':
+                    new_loss_name = f"{branch}/{loss_item[len(branch) + 1:]}"
+                else:
+                    parts = loss_item[len(branch) + 1:].split("_")
+                    new_loss_name = f"{branch}/{parts[0]}/{'_'.join(parts[1:])}"
+                losses.update({new_loss_name: loss_value})
+            
+                # compute the norm of grad
+                # _grad_norm = compute_grad_norm(self, loss_value)
+                # losses.update({f"grad_norm/{new_loss_name}": _grad_norm})
+        
+        # import pandas as pd
+        # loss_list = sorted([(k, v.item()) for k, v in losses.items() if k != "loss" and not k.startswith("grad_norm")], key=lambda x: x[0])
+        # grad_list = sorted([(k, v.item()) for k, v in losses.items() if k.startswith("grad_norm")], key=lambda x: x[0])
+        # df = pd.DataFrame([(l[0], l[1], g[1]) for l, g in zip(loss_list, grad_list)], columns=['item_name', 'loss', 'gradnorm'])
+        # df.to_csv(f"loss_and_grad_{ts}.csv", index=False)
+        # print(f"loss_and_grad.csv saved.")
         return losses
+
+
+def compute_grad_norm(model, loss):
+    loss.backward(retain_graph=True)
+    total_norm = 0
+    for p in model.parameters():
+        if p.grad is not None:
+            param_norm = p.grad.detach().data.norm(2)
+            total_norm += param_norm.item() ** 2
+    total_norm = total_norm ** 0.5
+    model.zero_grad()
+    return torch.tensor(total_norm)
