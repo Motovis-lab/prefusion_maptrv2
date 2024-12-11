@@ -255,22 +255,45 @@ class ResNetFPN(BaseModule):
         # BACKBONE
         backbone_kwargs["type"] = "mmdet.ResNet"
         self.backbone = MODELS.build(backbone_kwargs)
-        self.fpn = MODELS.build(dict(
-            type="mmdet.FPN", 
-            norm_cfg=dict(type='mmdet.SyncBN', requires_grad=True),
-            in_channels=fpn_in_channels,
-            out_channels=fpn_lateral_channel,
-            num_outs=backbone_kwargs["num_stages"],
-        ))
 
-        self.out = OSABlock(fpn_lateral_channel, fpn_lateral_channel, out_channels, stride=1, repeat=3, has_bn=False)
+        # NECK (FPN)
+        if self.out_stride <= 16:
+            self.p4_up = nn.ConvTranspose2d(2048, 1024, kernel_size=2, stride=2, padding=0, bias=False)
+            self.p4_fusion = Concat()
+        if self.out_stride <= 8:
+            self.p3_linear = ConvBN(2048, 512, kernel_size=1, padding=0)
+            self.p3_up = nn.ConvTranspose2d(512, 512, kernel_size=2, stride=2, padding=0, bias=False)
+            self.p3_fusion = Concat()
+        if self.out_stride <= 4:
+            self.p2_linear = ConvBN(1024, 256, kernel_size=1, padding=0)
+            self.p2_up = nn.ConvTranspose2d(256, 256, kernel_size=2, stride=2, padding=0, bias=False)
+            self.p2_fusion = Concat()
+        
+        in_channels = {4: 512, 8: 1024, 16: 2048, 32: 2048}
+        mid_channels = {4: 128, 8: 256, 16: 512, 32: 1024}
+        self.out = OSABlock(
+            in_channels[self.out_stride], mid_channels[self.out_stride], out_channels,
+            stride=1, repeat=3, has_bn=False
+        )
+
         
     def forward(self, x):  # x: (N, 3, H, W)
         feats = self.backbone(x) # feats shape: [bs, 256, 64, 176], [bs, 512, 32, 88], [bs, 1024, 16, 44], [bs, 2048, 8, 22]
-        fpn_feats = self.fpn(feats)
-        out_feat_layer_idx = int(math.log2(self.out_stride) - 2)
-        out = fpn_feats[out_feat_layer_idx]        
+        # fpn_feats = self.fpn(feats)
+        # out_feat_layer_idx = int(math.log2(self.out_stride) - 2)
+        # out = fpn_feats[out_feat_layer_idx]
+
+        if self.out_stride <= 32:
+            out = feats[3]
+        if self.out_stride <= 16:
+            out = self.p4_fusion(self.p4_up(out), feats[2])
+        if self.out_stride <= 8:
+            out = self.p3_fusion(self.p3_up(self.p3_linear(out)), feats[1])
+        if self.out_stride <= 4:
+            out = self.p2_fusion(self.p2_up(self.p2_linear(out)), feats[0])
+        
         out = self.out(out)
+        
         return out
 
 

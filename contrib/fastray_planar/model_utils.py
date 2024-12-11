@@ -1,11 +1,12 @@
+from pathlib import Path
 
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
-from pathlib import Path
-
 from prefusion.dataset.tensor_smith import *
+
+
 
 __all__ = [
     'draw_out_feats',
@@ -67,6 +68,36 @@ def draw_out_feats(
     plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
     plt.imshow(pred_reg)
     plt.title("bbox_3d pred_reg")
+
+    if pred_bbox_3d_rect_cuboid:
+        gt_seg = batched_input_dict['annotations']['bbox_3d_rect_cuboid']['seg'][0][0].detach().cpu()
+        pred_seg = pred_bbox_3d_rect_cuboid['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_seg)
+        plt.title('bbox_3d_rect_cuboid gt_seg')
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_seg)
+        plt.title("bbox_3d_rect_cuboid pred_seg")
+        
+        gt_cen = batched_input_dict['annotations']['bbox_3d_rect_cuboid']['cen'][0][0].detach().cpu()
+        pred_cen = pred_bbox_3d_rect_cuboid['cen'][0][0].to(torch.float32).sigmoid().detach().cpu()
+        pred_cen *= (pred_seg > 0.5)
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_cen)
+        plt.title("bbox_3d_rect_cuboid gt_cen")
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_cen)
+        plt.title("bbox_3d_rect_cuboid pred_cen")
+        
+        gt_reg = batched_input_dict['annotations']['bbox_3d_rect_cuboid']['reg'][0][0].detach().cpu()
+        pred_reg = pred_bbox_3d_rect_cuboid['reg'][0][0].to(torch.float32).detach().cpu()
+        pred_reg *= (pred_seg > 0.5)
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_reg)
+        plt.title("bbox_3d_rect_cuboid gt_reg")
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_reg)
+        plt.title("bbox_3d_rect_cuboid pred_reg")
 
     if pred_bbox_3d_cylinder:
         gt_seg = batched_input_dict['annotations']['bbox_3d_cylinder']['seg'][0][0].detach().cpu()
