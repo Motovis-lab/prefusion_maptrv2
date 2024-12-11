@@ -14,6 +14,7 @@ import numpy as np
 import virtual_camera as vc
 # import albumentations as AT
 from scipy.spatial.transform import Rotation
+from scipy.ndimage import distance_transform_edt
 from copious.cv.geometry import Box3d as CopiousBox3d
 
 # from .tensor_smith import TensorSmith
@@ -1135,38 +1136,27 @@ class OccSdfBev(SpatialTransformable):
     def __init__(
         self,
         name: str, 
-        src_view_range: dict,
+        src_voxel_range: dict,
         occ: np.ndarray,
-        sdf: np.ndarray,
         height: np.ndarray,
-        dictionary: dict,
+        sdf: np.ndarray = None,
         mask: np.ndarray = None,
         tensor_smith: "TensorSmith" = None
     ):
         """OccSdfBev is a transformable contains occ, sdf and ground height info in a BEV view (a 2D spatial view).
 
-        back, front, right, left, bottom, up  
-        ||    ||     ||     ||    ||      ||
-        xmin, xmax,  ymin,  ymax, zmin,   zmax
-
-        bev: backward-right-up (H, W, Z)
-        ego: x-y-z, forward-left-up
-
         Parameters
         ----------
         name : str
             arbitrary string, will be set to each Transformable object to distinguish it with others
-        src_view_range : dict
-            view range of the bev view: [back, front, right, left, bottom, up], # in ego system
+        src_voxel_range : dict
+            voxel_range=([-0.5, 2.5], [-12, 36], [12, -12]), from axis min to max
         occ : np.ndarray
-            occ info, of shape (C, H, W), where C denote the nubmer of occ classes, H and W denote the height and width: 
-            H <=> (xmin, xmax), W <=> (ymin, ymax)
+            occ info, of shape (X, Y, C), where C denote the nubmer of occ classes
         sdf : np.ndarray
-            sdf info, of shape (1, H, W)
+            sdf info, of shape (X, Y)
         height : np.ndarray
-            height of the ground, of shape (1, H, W)
-        dictionary : dict
-            the dictionary for the occ classes
+            height of the ground, of shape (X, Y)
         mask : np.ndarray, optional
             if provided, only positions with value 1 will be take into consideration, by default None
             This feature is useful when we train on multiple different data source, where they have different BEV size/range.
@@ -1174,39 +1164,47 @@ class OccSdfBev(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.src_view_range = src_view_range
+        self.src_voxel_range = src_voxel_range
         self.occ = occ
-        self.sdf = sdf
         self.height = height
-        self.dictionary = dictionary
-        self.mask = mask if mask is not None else np.ones_like(self.sdf, dtype=np.uint8)
         self.tensor_smith = tensor_smith
-        self._bev_shape = self.occ.shape[1:]
-        self._bev_intrinsic = self._calc_bev_intrinsic()
+        self._bev_shape = self.occ.shape[:2]
+        self._bev_intrinsics = self._calc_bev_intrinsics()
+        self.sdf = self._generate_sdf() if sdf is None else sdf
+        self.mask = mask if mask is not None else np.ones_like(self.sdf, dtype=np.uint8)
         self._ego_points = self._unproject_bev_to_ego()
 
-    def _calc_bev_intrinsic(self):
-        H, W = self._bev_shape
-        fx = H / (self.src_view_range[0] - self.src_view_range[1])
-        fy = W / (self.src_view_range[2] - self.src_view_range[3])
-        cx = - self.src_view_range[1] * fx - 0.5
-        cy = - self.src_view_range[3] * fy - 0.5
-        return [cx, cy, fx, fy]
+    def _generate_sdf(self):
+        cx, cy, fx, fy = self._bev_intrinsics
+        df_obstacle = distance_transform_edt(1 - self.occ[..., 1] / 255)
+        df_freespace = distance_transform_edt(self.occ[..., 1] / 255)
+        assert abs(abs(fx) - abs(fy)) < 1e-3, f'fx={fx:.2f}, fy={fy:.2f}'
+        sdf = (df_freespace - df_obstacle) / abs(fx)
+        return sdf
+
+    def _calc_bev_intrinsics(self):
+        X, Y = self._bev_shape
+        fx = X / (self.src_voxel_range[1][1] - self.src_voxel_range[1][0])
+        fy = Y / (self.src_voxel_range[2][1] - self.src_voxel_range[2][0])
+        cx = - self.src_voxel_range[1][0] * fx - 0.5
+        cy = - self.src_voxel_range[2][0] * fy - 0.5
+
+        return cx, cy, fx, fy
 
     def _unproject_bev_to_ego(self):
-        H, W = self._bev_shape
-        cx, cy, fx, fy = self._bev_intrinsic
-        uu, vv = np.meshgrid(np.arange(W), np.arange(H))
+        cx, cy, fx, fy = self._bev_intrinsics
+        X, Y = self._bev_shape
+        vv, uu = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
         xx = (vv - cx) / fx
         yy = (uu - cy) / fy
-        zz = self.height[0]
+        zz = self.height
         # column points
         return np.stack([xx, yy, zz], axis=0).reshape(3, -1)
     
 
     def _project_ego_to_bev(self, ego_points):
         xx, yy, _ = ego_points
-        cx, cy, fx, fy = self._bev_intrinsic
+        cx, cy, fx, fy = self._bev_intrinsics
         vv_ = xx * fx + cx
         uu_ = yy * fy + cy
         return uu_.astype(np.float32), vv_.astype(np.float32)
@@ -1223,26 +1221,26 @@ class OccSdfBev(SpatialTransformable):
         
         self.occ = cv2.remap(
             self.occ, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_NEAREST
         )
         self.sdf = cv2.remap(
             self.sdf, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_LINEAR
         )
         self.height = cv2.remap(
             self.height, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_LINEAR
         )
         self.mask = cv2.remap(
             self.mask, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_NEAREST
         )
         return self
@@ -1257,26 +1255,26 @@ class OccSdfBev(SpatialTransformable):
         
         self.occ = cv2.remap(
             self.occ, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_NEAREST
         )
         self.sdf = cv2.remap(
             self.sdf, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_LINEAR
         )
         self.height = cv2.remap(
             self.height, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_LINEAR
         )
         self.mask = cv2.remap(
             self.mask, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_NEAREST
         )
         return self

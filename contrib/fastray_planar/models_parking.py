@@ -235,7 +235,7 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
         self.head_bbox_3d = MODELS.build(heads['bbox_3d'])
         self.head_polyline_3d = MODELS.build(heads['polyline_3d'])
         self.head_parkingslot_3d = MODELS.build(heads['parkingslot_3d'])
-        # self.head_occ_sdf = MODELS.build(heads['occ_sdf'])
+        # self.head_occ_sdf_bev = MODELS.build(heads['occ_sdf_bev'])
         # hidden voxel features for temporal fusion
         self.pre_nframes = pre_nframes
         self.cached_voxel_feats = {}
@@ -331,6 +331,7 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
         out_bbox_3d = self.head_bbox_3d(bev_feats)
         out_polyline_3d = self.head_polyline_3d(bev_feats)
         out_parkingslot_3d = self.head_parkingslot_3d(bev_feats)
+        # out_occ_sdf_bev = self.head_occ_sdf_bev(bev_feats)
         
         pred_dict = dict(
             bbox_3d_heading=dict(
@@ -367,6 +368,10 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
                 cen=out_parkingslot_3d[0][:, :1],
                 seg=out_parkingslot_3d[0][:, 1:],
                 reg=out_parkingslot_3d[1])
+            # occ_sdf_bev=dict(
+            #     seg=out_occ_sdf_bev[0][:, 0:1],
+            #     reg=out_occ_sdf_bev[1][:, 0:2]
+            # )
         )
         
         if self.debug_mode:

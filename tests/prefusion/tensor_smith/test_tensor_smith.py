@@ -1,9 +1,10 @@
 import pytest
 import numpy as np
 import torch
+import cv2
 from easydict import EasyDict as edict
 
-from prefusion.dataset.transform import Bbox3D, ParkingSlot3D, Polyline3D
+from prefusion.dataset.transform import Bbox3D, ParkingSlot3D, Polyline3D, OccSdfBev
 from prefusion.dataset.tensor_smith import (
     get_bev_intrinsics, 
     CameraImageTensor,
@@ -14,6 +15,7 @@ from prefusion.dataset.tensor_smith import (
     PlanarCylinder3D,
     PlanarOrientedCylinder3D,
     PlanarPolyline3D,
+    PlanarOccSdfBev,
 )
 
 def test_get_bev_intrinsics():
@@ -433,3 +435,28 @@ def test_planar_polyline_3d_link_polyline():
     assert tensor_dict['seg'][0].max() == 1
 
     pred_plyl = plyl3d_tensor_smith.reverse(tensor_dict)
+
+
+def test_planar_occ_sdf_bev():
+    src_voxel_range = [[-1, 3], [-12.8, 38.4], [25.6, -25.6]]
+    dst_voxel_range = ([-1, 3], [12, -12], [9, -9])
+    occ_path = 'tests/prefusion/tensor_smith/occ_sdf_bev/occ.png'
+    height_path = 'tests/prefusion/tensor_smith/occ_sdf_bev/height.tif'
+    planar_occ_sdf_bev = PlanarOccSdfBev(
+        voxel_shape=(6, 160, 120),
+        voxel_range=dst_voxel_range,
+        sdf_range=(-0.1, 5)
+    )
+    occ_sdf_bev = OccSdfBev(
+        name='test',
+        src_voxel_range=src_voxel_range,  # ego system,
+        occ=cv2.imread(occ_path),
+        sdf=None,
+        height=cv2.imread(height_path, cv2.IMREAD_UNCHANGED).astype(np.float32) / 3000 - 10,
+        mask=None,
+        tensor_smith=planar_occ_sdf_bev,
+    )
+    occ_sdf_bev.to_tensor()
+    tensor_dict = occ_sdf_bev.tensor
+    assert tensor_dict['seg'].shape == (4, 160, 120)
+    assert tensor_dict['reg'].shape == (2, 160, 120)

@@ -15,7 +15,7 @@ from .utils import (
 )
 from .transform import (
     CameraImage, CameraSegMask, CameraDepth,
-    Bbox3D, Polyline3D, SegBev, ParkingSlot3D
+    Bbox3D, Polyline3D, OccSdfBev, ParkingSlot3D
 )
 
 __all__ = [
@@ -27,7 +27,7 @@ __all__ = [
     "PlanarSquarePillar", 
     "PlanarCylinder3D", 
     "PlanarOrientedCylinder3D",
-    "PlanarSegBev", 
+    "PlanarOccSdfBev", 
     "PlanarPolyline3D", 
     "PlanarPolygon3D", 
     "PlanarParkingSlot3D",
@@ -426,6 +426,7 @@ class PlanarBbox3D(PlanarTensorSmith):
             bbox_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
+                'score': mean_classes[0] * area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
                 'translation': mean_center
@@ -732,6 +733,7 @@ class PlanarRectangularCuboid(PlanarBbox3D):
             bbox_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
+                'score': mean_classes[0] * area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
                 'translation': mean_center
@@ -1065,6 +1067,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
             pillar_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
+                'score': mean_classes[0] * area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
                 'translation': mean_center
@@ -1304,6 +1307,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
             cylinder_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
+                'score': mean_classes[0] * area_score,
                 'radius': mean_size[0],
                 'height': mean_size[1],
                 'zvec': mean_unit_zvec,
@@ -1607,6 +1611,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             cylinder_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
+                'score': mean_classes[0] * area_score,
                 'size': mean_size[[0, 0, 1]] * [2, 2, 1],
                 'rotation': mean_rmat,
                 'translation': mean_center
@@ -1684,9 +1689,74 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
 
 
 @TENSOR_SMITHS.register_module()
-class PlanarSegBev(PlanarTensorSmith):
-    def __call__(self, transformable: SegBev):
-        raise NotImplementedError
+class PlanarOccSdfBev(PlanarTensorSmith):
+    def __init__(self, 
+                 voxel_shape: tuple, 
+                 voxel_range: Tuple[list, list, list],
+                 sdf_range: tuple=(-0.1, 5)):
+        """
+        Parameters
+        ----------
+        voxel_shape : tuple
+        voxel_range : Tuple[List]
+        sdf_range : tuple
+
+        Examples
+        --------
+        - voxel_shape=(6, 320, 160)
+        - voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        - Z, X, Y = voxel_shape
+
+        """
+        super().__init__(voxel_shape, voxel_range)
+        self.sdf_range = sdf_range
+
+    def __call__(self, transformable: OccSdfBev):
+        """
+        Parameters
+        ----------
+        transformable : OccSdfBev
+
+        Returns
+        -------
+        tensor_dict : dict
+
+        Notes
+        -----
+        ```
+        seg_im  # 分割图
+        reg_im  # 回归图
+            0: truncated sdf
+            1: height_im
+        ```
+        """
+        # unproject dst_bev to ego
+        cx, cy, fx, fy = self.bev_intrinsics
+        ww, hh = self.points_grid_bev
+        xx = (hh - cx) / fx
+        yy = (ww - cy) / fy
+
+        # project ego to src_bev
+        cx_, cy_, fx_, fy_ = transformable._bev_intrinsics
+        hh_ = xx * fx_ + cx_
+        ww_ = yy * fy_ + cy_
+        
+        # bgr, b: unknown, g: freespace, r: occupied
+        occ = cv2.remap(transformable.occ, ww_, hh_, interpolation=cv2.INTER_NEAREST)
+        sdf = cv2.remap(transformable.sdf, ww_, hh_, interpolation=cv2.INTER_LINEAR)
+        sdf = np.clip(sdf, *self.sdf_range)
+        height = cv2.remap(transformable.height, ww_, hh_, interpolation=cv2.INTER_LINEAR)
+        mask = cv2.remap(transformable.mask, ww_, hh_, interpolation=cv2.INTER_NEAREST)
+        
+        seg_im = np.concatenate([occ.transpose(2, 0, 1) / 255, mask[None]], axis=0)
+        reg_im = np.concatenate([sdf[None], height[None]], axis=0)
+
+        tensor_data = {
+            'seg': torch.tensor(seg_im, dtype=torch.float32),
+            'reg': torch.tensor(reg_im, dtype=torch.float32)
+        }
+        
+        return tensor_data
 
 
 
@@ -2210,8 +2280,9 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
     def __init__(self, 
                  voxel_shape: tuple, 
                  voxel_range: Tuple[list, list, list],
-                 reverse_pre_conf: float=0.3,
-                 reverse_dist_thresh: float=1):
+                 reverse_pre_conf: float=0.5,
+                 reverse_dist_thresh: float=1.2,
+                 reverse_conf_thresh: float=0.5):
         """
         Parameters
         ----------
@@ -2219,6 +2290,7 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
         voxel_range : Tuple[List]
         reverse_pre_conf : float
         reverse_dist_thresh : float
+        reverse_conf_thresh : float
 
         Examples
         --------
@@ -2230,6 +2302,7 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
         super().__init__(voxel_shape, voxel_range)
         self.reverse_pre_conf = reverse_pre_conf
         self.reverse_dist_thresh = reverse_dist_thresh
+        self.reverse_conf_thresh = reverse_conf_thresh
     
     @staticmethod
     def _get_height_map(
@@ -2722,13 +2795,14 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
             # get 3d points
             mean_slot_3d = []
             for point, height in zip(mean_slot, heights):
-                mean_slot_3d.append(
-                    [(point[1] - cx) / fx, 
-                     (point[0] - cy) / fy, 
-                     height, 
-                     point[2]]
-                )
-            mean_slots_3d.append(np.float32(mean_slot_3d))
+                mean_slot_3d.append([(point[1] - cx) / fx, 
+                                     (point[0] - cy) / fy, 
+                                     height, 
+                                     point[2]])
+            mean_slot_3d = np.float32(mean_slot_3d)
+            conf = mean_slot_3d[:, 3].mean()
+            if conf > self.reverse_conf_thresh:
+                mean_slots_3d.append(mean_slot_3d)
         
         return mean_slots_3d
 
@@ -2750,16 +2824,10 @@ class PlanarPolyline3DSeg(PlanarTensorSmith):
         -----
         ```
         seg_im  # 分割图
-        reg_im  # 回归图
-            0: dist_im  # 每个分割图上的点到最近线段的垂直距离
-            1,2: vert_vec_im  # 每个分割图上的点到最近线段的向量
-            3,4,5: abs_dir_im  # 每个分割图上的点所在线段的广义单位方向，|nx|, |ny|, nx * ny
-            6 height_im # 每个分割图上的点的高度分布图
         ```
         """
         Z, X, Y = self.voxel_shape
         cx, cy, fx, fy = self.bev_intrinsics
-        points_grid_bev = self.points_grid_bev
 
         polylines = []
         class_inds = []

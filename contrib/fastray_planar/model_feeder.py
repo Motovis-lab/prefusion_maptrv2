@@ -17,7 +17,7 @@ from prefusion.dataset import (
 from prefusion.dataset.tensor_smith import (
     PlanarBbox3D, PlanarSquarePillar,
     PlanarCylinder3D, PlanarOrientedCylinder3D,
-    PlanarPolyline3D, PlanarPolygon3D, PlanarSegBev,
+    PlanarPolyline3D, PlanarPolygon3D, PlanarOccSdfBev,
     PlanarParkingSlot3D
 )
 
