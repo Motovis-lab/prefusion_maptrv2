@@ -1,6 +1,7 @@
-from typing import List, Union, Dict, TYPE_CHECKING
-from pathlib import Path
 import copy
+from typing import List, Union, Dict, TYPE_CHECKING, Any
+from pathlib import Path
+from cachetools import cached, Cache
 
 import torch
 import mmcv
@@ -96,6 +97,7 @@ def get_cam_type(name):
         raise ValueError('Unknown camera type')
 
 
+@cached(cache=Cache(maxsize=float('inf')), key=lambda cfg: str(sorted((cfg or {}).items())))
 def build_tensor_smith(tensor_smith: dict = None):
     tensor_smith = copy.deepcopy(tensor_smith)
     if isinstance(tensor_smith, dict):
@@ -142,12 +144,13 @@ def build_group_sampler(group_sampler: Union["GroupSampler", dict]) -> "GroupSam
     return group_sampler
 
 
-def build_subepoch_manager(subepoch_manager: Union["SubEpochManager", dict], phase: str):
-    if subepoch_manager is None or phase != "train":
+def build_subepoch_manager(subepoch_manager: Union["SubEpochManager", dict], batch_size: int):
+    if subepoch_manager is None:
         return None
     subepoch_manager = copy.deepcopy(subepoch_manager)
     if isinstance(subepoch_manager, dict):
         subepoch_manager = DATASET_TOOLS.build(subepoch_manager)
+    subepoch_manager.set_batch_size(batch_size)
     return subepoch_manager
 
 def read_pcd(path: Union[str, Path], intensity: bool = True) -> np.ndarray:

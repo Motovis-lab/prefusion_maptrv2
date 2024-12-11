@@ -1,17 +1,33 @@
 import abc
+import copy
+import math
 import random
-from typing import List, Tuple, Dict, Union, TYPE_CHECKING
+import warnings
+from itertools import cycle
+from pathlib import Path
+from cachetools import cached, Cache
+from collections import defaultdict, UserList, Counter
+from typing import List, Tuple, Dict, Union, TYPE_CHECKING, Sequence
 
 import numpy as np
+import pandas as pd
+from loguru import logger
 from prefusion.registry import GROUP_SAMPLERS
 from prefusion.dataset.transformable_loader import Bbox3DLoader
 from prefusion.dataset.index_info import IndexInfo
+from prefusion.dataset.transformable_loader import Bbox3DLoader, Polyline3DLoader, Polygon3DLoader, ParkingSlot3DLoader
+from prefusion.dataset.transform import Bbox3D, Polyline3D, Polygon3D, ParkingSlot3D
+from prefusion.dataset.utils import build_transformable_loader
 
 if TYPE_CHECKING:
     from .dataset import TransformableLoader
     from .transform import Transformable
 
 __all__ = ["IndexGroupSampler", "ClassBalancedGroupSampler"]
+
+
+class Group(UserList):
+    pass
 
 
 def generate_groups(
@@ -99,9 +115,96 @@ def generate_groups(
     return np.unique(ind_lists, axis=0)
 
 
+def get_scene_frame_inds(info: Dict, indices: List[str] = None) -> Dict[str, List[str]]:
+    """prepare scene_frame_inds for later usage
+
+    Parameters
+    ----------
+    info : Dict
+        the full info (pkl) of the dataset
+    indices : List[str], optional
+        _description_, by default None
+
+    Returns
+    -------
+    scene_frame_inds : Dict[str, List[str]]
+        e.g.  
+        ```
+        {
+            "20231101_160337": [ "20231101_160337/1698825817664", "20231101_160337/1698825817764"],
+            "20230823_110018": [ "20230823_110018/1692759640764", "20230823_110018/1692759640864"],
+        }
+        ```
+    """
+    if indices is None:
+        indices = {}
+        for scene_id in info:
+            frame_list = sorted(info[scene_id]["frame_info"].keys())
+            if frame_list:
+                indices[scene_id] = [f"{scene_id}/{frame_id}" for frame_id in frame_list]
+        return indices
+
+    available_indices = defaultdict(list)
+    for index in indices:
+        scene_id, frame_id = index.split("/")
+        if scene_id in info:
+            if frame_id in info[scene_id]["frame_info"]:
+                available_indices[scene_id].append(index)
+    for scene_id in available_indices:
+        available_indices[scene_id] = sorted(available_indices[scene_id])
+
+    return available_indices
+
+
+def convert_str_index_to_index_info(groups: List[Union[List[str], Group[str]]]) -> List[Group["IndexInfo"]]:
+    index_info_groups = []
+    for grp in groups:
+        index_info_grp = []
+        prev = None
+        for i, scn_frm_str in enumerate(grp):
+            cur = IndexInfo.from_str(scn_frm_str, prev=prev)
+            prev = cur
+            index_info_grp.append(cur)
+        index_info_groups.append(Group(index_info_grp))
+    return index_info_groups
+
+
+class GroupSampler:
+    def __init__(
+        self, 
+        phase: str, 
+        possible_group_sizes: Union[int, Tuple[int]], 
+        possible_frame_intervals: Union[int, Tuple[int]] = 1, 
+        seed: int = None,
+        **kwargs,
+    ):
+        assert phase.lower() in ["train", "val", "test", "test_scene_by_scene"]
+        self.phase = phase.lower()
+        self.possible_group_sizes = [possible_group_sizes] if isinstance(possible_group_sizes, int) else possible_group_sizes
+        self.possible_frame_intervals = [possible_frame_intervals] if isinstance(possible_frame_intervals, int) else possible_frame_intervals
+        self._cur_train_group_size = self.possible_group_sizes[0]  # train group size of current epoch
+        self.seed = seed
+
+    @property
+    def group_size(self) -> int:
+        return self._cur_train_group_size
+
+    @abc.abstractmethod
+    def sample(self, data_root: Path, info: Dict, **kwargs) -> List[Group["IndexInfo"]]:
+        raise NotImplementedError
+
+
 @GROUP_SAMPLERS.register_module()
-class IndexGroupSampler:
-    def __init__(self, phase: str, possible_group_sizes: Union[int, Tuple[int]], possible_frame_intervals: Union[int, Tuple[int]] = 1, seed: int = None):
+class IndexGroupSampler(GroupSampler):
+    def __init__(
+        self, 
+        phase: str, 
+        possible_group_sizes: Union[int, Tuple[int]], 
+        possible_frame_intervals: Union[int, Tuple[int]] = 1, 
+        seed: int = None,
+        indices_path: Union[str, Path] = None,
+        **kwargs,
+    ):
         """Sample groups
 
         Parameters
@@ -116,40 +219,39 @@ class IndexGroupSampler:
             Interval between frames; default is 1.
             if int, will always use this value as frame_interval;
             if Tuple[int], during train phase, will random pick a value as the frame_interval for a given epoch.
+        indices_path : Union[str, Path], optional
+            Specified file of indices to load; if None, all frames are automatically fetched from the info_path.
         seed : int, optional
             Random seed for randomization operations. It's usually for testing and debugging purpose.
         """
-        assert phase.lower() in ["train", "val", "test", "test_scene_by_scene"]
-        self.phase = phase.lower()
-        self.possible_group_sizes = [possible_group_sizes] if isinstance(possible_group_sizes, int) else possible_group_sizes
-        self.possible_frame_intervals = [possible_frame_intervals] if isinstance(possible_frame_intervals, int) else possible_frame_intervals
-        self._cur_train_group_size = self.possible_group_sizes[0]  # train group size of current epoch
-        self.seed = seed
+        super().__init__(phase, possible_group_sizes, possible_frame_intervals, seed)
+        self.indices_path = indices_path
 
-    @property
-    def group_size(self) -> int:
-        return self._cur_train_group_size
-
-    def sample(self, scene_frame_inds: Dict[str, List[str]], output_str_index: bool = False) -> List[List["IndexInfo"]]:
-        """_summary_
+    def sample(self, data_root: Path, info: Dict, output_str_index: bool = False, **kwargs) -> List[Group["IndexInfo"]]:
+        """Sample groups
 
         Parameters
         ----------
-        scene_frame_inds : Dict[str, List[str]]
-            e.g.  
-            ```
-            {
-              "20231101_160337": [ "20231101_160337/1698825817664", "20231101_160337/1698825817764"],
-              "20230823_110018": [ "20230823_110018/1692759640764", "20230823_110018/1692759640864"],
-            }
-            ```
-        output_str_index: bool, optional
-
+        info : Dict
+            the full info (pkl) of the dataset
+        output_str_index: bool, optional, deprecated
+            whether to output str index or IndexInfo; default is False.
         Returns
         -------
-        _type_
-            _description_
+        List[Group["IndexInfo"]]
+            Generated groups
         """
+        if output_str_index:
+            warnings.warn("Outputting groups as string indices is deprecated.", DeprecationWarning)
+
+        # generate scene_frame_inds
+        if self.indices_path is not None:
+            indices = [line.strip() for line in open(self.indices_path, "w")]
+            scene_frame_inds = get_scene_frame_inds(info, indices=indices)
+        else:
+            scene_frame_inds = get_scene_frame_inds(info)
+
+        # sample groups
         match self.phase:
             case "train":
                 groups = self.sample_train_groups(scene_frame_inds)
@@ -158,20 +260,7 @@ class IndexGroupSampler:
             case "test_scene_by_scene" :
                 groups = self.sample_scene_groups(scene_frame_inds)
         if not output_str_index:
-            return self._convert_groups_to_info(groups)
-
-    @staticmethod
-    def _convert_groups_to_info(groups: List[List[str]]) -> List[List["IndexInfo"]]:
-        index_info_groups = []
-        for grp in groups:
-            index_info_grp = []
-            prev = None
-            for i, frm in enumerate(grp):
-                cur = IndexInfo.from_str(frm, prev=prev)
-                prev = cur
-                index_info_grp.append(cur)
-            index_info_groups.append(index_info_grp)
-        return index_info_groups
+            return convert_str_index_to_index_info(groups)
 
     def sample_train_groups(self, scene_frame_inds: Dict[str, List[str]]) -> List[List[str]]:
         if self.seed: random.seed(self.seed)
@@ -206,7 +295,7 @@ class IndexGroupSampler:
                 if self.seed: random.seed(self.seed)
                 frame_interval = random.choice(self.possible_frame_intervals)
             inds_list = generate_groups(len(frame_ids), group_size, frame_interval, start_ind=start_ind, random_start_ind=random_start_ind, seed=seed)
-            groups = [[frame_ids[i] for i in inds] for inds in inds_list]
+            groups = [Group([frame_ids[i] for i in inds]) for inds in inds_list]
             all_groups.extend(groups)
         if shuffle:
             if self.seed: random.seed(self.seed)
@@ -215,6 +304,221 @@ class IndexGroupSampler:
 
 
 @GROUP_SAMPLERS.register_module()
-class ClassBalancedGroupSampler:
-    def __init__( self, annotation_loaders: Union["TransformableLoader", List["TransformableLoader"]] = Bbox3DLoader, ):
-        pass
+class ClassBalancedGroupSampler(GroupSampler):
+    SUPPORTED_LOADERS = {
+        Bbox3D.__name__: Bbox3DLoader,
+        Polyline3D.__name__: Polyline3DLoader,
+        Polygon3D.__name__: Polygon3DLoader,
+        ParkingSlot3D.__name__: ParkingSlot3DLoader,
+    }
+
+    def __init__(
+        self, 
+        phase: str, 
+        possible_group_sizes: Union[int, Tuple[int]], 
+        possible_frame_intervals: Union[int, Tuple[int]] = 1, 
+        seed: int = None,
+        transformable_cfg: Dict[str, "Transformable"] = None,
+        cbgs_cfg: Union[str, Dict] = None,
+        num_processes: int = 0,
+        **kwargs
+    ):
+        super().__init__(phase, possible_group_sizes, possible_frame_intervals, seed)
+        assert phase == "train", "ClassBalancedGroupSampler is only designed for train phase."
+        assert transformable_cfg is not None, "transformables cannot be None, it's for loading annotation data that has class info."
+        assert cbgs_cfg is not None, "cbgs_cfg cannot be None."
+        self.transformable_cfg = transformable_cfg
+        self.num_processes = num_processes
+        self._base_group_sampler = IndexGroupSampler(phase, possible_group_sizes, possible_frame_intervals, seed)
+        self.cbgs_cfg = self._cbgs_cfg_with_default_values(cbgs_cfg)
+        self.default_data_root = None
+    
+    def _cbgs_cfg_with_default_values(self, cbgs_cfg: Dict):
+        def _set_default(key, value):
+            if key not in cbgs_cfg:
+                warnings.warn(f"{key} not found in cbgs_cfg, using default value {value}", UserWarning)
+                cbgs_cfg[key] = value
+        
+        _set_default("desired_ratio", 0.25)
+        _set_default("counter_type", "frame")
+        _set_default("update_stats_during_oversampling", False)
+        _set_default("oversampling_consider_no_objects", False)
+        _set_default("oversampling_consider_object_attr", False)
+
+        return cbgs_cfg
+
+    @staticmethod
+    def _to_df(groups: List[Group], colname: str = "cnt", fill_value: float = 0.0) -> pd.DataFrame:
+        return pd.DataFrame([getattr(grp, colname) for grp in groups]).fillna(fill_value)
+
+    def sample(self, data_root: Path, info: Dict, **kwargs) -> List[Group["IndexInfo"]]:
+        self.default_data_root = data_root
+        groups = self._base_group_sampler.sample(data_root, info)
+        groups = self.count_class_and_attr_occurrence(data_root, info, groups)
+        sampled_groups = self.iterative_sample_minority_groups(groups)
+        total_groups = groups + sampled_groups
+        self.print_cbgs_report(groups, total_groups)
+        return total_groups
+    
+    @staticmethod
+    def print_cbgs_report(groups_before: List[Group], groups_after: List[Group]):
+        logger.info(
+            "\n============== CBGS Report ==============\n"
+            f"### Before ###\n"
+            f" - Number of groups: {len(groups_before)}\n"
+            f" - Number of groups per class:\n"
+            f"{ClassBalancedGroupSampler._to_df(groups_before).sum(axis=0)}\n"
+            f"\n### After ###\n"
+            f" - Number of groups: {len(groups_after)}\n"
+            f" - Number of groups per class:\n"
+            f"{ClassBalancedGroupSampler._to_df(groups_after).sum(axis=0)}\n"
+        )
+
+    def count_class_and_attr_occurrence(self, data_root: Path, info: Dict, groups: List[Group]) -> List[Group]:
+        for group in groups:
+            obj_cnt = Counter()
+            frm_cnt = Counter()
+            for index_info in group:
+                transformables = self.load_all_transformables(info, index_info)
+                no_objects_found = True
+                for _, transformable in transformables.items():
+                    classes = [ele['class'] for ele in transformable.elements]
+                    attrs = [attr_val for ele in transformable.elements for attr_val in ele['attr']]
+                    
+                    if classes:
+                        obj_cnt.update(classes)
+                        frm_cnt.update(set(classes))
+                        no_objects_found = False
+
+                    if attrs and self.cbgs_cfg.get("oversampling_consider_object_attr"):
+                        obj_cnt.update(attrs)
+                        frm_cnt.update(set(attrs))
+                        no_objects_found = False
+
+                if self.cbgs_cfg.get("oversampling_consider_no_objects") and no_objects_found:
+                    obj_cnt.update(['<NO_OBJECTS>'])
+                    frm_cnt.update(['<NO_OBJECTS>'])
+            
+            group.obj_cnt = obj_cnt
+            group.frm_cnt = frm_cnt
+            group.grp_cnt = Counter(list(frm_cnt.keys()))
+            group.cnt = self._decide_counter(group)
+
+        return groups
+    
+    def _decide_counter(self, group: Group):
+        match self.cbgs_cfg:
+            case {"counter_type": "group", **rest}:
+                return group.grp_cnt
+            case {"counter_type": "frame", **rest}:
+                return group.frm_cnt
+            case {"counter_type": "object", **rest}:
+                return group.obj_cnt
+            case _:
+                return group.frm_cnt
+
+    def iterative_sample_minority_groups(self, groups: List[Group]) -> List[Group]:
+        # Calculate class distribution
+        groups_df = self._to_df(groups)
+        cnt_per_class = groups_df.sum(axis=0)
+        max_class = cnt_per_class.idxmax()
+
+        # Get minority classes
+        class_stats_df = cnt_per_class.to_frame(name="cnt")
+        class_stats_df.loc[:, "ratio"] = class_stats_df.cnt / class_stats_df.loc[max_class]['cnt']
+        minority_classes = class_stats_df[class_stats_df.ratio < self.cbgs_cfg["desired_ratio"]].sort_values("cnt").index.tolist() # NOTE: it's sorted by `cnt`
+
+        if not minority_classes:
+            return []
+
+        # Oversample the minority classes to the same level
+        sep = 1
+        oversampling_classes, target_classes = minority_classes[:sep], minority_classes[sep:]
+        sampled_groups = []
+        while len(target_classes) > 0:
+            target_class = target_classes[0] # class with minimum cnt in target_classes
+            if self.cbgs_cfg["update_stats_during_oversampling"]:
+                sampled_groups.extend(self.sample_minority_groups(groups + sampled_groups, oversampling_classes, target_class, target_ratio=1.0))
+                groups_df = self._to_df(groups + sampled_groups)
+                class_stats_df = groups_df.sum(axis=0).to_frame(name="cnt")
+            else:
+                sampled_groups.extend(self.sample_minority_groups(groups, oversampling_classes, target_class, target_ratio=1.0))
+        
+            sep += 1
+            oversampling_classes, target_classes = minority_classes[:sep], minority_classes[sep:]
+
+        # Final Oversampling referring to the max class
+        if self.cbgs_cfg["update_stats_during_oversampling"]:
+            sampled_groups.extend(self.sample_minority_groups(groups + sampled_groups, oversampling_classes, max_class, target_ratio=self.cbgs_cfg["desired_ratio"]))
+        else:
+            sampled_groups.extend(self.sample_minority_groups(groups, oversampling_classes, max_class, target_ratio=self.cbgs_cfg["desired_ratio"]))
+
+        return sampled_groups
+
+
+    def sample_minority_groups(self, groups: List[Group], minority_classes: List[str], target_class: str, target_ratio: float = 1.0) -> List[Group]:
+        groups_df = self._to_df(groups)
+        cnt_per_class = groups_df.sum(axis=0)
+        gap_cnt = int(math.ceil(cnt_per_class[target_class] * target_ratio - max([cnt_per_class[c] for c in minority_classes])))
+        groups_df = groups_df.drop_duplicates() # oversamping in the following step should only select groups from the original pool (while calculating gap may based on updated groups)
+        sampled_groups = []
+        for minor_cls in minority_classes:
+            colname = f"{minor_cls}_{target_class}_ratio"
+            groups_df.loc[:, colname] = groups_df[minor_cls] / (groups_df[target_class] + 1e-4)
+            candidates = cycle(groups_df[groups_df[colname] > 1e-6][colname].sort_values(ascending=False).index)
+            _group_indices = [next(candidates) for _ in range(0, gap_cnt)]
+            sampled_groups.extend([copy.deepcopy(groups[idx]) for idx in _group_indices])
+
+        return sampled_groups
+
+    def load_all_transformables(self, info: Dict, index_info: "IndexInfo") -> dict:
+        transformables = {}
+        for name in self.transformable_cfg:
+            _t_cfg = copy.deepcopy(self.transformable_cfg[name])
+            transformable_type = _t_cfg.pop("type")
+            loader_cfg = _t_cfg.pop("loader", None)
+            if transformable_type not in self.SUPPORTED_LOADERS:
+                continue
+            loader = self._build_transformable_loader(loader_cfg, transformable_type)
+            scene_data = info[index_info.scene_id]
+            transformables[name] = loader.load(name, scene_data, index_info, **_t_cfg)
+        
+        return transformables
+    
+    @cached(cache=Cache(maxsize=float('inf')), key=lambda self_, cfg, type_: (str(sorted((cfg or {}).items())), type_))
+    def _build_transformable_loader(self, loader_cfg, transformable_type: str) -> "TransformableLoader":
+        if loader_cfg:
+            loader_cfg.setdefault("data_root", self.default_data_root)  # fallback with default data_root from Dataset
+        else:
+            loader_cfg = dict(type=self.SUPPORTED_LOADERS[transformable_type], data_root=self.default_data_root)
+        loader = build_transformable_loader(loader_cfg)
+        return loader
+
+
+@GROUP_SAMPLERS.register_module()
+class SceneLevelBalancedGroupSampler(GroupSampler):
+    SUPPORTED_LOADERS = {
+        Bbox3D.__name__: Bbox3DLoader,
+        Polyline3D.__name__: Polyline3DLoader,
+        Polygon3D.__name__: Polygon3DLoader,
+        ParkingSlot3D.__name__: ParkingSlot3DLoader,
+    }
+
+    def __init__(
+        self, 
+        phase: str, 
+        possible_group_sizes: Union[int, Tuple[int]], 
+        possible_frame_intervals: Union[int, Tuple[int]] = 1, 
+        seed: int = None,
+        transformable_cfg: Dict[str, "Transformable"] = None,
+        cbgs_cfg: Union[str, Dict] = None,
+        num_processes: int = 0,
+        **kwargs
+    ):
+        super().__init__(phase, possible_group_sizes, possible_frame_intervals, seed)
+        self._base_group_sampler = ClassBalancedGroupSampler(phase, possible_group_sizes, possible_frame_intervals, seed)
+
+    def sample(self, data_root: Path, info: Dict, **kwargs) -> List[Group]:
+        # TODO: [ ] 1. calculate occurred tags for each scene based on the groups generated by self._base_group_sampler
+        # TODO: [ ] 2. expand scenes according to tag distribution (e.g. expand groups that in the rare scenes)
+        raise NotImplementedError
