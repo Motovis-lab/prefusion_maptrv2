@@ -23,7 +23,7 @@ img_scale = 2
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
 front_perspective_img_size = [768, 384]
-batch_size = 3
+batch_size = 2
 group_size = 1
 bev_range = [-12, 36, -12, 12, -0.5, 2.5]
 

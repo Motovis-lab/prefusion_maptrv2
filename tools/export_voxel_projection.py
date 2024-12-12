@@ -19,6 +19,10 @@ cfg = Config.fromfile("contrib/fastbev_det/configs/mv_4d_fastbev_3dbox_deploy.py
 input_fish = torch.ones((4, 3, 80, 128)).float().cuda()
 input_pv = torch.ones(5, 3, 96, 128).float().cuda()
 input_front = torch.ones(1, 3, 96, 192).float().cuda()
+
+input_depth_fish = torch.ones(4, 142, 80, 128).float().cuda() - 0.5
+input_depth_pv = torch.ones(5, 142, 96, 128).float().cuda() - 0.5
+input_depth_front = torch.ones(1, 142, 96, 192).float().cuda() - 0.5
 img_front = mmcv.imread("work_dirs/vt_debug/img_fish_feats_0_0.jpg").transpose(2,0,1)
 img_left = mmcv.imread("work_dirs/vt_debug/img_fish_feats_0_1.jpg").transpose(2,0,1)
 img_back = mmcv.imread("work_dirs/vt_debug/img_fish_feats_0_2.jpg").transpose(2,0,1)
@@ -34,9 +38,10 @@ model.forward = model.pure_forward
 # plt.imsave("work_dirs/vt_debug/fish_out.jpg", tmp.transpose(1,2,0))
 
 save_root = "./work_dirs/deploy/voxel_projection_conv_64_permute_int.onnx"
+save_root = "./work_dirs/deploy/voxel_projection_conv_64_permute_int_dd.onnx"
 
-torch.onnx.export(model, (input_fish, input_pv, input_front), save_root, opset_version=11,  # input must be tuple type
-        input_names = ['input_fish', 'input_pv', 'input_front'],
+torch.onnx.export(model, (input_fish, input_pv, input_front, input_depth_fish, input_depth_pv, input_depth_front), save_root, opset_version=11,  # input must be tuple type
+        input_names = ['input_fish', 'input_pv', 'input_front', 'input_depth_fish', 'input_depth_pv', 'input_depth_front'],
         output_names = ['output'],
         operator_export_type=torch.onnx.OperatorExportTypes.ONNX_FALLTHROUGH)
 
@@ -54,21 +59,3 @@ print("ONNX file saved in {}".format(save_root))
 
 print('finished')
 
-# sub module test
-# model = VoxelProjection_pv()
-# save_root = "./work_dirs/deploy/voxel_projection.onnx"
-# img_front_left = mmcv.imread("work_dirs/vt_debug/img_pv_feats_0_0.jpg").transpose(2,0,1)
-# img_back_left = mmcv.imread("work_dirs/vt_debug/img_pv_feats_0_0.jpg").transpose(2,0,1)
-# img_back = mmcv.imread("work_dirs/vt_debug/img_pv_feats_0_2.jpg").transpose(2,0,1)
-# img_front_right = mmcv.imread("work_dirs/vt_debug/img_pv_feats_0_3.jpg").transpose(2,0,1)
-# img_back_right = mmcv.imread("work_dirs/vt_debug/img_pv_feats_0_4.jpg").transpose(2,0,1)
-# input_fish = torch.from_numpy(np.stack([img_front_left, img_back_left, img_back, img_front_right, img_back_right], axis=0)).cuda()
-
-# out = model.eval()(input_fish)
-# show_img = torch.stack([out[0], out[6], out[12]], dim=-1).cpu().numpy()
-# plt.imshow(show_img)
-# plt.show()
-# torch.onnx.export(model, input_fish, save_root, opset_version=11,  # input must be tuple type
-#         input_names = ['input_fish'],
-#         output_names = ['output'],
-#         operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK)
