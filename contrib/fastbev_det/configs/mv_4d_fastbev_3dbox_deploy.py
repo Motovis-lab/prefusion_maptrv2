@@ -255,7 +255,7 @@ model = dict(
         label_start_idx=2, # process labels info start index of collection_info_type
     ),
     backbone_conf=dict(
-        type='FastRay_DP_v2',
+        type='FastRay_DP_v3',
         x_bound=[36, -12, 0.2],  # BEV grids bounds and size (m)
         y_bound=[12, -12, 0.2],  # BEV grids bounds and size (m)
         z_bound=[-0.5, 2.5, 0.5],  # BEV grids bounds and size (m)
