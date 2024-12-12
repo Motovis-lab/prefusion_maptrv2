@@ -166,12 +166,12 @@ train_dataloader = dict(
         data_root=data_root,
         info_path=data_root + 'mv_4d_infos_val.pkl',
         transformables=transformables,
-        # transforms=train_pipeline,
-        transforms=val_pipeline,  # only for saving uu vv dd ...
-        phase='train',
+        transforms=train_pipeline,
+        group_sampler=dict(type="IndexGroupSampler",
+                           phase="train",
+                           possible_group_sizes=[1],
+                           possible_frame_intervals=[1]),
         batch_size=batch_size, 
-        possible_group_sizes=[1],
-        possible_frame_intervals=[1]
         ),
     )
 
@@ -188,10 +188,11 @@ val_dataloader = dict(
         info_path=data_root + 'mv_4d_infos_val.pkl',
         transformables=transformables,
         transforms=val_pipeline,
-        phase='val',
         batch_size=batch_size, 
-        possible_group_sizes=[1],
-        possible_frame_intervals=[1]
+        group_sampler=dict(type="IndexGroupSampler",
+                           phase="val",
+                           possible_group_sizes=[1],
+                           possible_frame_intervals=[1]),
         ),
     )
 
@@ -393,7 +394,7 @@ env_cfg = dict(
 )
 find_unused_parameters = True
 
-runner_type = 'GroupRunner'
+runner_type = 'GroupBatchRunner'
 
 lr = 0.01  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Union, List
 import warnings
 
+import cv2
 import mmcv
 import numpy as np
 from scipy.spatial.transform import Rotation
@@ -33,7 +34,7 @@ from prefusion.dataset.transform import (
 
 
 if TYPE_CHECKING:
-    from prefusion.dataset import IndexInfo
+    from prefusion.dataset.index_info import IndexInfo
 
 
 __all__ = [
@@ -81,8 +82,14 @@ class TransformableLoader:
         raise NotImplementedError(f'Module [{type(self).__name__}] is missing the required "load" function')
 
 
+class CameraSetLoader(TransformableLoader):
+    def __init__(self, data_root: Path, selected_cameras: List | str = 'all') -> None:
+        super().__init__(data_root)
+        self.selected_cameras = selected_cameras
+
+
 @TRANSFORMABLE_LOADERS.register_module()
-class CameraImageSetLoader(TransformableLoader):
+class CameraImageSetLoader(CameraSetLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraImageSet:
         scene_info = scene_data["scene_info"]
         frame_info = scene_data["frame_info"][index_info.frame_id]
@@ -99,6 +106,7 @@ class CameraImageSetLoader(TransformableLoader):
                 tensor_smith=tensor_smith,
             )
             for cam_id in frame_info["camera_image"]
+            if self.selected_cameras == 'all' or cam_id in self.selected_cameras
         }
         return CameraImageSet(name, camera_images)
 
@@ -125,7 +133,7 @@ class NuscenesCameraImageSetLoader(TransformableLoader):
 
 
 @TRANSFORMABLE_LOADERS.register_module()
-class CameraDepthSetLoader(TransformableLoader):
+class CameraDepthSetLoader(CameraSetLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraDepthSet:
         scene_info = scene_data["scene_info"]
         frame_info = scene_data["frame_info"][index_info.frame_id]
@@ -144,12 +152,13 @@ class CameraDepthSetLoader(TransformableLoader):
                 tensor_smith=tensor_smith,
             )
             for cam_id in frame_info["camera_image_depth"]
+            if self.selected_cameras == 'all' or cam_id in self.selected_cameras
         }
         return CameraDepthSet(name, camera_depths)
 
 
 @TRANSFORMABLE_LOADERS.register_module()
-class CameraSegMaskSetLoader(TransformableLoader):
+class CameraSegMaskSetLoader(CameraSetLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> CameraSegMaskSet:
         scene_info = scene_data["scene_info"]
         frame_info = scene_data["frame_info"][index_info.frame_id]
@@ -168,6 +177,7 @@ class CameraSegMaskSetLoader(TransformableLoader):
                 tensor_smith=tensor_smith,
             )
             for cam_id in frame_info["camera_image_seg"]
+            if self.selected_cameras == 'all' or cam_id in self.selected_cameras
         }
         return CameraSegMaskSet(name, camera_segs)
 
@@ -362,18 +372,27 @@ class ParkingSlot3DLoader(TransformableLoader):
 
 @TRANSFORMABLE_LOADERS.register_module()
 class OccSdfBevLoader(TransformableLoader):
-    def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> OccSdfBev:
+    def __init__(self, data_root: Path, src_voxel_range: List = None, load_sdf: bool = False) -> None:
+        super().__init__(data_root)
+        self.src_voxel_range = src_voxel_range
+        self.load_sdf = load_sdf
+
+    def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> OccSdfBev:
         frame = scene_data["frame_info"][index_info.frame_id]
-        occ_path = frame["occ_sdf"]["occ_bev"]
-        sdf_path = frame["occ_sdf"]["sdf_bev"]
-        height_path = frame["occ_sdf"]["height_bev"]
+        occ = mmcv.imread(frame["occ_sdf"]["occ_bev"])
+        if self.load_sdf:
+            sdf = cv2.imread(frame["occ_sdf"]["sdf_bev"], cv2.IMREAD_UNCHANGED).astype(np.float32) / 860 - 36,
+        else:
+            sdf = None
+        height = cv2.imread(frame["occ_sdf"]["height_bev"], cv2.IMREAD_UNCHANGED).astype(np.float32) / 3000 - 10,
+        if self.src_voxel_range is None:
+            src_voxel_range = scene_data["meta_info"]["space_range"]["occ"]
+        else:
+            src_voxel_range = self.src_voxel_range
         return OccSdfBev(
             name=name,
-            src_view_range=scene_data["meta_info"]["space_range"]["occ"],  # ego system,
-            occ=mmcv.imread(occ_path),
-            sdf=mmcv.imread(sdf_path),
-            height=mmcv.imread(height_path),
-            dictionary=dictionary,
+            src_voxel_range=src_voxel_range,  # ego system,
+            occ=occ, sdf=sdf, height=height,
             mask=None,
             tensor_smith=tensor_smith,
         )

@@ -8,7 +8,7 @@ import numpy as np
 from numpy.testing import assert_almost_equal
 
 from copious.io.fs import mktmpdir
-from prefusion.dataset.dataset import IndexInfo
+from prefusion.dataset.index_info import IndexInfo
 from prefusion.dataset.transformable_loader import (
     CameraImageSetLoader, 
     CameraDepthSetLoader, 

@@ -16,6 +16,7 @@ def get_data(dataloader):
         for frame_idx, frame_batch in enumerate(group_batch):
             idx = group_idx * 1 + frame_idx
             time.sleep(0.01)
+            del frame_batch
             # print(f'{idx}/{total_size}')
     print('DONE!')
             

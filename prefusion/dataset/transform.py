@@ -14,6 +14,7 @@ import numpy as np
 import virtual_camera as vc
 # import albumentations as AT
 from scipy.spatial.transform import Rotation
+from scipy.ndimage import distance_transform_edt
 from copious.cv.geometry import Box3d as CopiousBox3d
 
 # from .tensor_smith import TensorSmith
@@ -108,6 +109,10 @@ class Transformable:
         return self
     
     @transform_method
+    def render_camera(self, *args, **kwargs):
+        return self
+    
+    @transform_method
     def flip_3d(self, *args, **kwargs):
         return self
     
@@ -164,6 +169,11 @@ class CameraTransformable(Transformable, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def render_extrinsic(self, *args, **kwargs):
         pass
+
+    @transform_method
+    @abc.abstractmethod
+    def render_camera(self, *args, **kwargs):
+        return self
     
     @transform_method
     @abc.abstractmethod
@@ -417,6 +427,22 @@ class CameraImage(CameraTransformable):
         self.extrinsic = (R_new, t_new)
         
         return self
+    
+    def render_camera(self, camera_new, **kwargs):
+        resolution = self.img.shape[:2][::-1]
+        camera_class = getattr(vc, self.cam_type)
+        camera_old = camera_class(
+            resolution,
+            self.extrinsic,
+            self.intrinsic,
+            ego_mask=self.ego_mask
+        )
+        self.img, self.ego_mask = vc.render_image(self.img, camera_old, camera_new)
+        self.extrinsic = camera_new.extrinsic
+        self.intrinsic = camera_new.intrinsic
+        self.cam_type = camera_new.__class__.__name__
+        
+        return self
 
 
     def flip_3d(self, flip_mat, **kwargs):
@@ -552,6 +578,24 @@ class CameraSegMask(CameraTransformable):
             self.img, camera_old, camera_new, interpolation=cv2.INTER_NEAREST
         )
         self.extrinsic = (R_new, t_new)
+        
+        return self
+    
+    def render_camera(self, camera_new, **kwargs):
+        resolution = self.img.shape[:2][::-1]
+        camera_class = getattr(vc, self.cam_type)
+        camera_old = camera_class(
+            resolution,
+            self.extrinsic,
+            self.intrinsic,
+            ego_mask=self.ego_mask
+        )
+        self.img, self.ego_mask = vc.render_image(
+            self.img, camera_old, camera_new, interpolation=cv2.INTER_NEAREST
+        )
+        self.extrinsic = camera_new.extrinsic
+        self.intrinsic = camera_new.intrinsic
+        self.cam_type = camera_new.__class__.__name__
         
         return self
 
@@ -694,6 +738,28 @@ class CameraDepth(CameraTransformable):
             # TODO: get real points from depth then remap to image
             raise NotImplementedError
         self.extrinsic = (R_new, t_new)
+        
+        return self
+    
+    def render_camera(self, camera_new, **kwargs):
+        resolution = self.img.shape[:2][::-1]
+        camera_class = getattr(vc, self.cam_type)
+        camera_old = camera_class(
+            resolution,
+            self.extrinsic,
+            self.intrinsic,
+            ego_mask=self.ego_mask
+        )
+        if self.depth_mode == 'd':
+            self.img, self.ego_mask = vc.render_image(
+                self.img, camera_old, camera_new, interpolation=cv2.INTER_NEAREST
+            )
+        else:
+            # TODO: get real points from depth then remap to image
+            raise NotImplementedError
+        self.extrinsic = camera_new.extrinsic
+        self.intrinsic = camera_new.intrinsic
+        self.cam_type = camera_new.__class__.__name__
         
         return self
 
@@ -1070,38 +1136,27 @@ class OccSdfBev(SpatialTransformable):
     def __init__(
         self,
         name: str, 
-        src_view_range: dict,
+        src_voxel_range: dict,
         occ: np.ndarray,
-        sdf: np.ndarray,
         height: np.ndarray,
-        dictionary: dict,
+        sdf: np.ndarray = None,
         mask: np.ndarray = None,
         tensor_smith: "TensorSmith" = None
     ):
         """OccSdfBev is a transformable contains occ, sdf and ground height info in a BEV view (a 2D spatial view).
 
-        back, front, right, left, bottom, up  
-        ||    ||     ||     ||    ||      ||
-        xmin, xmax,  ymin,  ymax, zmin,   zmax
-
-        bev: backward-right-up (H, W, Z)
-        ego: x-y-z, forward-left-up
-
         Parameters
         ----------
         name : str
             arbitrary string, will be set to each Transformable object to distinguish it with others
-        src_view_range : dict
-            view range of the bev view: [back, front, right, left, bottom, up], # in ego system
+        src_voxel_range : dict
+            voxel_range=([-0.5, 2.5], [-12, 36], [12, -12]), from axis min to max
         occ : np.ndarray
-            occ info, of shape (C, H, W), where C denote the nubmer of occ classes, H and W denote the height and width: 
-            H <=> (xmin, xmax), W <=> (ymin, ymax)
+            occ info, of shape (X, Y, C), where C denote the nubmer of occ classes
         sdf : np.ndarray
-            sdf info, of shape (1, H, W)
+            sdf info, of shape (X, Y)
         height : np.ndarray
-            height of the ground, of shape (1, H, W)
-        dictionary : dict
-            the dictionary for the occ classes
+            height of the ground, of shape (X, Y)
         mask : np.ndarray, optional
             if provided, only positions with value 1 will be take into consideration, by default None
             This feature is useful when we train on multiple different data source, where they have different BEV size/range.
@@ -1109,39 +1164,47 @@ class OccSdfBev(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.src_view_range = src_view_range
+        self.src_voxel_range = src_voxel_range
         self.occ = occ
-        self.sdf = sdf
         self.height = height
-        self.dictionary = dictionary
-        self.mask = mask if mask is not None else np.ones_like(self.sdf, dtype=np.uint8)
         self.tensor_smith = tensor_smith
-        self._bev_shape = self.occ.shape[1:]
-        self._bev_intrinsic = self._calc_bev_intrinsic()
+        self._bev_shape = self.occ.shape[:2]
+        self._bev_intrinsics = self._calc_bev_intrinsics()
+        self.sdf = self._generate_sdf() if sdf is None else sdf
+        self.mask = mask if mask is not None else np.ones_like(self.sdf, dtype=np.uint8)
         self._ego_points = self._unproject_bev_to_ego()
 
-    def _calc_bev_intrinsic(self):
-        H, W = self._bev_shape
-        fx = H / (self.src_view_range[0] - self.src_view_range[1])
-        fy = W / (self.src_view_range[2] - self.src_view_range[3])
-        cx = - self.src_view_range[1] * fx - 0.5
-        cy = - self.src_view_range[3] * fy - 0.5
-        return [cx, cy, fx, fy]
+    def _generate_sdf(self):
+        cx, cy, fx, fy = self._bev_intrinsics
+        df_obstacle = distance_transform_edt(1 - self.occ[..., 1] / 255)
+        df_freespace = distance_transform_edt(self.occ[..., 1] / 255)
+        assert abs(abs(fx) - abs(fy)) < 1e-3, f'fx={fx:.2f}, fy={fy:.2f}'
+        sdf = (df_freespace - df_obstacle) / abs(fx)
+        return sdf
+
+    def _calc_bev_intrinsics(self):
+        X, Y = self._bev_shape
+        fx = X / (self.src_voxel_range[1][1] - self.src_voxel_range[1][0])
+        fy = Y / (self.src_voxel_range[2][1] - self.src_voxel_range[2][0])
+        cx = - self.src_voxel_range[1][0] * fx - 0.5
+        cy = - self.src_voxel_range[2][0] * fy - 0.5
+
+        return cx, cy, fx, fy
 
     def _unproject_bev_to_ego(self):
-        H, W = self._bev_shape
-        cx, cy, fx, fy = self._bev_intrinsic
-        uu, vv = np.meshgrid(np.arange(W), np.arange(H))
+        cx, cy, fx, fy = self._bev_intrinsics
+        X, Y = self._bev_shape
+        vv, uu = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
         xx = (vv - cx) / fx
         yy = (uu - cy) / fy
-        zz = self.height[0]
+        zz = self.height
         # column points
         return np.stack([xx, yy, zz], axis=0).reshape(3, -1)
     
 
     def _project_ego_to_bev(self, ego_points):
         xx, yy, _ = ego_points
-        cx, cy, fx, fy = self._bev_intrinsic
+        cx, cy, fx, fy = self._bev_intrinsics
         vv_ = xx * fx + cx
         uu_ = yy * fy + cy
         return uu_.astype(np.float32), vv_.astype(np.float32)
@@ -1158,26 +1221,26 @@ class OccSdfBev(SpatialTransformable):
         
         self.occ = cv2.remap(
             self.occ, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_NEAREST
         )
         self.sdf = cv2.remap(
             self.sdf, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_LINEAR
         )
         self.height = cv2.remap(
             self.height, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_LINEAR
         )
         self.mask = cv2.remap(
             self.mask, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_NEAREST
         )
         return self
@@ -1192,26 +1255,26 @@ class OccSdfBev(SpatialTransformable):
         
         self.occ = cv2.remap(
             self.occ, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_NEAREST
         )
         self.sdf = cv2.remap(
             self.sdf, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_LINEAR
         )
         self.height = cv2.remap(
             self.height, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_LINEAR
         )
         self.mask = cv2.remap(
             self.mask, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_NEAREST
         )
         return self
@@ -1615,6 +1678,73 @@ class RenderExtrinsic(Transform):
                 if cam_id in self.cam_ids:
                     transformable.render_extrinsic(self.del_extrinsics[cam_id])
         return transformables
+
+
+class RenderVirtualCamera(Transform):
+    
+    def __init__(self, camera_settings: dict, scope="frame"):
+        """
+        Notes
+        -----
+        The extrinsic parameters must be in original ego system, 
+        in which the camera is calibrated.
+
+        Parameters
+        ----------
+        camera_settings : dict
+            ```python
+            {<cam_id>: dict(cam_type='PerspectiveCamera' | 'FisheyeCamera',
+                            resolution=(W, H),
+                            euler_angles=[<ang>, <ang>, <ang>], # ego x-y-z euler angles,
+                            translation=[<x>, <y>, <z>],
+                            intrinsic='auto' or (cx, cy, fx, fy, *dist_params)),
+            ...}
+            ```
+        scope : str, optional
+            seed scope, by default "frame"
+        """
+        super().__init__(scope=scope)
+        self.cam_ids = list(camera_settings.keys())
+        for cam_id in self.cam_ids:
+            assert camera_settings[cam_id]['cam_type'] in ['PerspectiveCamera', 'FisheyeCamera']
+        self.cameras = {}
+        for cam_id in self.cam_ids:
+            resolution = camera_settings[cam_id]['resolution']
+            extrinsic = (
+                Rotation.from_euler('xyz', camera_settings[cam_id]['euler_angles'], degrees=True).as_matrix(),
+                np.array(camera_settings[cam_id]['translation'])
+            )
+            intrinsic = camera_settings[cam_id]['intrinsic']
+            cam_type = camera_settings[cam_id]['cam_type']
+            if intrinsic == 'auto': 
+                W, H = resolution
+                if cam_type == 'PerspectiveCamera':
+                    cx = (W - 1) / 2
+                    cy = (H - 1) / 2
+                    fx = fy = W / 2
+                    intrinsic = (cx, cy, fx, fy)
+                if cam_type == 'FisheyeCamera':
+                    cx = (W - 1) / 2
+                    cy = (H - 1) / 2
+                    fx = fy = W / 4
+                    intrinsic = (cx, cy, fx, fy, 0.1, 0, 0, 0)
+            camera_class = getattr(vc, camera_settings[cam_id]['cam_type'])
+            self.cameras[cam_id] = camera_class(resolution, extrinsic, intrinsic)            
+    
+    def __call__(self, *transformables, **kwargs):
+        for transformable in transformables:
+            if isinstance(transformable, (CameraImageSet, CameraSegMaskSet, CameraDepthSet)):
+                for t_sub in transformable.transformables.values():
+                    cam_id = t_sub.cam_id
+                    if cam_id in self.cam_ids:
+                        t_sub.render_camera(self.cameras[cam_id])
+            elif isinstance(transformable, (CameraImage, CameraSegMask, CameraDepth)):
+                cam_id = transformable.cam_id
+                if cam_id in self.cam_ids:
+                    transformable.render_camera(self.cameras[cam_id])
+        return transformables
+
+
 
 
 class RandomRenderExtrinsic(RandomTransform):

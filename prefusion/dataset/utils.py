@@ -1,18 +1,21 @@
-from typing import List, Union, Dict, TYPE_CHECKING
-from pathlib import Path
 import copy
+from typing import List, Union, Dict, TYPE_CHECKING, Any
+from pathlib import Path
+from cachetools import cached, Cache
 
 import torch
 import mmcv
 import numpy as np
 from pypcd_imp import pypcd
 
-from prefusion.registry import TRANSFORMS, MODEL_FEEDERS, TRANSFORMABLE_LOADERS, TENSOR_SMITHS
+from prefusion.registry import TRANSFORMS, MODEL_FEEDERS, TRANSFORMABLE_LOADERS, TENSOR_SMITHS, DATASET_TOOLS, GROUP_SAMPLERS
 
 if TYPE_CHECKING:
     from .transform import Transform
     from .model_feeder import BaseModelFeeder
     from .transformable_loader import TransformableLoader
+    from .subepoch_manager import SubEpochManager
+    from .group_sampler import GroupSampler
 
 INF_DIST = 1e8
 
@@ -58,6 +61,13 @@ def _sign(x):
     return 2 * (x > 0) - 1
 
 
+def divide(dividend, divisor, drop_last=False):
+    if drop_last:
+        return dividend // divisor
+    else:
+        return int(np.ceil(dividend / divisor))
+
+
 def make_seed(base_number: int, *variables, base=17) -> int:
     """Create a new Integer seed based on `base_number` and extra varying input values such as i=0,1,2,...; j=0,1,2,... 
 
@@ -87,6 +97,7 @@ def get_cam_type(name):
         raise ValueError('Unknown camera type')
 
 
+@cached(cache=Cache(maxsize=float('inf')), key=lambda cfg: str(sorted((cfg or {}).items())))
 def build_tensor_smith(tensor_smith: dict = None):
     tensor_smith = copy.deepcopy(tensor_smith)
     if isinstance(tensor_smith, dict):
@@ -122,6 +133,25 @@ def build_model_feeder(model_feeder: Union["BaseModelFeeder", dict]) -> "BaseMod
     if isinstance(model_feeder, dict):
         return MODEL_FEEDERS.build(model_feeder)
     return model_feeder
+
+
+def build_group_sampler(group_sampler: Union["GroupSampler", dict]) -> "GroupSampler":
+    if group_sampler is None:
+        raise ValueError("Group sampler is mandantory for dataset.")
+    group_sampler = copy.deepcopy(group_sampler)
+    if isinstance(group_sampler, dict):
+        return GROUP_SAMPLERS.build(group_sampler)
+    return group_sampler
+
+
+def build_subepoch_manager(subepoch_manager: Union["SubEpochManager", dict], batch_size: int):
+    if subepoch_manager is None:
+        return None
+    subepoch_manager = copy.deepcopy(subepoch_manager)
+    if isinstance(subepoch_manager, dict):
+        subepoch_manager = DATASET_TOOLS.build(subepoch_manager)
+    subepoch_manager.set_batch_size(batch_size)
+    return subepoch_manager
 
 def read_pcd(path: Union[str, Path], intensity: bool = True) -> np.ndarray:
     """read pcd file

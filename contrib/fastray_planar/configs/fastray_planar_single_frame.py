@@ -209,10 +209,11 @@ train_dataset = dict(
             tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range))
     ),
     transforms=transforms,
-    phase="train",
+    group_sampler=dict(type="IndexGroupSampler",
+                       phase="train",
+                       possible_group_sizes=1,
+                       possible_frame_intervals=1),
     batch_size=batch_size,
-    possible_group_sizes=1,
-    possible_frame_intervals=1,
 )
 
 ## dataloader configs

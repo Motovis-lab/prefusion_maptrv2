@@ -599,57 +599,33 @@ def test_parking_slot_3d_flip_y_multiple_slots(vertical_parkslot, horizontal_par
 def occ_sdf_bev():
     return OccSdfBev(
         "occ_sdf_bev",
-        src_view_range=[-50, 50, -50, 50, -2, 2],
-        occ=np.array([
-            [[1, 1, 1, 0],
-             [0, 0, 1, 0],
-             [0, 0, 0, 0]],
-
-            [[1, 1, 1, 1],
-             [0, 0, 0, 0],
-             [1, 0, 0, 0]],
-        ], dtype=np.float32),
-        sdf=np.array([
-            [[0.1, 0.1, 0.1, 0.1],
-             [0.4, 0.3, 0.1, 0.2],
-             [0.2, 0.9, 0.3, 1.1]]
-        ], dtype=np.float32),
-        height=np.array([
-            [[ 0.1, 0.1, 0.1, 0.2],
-             [ 0.0, 0.1, 0.2, 0.3],
-             [-0.1, 0.0, 0.2, 0.4]]
-        ], dtype=np.float32),
-        dictionary={},
+        src_voxel_range=[[-2, 2], [-3, 3], [-4, 4]],
+        occ=np.array([[[1., 1.],
+                       [1., 1.],
+                       [1., 1.],
+                       [0., 1.]],
+                      [[0., 0.],
+                       [0., 0.],
+                       [1., 0.],
+                       [0., 0.]],
+                      [[0., 1.],
+                       [0., 0.],
+                       [0., 0.],
+                       [0., 0.]]], dtype=np.float32),
+        sdf=None,
+        height=np.array([[ 0.1, 0.1, 0.1, 0.2],
+                         [ 0.0, 0.1, 0.2, 0.3],
+                         [-0.1, 0.0, 0.2, 0.4]], 
+                        dtype=np.float32)
     )
 
-def test_occ_sdf_bev(occ_sdf_bev):
-    np.testing.assert_almost_equal(occ_sdf_bev.mask, np.ones((1, 3, 4)))
+def test_occ_sdf_bev(occ_sdf_bev: OccSdfBev):
+    np.testing.assert_almost_equal(occ_sdf_bev.mask, np.ones((3, 4)))
     assert occ_sdf_bev._bev_shape == (3, 4)
 
 
 def test_occ_sdf_bev_flip_y(occ_sdf_bev):
     return
-    flip_mat = np.array([[1, 0, 0], [0, -1, 0], [0, 0, 1]])
-    occ_sdf_bev.flip_3d(flip_mat)
-    np.testing.assert_almost_equal(occ_sdf_bev.occ, np.array([
-        [[0, 1, 1, 1],
-         [0, 1, 0, 0],
-         [0, 0, 0, 0]],
-
-        [[1, 1, 1, 1], 
-         [0, 0, 0, 0],
-         [0, 0, 0, 1]],
-    ]))
-    np.testing.assert_almost_equal(occ_sdf_bev.sdf, np.array([
-        [[0.1, 0.1, 0.1, 0.1],
-         [0.2, 0.1, 0.3, 0.4],
-         [1.1, 0.3, 0.9, 0.2]]
-    ]))
-    np.testing.assert_almost_equal(occ_sdf_bev.height, np.array([
-        [[ 0.2, 0.1, 0.1, 0.1],
-         [ 0.3, 0.2, 0.1, 0.0],
-         [0.4, 0.2, 0.0, -0.1]]
-    ]))
 
 
 @pytest.fixture()

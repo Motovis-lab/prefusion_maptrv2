@@ -11,14 +11,14 @@ from .voxel_lut import VoxelLookUpTableGenerator
 
 from prefusion.dataset import (
     CameraImageSet, EgoPoseSet, LidarPoints,
-    Bbox3D, Polyline3D, ParkingSlot3D
+    Bbox3D, Polyline3D, ParkingSlot3D, OccSdfBev
 )
 
 from prefusion.dataset.tensor_smith import (
     PlanarBbox3D, PlanarSquarePillar,
     PlanarCylinder3D, PlanarOrientedCylinder3D,
-    PlanarPolyline3D, PlanarPolygon3D, PlanarSegBev,
-    PlanarParkingSlot3D
+    PlanarPolyline3D, PlanarPolygon3D,
+    PlanarParkingSlot3D, PlanarOccSdfBev
 )
 
 
@@ -138,7 +138,7 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
                         delta_T[:3, :3] = torch.tensor(delta_rotation)
                         delta_T[:3, 3:] = torch.tensor(delta_translation)
                         processed_frame_batch['delta_poses'].append(delta_T)
-                    case Bbox3D() | Polyline3D() | ParkingSlot3D():
+                    case Bbox3D() | Polyline3D() | ParkingSlot3D() | OccSdfBev():
                         annotation_tensor = transformable.tensor
                         anno_ts = transformable.tensor_smith
                         match anno_ts:
@@ -148,11 +148,12 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
                                 anno_batch_dict[transformable.name]['cen'].append(annotation_tensor['cen'])
                                 anno_batch_dict[transformable.name]['seg'].append(annotation_tensor['seg'])
                                 anno_batch_dict[transformable.name]['reg'].append(annotation_tensor['reg'])
-                            case PlanarPolyline3D() | PlanarPolygon3D():
+                            case PlanarPolyline3D() | PlanarPolygon3D() | PlanarOccSdfBev():
                                 anno_batch_dict[transformable.name]['seg'].append(annotation_tensor['seg'])
                                 anno_batch_dict[transformable.name]['reg'].append(annotation_tensor['reg'])
                             case _:
                                 anno_batch_dict[transformable.name].append(annotation_tensor)
+
         # tensorize batches
         for cam_id in processed_frame_batch['camera_tensors']:
             processed_frame_batch['camera_tensors'][cam_id] = torch.stack(
@@ -168,3 +169,10 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
             elif all(isinstance(data, torch.Tensor) for data in data_batch):
                 anno_batch_dict[transformable_name] = torch.stack(data_batch)
         return defaultdict2dict(processed_frame_batch)
+    
+    def __call__(self, group_batch: list):
+        processed_group_batch = []
+        for frame_batch in group_batch:
+            processed_group_batch.append(self.process(frame_batch))
+        
+        return processed_group_batch

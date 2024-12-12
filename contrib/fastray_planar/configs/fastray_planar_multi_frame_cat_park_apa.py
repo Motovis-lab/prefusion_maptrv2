@@ -8,31 +8,25 @@ custom_imports = dict(
 ## camera and voxel feature configs
 feature_downscale = 4
 default_camera_feature_config = dict(
-    ray_distance_num_channel=64,
-    ray_distance_start=0.25,
-    ray_distance_step=0.25,
+    ray_distance_num_channel=32,
+    ray_distance_start=0.5,
+    ray_distance_step=0.5,
     feature_downscale=feature_downscale)
 
 camera_feature_configs = dict(
-    VCAMERA_PERSPECTIVE_FRONT=default_camera_feature_config,
-    VCAMERA_PERSPECTIVE_FRONT_LEFT=default_camera_feature_config,
-    VCAMERA_PERSPECTIVE_FRONT_RIGHT=default_camera_feature_config,
-    VCAMERA_PERSPECTIVE_BACK_LEFT=default_camera_feature_config,
-    VCAMERA_PERSPECTIVE_BACK_RIGHT=default_camera_feature_config,
-    VCAMERA_PERSPECTIVE_BACK=default_camera_feature_config,
     VCAMERA_FISHEYE_FRONT=default_camera_feature_config,
     VCAMERA_FISHEYE_LEFT=default_camera_feature_config,
     VCAMERA_FISHEYE_BACK=default_camera_feature_config,
     VCAMERA_FISHEYE_RIGHT=default_camera_feature_config)
 
-voxel_shape = (6, 320, 160)  # Z, X, Y in ego system
-voxel_range = ([-0.5, 2.5], [36, -12], [12, -12])
+voxel_shape = (8, 160, 120)  # Z, X, Y in ego system
+voxel_range = ([-1, 3], [12, -12], [9, -9])
 
 voxel_feature_config = dict(
     voxel_shape=voxel_shape, 
     voxel_range=voxel_range,
-    ego_distance_max=40,
-    ego_distance_step=5)
+    ego_distance_max=16,
+    ego_distance_step=2)
 
 ## dictionaries and mappings for different types of tasks
 
@@ -144,37 +138,18 @@ dictionary_polygons = dict(
 
 ## camera configs for model inputs
 
-camera_groups = dict(
-    pv_front=['VCAMERA_PERSPECTIVE_FRONT'],
-    pv_sides=['VCAMERA_PERSPECTIVE_FRONT_LEFT',
-              'VCAMERA_PERSPECTIVE_FRONT_RIGHT',
-              'VCAMERA_PERSPECTIVE_BACK_LEFT',
-              'VCAMERA_PERSPECTIVE_BACK_RIGHT',
-              'VCAMERA_PERSPECTIVE_BACK'],
-    fisheyes=['VCAMERA_FISHEYE_FRONT',
-              'VCAMERA_FISHEYE_LEFT',
-              'VCAMERA_FISHEYE_BACK',
-              'VCAMERA_FISHEYE_RIGHT'])
+fisheye_cameras=['VCAMERA_FISHEYE_FRONT',
+                 'VCAMERA_FISHEYE_LEFT',
+                 'VCAMERA_FISHEYE_BACK',
+                 'VCAMERA_FISHEYE_RIGHT']
 
-resolution_pv_front = (640, 320)
-resolution_pv_sides = (512, 320)
-resolution_fisheyes = (512, 320)
+fisheye_resolution = (640, 384)
 
 camera_resolution_configs = dict(
-    VCAMERA_PERSPECTIVE_FRONT=resolution_pv_front,
-    VCAMERA_PERSPECTIVE_FRONT_LEFT=resolution_pv_sides,
-    VCAMERA_PERSPECTIVE_FRONT_RIGHT=resolution_pv_sides,
-    VCAMERA_PERSPECTIVE_BACK_LEFT=resolution_pv_sides,
-    VCAMERA_PERSPECTIVE_BACK_RIGHT=resolution_pv_sides,
-    VCAMERA_PERSPECTIVE_BACK=resolution_pv_sides,
-    VCAMERA_FISHEYE_FRONT=resolution_fisheyes,
-    VCAMERA_FISHEYE_LEFT=resolution_fisheyes,
-    VCAMERA_FISHEYE_BACK=resolution_fisheyes,
-    VCAMERA_FISHEYE_RIGHT=resolution_fisheyes)
-
-camera_intrinsic_configs = dict(
-    VCAMERA_PERSPECTIVE_FRONT=[319.5, 159.5, 640, 640],
-)
+    VCAMERA_FISHEYE_FRONT=fisheye_resolution,
+    VCAMERA_FISHEYE_LEFT=fisheye_resolution,
+    VCAMERA_FISHEYE_BACK=fisheye_resolution,
+    VCAMERA_FISHEYE_RIGHT=fisheye_resolution)
 
 
 debug_mode = True
@@ -182,32 +157,32 @@ debug_mode = True
 if debug_mode:
     batch_size = 1
     num_workers = 1
-    transforms = [
-        dict(type='RenderIntrinsic', 
-             resolutions=camera_resolution_configs,
-             intrinsics=camera_intrinsic_configs)
-    ]
-    possible_group_sizes=2,
+    transforms = [dict(type='RenderIntrinsic', resolutions=camera_resolution_configs)]
+    possible_group_sizes = 2
 else:
     batch_size = 4
     num_workers = 4
     transforms = [
         dict(type='RandomRenderExtrinsic'),
-        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
-        dict(type='RandomRotateSpace'),
+        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs),
+        dict(type='RandomRotateSpace', angles=(0, 0, 90), prob_inverse_cameras_rotation=0),
         dict(type='RandomMirrorSpace'),
         dict(type='RandomImageISP', prob=0.2),
         dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
         dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
-    possible_group_sizes=2,
+    possible_group_sizes = 2
 
 
 ## GroupBatchDataset configs
 
 # transformables
 transformables=dict(
-    camera_images=dict(type='CameraImageSet', tensor_smith=dict(type='CameraImageTensor')),
+    camera_images=dict(
+        type='CameraImageSet', 
+        loader=dict(type='CameraImageSetLoader',
+                    selected_cameras=fisheye_cameras),
+        tensor_smith=dict(type='CameraImageTensor')),
     ego_poses=dict(type='EgoPoseSet'),
     bbox_3d_heading=dict(
         type='Bbox3D', 
@@ -249,7 +224,11 @@ transformables=dict(
         tensor_smith=dict(type='PlanarPolygon3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
     parkingslot_3d=dict(
         type='ParkingSlot3D', dictionary=dict(classes=['class.parking.parking_slot']),
-        tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range))
+        tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+    # occ_sdf_bev=dict(
+    #     type='OccSdfBev',
+    #     src_voxel_range=[[-1, 3], [-12.8, 38.4], [25.6, -25.6]],
+    #     tensor_smith=dict(type='PlanarOccSdfBev', voxel_shape=voxel_shape, voxel_range=voxel_range)),
 )
 
 # datasets
@@ -258,6 +237,7 @@ train_dataset = dict(
     name="demo_parking",
     data_root='../MV4D-PARKING',
     info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
+    # info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -270,6 +250,13 @@ train_dataset = dict(
                        possible_group_sizes=possible_group_sizes,
                        possible_frame_intervals=10),
     batch_size=batch_size,
+    subepoch_manager=dict(type="SubEpochManager",
+                          batch_size=batch_size,
+                          num_group_batches_per_subepoch=500,
+                          drop_last_group_batch=False,
+                          drop_last_subepoch=False,
+                          verbose=True,
+                          debug_mode=True),
 )
 
 val_dataset = dict(
@@ -285,11 +272,7 @@ val_dataset = dict(
         debug_mode=debug_mode
     ),
     transformables=transformables,
-    transforms=[
-        dict(type='RenderIntrinsic', 
-             resolutions=camera_resolution_configs,
-             intrinsics=camera_intrinsic_configs)
-    ],
+    transforms=[dict(type='RenderIntrinsic', resolutions=camera_resolution_configs)],
     group_sampler=dict(type="IndexGroupSampler",
                        phase="train",
                        possible_group_sizes=10,
@@ -318,18 +301,18 @@ val_dataloader = dict(
 ## model configs
 bev_mode = True
 # backbones
-camera_feat_channels = 128
-backbones = dict(
-    pv_front=dict(type='VoVNetFPN', out_stride=feature_downscale, out_channels=camera_feat_channels),
-    pv_sides=dict(type='VoVNetFPN', out_stride=feature_downscale, out_channels=camera_feat_channels),
-    fisheyes=dict(type='VoVNetFPN', out_stride=feature_downscale, out_channels=camera_feat_channels))
+camera_feat_channels = 64
+backbone = dict(type='VoVNetSlimFPN', out_channels=camera_feat_channels)
 # spatial_transform
 spatial_transform = dict(
     type='FastRaySpatialTransform',
     voxel_shape=voxel_shape,
     fusion_mode='bilinear_weighted',
     # fusion_mode='weighted',
-    bev_mode=bev_mode)
+    bev_mode=bev_mode,
+    reduce_channels=True,
+    in_channels=camera_feat_channels * voxel_shape[0],
+    out_channels=64)
 # temporal_transform
 temporal_transform = dict(
     type='VoxelTemporalAlign',
@@ -337,12 +320,18 @@ temporal_transform = dict(
     voxel_range=voxel_range,
     bev_mode=bev_mode,
     interpolation='bilinear')
-# voxel fusion
+## voxel encoder
+voxel_encoder = dict(
+    type='VoxelEncoderFPN', 
+    in_channels=64, 
+    mid_channels_list=[64, 96, 128],
+    out_channels=64,
+    repeats=[3, 3, 3])
+# temporal fusion
 pre_nframes = 1
-# voxel_fusion = dict(type='EltwiseAdd')
 voxel_fusion = dict(
     type='VoxelConcatFusion',
-    in_channels=camera_feat_channels * voxel_shape[0],
+    in_channels=64,
     pre_nframes=pre_nframes,
     bev_mode=bev_mode)
 
@@ -364,103 +353,187 @@ all_bbox_3d_reg_channels = sum([
     13   # bbox_3d_oriented_cylinder
 ])
 heads = dict(
-    voxel_encoder=dict(type='VoVNetEncoder', 
-                       in_channels=camera_feat_channels * voxel_shape[0], 
-                       mid_channels=128,
-                       out_channels=128,
-                       repeat=3),
-    bbox_3d=dict(type='PlanarHead',
-                 in_channels=128,
-                 mid_channels=128,
+    bbox_3d=dict(type='PlanarHeadSimple',
+                 in_channels=64,
+                 mid_channels=64,
                  cen_seg_channels=all_bbox_3d_cen_seg_channels,
                  reg_channels=all_bbox_3d_reg_channels),
-    polyline_3d=dict(type='PlanarHead',
-                     in_channels=128,
-                     mid_channels=128,
+    polyline_3d=dict(type='PlanarHeadSimple',
+                     in_channels=64,
+                     mid_channels=64,
                      cen_seg_channels=1 + 8 + 2 + 4,
                      reg_channels=7 + 7),
-    parkingslot_3d=dict(type='PlanarHead',
-                        in_channels=128,
-                        mid_channels=128,
+    parkingslot_3d=dict(type='PlanarHeadSimple',
+                        in_channels=64,
+                        mid_channels=64,
                         cen_seg_channels=5,
-                        reg_channels=15)
+                        reg_channels=15),
+    # occ_sdf_bev=dict(type='PlanarHeadSimple',
+    #                  in_channels=64,
+    #                  mid_channels=64,
+    #                  cen_seg_channels=3,
+    #                  reg_channels=2)
 )
 
 # loss configs
 bbox_3d_heading_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=5,
              fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
-             dual_focal_loss_weight=2),
-    reg=dict(loss_weight=1.0))
+             iou_loss_weight=5,
+             dual_focal_loss_weight=10),
+    reg=dict(loss_weight=1.0,
+             partition_weights={
+                "center_xy": {"weight": 2, "slice": (0, 2)},
+                "center_z": {"weight": 5, "slice": 2},
+                "size": {"weight": 5, "slice": (3, 6)},
+                "unit_xvec": {"weight": 10, "slice": (6, 9)},
+                "abs_xvec": {"weight": 20, "slice": (9, 14)},
+                "abs_roll_angle": {"weight": 5, "slice": (14, 17)},
+                "velo": {"weight": 5, "slice": (17, 20)},
+            })
+)
 
 bbox_3d_plane_heading_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=5,
              fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
-             dual_focal_loss_weight=2),
-    reg=dict(loss_weight=1.0))
+             iou_loss_weight=5,
+             dual_focal_loss_weight=10),
+    reg=dict(loss_weight=1.0,
+             partition_weights={
+                "center_xy": {"weight": 2, "slice": (0, 2)},
+                "center_z": {"weight": 5, "slice": 2},
+                "size": {"weight": 5, "slice": (3, 6)},
+                "unit_xvec": {"weight": 10, "slice": (6, 9)},
+                "abs_xvec": {"weight": 20, "slice": (9, 14)},
+                "abs_roll_angle": {"weight": 5, "slice": (14, 17)},
+                "velo": {"weight": 1, "slice": (17, 20)},
+            })
+)
 
 bbox_3d_no_heading_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=5,
              fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
-             dual_focal_loss_weight=2),
-    reg=dict(loss_weight=1.0))
+             iou_loss_weight=5,
+             dual_focal_loss_weight=10),
+    reg=dict(loss_weight=1.0,
+             partition_weights={
+                "center_xy": {"weight": 2, "slice": (0, 2)},
+                "center_z": {"weight": 5, "slice": 2},
+                "size": {"weight": 5, "slice": (3, 6)},
+                "abs_xvec": {"weight": 20, "slice": (6, 11)},
+                "abs_roll_angle": {"weight": 5, "slice": (11, 14)},
+            })
+)
 
 bbox_3d_square_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=5,
              fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
-             dual_focal_loss_weight=2),
-    reg=dict(loss_weight=1.0))
+             iou_loss_weight=5,
+             dual_focal_loss_weight=10),
+    reg=dict(loss_weight=1.0,
+             partition_weights={
+                "center_xy": {"weight": 2, "slice": (0, 2)},
+                "center_z": {"weight": 5, "slice": 2},
+                "size": {"weight": 5, "slice": (3, 6)},
+                "unit_zvec": {"weight": 20, "slice": (6, 9)},
+                "yaw_angle": {"weight": 5, "slice": (9, 11)},
+            })
+)
 
 bbox_3d_cylinder_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=5,
              fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
-             dual_focal_loss_weight=2),
-    reg=dict(loss_weight=1.0))
+             iou_loss_weight=5,
+             dual_focal_loss_weight=10),
+    reg=dict(loss_weight=1.0,
+             partition_weights={
+                "center_xy": {"weight": 2, "slice": (0, 2)},
+                "center_z": {"weight": 5, "slice": 2},
+                "size": {"weight": 5, "slice": (3, 5)},
+                "unit_zvec": {"weight": 20, "slice": (5, 8)},
+            })
+)
 
 bbox_3d_oriented_cylinder_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=5,
              fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
-             dual_focal_loss_weight=2),
-    reg=dict(loss_weight=1.0))
+             iou_loss_weight=5,
+             dual_focal_loss_weight=10),
+    reg=dict(loss_weight=1.0,
+             partition_weights={
+                "center_xy": {"weight": 2, "slice": (0, 2)},
+                "center_z": {"weight": 5, "slice": 2},
+                "size": {"weight": 5, "slice": (3, 5)},
+                "unit_zvec": {"weight": 20, "slice": (5, 8)},
+                "yaw_angle": {"weight": 5, "slice": (8, 10)},
+                "velo": {"weight": 5, "slice": (10, 13)},
+            })
+)
 
 polyline_3d_weight_scheme = dict(
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=2,
-             dual_focal_loss_weight=5),
-    reg=dict(loss_weight=1.0))
+             iou_loss_weight=5,
+             dual_focal_loss_weight=10),
+    reg=dict(loss_weight=1.0,
+             partition_weights={
+                "dist": {"weight": 2, "slice": (0, 1)},
+                "vec": {"weight": 2, "slice": (1, 3)},
+                "dir": {"weight": 20, "slice": (3, 6)},
+                "height": {"weight": 5, "slice": (6, 7)},
+            })
+)
 
 polygon_3d_weight_scheme = dict(
-    seg=dict(loss_weight=1.0,
-             iou_loss_weight=2,
-             dual_focal_loss_weight=5),
-    reg=dict(loss_weight=1.0))
+    seg=dict(loss_weight=2,
+             iou_loss_weight=5,
+             dual_focal_loss_weight=10),
+    reg=dict(loss_weight=0.5,
+             partition_weights={
+                "dist": {"weight": 2, "slice": (0, 1)},
+                "vec": {"weight": 2, "slice": (1, 3)},
+                "dir": {"weight": 20, "slice": (3, 6)},
+                "height": {"weight": 5, "slice": (6, 7)},
+            })
+)
 
 parkingslot_3d_weight_scheme = dict(
-    cen=dict(loss_weight=1,
+    cen=dict(loss_weight=5,
              fg_weight=2,
              bg_weight=0.5),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
-             dual_focal_loss_weight=2),
-    reg=dict(loss_weight=1.0))
+             iou_loss_weight=5,
+             dual_focal_loss_weight=10),
+    reg=dict(loss_weight=1,
+             partition_weights={
+                "dist": {"weight": 5, "slice": (0, 4)},
+                "dir": {"weight": 20, "slice": (4, 10)},
+                "vec": {"weight": 10, "slice": (10, 14)},
+                "height": {"weight": 5, "slice": (14, 15)},
+            })
+)
+
+# occ_sdf_bev_weight_scheme = dict(
+#     seg=dict(loss_weight=1.0,
+#              iou_loss_weight=5,
+#              dual_focal_loss_weight=10),
+#     reg=dict(loss_weight=10,
+#              partition_weights={
+#                 "sdf": {"weight": 1, "slice": (0, 1)},
+#                 "height": {"weight": 1, "slice": (1, 2)},
+#             })
+# )
 
 loss_cfg = dict(
     bbox_3d_heading=dict(
@@ -498,21 +571,26 @@ loss_cfg = dict(
     parkingslot_3d=dict(
         type='PlanarLoss',
         loss_name_prefix='parkingslot_3d',
-        weight_scheme=parkingslot_3d_weight_scheme)
+        weight_scheme=parkingslot_3d_weight_scheme),
+    # occ_sdf_bev=dict(
+    #     type='PlanarLoss',
+    #     loss_name_prefix='occ_sdf_bev',
+    #     weight_scheme=occ_sdf_bev_weight_scheme),
 )
 
 # integrated model config
 model = dict(
-    type='ParkingFastRayPlanarMultiFrameModel',
-    camera_groups=camera_groups,
-    backbones=backbones,
+    type='ParkingFastRayPlanarMultiFrameModelAPA',
+    backbone=backbone,
     spatial_transform=spatial_transform,
     temporal_transform=temporal_transform,
     voxel_fusion=voxel_fusion,
+    voxel_encoder=voxel_encoder,
     heads=heads,
     loss_cfg=loss_cfg,
     debug_mode=debug_mode,
     pre_nframes=pre_nframes,
+    voxel_fusion_before_encoder=True
 )
 
 ## log_processor
@@ -520,7 +598,7 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=20, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
 
 ## evaluator and metrics
@@ -536,7 +614,7 @@ optim_wrapper = dict(
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[24, 36, 48])
+param_scheduler = dict(type='MultiStepLR', milestones=[10, 15, 18])
 
 
 env_cfg = dict(
@@ -545,9 +623,17 @@ env_cfg = dict(
 )
 
 
-# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_1120"
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_1122_val"
-# load_from = "./work_dirs/collected_models/parking_multi_frame_14.pth"
-load_from = "./work_dirs/collected_models/parking_multi_frame_20.pth"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1127"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1128_val"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1129_val"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1129"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1130"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1201"
+work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1204"
+# load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
+# load_from = "./work_dirs/collected_models/apa_epoch_10.pth"
+# load_from = "./work_dirs/collected_models/apa_epoch_20_enhanced.pth"
+# load_from = "./work_dirs/collected_models/apa_epoch_20_better.pth"
+load_from = "./work_dirs/collected_models/apa_epoch_14_tf.pth"
 
 resume = False

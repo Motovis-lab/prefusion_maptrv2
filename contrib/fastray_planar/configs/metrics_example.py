@@ -211,10 +211,11 @@ train_dataset = dict(
             tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range))
     ),
     transforms=transforms,
-    phase="train",
+    group_sampler=dict(type="IndexGroupSampler",
+                       phase="train",
+                       possible_group_sizes=4,
+                       possible_frame_intervals=5),
     batch_size=batch_size,
-    possible_group_sizes=4,
-    possible_frame_intervals=5,
 )
 
 val_dataset = dict(
@@ -253,10 +254,11 @@ val_dataset = dict(
             tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range))
     ),
     transforms=[dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs)],
-    phase="val",
+    group_sampler=dict(type="IndexGroupSampler",
+                       phase="val",
+                       possible_group_sizes=4,
+                       possible_frame_intervals=5),
     batch_size=1,
-    possible_group_sizes=4,
-    possible_frame_intervals=5,
 )
 
 ## dataloader configs

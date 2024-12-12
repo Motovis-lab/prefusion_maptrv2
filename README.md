@@ -47,7 +47,8 @@
   - resume
 - Dataset及相关组件
   - GroupBatchDataset
-  - DistributedGroupSampler
+  - GroupSampler
+  - SubEpochManager
   - collate_fn 
   - Transforms
   - Transformables
@@ -320,7 +321,7 @@ docker build -t prefusion:lastest .
 Pull from Dockerhub
 
 ```bash
-docker pull brianlan/prefusion:v2
+docker pull brianlan/prefusion:v8
 ```
 
 Run with docker

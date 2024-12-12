@@ -10,7 +10,7 @@ from prefusion.dataset.transform import (
     random_transform_class_factory,
     CameraImage, CameraImageSet,
     RandomSetIntrinsicParam, RandomSetExtrinsicParam,
-    RenderIntrinsic, RenderExtrinsic, RandomRenderExtrinsic,
+    RenderIntrinsic, RenderExtrinsic, RenderVirtualCamera, RandomRenderExtrinsic,
     RandomChooseKTransform, RandomBrightness, RandomSharpness, RandomImEqualize,
     RandomRotateSpace
 )
@@ -151,6 +151,33 @@ def test_render_extrinsic(fisheye_image, perspective_image, camera_imageset):
     )
     np.testing.assert_almost_equal(camera_imageset.transformables['front'].img, answer_perspective_img)
 
+
+def test_render_virtual_camera(fisheye_image, perspective_image, camera_imageset):
+    cameras = {
+        'VCAMERA_FISHEYE_FRONT': dict(
+            cam_type='FisheyeCamera',
+            resolution=(96, 48),
+            euler_angles=[-120, 0, -90],
+            translation=[3.5, 0, 0.5],
+            intrinsic='auto'
+        ),
+        'VCAMERA_PERSPECTIVE_FRONT': dict(
+            cam_type='PerspectiveCamera',
+            resolution=(96, 48),
+            euler_angles=[-90, 0, -90],
+            translation=[2, 0, 1.5],
+            intrinsic='auto'
+        )
+    }
+    transform = RenderVirtualCamera(cameras)
+    transform(fisheye_image, perspective_image, camera_imageset)
+    answer_fisheye_img = mmcv.imread('tests/prefusion/transform/test_render_imgs/test_fisheye_render_intrinsic_result.png')
+    answer_perspective_img = mmcv.imread('tests/prefusion/transform/test_render_imgs/test_perspective_render_intrinsic_result.png')
+    np.testing.assert_almost_equal(fisheye_image.img, answer_fisheye_img)
+    np.testing.assert_almost_equal(fisheye_image.intrinsic, [47.5, 23.5, 24.0, 24.0, 0.1, 0, 0, 0])
+    np.testing.assert_almost_equal(perspective_image.img, answer_perspective_img)
+    np.testing.assert_almost_equal(perspective_image.intrinsic, [47.5, 23.5, 48.0, 48.0])
+    np.testing.assert_almost_equal(camera_imageset.transformables['front'].img, answer_perspective_img)
 
 
 def test_random_render_extrinsic(fisheye_image, perspective_image, camera_imageset):

@@ -52,9 +52,13 @@ RUN apt-get update \
 
 # install pytorch3d
 RUN pip install --no-cache-dir --extra-index-url https://miropsota.github.io/torch_packages_builder pytorch3d==0.7.8+pt2.4.1cu121
+# COPY ./pytorch3d-0.7.8+pt2.4.1cu121-cp310-cp310-linux_x86_64.whl /pytorch3d-0.7.8+pt2.4.1cu121-cp310-cp310-linux_x86_64.whl
+# RUN pip install --no-cache-dir /pytorch3d-0.7.8+pt2.4.1cu121-cp310-cp310-linux_x86_64.whl
+# RUN rm -rf /pytorch3d-0.7.8+pt2.4.1cu121-cp310-cp310-linux_x86_64.whl
 
 # install extra python packages
 RUN pip install --no-cache-dir copious==0.1.23
+RUN pip install --no-cache-dir redis==5.2.0
 
 WORKDIR /workspace
 
