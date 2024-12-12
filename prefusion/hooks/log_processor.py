@@ -1,12 +1,14 @@
 import copy
 import datetime
 import re
+import math
 from collections import OrderedDict
 from itertools import chain
 from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
+from tabulate import tabulate
 
 from prefusion.registry import LOG_PROCESSORS
 from mmengine.runner.log_processor import LogProcessor
@@ -15,8 +17,22 @@ from mmengine.device import is_cuda_available, is_musa_available
 
 @LOG_PROCESSORS.register_module()
 class GroupAwareLogProcessor(LogProcessor):
-    def __init__(self, window_size=10, by_epoch=True, custom_cfg: List[dict] | None = None, num_digits: int = 4, log_with_hierarchy: bool = False, mean_pattern=r'.*(loss|time|data_time|grad_norm).*'):
+    def __init__(
+        self, 
+        window_size=10, 
+        by_epoch=True, 
+        custom_cfg: List[dict] | None = None, 
+        num_digits: int = 4, 
+        tabulate: bool = True, 
+        tabulate_ncols: int = 3, 
+        tabulate_fmt: str = "rounded_outline", 
+        log_with_hierarchy: bool = False, 
+        mean_pattern=r'.*(loss|time|data_time|grad_norm).*'
+    ):
         super().__init__(window_size, by_epoch, custom_cfg, num_digits, log_with_hierarchy, mean_pattern)
+        self.tabulate = tabulate
+        self.tabulate_ncols = tabulate_ncols
+        self.tabulate_fmt = tabulate_fmt
 
     def _get_dataloader_size(self, runner, mode) -> int:
         """Get dataloader size of current loop.
@@ -144,15 +160,41 @@ class GroupAwareLogProcessor(LogProcessor):
             log_str += f'memory: {max_memory}  '
             tag['memory'] = max_memory
 
+        # Deal with total loss
+        if "loss" in log_tag:
+            log_str += f'loss: {log_tag["loss"]:.{self.num_digits}f}  '
+            log_tag.pop('loss')
+
+        # Deal with gradnorm (if applicable)
+        if "grad_norm" in log_tag:
+            log_str += f'grad_norm: {log_tag["grad_norm"]:.{self.num_digits}f}  '
+            log_tag.pop('grad_norm')
+
         # Loop left keys to fill `log_str`.
         if mode in ('train', 'val'):
-            log_items = []
-            for name, val in log_tag.items():
-                if mode == 'val' and not name.startswith('val/loss'):
-                    continue
-                if isinstance(val, float):
-                    val = f'{val:.{self.num_digits}f}'
-                log_items.append(f'{name}: {val}\n')
-            log_str += '  '.join(log_items)
+            if self.tabulate:
+                log_str += self._generate_tabulate_loss_report(log_tag, mode)
+            else:
+                log_str += self._generate_naive_loss_report(log_tag, mode)
         return tag, log_str
-        
+
+    def _generate_tabulate_loss_report(self, log_tag: OrderedDict, mode: str):
+        losses = np.array(list(f"{k}_#_#_{v:.4f}" for k, v in log_tag.items() if mode != 'val' or v.startswith('val/loss')))
+        if len(losses) % self.tabulate_ncols != 0:
+            losses = np.pad(losses, ((0, self.tabulate_ncols - len(losses) % self.tabulate_ncols)), constant_values='plh')
+        losses = losses.reshape(-1, self.tabulate_ncols, order="F").tolist()
+        losses = [[itm for cmb in row if cmb != 'plh' for itm in cmb.split('_#_#_')] for row in losses]
+        return "\n" + tabulate(losses, headers=['loss name', 'value'] * self.tabulate_ncols, tablefmt=self.tabulate_fmt)
+
+    def _generate_naive_loss_report(self, log_tag: OrderedDict, mode: str):
+        log_items = []
+        loss_str = ""
+        for name, val in log_tag.items():
+            if mode == 'val' and not name.startswith('val/loss'):
+                continue
+            if isinstance(val, float):
+                val = f'{val:.{self.num_digits}f}'
+            log_items.append(f'{name}: {val}\n')
+        loss_str += '  '.join(log_items)
+
+        return loss_str
