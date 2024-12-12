@@ -255,7 +255,7 @@ def build_3d_boxes(nusc: NuScenes, cur_sample, lidar_ego_pose):
         ann_info = nusc.get("sample_annotation", ann)
         valid_flag = (ann_info['num_lidar_pts'] + ann_info['num_radar_pts']) > 0  # this logic and naming is aligned with mmdet3d and CMT
         if not valid_flag:
-            logger.debug(f"{ann_info['num_lidar_pts']}, {ann_info['num_radar_pts']}, {ann_info['visibility_token']}")
+            # logger.debug(f"{ann_info['num_lidar_pts']}, {ann_info['num_radar_pts']}, {ann_info['visibility_token']}")
             continue
 
         velocity_world = nusc.box_velocity(ann_info["token"])

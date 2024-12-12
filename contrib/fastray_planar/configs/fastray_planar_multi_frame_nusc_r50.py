@@ -106,7 +106,7 @@ else:
         dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
     possible_group_sizes = 2
-    persistent_workers = False
+    persistent_workers = True
 
 ## Transformables
 transformables = dict(
@@ -178,10 +178,16 @@ train_dataset = dict(
         debug_mode=debug_mode),
     transformables=transformables,
     transforms=transforms,
-    group_sampler=dict(type="IndexGroupSampler",
-                    phase="train",
-                    possible_group_sizes=possible_group_sizes,
-                    possible_frame_intervals=1),
+    # group_sampler=dict(type="IndexGroupSampler",
+    #                 phase="train",
+    #                 possible_group_sizes=possible_group_sizes,
+    #                 possible_frame_intervals=1),
+    group_sampler=dict(type="ClassBalancedGroupSampler",
+                       phase="train",
+                       possible_group_sizes=possible_group_sizes,
+                       possible_frame_intervals=1,
+                       transformable_cfg=transformables,
+                       cbgs_cfg=dict(desired_ratio=0.4)),
     batch_size=batch_size,
 )
 
@@ -245,7 +251,7 @@ backbones = dict(
         norm_cfg=dict(type='SyncBN', requires_grad=True),
         norm_eval=True,
         style='pytorch',
-        # init_cfg=dict(type='Pretrained', checkpoint='./ckpts/resnet50.pth'),
+        init_cfg=dict(type='Pretrained', checkpoint='./ckpts/resnet50.pth'),
         fpn_lateral_channel=128,
         fpn_in_channels=[256, 512, 1024, 2048],
         out_stride=feature_downscale,
@@ -422,11 +428,11 @@ model = dict(
 )
 
 ## log_processor
-log_processor = dict(type='GroupAwareLogProcessor')
+log_processor = dict(type='GroupAwareLogProcessor', tabulate_ncols=3, tabulate_fmt="github")
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=48, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=24, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
 
 ## evaluator and metrics
@@ -447,12 +453,12 @@ optim_wrapper = dict(
     optimizer=dict(type='SGD',
                 lr=0.01,
                 momentum=0.9,
-                weight_decay=0.0001),
+                weight_decay=0.01),
     clip_grad=dict(max_norm=10),
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[20, 44])
+param_scheduler = dict(type='MultiStepLR', milestones=[10, 22])
 
 
 env_cfg = dict(
@@ -473,7 +479,7 @@ today = datetime.datetime.now().strftime("%m%d")
 work_dir = f'./work_dirs/{experiment_name}_{today}'
 # load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
 # load_from = "./ckpts/fastray_planar_single_frame_nusc_4planar_types_1113_epoch_1.pth"
-load_from = "./ckpts/multi_frame_nusc_r50_1203_epoch_48.pth"
+# load_from = "./ckpts/multi_frame_nusc_r50_1203_epoch_48.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_nusc_r50_1125/multi_frame_nusc_r50_epoch_1.pth"
 
 resume = False
