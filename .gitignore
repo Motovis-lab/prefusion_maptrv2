@@ -171,6 +171,8 @@ work_dir
 log
 logs
 ipynb
+ckpts
+checkpoints
 
 
 convert_model_key.py

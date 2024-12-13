@@ -6,7 +6,7 @@ from prefusion.dataset.dataset import GroupBatchDataset
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 from mmengine.runner.amp import autocast
 
-__all__ = ['GroupBatchTrainLoop', 'GroupValLoop', 'GroupTestLoop', 'GroupInferLoop']
+__all__ = ['GroupBatchTrainLoop', 'GroupBatchValLoop', 'GroupBatchTestLoop', 'GroupBatchInferLoop']
 
 @LOOPS.register_module()
 class GroupBatchTrainLoop(EpochBasedTrainLoop):
@@ -63,13 +63,16 @@ class GroupBatchTrainLoop(EpochBasedTrainLoop):
             for frame_idx, frame_batch in enumerate(group_batch):
                 idx = group_idx * self.dataloader.dataset.group_size + frame_idx
                 self.run_iter(idx, frame_batch)
+        
+        if hasattr(self.dataloader.dataset, "post_epoch_processing"):
+            self.dataloader.dataset.post_epoch_processing()
 
         self.runner.call_hook('after_train_epoch')
         self._epoch += 1
 
 
 @LOOPS.register_module()
-class GroupValLoop(ValLoop):
+class GroupBatchValLoop(ValLoop):
     """Loop for validation. For GroupBatchDataset.
 
     Args:
@@ -103,7 +106,7 @@ class GroupValLoop(ValLoop):
 
 
 @LOOPS.register_module()
-class GroupTestLoop(TestLoop):
+class GroupBatchTestLoop(TestLoop):
     """Loop for test. For GroupBatchDataset.
 
     Args:
@@ -137,7 +140,7 @@ class GroupTestLoop(TestLoop):
         
 
 @LOOPS.register_module()
-class GroupInferLoop(ValLoop):
+class GroupBatchInferLoop(ValLoop):
 
     def run(self):
         """Launch validation."""

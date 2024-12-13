@@ -2,6 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from prefusion.registry import MODELS
+
+__all__ = ['seg_iou', 'SegIouLoss', 'dual_focal_loss']
 
 def seg_iou(pred, label, dim=None):
     """
@@ -9,12 +12,13 @@ def seg_iou(pred, label, dim=None):
     shape in (N, C, H, W) or (N, H, W) or (H, W)
     """
     if label.max() == 0:
-        return seg_iou(1 - pred, 1 - label)
+        return seg_iou(1 - pred, 1 - label, dim=dim)
     inter = (pred * label).sum(dim=dim) + 1
     union = (pred + label - pred * label).sum(dim=dim) + 1
     return inter / union
 
 
+@MODELS.register_module()
 class SegIouLoss(nn.Module):
     def __init__(self, method='log', pred_logits=True, reduction_dim=None):
         super().__init__()

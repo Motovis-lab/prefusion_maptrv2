@@ -11,7 +11,7 @@ from prefusion.dataset.transformable_loader import TransformableLoader
 
 
 if TYPE_CHECKING:
-    from prefusion.dataset import IndexInfo
+    from prefusion.dataset.index_info import IndexInfo
 
 
 @TRANSFORMABLE_LOADERS.register_module()

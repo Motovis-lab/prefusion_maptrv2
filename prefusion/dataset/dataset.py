@@ -1,16 +1,17 @@
 # Written by AlphaLFC. All rights reserved.
-
 import os
 import copy
-import random
+import logging
+import functools
+from cachetools import cached, Cache
 from pathlib import Path
-from typing import List, Tuple, Dict, Union, TYPE_CHECKING
-from collections import defaultdict
+from typing import List, Dict, Union, TYPE_CHECKING
 
 import mmengine
-import numpy as np
+from mmengine.logging import print_log
 from torch.utils.data import Dataset
 from prefusion.registry import DATASETS, MMENGINE_FUNCTIONS, TENSOR_SMITHS
+from prefusion.dataset.subepoch_manager import EndOfAllSubEpochs
 from prefusion.dataset.transformable_loader import (
     TransformableLoader,
     CameraImageSetLoader,
@@ -41,24 +42,26 @@ from prefusion.dataset.transform import (
     SegBev,
 )
 
-from .utils import build_transforms, build_model_feeder, build_tensor_smith, build_transformable_loader
+from .utils import (
+    build_transforms, 
+    build_model_feeder, 
+    build_tensor_smith, 
+    build_transformable_loader, 
+    build_group_sampler,
+    build_subepoch_manager, 
+    divide,
+)
 
 if TYPE_CHECKING:
     from .tensor_smith import TensorSmith
     from .transform import Transform
     from .model_feeder import BaseModelFeeder
     from .transform import Transformable
+    from .index_info import IndexInfo
+    from .subepoch_manager import SubEpochManager
+    from .group_sampler import GroupSampler
 
-__all__ = [
-    "IndexInfo",
-    "GroupBatchDataset"
-]
-
-
-def get_frame_index(sequence, timestamp):
-    for t in sequence:
-        if timestamp <= t:
-            return t
+__all__ = ["GroupBatchDataset"]
 
 
 @MMENGINE_FUNCTIONS.register_module()
@@ -68,235 +71,7 @@ def collate_dict(batch):
 
 GroupBatch = List[List[Dict]]
 
-
-def generate_groups(
-    total_num_frames: int, 
-    group_size: int, 
-    frame_interval: int, 
-    start_ind: int = 0, 
-    random_start_ind: bool = False, 
-    pad_mode: str = 'both',
-    seed: int = None,
-) -> List[Tuple[int]]:
-    """
-    Generate groups of frames from a single scene.
-
-    Parameters
-    ----------
-    total_num_frames : int
-        The total number of frames in the scene.
-    group_size : int
-        The number of frames in each group.
-    frame_interval : int
-        The interval between frames in each group.
-    start_ind : int, optional
-        The starting index of the first group. Default is 0.
-    random_start_ind : bool, optional
-        If True, randomly select the starting index of the first group. Default is False.
-    pad_mode : str, optional, choices=['prev', 'post', 'both'], default='prev'
-        The padding mode for the last group. Default is 'prev'.
-
-    Returns
-    -------
-    groups : list of tuples
-        A list of tuples, where each tuple represents a group of frames.
-
-    Notes
-    -----
-    - `group_interval = group_size * frame_interval`
-    - `group_interval <= total_num_frames` 
-    - `start_ind` should be assigned between `[0, group_interval - 1]`
-    - When the `start_ind > 0`, we should insert a group including `[0, start_ind)`
-    - If the tail of the group, aka `end_ind`, is bigger than `total_num_frames - 1`, we should append a group including `(end_ind, total_num_frames]`
-    """
-    if seed:
-        random.seed(seed)
-
-    total_frame_inds = np.arange(total_num_frames)
-    # fill up total_frame_inds if group_interval > group_size
-    group_interval = group_size * frame_interval
-    if group_interval > total_num_frames:
-        out_of_bound = group_interval - total_num_frames
-        if pad_mode in ['prev']:
-            total_frame_inds = np.insert(total_frame_inds, 0, [0, ] * out_of_bound)
-        elif pad_mode in ['post']:
-            total_frame_inds = np.append(total_frame_inds, [total_num_frames - 1, ] * out_of_bound)
-        elif pad_mode in ['both']:
-            out_of_bound_prev = out_of_bound // 2
-            out_of_bound_post = out_of_bound - out_of_bound_prev
-            total_frame_inds = np.insert(total_frame_inds, 0, [0, ] * out_of_bound_prev)
-            total_frame_inds = np.append(total_frame_inds, [total_num_frames - 1, ] * out_of_bound_post)
-
-    total_num_frames_padded = len(total_frame_inds)
-
-    if random_start_ind:
-        start_ind = random.randint(0, group_interval - 1)
-    assert start_ind >= 0 and start_ind < group_interval
-    # get splits
-    splits = total_frame_inds[start_ind::group_interval]
-    # insert a start_ind < 0
-    if splits[0] > 0:
-        splits = np.insert(splits, 0, splits[0] - group_interval)
-    # append a tail, end_ind
-    splits = np.append(splits, splits[-1] + group_interval)
-
-    ind_lists = []
-    for start, end in zip(splits[:-1], splits[1:]):
-        if start < 0:
-            start = 0
-            end = group_interval
-        if end >= total_num_frames_padded:
-            end = total_num_frames_padded
-            start = total_num_frames_padded - group_interval
-        ind_list = total_frame_inds[start:end].reshape(group_size, frame_interval).T
-        ind_lists.extend(ind_list.tolist())
-    # sometimes the ind_list may be duplicated, so add a unique operation
-    return np.unique(ind_lists, axis=0)
-
-
-class IndexInfo:
-    def __init__(self, scene_id: str, frame_id: str, prev: "IndexInfo" = None, next: "IndexInfo" = None):
-        self.scene_id = scene_id
-        self.frame_id = frame_id
-        self.prev = prev
-        self.next = next
-        if prev:
-            prev.next = self
-        if next:
-            next.prev = self
-
-    def __repr__(self) -> str:
-        return f"{self.scene_id}/{self.frame_id} (prev: {self.prev.scene_frame_id if self.prev else None}, next: {self.next.scene_frame_id if self.next else None})"
-
-    def __eq__(self, other: "IndexInfo") -> bool:
-        if other is None:
-            return False
-        if self.scene_frame_id != other.scene_frame_id:
-            return False
-        if self.prev is None and other.prev is not None:
-            return False
-        if self.next is None and other.next is not None:
-            return False
-        if self.prev is not None and other.prev is not None and self.prev.scene_frame_id != other.prev.scene_frame_id:
-            return False
-        if self.next is not None and other.next is not None and self.next.scene_frame_id != other.next.scene_frame_id:
-            return False
-        return True
-
-    @property
-    def scene_frame_id(self) -> str:
-        return f"{self.scene_id}/{self.frame_id}"
-
-    def as_dict(self) -> dict:
-        return {
-            "scene_id": self.scene_id,
-            "frame_id": self.frame_id,
-            "prev": {"scene_id": self.prev.scene_id, "frame_id": self.prev.frame_id} if self.prev else None,
-            "next": {"scene_id": self.next.scene_id, "frame_id": self.next.frame_id} if self.next else None,
-        }
-
-    @classmethod
-    def from_str(self, index_str: str, prev: "IndexInfo" = None, next: "IndexInfo" = None, sep: str = "/"):
-        scene_id, frame_id = index_str.split(sep)
-        return IndexInfo(scene_id, frame_id, prev=prev, next=next)
-
-
-class GroupSampler:
-    def __init__(self, scene_frame_inds: Dict[str, List[str]], possible_group_sizes: Union[int, Tuple[int]], possible_frame_intervals: Union[int, Tuple[int]] = 1, seed: int = None):
-        """Sample groups
-
-        Parameters
-        ----------
-        scene_frame_inds : Dict[str, List[str]]
-            e.g.  
-            ```
-            {
-              "20231101_160337": [ "20231101_160337/1698825817664", "20231101_160337/1698825817764"],
-              "20230823_110018": [ "20230823_110018/1692759640764", "20230823_110018/1692759640864"],
-            }
-            ```
-        possible_group_size : Union[int, Tuple[int]]
-            if int, will always use this value as group_size;
-            if Tuple[int], during train phase, will random pick a value as the group_size for a given epoch.
-        possible_frame_interval : Union[int, Tuple[int]], optional
-            if int, will always use this value as frame_interval;
-            if Tuple[int], during train phase, will random pick a value as the frame_interval for a given epoch.
-        seed : int, optional
-            Random seed for randomization operations. It's usually for testing and debugging purpose.
-        """
-        self.scene_frame_inds = scene_frame_inds
-        self.possible_group_sizes = [possible_group_sizes] if isinstance(possible_group_sizes, int) else possible_group_sizes
-        self.possible_frame_intervals = [possible_frame_intervals] if isinstance(possible_frame_intervals, int) else possible_frame_intervals
-        self._cur_train_group_size = self.possible_group_sizes[0]  # train group size of current epoch
-        self.seed = seed
-
-    @property
-    def group_size(self) -> int:
-        return self._cur_train_group_size
-
-    def sample(self, phase: str, output_str_index: bool = False) -> List[List[IndexInfo]]:
-        assert phase.lower() in ["train", "val", "test", "test_scene_by_scene"]
-        match phase:
-            case "train":
-                groups = self.sample_train_groups()
-            case "val" | "test":
-                groups = self.sample_val_groups()
-            case "test_scene_by_scene" :
-                groups = self.sample_scene_groups()
-        if not output_str_index:
-            return self._convert_groups_to_info(groups)
-
-    @staticmethod
-    def _convert_groups_to_info(groups: List[List[str]]) -> List[List[IndexInfo]]:
-        index_info_groups = []
-        for grp in groups:
-            index_info_grp = []
-            prev = None
-            for i, frm in enumerate(grp):
-                cur = IndexInfo.from_str(frm, prev=prev)
-                prev = cur
-                index_info_grp.append(cur)
-            index_info_groups.append(index_info_grp)
-        return index_info_groups
-
-    def sample_train_groups(self) -> List[List[str]]:
-        if self.seed: random.seed(self.seed)
-        self._cur_train_group_size = random.choice(self.possible_group_sizes)
-        return self._generate_groups(self._cur_train_group_size, random_start_ind=True, shuffle=True, seed=self.seed)
-
-    def sample_val_groups(self) -> List[List[str]]:
-        return self._generate_groups(self.possible_group_sizes[0], frame_interval=self.possible_frame_intervals[0], start_ind=0, random_start_ind=False, shuffle=False)
-
-    def sample_scene_groups(self) -> List[List[str]]:
-        return list(self.scene_frame_inds.values())
-
-    def sample_groups_by_class_balance(self):
-        raise NotImplementedError
-
-    def sample_groups_by_meta_info(self):
-        raise NotImplementedError
-    
-    def _generate_groups(
-        self, 
-        group_size: int, 
-        frame_interval: int = None, 
-        start_ind: int = 0, 
-        random_start_ind: bool = False, 
-        shuffle: bool = False, 
-        seed: int = None
-    ) -> List[List[str]]:
-        all_groups = []
-        for _, frame_ids in self.scene_frame_inds.items():
-            if not frame_interval:
-                if self.seed: random.seed(self.seed)
-                frame_interval = random.choice(self.possible_frame_intervals)
-            inds_list = generate_groups(len(frame_ids), group_size, frame_interval, start_ind=start_ind, random_start_ind=random_start_ind, seed=seed)
-            groups = [[frame_ids[i] for i in inds] for inds in inds_list]
-            all_groups.extend(groups)
-        if shuffle:
-            if self.seed: random.seed(self.seed)
-            random.shuffle(all_groups)
-        return all_groups
+_print_log = functools.partial(print_log, logger='current')
 
 
 @DATASETS.register_module()
@@ -329,12 +104,10 @@ class GroupBatchDataset(Dataset):
         transformables: dict,
         transforms: List[Union[dict, "Transform"]] = None,
         model_feeder: Union["BaseModelFeeder", dict] = None,
-        phase: str = "train",
-        indices_path: Union[str, Path] = None,
+        subepoch_manager: Union["SubEpochManager", dict] = None,
+        group_sampler: Union["GroupSampler", dict] = None,
         batch_size: int = 1,
         drop_last: bool = False,
-        possible_group_sizes: Union[int, Tuple[int]] = 3,
-        possible_frame_intervals: Union[int, Tuple[int]] = 1,  # TODO: redefine it by time, like seconds
         group_backtime_prob: float = 0.0,
         seed_dataset: int = None,
     ):
@@ -347,12 +120,10 @@ class GroupBatchDataset(Dataset):
         - info_path (str): Path to the information file.
         - transformables (dict): Dict of transformable definitions.
         - transforms (list): Transform classes for preprocessing transformables. Build by TRANSFORMS.
-        - phase (str): Specifies the phase ('train', 'val', 'test' or 'test_scene_by_scene') of the dataset; default is 'train'.
-        - indices_path (str, optional): Specified file of indices to load; if None, all frames are automatically fetched from the info_path.
         - batch_size (int, optional): Batch size; defualt is 1.
-        - possible_group_sizes (int or list, optional): Size of sequence group; can be a single integer or a list (e.g., [5, 10]); default is 3.
-        - possible_frame_intervals (int or list, optional): Interval between frames; default is 1.
         - group_backtime_prob (float): Probability of grouping backtime frames.
+        - subepoch_manager (SubEpochManager or dict): Only works for training. If set, only `num_group_batches_per_subepoch` will be trained in a epoch and the 
+                                                      rest of data will be spit out in the next epoch. 
         - seed_dataset (int): Random seed for dataset
 
         Notes:
@@ -366,49 +137,33 @@ class GroupBatchDataset(Dataset):
         super().__init__()
         self.name = name
         self.data_root = Path(data_root)
-        assert phase.lower() in ["train", "val", "test", "test_scene_by_scene"]
-        self.phase = phase.lower()
         self.info = mmengine.load(str(info_path))
         self.transformables = transformables
         self.transforms = build_transforms(transforms)
         self.model_feeder = build_model_feeder(model_feeder)
-
-        if indices_path is not None:
-            indices = [line.strip() for line in open(indices_path, "w")]
-            self.scene_frame_inds = self._prepare_scene_frame_inds(self.info, indices=indices)
-        else:
-            self.scene_frame_inds = self._prepare_scene_frame_inds(self.info)
-
+        self.group_sampler = build_group_sampler(group_sampler)
+        self.subepoch_manager = None
         self.batch_size = batch_size
         self.drop_last = drop_last
         self.group_backtime_prob = group_backtime_prob
-
         self.seed_dataset = seed_dataset
 
-        self.group_sampler = GroupSampler(self.scene_frame_inds, possible_group_sizes, possible_frame_intervals, seed=seed_dataset)
-        self.groups = self.group_sampler.sample(self.phase, output_str_index=False)
+        self._sample_groups()
 
-    @staticmethod
-    def _prepare_scene_frame_inds(info: Dict, indices: List[str] = None) -> Dict[str, List[str]]:
-        if indices is None:
-            indices = {}
-            for scene_id in info:
-                frame_list = sorted(info[scene_id]["frame_info"].keys())
-                if frame_list:
-                    indices[scene_id] = [f"{scene_id}/{frame_id}" for frame_id in frame_list]
-            return indices
-
-        available_indices = defaultdict(list)
-        for index in indices:
-            scene_id, frame_id = index.split("/")
-            if scene_id in info:
-                if frame_id in info[scene_id]["frame_info"]:
-                    available_indices[scene_id].append(index)
-        for scene_id in available_indices:
-            available_indices[scene_id] = sorted(available_indices[scene_id])
-
-        return available_indices
+        if self.group_sampler.phase == "train":
+            self.subepoch_manager = build_subepoch_manager(subepoch_manager, batch_size)
+            if self.subepoch_manager is not None:
+                _print_log(
+                    "Since you have set SubEpochManager, "
+                    "you should consider set a larger max_epochs for your training.", 
+                    level=logging.WARNING
+                )
+                self.subepoch_manager.init(len(self.groups))
     
+    def _sample_groups(self):
+        self.groups = self.group_sampler.sample(self.data_root, self.info)
+        self.num_total_group_batches = divide(len(self.groups), self.batch_size, drop_last=self.drop_last)
+
     @property
     def group_size(self):
         return self.group_sampler.group_size
@@ -419,7 +174,6 @@ class GroupBatchDataset(Dataset):
                 f"An instance of {self.__class__}: (\n",
                 f"    name={self.name}, \n",
                 f"    num_groups={len(self.groups)}, \n"
-                f"    phase={self.phase}, \n"
                 f"    batch_size={self.batch_size}, \n"
                 f"    group_size={self.group_sampler.possible_group_sizes}, \n"
                 f"    frame_interval={self.group_sampler.possible_frame_intervals}, \n"
@@ -427,7 +181,7 @@ class GroupBatchDataset(Dataset):
             ]
         )
 
-    def load_all_transformables(self, index_info: IndexInfo) -> dict:
+    def load_all_transformables(self, index_info: "IndexInfo") -> dict:
         transformables = {}
         for name in self.transformables:
             _t_cfg = copy.deepcopy(self.transformables[name])
@@ -440,8 +194,8 @@ class GroupBatchDataset(Dataset):
         
         return transformables
     
-
-    def _build_transformable_loader(self, loader_cfg, transformable_type: str) -> TransformableLoader:
+    @cached(cache=Cache(maxsize=float('inf')), key=lambda self_, cfg, type_: (str(sorted((cfg or {}).items())), type_))
+    def _build_transformable_loader(self, loader_cfg: dict, transformable_type: str) -> TransformableLoader:
         if loader_cfg:
             loader_cfg.setdefault("data_root", self.data_root)  # fallback with default data_root from Dataset
         else:
@@ -465,11 +219,9 @@ class GroupBatchDataset(Dataset):
         return tensor_smith
 
     def __len__(self):
-        if self.drop_last:
-            return len(self.groups) // self.batch_size
-        else:
-            return int(np.ceil(len(self.groups) / self.batch_size))
-    
+        if self.subepoch_manager is None:
+            return self.num_total_group_batches
+        return self.subepoch_manager.num_group_batches_per_subepoch
 
     @staticmethod
     def _batch_groups(group_batch_ind, groups, batch_size):
@@ -481,12 +233,34 @@ class GroupBatchDataset(Dataset):
             batched_groups.append(groups[group_idx])
         return batched_groups
 
+    def post_epoch_processing(self):
+        if self.subepoch_manager is None: # training on the normal epoch settings
+            self._sample_groups()
+            return
+
+        try: # training on sub-epochs
+            self.subepoch_manager.to_next_sub_epoch()
+        except EndOfAllSubEpochs:
+            # from mmengine.dist import get_dist_info
+            # from loguru import logger
+            # rank, _ = get_dist_info()
+            # logger.debug(f"[rank{rank}] id={id(self.subepoch_manager)}")
+            # logger.debug(f"[rank{rank}] drop_last_group_batch={self.subepoch_manager.drop_last_group_batch}")
+            # logger.debug(f"[rank{rank}] drop_last_subepoch={self.subepoch_manager.drop_last_subepoch}")
+            # logger.debug(f"[rank{rank}] num_total_groups={self.subepoch_manager.num_total_groups}")
+            # logger.debug(f"[rank{rank}] num_total_group_batches={self.subepoch_manager.num_total_group_batches}")
+            # logger.debug(f"[rank{rank}] num_group_batches_per_subepoch={self.subepoch_manager.num_group_batches_per_subepoch}")
+            # logger.debug(f"[rank{rank}] batch_size={self.subepoch_manager.batch_size}")
+            # logger.debug(f"[rank{rank}] num_subepochs={self.subepoch_manager.num_subepochs}")
+            # logger.debug(f"[rank{rank}] id(visited)={id(self.subepoch_manager.visited)}")
+            # logger.debug(f"[rank{rank}] visited={self.subepoch_manager.visited.todict().keys()}")
+
+            self._sample_groups()
+            self.subepoch_manager.reset(len(self.groups))
 
     def __getitem__(self, idx) -> GroupBatch:
-
-        if idx >= len(self):
-            self.groups = self.group_sampler.sample(self.phase, output_str_index=False)
-            raise IndexError
+        if self.subepoch_manager is not None:
+            idx = self.subepoch_manager.translate_index(idx)
 
         batched_groups = self._batch_groups(idx, self.groups, self.batch_size)
 
@@ -520,5 +294,5 @@ class GroupBatchDataset(Dataset):
 
         return model_food
 
-    def _build_transformable(self, name: str, scene_data: Dict, index_info: IndexInfo, loader: "TransformableLoader", tensor_smith: "TensorSmith" = None, **kwargs) -> "Transformable":
+    def _build_transformable(self, name: str, scene_data: Dict, index_info: "IndexInfo", loader: "TransformableLoader", tensor_smith: "TensorSmith" = None, **kwargs) -> "Transformable":
         return loader.load(name, scene_data, index_info, tensor_smith=tensor_smith, **kwargs)

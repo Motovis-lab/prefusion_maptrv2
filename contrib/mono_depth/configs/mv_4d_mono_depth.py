@@ -83,10 +83,11 @@ train_dataloader = dict(
         info_path=data_root + 'mv_4d_infos_train.pkl',
         transformables=transformables,
         transforms=train_pipeline,
-        phase='train',
+        group_sampler=dict(type="IndexGroupSampler",
+                           phase="train",
+                           possible_group_sizes=[3],
+                           possible_frame_intervals=[1]),
         batch_size=batch_size, 
-        possible_group_sizes=[3],
-        possible_frame_intervals=[1]
         ),
 )
 
@@ -103,10 +104,11 @@ val_dataloader = dict(
         info_path=data_root + 'mv_4d_infos_val.pkl',
         transformables=transformables,
         transforms=val_pipeline,
-        phase='val',
+        group_sampler=dict(type="IndexGroupSampler",
+                           phase="val",
+                           possible_group_sizes=[1],
+                           possible_frame_intervals=[1]),
         batch_size=batch_size, 
-        possible_group_sizes=[1],
-        possible_frame_intervals=[1]
         ),
 )
 val_dataloader = None
@@ -187,7 +189,9 @@ model = dict(
                                               width=fish_img_size[0],
                                               intrinsic=((fish_img_size[0]-1)/2, (fish_img_size[1]-1)/2, fish_img_size[0]/4, fish_img_size[0]/4, 0.1, 0,0,0)),                      
                       depth_decoder_conf=dict(type='DepthDecoder')
-    )
+    ),
+    supervised_depth_weight=0.2,
+    mono_depth_weight=10
 )    
 
 val_evaluator = None
@@ -203,7 +207,7 @@ env_cfg = dict(
 )
 find_unused_parameters = True
 
-runner_type = 'GroupRunner'
+runner_type = 'GroupBatchRunner'
 
 lr = 0.01  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(

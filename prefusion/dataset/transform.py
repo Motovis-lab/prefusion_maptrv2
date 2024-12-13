@@ -1,5 +1,5 @@
 import random
-import copy
+from copy import deepcopy
 import inspect
 import functools
 import abc
@@ -14,6 +14,7 @@ import numpy as np
 import virtual_camera as vc
 # import albumentations as AT
 from scipy.spatial.transform import Rotation
+from scipy.ndimage import distance_transform_edt
 from copious.cv.geometry import Box3d as CopiousBox3d
 
 # from .tensor_smith import TensorSmith
@@ -40,83 +41,87 @@ class Transformable:
         self.name = name
 
     @transform_method
-    def at_transform(self, func_name, **kwargs):
+    def at_transform(self, func_name, *args, **kwargs):
         return self
 
     @transform_method
-    def adjust_brightness(self, brightness=1, **kwargs):
+    def adjust_brightness(self, *args, brightness=1, **kwargs):
         return self
     
     @transform_method
-    def adjust_saturation(self, saturation=1, **kwargs):
+    def adjust_saturation(self, *args, saturation=1, **kwargs):
         return self
     
     @transform_method
-    def adjust_contrast(self, contrast=1, **kwargs):
+    def adjust_contrast(self, *args, contrast=1, **kwargs):
         return self
     
     @transform_method
-    def adjust_hue(self, hue=1, **kwargs):
+    def adjust_hue(self, *args, hue=1, **kwargs):
         return self
     
     @transform_method
-    def adjust_sharpness(self, sharpness=1, **kwargs):
+    def adjust_sharpness(self, *args, sharpness=1, **kwargs):
         return self
     
     @transform_method
-    def posterize(self, bits=8, **kwargs):
+    def posterize(self, *args, bits=8, **kwargs):
         return self
     
     @transform_method
-    def auto_contrast(self, **kwargs):
+    def auto_contrast(self, *args, **kwargs):
         return self
     
     @transform_method
-    def imequalize(self, **kwargs):
+    def imequalize(self, *args, **kwargs):
         return self
     
     @transform_method
-    def solarize(self, **kwargs):
+    def solarize(self, *args, **kwargs):
         return self
     
     @transform_method
-    def sobelize(self, **kwargs):
+    def sobelize(self, *args, **kwargs):
         return self
     
     @transform_method
-    def gaussian_blur(self, **kwargs):
+    def gaussian_blur(self, *args, **kwargs):
         return self
     
     @transform_method
-    def channel_shuffle(self, **kwargs):
+    def channel_shuffle(self, *args, **kwargs):
         return self
     
     @transform_method
-    def set_intrinsic_param(self, **kwargs):
+    def set_intrinsic_param(self, *args, **kwargs):
         return self
     
     @transform_method
-    def render_intrinsic(self, **kwargs):
+    def render_intrinsic(self, *args, **kwargs):
         return self
     
     @transform_method
-    def set_extrinsic_param(self, **kwargs):
+    def set_extrinsic_param(self, *args, **kwargs):
         return self
     
     @transform_method
-    def render_extrinsic(self, **kwargs):
+    def render_extrinsic(self, *args, **kwargs):
         return self
     
     @transform_method
-    def flip_3d(self, **kwargs):
+    def render_camera(self, *args, **kwargs):
         return self
     
     @transform_method
-    def rotate_3d(self, **kwargs):
+    def flip_3d(self, *args, **kwargs):
+        return self
+    
+    @transform_method
+    def rotate_3d(self, *args, **kwargs):
         return self
 
     @transform_method
-    def scale_3d(self, **kwargs):
+    def scale_3d(self, *args, **kwargs):
         return self
 
     def to_tensor(self):
@@ -147,44 +152,49 @@ class Transformable:
 class CameraTransformable(Transformable, metaclass=abc.ABCMeta):
     @transform_method
     @abc.abstractmethod
-    def set_intrinsic_param(self, **kwargs):
+    def set_intrinsic_param(self, *args, **kwargs):
         pass
     
     @transform_method
     @abc.abstractmethod
-    def render_intrinsic(self, **kwargs):
+    def render_intrinsic(self, *args, **kwargs):
         pass
     
     @transform_method
     @abc.abstractmethod
-    def set_extrinsic_param(self, **kwargs):
+    def set_extrinsic_param(self, *args, **kwargs):
         pass
     
     @transform_method
     @abc.abstractmethod
-    def render_extrinsic(self, **kwargs):
+    def render_extrinsic(self, *args, **kwargs):
+        pass
+
+    @transform_method
+    @abc.abstractmethod
+    def render_camera(self, *args, **kwargs):
+        return self
+    
+    @transform_method
+    @abc.abstractmethod
+    def flip_3d(self, *args, **kwargs):
         pass
     
     @transform_method
     @abc.abstractmethod
-    def flip_3d(self, **kwargs):
-        pass
-    
-    @transform_method
-    @abc.abstractmethod
-    def rotate_3d(self, **kwargs):
+    def rotate_3d(self, *args, **kwargs):
         pass
 
 
 class SpatialTransformable(Transformable, metaclass=abc.ABCMeta):
     @transform_method
     @abc.abstractmethod
-    def flip_3d(self, **kwargs):
+    def flip_3d(self, *args, **kwargs):
         pass
     
     @transform_method
     @abc.abstractmethod
-    def rotate_3d(self, **kwargs):
+    def rotate_3d(self, *args, **kwargs):
         pass
 
 
@@ -314,7 +324,7 @@ class CameraImage(CameraTransformable):
         self.cam_type = cam_type
         self.img = img
         self.ego_mask = ego_mask
-        self.extrinsic = list(p.copy() for p in extrinsic)
+        self.extrinsic = list(deepcopy(p) for p in extrinsic)
         self.intrinsic = np.array(intrinsic)
         self.tensor_smith = tensor_smith
 
@@ -348,15 +358,15 @@ class CameraImage(CameraTransformable):
         self.img = mmcv.posterize(self.img, bits)
         return self
     
-    def auto_contrast(self, **kwargs):
+    def auto_contrast(self, *args, **kwargs):
         self.img = mmcv.auto_contrast(self.img)
         return self
     
-    def imequalize(self, **kwargs):
+    def imequalize(self, *args, **kwargs):
         self.img = mmcv.imequalize(self.img)
         return self
     
-    def solarize(self, **kwargs):
+    def solarize(self, *args, **kwargs):
         self.img = mmcv.solarize(self.img)
         return self
     
@@ -415,6 +425,22 @@ class CameraImage(CameraTransformable):
         )
         self.img, self.ego_mask = vc.render_image(self.img, camera_old, camera_new)
         self.extrinsic = (R_new, t_new)
+        
+        return self
+    
+    def render_camera(self, camera_new, **kwargs):
+        resolution = self.img.shape[:2][::-1]
+        camera_class = getattr(vc, self.cam_type)
+        camera_old = camera_class(
+            resolution,
+            self.extrinsic,
+            self.intrinsic,
+            ego_mask=self.ego_mask
+        )
+        self.img, self.ego_mask = vc.render_image(self.img, camera_old, camera_new)
+        self.extrinsic = camera_new.extrinsic
+        self.intrinsic = camera_new.intrinsic
+        self.cam_type = camera_new.__class__.__name__
         
         return self
 
@@ -490,9 +516,10 @@ class CameraSegMask(CameraTransformable):
         self.cam_type = cam_type
         self.img = img
         self.ego_mask = ego_mask
-        self.extrinsic = list(p.copy() for p in extrinsic)
+        self.extrinsic = list(deepcopy(p) for p in extrinsic)
         self.intrinsic = np.array(intrinsic)
-        self.dictionary = dictionary.copy()
+        assert dictionary is not None
+        self.dictionary = deepcopy(dictionary)
         self.tensor_smith = tensor_smith
 
     def set_intrinsic_param(self, intrinsic: Sequence, **kwargs):
@@ -551,6 +578,24 @@ class CameraSegMask(CameraTransformable):
             self.img, camera_old, camera_new, interpolation=cv2.INTER_NEAREST
         )
         self.extrinsic = (R_new, t_new)
+        
+        return self
+    
+    def render_camera(self, camera_new, **kwargs):
+        resolution = self.img.shape[:2][::-1]
+        camera_class = getattr(vc, self.cam_type)
+        camera_old = camera_class(
+            resolution,
+            self.extrinsic,
+            self.intrinsic,
+            ego_mask=self.ego_mask
+        )
+        self.img, self.ego_mask = vc.render_image(
+            self.img, camera_old, camera_new, interpolation=cv2.INTER_NEAREST
+        )
+        self.extrinsic = camera_new.extrinsic
+        self.intrinsic = camera_new.intrinsic
+        self.cam_type = camera_new.__class__.__name__
         
         return self
 
@@ -627,7 +672,7 @@ class CameraDepth(CameraTransformable):
         self.cam_type = cam_type
         self.img = img
         self.ego_mask = ego_mask
-        self.extrinsic = list(p.copy() for p in extrinsic)
+        self.extrinsic = list(deepcopy(p) for p in extrinsic)
         self.intrinsic = np.array(intrinsic)
         self.depth_mode = depth_mode
         self.tensor_smith = tensor_smith
@@ -695,6 +740,28 @@ class CameraDepth(CameraTransformable):
         self.extrinsic = (R_new, t_new)
         
         return self
+    
+    def render_camera(self, camera_new, **kwargs):
+        resolution = self.img.shape[:2][::-1]
+        camera_class = getattr(vc, self.cam_type)
+        camera_old = camera_class(
+            resolution,
+            self.extrinsic,
+            self.intrinsic,
+            ego_mask=self.ego_mask
+        )
+        if self.depth_mode == 'd':
+            self.img, self.ego_mask = vc.render_image(
+                self.img, camera_old, camera_new, interpolation=cv2.INTER_NEAREST
+            )
+        else:
+            # TODO: get real points from depth then remap to image
+            raise NotImplementedError
+        self.extrinsic = camera_new.extrinsic
+        self.intrinsic = camera_new.intrinsic
+        self.cam_type = camera_new.__class__.__name__
+        
+        return self
 
 
     def flip_3d(self, flip_mat, **kwargs):
@@ -741,8 +808,8 @@ class LidarPoints(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.positions = positions.copy()
-        self.attributes = attributes.copy()
+        self.positions = deepcopy(positions)
+        self.attributes = deepcopy(attributes)
         self.tensor_smith = tensor_smith
 
     def flip_3d(self, flip_mat, **kwargs):
@@ -770,9 +837,11 @@ class Bbox3D(SpatialTransformable):
             a list of boxes. Each element is a dict of box having the following format:
             elements[0] = {
                 'class': 'class.vehicle.passenger_car',
-                'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
-                        'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
-                        'attr.vehicle.is_door_open': 'attr.vehicle.is_door_open.false'},
+                'attr': [
+                    'attr.time_varying.object.state.stationary',
+                    'attr.vehicle.is_trunk_open.false',
+                    'attr.vehicle.is_door_open.false'
+                ],
                 'size': [4.6486, 1.9505, 1.5845],
                 'rotation': array([[ 0.93915682, -0.32818596, -0.10138267],
                                 [ 0.32677338,  0.94460343, -0.03071667],
@@ -793,13 +862,20 @@ class Bbox3D(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.elements = elements.copy()
-        self.dictionary = dictionary.copy()
+        assert dictionary is not None
+        self.elements = deepcopy(elements)
+        for ele in self.elements:
+            # ensure translation and velocity to be a column array
+            if 'translation' in ele:
+                ele['translation'] = ele['translation'].flatten()[:, None]
+            if 'velocity' in ele:
+                ele['velocity'] = ele['velocity'].flatten()[:, None]
+        self.dictionary = deepcopy(dictionary)
         self.remove_elements_not_recognized_by_dictionary()
         self.flip_aware_class_pairs = flip_aware_class_pairs
         self.tensor_smith = tensor_smith
 
-    def remove_elements_not_recognized_by_dictionary(self, **kwargs):
+    def remove_elements_not_recognized_by_dictionary(self):
         full_set_of_classes = {c for c in self.dictionary['classes']}
         for i in range(len(self.elements) - 1, -1, -1):
             if self.elements[i]['class'] not in full_set_of_classes:
@@ -878,7 +954,7 @@ class Polyline3D(SpatialTransformable):
             ```python
             elements[0] = {
                 'class': 'class.road_marker.lane_line',
-                'attr': <dict>,
+                'attr': <list>,
                 'points': <N x 3 array>
             }
             ```
@@ -896,13 +972,13 @@ class Polyline3D(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.elements = elements.copy()
-        self.dictionary = dictionary.copy()
+        self.elements = deepcopy(elements)
+        self.dictionary = deepcopy(dictionary)
         self.remove_elements_not_recognized_by_dictionary()
         self.flip_aware_class_pairs = flip_aware_class_pairs
         self.tensor_smith = tensor_smith
 
-    def remove_elements_not_recognized_by_dictionary(self, **kwargs):
+    def remove_elements_not_recognized_by_dictionary(self):
         full_set_of_classes = {c for c in self.dictionary['classes']}
         for i in range(len(self.elements) - 1, -1, -1):
             if self.elements[i]['class'] not in full_set_of_classes:
@@ -947,7 +1023,7 @@ class ParkingSlot3D(SpatialTransformable):
             ```python
             elements[0] = {
                 'class': 'class.parking.parking_slot',
-                'attr': <dict>,
+                'attr': <list>,
                 'points': <4 x 3 array>
             }
             ```
@@ -963,12 +1039,12 @@ class ParkingSlot3D(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.elements = elements.copy()
-        self.dictionary = dictionary.copy()
+        self.elements = deepcopy(elements)
+        self.dictionary = deepcopy(dictionary)
         self.tensor_smith = tensor_smith
         self.remove_elements_not_recognized_by_dictionary()
     
-    def remove_elements_not_recognized_by_dictionary(self, **kwargs):
+    def remove_elements_not_recognized_by_dictionary(self):
         full_set_of_classes = {c for c in self.dictionary['classes']}
         for i in range(len(self.elements) - 1, -1, -1):
             if self.elements[i]['class'] not in full_set_of_classes:
@@ -1049,10 +1125,10 @@ class EgoPoseSet(TransformableSet):
 
 
 class SegBev(SpatialTransformable):
-    def flip_3d(self, **kwargs):
+    def flip_3d(self, *args, **kwargs):
         raise NotImplementedError
     
-    def rotate_3d(self, **kwargs):
+    def rotate_3d(self, *args, **kwargs):
         raise NotImplementedError
 
 
@@ -1060,38 +1136,27 @@ class OccSdfBev(SpatialTransformable):
     def __init__(
         self,
         name: str, 
-        src_view_range: dict,
+        src_voxel_range: dict,
         occ: np.ndarray,
-        sdf: np.ndarray,
         height: np.ndarray,
-        dictionary: dict,
+        sdf: np.ndarray = None,
         mask: np.ndarray = None,
         tensor_smith: "TensorSmith" = None
     ):
         """OccSdfBev is a transformable contains occ, sdf and ground height info in a BEV view (a 2D spatial view).
 
-        back, front, right, left, bottom, up  
-        ||    ||     ||     ||    ||      ||
-        xmin, xmax,  ymin,  ymax, zmin,   zmax
-
-        bev: backward-right-up (H, W, Z)
-        ego: x-y-z, forward-left-up
-
         Parameters
         ----------
         name : str
             arbitrary string, will be set to each Transformable object to distinguish it with others
-        src_view_range : dict
-            view range of the bev view: [back, front, right, left, bottom, up], # in ego system
+        src_voxel_range : dict
+            voxel_range=([-0.5, 2.5], [-12, 36], [12, -12]), from axis min to max
         occ : np.ndarray
-            occ info, of shape (C, H, W), where C denote the nubmer of occ classes, H and W denote the height and width: 
-            H <=> (xmin, xmax), W <=> (ymin, ymax)
+            occ info, of shape (X, Y, C), where C denote the nubmer of occ classes
         sdf : np.ndarray
-            sdf info, of shape (1, H, W)
+            sdf info, of shape (X, Y)
         height : np.ndarray
-            height of the ground, of shape (1, H, W)
-        dictionary : dict
-            the dictionary for the occ classes
+            height of the ground, of shape (X, Y)
         mask : np.ndarray, optional
             if provided, only positions with value 1 will be take into consideration, by default None
             This feature is useful when we train on multiple different data source, where they have different BEV size/range.
@@ -1099,39 +1164,47 @@ class OccSdfBev(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.src_view_range = src_view_range
+        self.src_voxel_range = src_voxel_range
         self.occ = occ
-        self.sdf = sdf
         self.height = height
-        self.dictionary = dictionary
-        self.mask = mask if mask is not None else np.ones_like(self.sdf, dtype=np.uint8)
         self.tensor_smith = tensor_smith
-        self._bev_shape = self.occ.shape[1:]
-        self._bev_intrinsic = self._calc_bev_intrinsic()
+        self._bev_shape = self.occ.shape[:2]
+        self._bev_intrinsics = self._calc_bev_intrinsics()
+        self.sdf = self._generate_sdf() if sdf is None else sdf
+        self.mask = mask if mask is not None else np.ones_like(self.sdf, dtype=np.uint8)
         self._ego_points = self._unproject_bev_to_ego()
 
-    def _calc_bev_intrinsic(self):
-        H, W = self._bev_shape
-        fx = H / (self.src_view_range[0] - self.src_view_range[1])
-        fy = W / (self.src_view_range[2] - self.src_view_range[3])
-        cx = - self.src_view_range[1] * fx - 0.5
-        cy = - self.src_view_range[3] * fy - 0.5
-        return [cx, cy, fx, fy]
+    def _generate_sdf(self):
+        cx, cy, fx, fy = self._bev_intrinsics
+        df_obstacle = distance_transform_edt(1 - self.occ[..., 1] / 255)
+        df_freespace = distance_transform_edt(self.occ[..., 1] / 255)
+        assert abs(abs(fx) - abs(fy)) < 1e-3, f'fx={fx:.2f}, fy={fy:.2f}'
+        sdf = (df_freespace - df_obstacle) / abs(fx)
+        return sdf
+
+    def _calc_bev_intrinsics(self):
+        X, Y = self._bev_shape
+        fx = X / (self.src_voxel_range[1][1] - self.src_voxel_range[1][0])
+        fy = Y / (self.src_voxel_range[2][1] - self.src_voxel_range[2][0])
+        cx = - self.src_voxel_range[1][0] * fx - 0.5
+        cy = - self.src_voxel_range[2][0] * fy - 0.5
+
+        return cx, cy, fx, fy
 
     def _unproject_bev_to_ego(self):
-        H, W = self._bev_shape
-        cx, cy, fx, fy = self._bev_intrinsic
-        uu, vv = np.meshgrid(np.arange(W), np.arange(H))
+        cx, cy, fx, fy = self._bev_intrinsics
+        X, Y = self._bev_shape
+        vv, uu = np.meshgrid(np.arange(X), np.arange(Y), indexing='ij')
         xx = (vv - cx) / fx
         yy = (uu - cy) / fy
-        zz = self.height[0]
+        zz = self.height
         # column points
         return np.stack([xx, yy, zz], axis=0).reshape(3, -1)
     
 
     def _project_ego_to_bev(self, ego_points):
         xx, yy, _ = ego_points
-        cx, cy, fx, fy = self._bev_intrinsic
+        cx, cy, fx, fy = self._bev_intrinsics
         vv_ = xx * fx + cx
         uu_ = yy * fy + cy
         return uu_.astype(np.float32), vv_.astype(np.float32)
@@ -1148,26 +1221,26 @@ class OccSdfBev(SpatialTransformable):
         
         self.occ = cv2.remap(
             self.occ, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_NEAREST
         )
         self.sdf = cv2.remap(
             self.sdf, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_LINEAR
         )
         self.height = cv2.remap(
             self.height, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_LINEAR
         )
         self.mask = cv2.remap(
             self.mask, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_NEAREST
         )
         return self
@@ -1182,36 +1255,36 @@ class OccSdfBev(SpatialTransformable):
         
         self.occ = cv2.remap(
             self.occ, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_NEAREST
         )
         self.sdf = cv2.remap(
             self.sdf, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_LINEAR
         )
         self.height = cv2.remap(
             self.height, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_LINEAR
         )
         self.mask = cv2.remap(
             self.mask, 
-            uu_.reshape((1, *self._bev_shape)),
-            vv_.reshape((1, *self._bev_shape)),
+            uu_.reshape(self._bev_shape),
+            vv_.reshape(self._bev_shape),
             interpolation=cv2.INTER_NEAREST
         )
         return self
 
 
 class OccSdf3D(SpatialTransformable):
-    def flip_3d(self, **kwargs):
+    def flip_3d(self, *args, **kwargs):
         raise NotImplementedError
     
-    def rotate_3d(self, **kwargs):
+    def rotate_3d(self, *args, **kwargs):
         raise NotImplementedError
 
 #--------------------------------#
@@ -1359,18 +1432,18 @@ ToTensor = deterministic_transform_class_factory("ToTensor", "to_tensor")
 #######################
 class RandomSetIntrinsicParam(RandomTransform):
 
-    def __init__(self, *, prob: float = 0.0, jitter_ratio: float = 0.0, scope: str = "frame", **kwargs):
+    def __init__(self, *, prob: float = 0.2, jitter_ratio: float = 0.01, scope: str = "transformable", **kwargs):
         """This transform random jitters the intrinsic params of CameraTransformable.
         (NOTE: only applicable to cx, cy, fx, fy).
 
         Parameters
         ----------
         prob : float, optional
-            the happening probability of this Transform, value range [0, 1], by default 0.0
+            the happening probability of this Transform, value range [0, 1], by default 0.2
         jitter_ratio : float, optional
-            the relative ratio of the jittering to each param in intrinsic, by default 0.0 (i.e. 0%)
+            the relative ratio of the jittering to each param in intrinsic, by default 0.01 (i.e. 0%)
         scope : str, optional
-            the scope of the Transform, by default "frame"
+            the scope of the Transform, by default "transformable"
         """
         Transform.__init__(self, scope=scope)
         self.prob = prob
@@ -1387,23 +1460,28 @@ class RandomSetIntrinsicParam(RandomTransform):
                 _seeds = dict(**seeds, transformable=make_seed(seeds["frame"], i))
                 new_intrinsic = [self.random_pick_param(_seeds, param) for param in transformable.intrinsic]
                 transformable.set_intrinsic_param(new_intrinsic)
+            elif isinstance(transformable, (CameraImageSet, CameraSegMaskSet, CameraDepthSet)):
+                for t in transformable.transformables.values():
+                    _seeds = dict(**seeds, transformable=make_seed(seeds["frame"], i))
+                    new_intrinsic = [self.random_pick_param(_seeds, param) for param in t.intrinsic]
+                    t.set_intrinsic_param(new_intrinsic)
         return transformables
 
 
 class RandomSetExtrinsicParam(RandomTransform):
-    def __init__(self, *, prob: float = 0.0, angle: float = 0.0, translation: float = 0.0, scope: str = "frame", **kwargs):
+    def __init__(self, *, prob: float = 0.2, angle: float = 1.0, translation: float = 0.01, scope: str = "transformable", **kwargs):
         """This transform random jitters the rotation angle and translation of CameraTransformable's extrinsic params.
 
         Parameters
         ----------
         prob : float, optional
-            the happening probability of this Transform, value range [0, 1], by default 0.0
+            the happening probability of this Transform, value range [0, 1], by default 0.2
         angle : float, optional
-            the jittering angle (degrees) that applies to current extrinsic.Rotation, by default 0.0
+            the jittering angle (degrees) that applies to current extrinsic.Rotation, by default 1.0
         translation : float, optional
-            the translation (m) that applies to current extrinsic.Translation, by default 0.0
+            the translation (m) that applies to current extrinsic.Translation, by default 0.01
         scope : str, optional
-            the scope of the Transform, by default "frame"
+            the scope of the Transform, by default "transformable"
         """
         Transform.__init__(self, scope=scope)
         self.prob = prob
@@ -1439,6 +1517,14 @@ class RandomSetExtrinsicParam(RandomTransform):
                 new_R = delta_R @ R
                 new_t = delta_t + t
                 transformable.set_extrinsic_param([new_R, new_t])
+            elif isinstance(transformable, (CameraImageSet, CameraSegMaskSet, CameraDepthSet)):
+                for t_sub in transformable.transformables.values():
+                    _seeds = dict(**seeds, transformable=make_seed(seeds['frame'], i))
+                    delta_R, delta_t = self.random_pick_param(_seeds)
+                    R, t = t_sub.extrinsic
+                    new_R = delta_R @ R
+                    new_t = delta_t + t
+                    t_sub.set_extrinsic_param([new_R, new_t])
         return transformables
 
 
@@ -1465,7 +1551,7 @@ class RandomChooseKTransform(RandomTransform):
 
 
 class RandomImageISP(Transform):
-    def __init__(self, prob=0.5, transform_probs=None, scope='frame'):
+    def __init__(self, prob=0.5, transform_probs=None, scope='transformable'):
         super().__init__(scope=scope)
         self.transforms=[
             RandomBrightness(prob=0.5, param_randomization_rules={"brightness": {"type": "float", "range": [0.5, 2.0]}}),
@@ -1479,6 +1565,8 @@ class RandomImageISP(Transform):
             RandomSolarize(prob=0.01),
             RandomImEqualize(prob=0.1),
         ]
+        for transform in self.transforms:
+            transform.scope = scope
         self.delegate_transform = RandomChooseKTransform(
             transforms=self.transforms,
             prob=prob,
@@ -1512,6 +1600,10 @@ class RenderIntrinsic(Transform):
         if intrinsics == 'default':
             intrinsics = {}
             for cam_id in self.cam_ids:
+                intrinsics[cam_id] = 'default'
+        # fill default intrinsics
+        for cam_id in self.cam_ids:
+            if cam_id not in intrinsics:
                 intrinsics[cam_id] = 'default'
         self.intrinsics = intrinsics
 
@@ -1586,6 +1678,73 @@ class RenderExtrinsic(Transform):
                 if cam_id in self.cam_ids:
                     transformable.render_extrinsic(self.del_extrinsics[cam_id])
         return transformables
+
+
+class RenderVirtualCamera(Transform):
+    
+    def __init__(self, camera_settings: dict, scope="frame"):
+        """
+        Notes
+        -----
+        The extrinsic parameters must be in original ego system, 
+        in which the camera is calibrated.
+
+        Parameters
+        ----------
+        camera_settings : dict
+            ```python
+            {<cam_id>: dict(cam_type='PerspectiveCamera' | 'FisheyeCamera',
+                            resolution=(W, H),
+                            euler_angles=[<ang>, <ang>, <ang>], # ego x-y-z euler angles,
+                            translation=[<x>, <y>, <z>],
+                            intrinsic='auto' or (cx, cy, fx, fy, *dist_params)),
+            ...}
+            ```
+        scope : str, optional
+            seed scope, by default "frame"
+        """
+        super().__init__(scope=scope)
+        self.cam_ids = list(camera_settings.keys())
+        for cam_id in self.cam_ids:
+            assert camera_settings[cam_id]['cam_type'] in ['PerspectiveCamera', 'FisheyeCamera']
+        self.cameras = {}
+        for cam_id in self.cam_ids:
+            resolution = camera_settings[cam_id]['resolution']
+            extrinsic = (
+                Rotation.from_euler('xyz', camera_settings[cam_id]['euler_angles'], degrees=True).as_matrix(),
+                np.array(camera_settings[cam_id]['translation'])
+            )
+            intrinsic = camera_settings[cam_id]['intrinsic']
+            cam_type = camera_settings[cam_id]['cam_type']
+            if intrinsic == 'auto': 
+                W, H = resolution
+                if cam_type == 'PerspectiveCamera':
+                    cx = (W - 1) / 2
+                    cy = (H - 1) / 2
+                    fx = fy = W / 2
+                    intrinsic = (cx, cy, fx, fy)
+                if cam_type == 'FisheyeCamera':
+                    cx = (W - 1) / 2
+                    cy = (H - 1) / 2
+                    fx = fy = W / 4
+                    intrinsic = (cx, cy, fx, fy, 0.1, 0, 0, 0)
+            camera_class = getattr(vc, camera_settings[cam_id]['cam_type'])
+            self.cameras[cam_id] = camera_class(resolution, extrinsic, intrinsic)            
+    
+    def __call__(self, *transformables, **kwargs):
+        for transformable in transformables:
+            if isinstance(transformable, (CameraImageSet, CameraSegMaskSet, CameraDepthSet)):
+                for t_sub in transformable.transformables.values():
+                    cam_id = t_sub.cam_id
+                    if cam_id in self.cam_ids:
+                        t_sub.render_camera(self.cameras[cam_id])
+            elif isinstance(transformable, (CameraImage, CameraSegMask, CameraDepth)):
+                cam_id = transformable.cam_id
+                if cam_id in self.cam_ids:
+                    transformable.render_camera(self.cameras[cam_id])
+        return transformables
+
+
 
 
 class RandomRenderExtrinsic(RandomTransform):

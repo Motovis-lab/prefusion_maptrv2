@@ -16,8 +16,9 @@ class Mono_Depth_Head(BaseModel):
                  fish_img_size=None,
                  pv_img_size=None, 
                  front_img_size=None,
-                 min_depth=0.1,
-                 max_depth=100,
+                 fish_min_max_depth=[0.1, 5.1],
+                 pv_min_max_depth=[0.1, 12.1],
+                 front_min_max_depth=[0.1, 36.1],
                  downsample_factor: torch.Tensor = [16] , 
                  batch_size=None,
                  avg_reprojection=False,
@@ -35,8 +36,9 @@ class Mono_Depth_Head(BaseModel):
         self.fish_img_size = fish_img_size
         self.pv_img_size = pv_img_size
         self.front_img_size = front_img_size
-        self.min_depth = min_depth
-        self.max_depth = max_depth  
+        self.fish_min_max_depth=fish_min_max_depth,
+        self.pv_min_max_depth=pv_min_max_depth,
+        self.front_min_max_depth=front_min_max_depth,
         self.batch_size = batch_size
         self.avg_reprojection = avg_reprojection
         self.disparity_smoothness = disparity_smoothness
@@ -118,8 +120,10 @@ class Mono_Depth_Head(BaseModel):
         Generated images are saved into the `outputs` dictionary.
         """
         disp = outputs['disp']
-
-        _, depth = disp_to_depth(disp, self.min_depth, self.max_depth)
+        
+        min_depth = getattr(self, f"{camera_type}_min_max_depth")[0][0]
+        max_depth = getattr(self, f"{camera_type}_min_max_depth")[0][1]
+        _, depth = disp_to_depth(disp, min_depth, max_depth)
 
         outputs["depth"] = depth
 
@@ -136,7 +140,7 @@ class Mono_Depth_Head(BaseModel):
                 outputs[("sample", frame_id)] = pix_coords
 
             outputs[("color", frame_id)] = F.grid_sample(
-                inputs['color', frame_id],
+                inputs[('color', frame_id)],
                 outputs[("sample", frame_id)],
                 padding_mode="border")
 
@@ -162,21 +166,22 @@ class Mono_Depth_Head(BaseModel):
         loss = 0
         disp = outputs['disp']
         reprojection_losses = []
-        color = inputs['color', 1]
-        target = inputs['color', 1]
+        color = inputs[('color', 1)]
+        target = inputs[('color', 1)]
+        ego_mask = inputs[('ego_mask', 1)].unsqueeze(1)  # 可用的部分为1,不可用的部分为0
 
         for frame_id in self.frame_ids[1:]:
-            pred = outputs[("color", frame_id)]
-            reprojection_losses.append(self.compute_reprojection_loss(pred, target))
+            pred = outputs[("color", frame_id)] * ego_mask
+            reprojection_losses.append(self.compute_reprojection_loss(pred, target * ego_mask))
 
         reprojection_losses = torch.cat(reprojection_losses, 1)
         
         # automasking
         identity_reprojection_losses = []
         for frame_id in self.frame_ids[1:]:
-            pred = inputs["color", frame_id]
+            pred = inputs[("color", frame_id)] * ego_mask
             identity_reprojection_losses.append(
-                self.compute_reprojection_loss(pred, target))  # ssim
+                self.compute_reprojection_loss(pred, target * ego_mask))  # ssim
 
         identity_reprojection_losses = torch.cat(identity_reprojection_losses, 1)
 

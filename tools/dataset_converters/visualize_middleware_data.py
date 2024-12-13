@@ -216,6 +216,116 @@ def intrinsics_matrix(intrinsic):
     K[1, 2] = cy
     return K
 
+def plot_show(frame_info, calibration, gt_corners, gt_labels, pts, IMG_KEYS, data_root='data/mv_4d_data', figure_size=(24, 8), row=5, data_flag="mv_4d"):
+    plt.figure(figsize=figure_size)
+
+    for i, k in enumerate(IMG_KEYS): # type: ignore
+        # Draw camera views
+        fig_idx = i + 1 if i < row else i + 2
+        plt.subplot(2, row+1, fig_idx)
+
+        # Set camera attributes
+        plt.title(k)
+        plt.axis('off')
+        if data_flag == "mv_4d":
+            if "FISHEYE" in k:
+                plt.xlim(0, 1024)
+                plt.ylim(640, 0)
+            else:
+                plt.xlim(0, 1280)
+                plt.ylim(960, 0)
+        elif data_flag == "MV4D":
+            plt.xlim(0, 1920)
+            plt.ylim(1080, 0)
+        img = mmcv.imread(
+            os.path.join(data_root, frame_info['camera_image'][k]))
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        # Draw images
+        plt.imshow(img)
+
+        # Draw 3D gt
+        if "FISHEYE" in k or k in ["camera1", "camera5", "camera8", "camera11"]:
+            for corners in gt_corners:
+                cam_corners = get_corners_ego2cam(
+                    corners,
+                    calibration[k]["extrinsic"][1],
+                    Quaternion(matrix=calibration[k]["extrinsic"][0]),
+                )
+                # 12条线段
+                inter_cam_corners = interpolate_points(cam_corners)
+                for inter_cam_corner in inter_cam_corners:
+                    # pdb.set_trace()
+                    img_corners = FisheyeCamera(resolution=img.shape[:2][::-1], extrinsic=calibration[k]["extrinsic"], intrinsic=calibration[k]['intrinsic'], fov=225).project_points_from_camera_to_image(inter_cam_corner.T)
+                    img_corners = np.stack([img_corners[0], img_corners[1]], axis=1)
+                    mask = np.logical_or(img_corners[:, 0] <= 0, img_corners[:, 1] <= 0)
+                    img_corners = img_corners[~mask, :]
+                    plt.plot(img_corners[:, 0],
+                            img_corners[:, 1],
+                            c=cm.get_cmap('tab10')(4)
+                            )
+        else:
+            for corners, label_name in zip(gt_corners, gt_labels):
+                cam_corners = get_cam_corners(
+                    corners,
+                    calibration[k]["extrinsic"][1],
+                    Quaternion(matrix=calibration[k]["extrinsic"][0]),
+                    intrinsics_matrix(calibration[k]['intrinsic'][:4]))
+                lines = get_3d_lines(cam_corners)
+                for line in lines:
+                    plt.plot(line[0],
+                            line[1],
+                            c=cm.get_cmap('tab10')(4)
+                            )
+                # debug
+                # if "VCAMERA_PERSPECTIVE_FRONT" == k:
+                #     plt.text(cam_corners[0][0], cam_corners[0][1], label_name, fontsize=5, ha='center', va='bottom')
+        # for box in info['box_2d'][k]['box']:
+        #     x1, y1, x2, y2 = box
+        #     w = x2 - x1
+        #     h = y2 - y1
+        #     rect = patches.Rectangle((x1, y1), w, h, linewidth=1, edgecolor='r', facecolor='none')
+        #     plt.gca().add_patch(rect)
+    # Draw BEV
+    plt.subplot(1, 6, 6)
+
+    # Set BEV attributes
+    plt.title('LIDAR_TOP')
+    plt.axis('equal')
+    plt.xlim(-40, 40)
+    plt.ylim(-40, 40)
+
+    # Draw point cloud
+    plt.scatter(-pts[:, 1], pts[:, 0], s=0.01, c=pts[:, -1], cmap='gray')
+    # BEV box ego 是x朝前 y朝左,  可视化出来到图上是x朝右，y朝前，对应到图上x=-y,y=x 
+    # Draw BEV GT boxes
+    for corners in gt_corners:
+        lines = get_bev_lines(corners)
+        front_line = lines.pop(0)
+        plt.plot([-x for x in front_line[1]],
+                    front_line[0],
+                    c='b',
+                    label='ground truth')
+        for line in lines:
+            plt.plot([-x for x in line[1]],
+                    line[0],
+                    c='r',
+                    label='ground truth')
+
+    # Set legend
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(by_label.values(),
+            by_label.keys(),
+            loc='upper right',
+            framealpha=1)
+
+    # Save figure
+    plt.tight_layout(w_pad=0, h_pad=2)
+    # plt.savefig(dump_file)
+    plt.show()
+
+
 def demo(
     idx,
     middleware_data,
@@ -238,7 +348,7 @@ def demo(
     # Set cameras
     nus = False
     av2 = False
-    mv_4d = True
+    mv_4d = False
     if "nus" in middleware_data:
         nus = True
         IMG_KEYS = [
@@ -250,11 +360,16 @@ def demo(
         IMG_KEYS = [
         'ring_rear_left', 'ring_side_left', 'ring_front_left', 'ring_front_center', 'ring_front_right', 'ring_side_right', 'ring_rear_right'
         ]
-    elif "mv_4d" in middleware_data:
+    elif "mv_4d_data" in middleware_data:
         mv_4d = True
         IMG_KEYS = [
         'VCAMERA_FISHEYE_FRONT', 'VCAMERA_PERSPECTIVE_FRONT_LEFT', 'VCAMERA_PERSPECTIVE_BACK_LEFT', 'VCAMERA_FISHEYE_LEFT', 'VCAMERA_PERSPECTIVE_BACK', 'VCAMERA_FISHEYE_BACK', 
         'VCAMERA_PERSPECTIVE_FRONT_RIGHT', 'VCAMERA_PERSPECTIVE_BACK_RIGHT', 'VCAMERA_FISHEYE_RIGHT', 'VCAMERA_PERSPECTIVE_FRONT'
+        ]
+    elif "MV4D_12V3L" in middleware_data:
+        MV4D = True
+        IMG_KEYS = [
+            "camera1", "camera2", "camera3", "camera4", "camera5", "camera6", "camera7", "camera8", "camera11", "camera12", "camera15"
         ]
     if test:
         infos = mmengine.load('data/nuScenes/nuscenes_infos_test.pkl')
@@ -280,6 +395,8 @@ def demo(
             lidar_data = o3d.t.io.read_point_cloud(os.path.join('data/av2/sensor', lidar_path))
         elif mv_4d:
             lidar_data = o3d.io.read_point_cloud(os.path.join('data/mv_4d_data', lidar_path))
+        elif MV4D:
+            lidar_data = o3d.io.read_point_cloud(os.path.join('data/MV4D_12V3L', lidar_path))
         lidar_points_positions = np.asarray(lidar_data.points)  # N * 3 # type: ignore
         lidar_points_intensity = np.zeros_like(lidar_points_positions[:, 0:1])  # N * 1
         lidar_points = np.concatenate([lidar_points_positions, lidar_points_intensity], axis=1)  # N * 4
@@ -479,110 +596,10 @@ def demo(
             plt.savefig(dump_file)
             plt.show()
         elif mv_4d:
-            plt.figure(figsize=(24, 8))
-            row = 5 
-
-            for i, k in enumerate(IMG_KEYS): # type: ignore
-                # Draw camera views
-                fig_idx = i + 1 if i < row else i + 2
-                plt.subplot(2, 6, fig_idx)
-
-                # Set camera attributes
-                plt.title(k)
-                plt.axis('off')
-                if "FISHEYE" in k:
-                    plt.xlim(0, 1024)
-                    plt.ylim(640, 0)
-                else:
-                    plt.xlim(0, 1280)
-                    plt.ylim(960, 0)
-                img = mmcv.imread(
-                    os.path.join('data/mv_4d_data', frame_info['camera_image'][k]))
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-                # Draw images
-                plt.imshow(img)
-
-                # Draw 3D gt
-                if "FISHEYE" in k:
-                    for corners in gt_corners:
-                        cam_corners = get_corners_ego2cam(
-                            corners,
-                            calibration[k]["extrinsic"][1],
-                            Quaternion(matrix=calibration[k]["extrinsic"][0]),
-                        )
-                        # 12条线段
-                        inter_cam_corners = interpolate_points(cam_corners)
-                        for inter_cam_corner in inter_cam_corners:
-                            # pdb.set_trace()
-                            img_corners = FisheyeCamera(resolution=img.shape[:2][::-1], extrinsic=calibration[k]["extrinsic"], intrinsic=calibration[k]['intrinsic'], fov=225).project_points_from_camera_to_image(inter_cam_corner.T)
-                            img_corners = np.stack([img_corners[0], img_corners[1]], axis=1)
-                            mask = np.logical_or(img_corners[:, 0] <= 0, img_corners[:, 1] <= 0)
-                            img_corners = img_corners[~mask, :]
-                            plt.plot(img_corners[:, 0],
-                                    img_corners[:, 1],
-                                    c=cm.get_cmap('tab10')(4)
-                                    )
-                else:
-                    for corners, label_name in zip(gt_corners, gt_labels):
-                        cam_corners = get_cam_corners(
-                            corners,
-                            calibration[k]["extrinsic"][1],
-                            Quaternion(matrix=calibration[k]["extrinsic"][0]),
-                            intrinsics_matrix(calibration[k]['intrinsic'][:4]))
-                        lines = get_3d_lines(cam_corners)
-                        for line in lines:
-                            plt.plot(line[0],
-                                    line[1],
-                                    c=cm.get_cmap('tab10')(4)
-                                    )
-                        # debug
-                        # if "VCAMERA_PERSPECTIVE_FRONT" == k:
-                        #     plt.text(cam_corners[0][0], cam_corners[0][1], label_name, fontsize=5, ha='center', va='bottom')
-                # for box in info['box_2d'][k]['box']:
-                #     x1, y1, x2, y2 = box
-                #     w = x2 - x1
-                #     h = y2 - y1
-                #     rect = patches.Rectangle((x1, y1), w, h, linewidth=1, edgecolor='r', facecolor='none')
-                #     plt.gca().add_patch(rect)
-            # Draw BEV
-            plt.subplot(1, 6, 6)
-
-            # Set BEV attributes
-            plt.title('LIDAR_TOP')
-            plt.axis('equal')
-            plt.xlim(-40, 40)
-            plt.ylim(-40, 40)
-
-            # Draw point cloud
-            plt.scatter(-pts[:, 1], pts[:, 0], s=0.01, c=pts[:, -1], cmap='gray')
-            # BEV box ego 是x朝前 y朝左,  可视化出来到图上是x朝右，y朝前，对应到图上x=-y,y=x 
-            # Draw BEV GT boxes
-            for corners in gt_corners:
-                lines = get_bev_lines(corners)
-                front_line = lines.pop(0)
-                plt.plot([-x for x in front_line[1]],
-                            front_line[0],
-                            c='b',
-                            label='ground truth')
-                for line in lines:
-                    plt.plot([-x for x in line[1]],
-                            line[0],
-                            c='r',
-                            label='ground truth')
-
-            # Set legend
-            handles, labels = plt.gca().get_legend_handles_labels()
-            by_label = dict(zip(labels, handles))
-            plt.legend(by_label.values(),
-                    by_label.keys(),
-                    loc='upper right',
-                    framealpha=1)
-
-            # Save figure
-            plt.tight_layout(w_pad=0, h_pad=2)
-            # plt.savefig(dump_file)
-            plt.show()
+            plot_show(frame_info, calibration, gt_corners, gt_labels, pts, IMG_KEYS)
+        elif MV4D:
+            plot_show(frame_info, calibration, gt_corners, gt_labels, pts, IMG_KEYS, data_root="./data/MV4D_12V3L", figure_size=(28, 8), row=6, data_flag="MV4D")
+            
 
 if __name__ == '__main__':
     args = parse_args()

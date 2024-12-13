@@ -1,6 +1,6 @@
 import torch
 
-from contrib.fastray_planar.model import (
+from contrib.fastray_planar.modules import (
     VoxelTemporalAlign,
     FastRaySpatialTransform,
 )
@@ -60,6 +60,7 @@ def test_fastray_spatial_transform():
     camera_feat_tensor = torch.zeros(1, 3, 4, 4, dtype=torch.float32)
     camera_feat_tensor[0, 0, 1, 1:3] = 28
     camera_feat_tensor[0, 1, 1, 1:3] = 4
+    camera_feat_tensor.requires_grad = True
     camera_feats_dict = dict(cam_6=camera_feat_tensor)
     camera_lookups = [dict(cam_6=dict(
         valid_map_sampled=torch.tensor([
@@ -132,3 +133,4 @@ def test_fastray_spatial_transform():
         [0, 0, 0, 0, 0, 0, 0, 0],
     ], dtype=torch.float32)
     torch.testing.assert_close(voxel_feat[0, 0, 0], answer)
+    assert voxel_feat.requires_grad

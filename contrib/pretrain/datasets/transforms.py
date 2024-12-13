@@ -61,38 +61,25 @@ class LoadAnnotationsPretrain(LoadAnnotations):
         if results["scene_name"] != "avp":
             img_bytes = fileio.get(
                 results['seg_map_path'], backend_args=self.backend_args)
-            gt_semantic_seg = mmcv.imfrombytes(
+            semantic_seg = mmcv.imfrombytes(
                 img_bytes, flag='unchanged',
                 backend=self.imdecode_backend).squeeze().astype(np.uint8)[..., 0]
-
-            # reduce zero_label
-            if self.reduce_zero_label is None:
-                self.reduce_zero_label = results['reduce_zero_label']
-            assert self.reduce_zero_label == results['reduce_zero_label'], \
-                'Initialize dataset with `reduce_zero_label` as ' \
-                f'{results["reduce_zero_label"]} but when load annotation ' \
-                f'the `reduce_zero_label` is {self.reduce_zero_label}'
-            if self.reduce_zero_label:
-                # avoid using underflow conversion
-                gt_semantic_seg[gt_semantic_seg == 0] = 255
-                gt_semantic_seg = gt_semantic_seg - 1
-                gt_semantic_seg[gt_semantic_seg == 254] = 255
-            # modify if custom classes
-            if results.get('label_map', None) is not None:
-                # Add deep copy to solve bug of repeatedly
-                # replace `gt_semantic_seg`, which is reported in
-                # https://github.com/open-mmlab/mmsegmentation/pull/1445/
-                gt_semantic_seg_copy = gt_semantic_seg.copy()
-                for old_id, new_id in results['label_map'].items():
-                    gt_semantic_seg[gt_semantic_seg_copy == old_id] = new_id
+            semantic_seg[semantic_seg==255] = 27
+            semantic_seg[semantic_seg==0] = 27
+            semantic_seg -= 1
+            num_classes = 27
+            rows, cols = semantic_seg.shape
+            gt_semantic_seg = np.zeros((rows, cols, num_classes))
+            gt_semantic_seg[np.arange(rows)[:, None], np.arange(cols), semantic_seg] = 1
+            
         else:
             gt_semantic_seg = np.array(PILImage.open(results['seg_map_path'])).astype(np.float32)
             segmap = gt_semantic_seg.transpose(2,0,1)
             gt_semantic_seg = segmap.reshape(segmap.shape[0]*9, segmap.shape[1], int(segmap.shape[2]/9)).transpose(1,2,0)
-            ignore = gt_semantic_seg[..., -1]
-            gt_semantic_seg = gt_semantic_seg[..., :-1]
-            for i in range(gt_semantic_seg.shape[-1]):
-                gt_semantic_seg[..., i][ignore==1] = 255
+            # ignore = gt_semantic_seg[..., -1]
+            # gt_semantic_seg = gt_semantic_seg[..., :-1]
+            # for i in range(gt_semantic_seg.shape[-1]):
+            #     gt_semantic_seg[..., i][ignore==1] = 255
         results['gt_seg_map'] = gt_semantic_seg
         results['seg_fields'].append('gt_seg_map')
     

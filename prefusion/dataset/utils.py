@@ -1,17 +1,21 @@
-from typing import List, Union, Dict, TYPE_CHECKING
-from pathlib import Path
 import copy
+from typing import List, Union, Dict, TYPE_CHECKING, Any
+from pathlib import Path
+from cachetools import cached, Cache
 
+import torch
 import mmcv
 import numpy as np
 from pypcd_imp import pypcd
 
-from prefusion.registry import TRANSFORMS, MODEL_FEEDERS, TRANSFORMABLE_LOADERS, TENSOR_SMITHS
+from prefusion.registry import TRANSFORMS, MODEL_FEEDERS, TRANSFORMABLE_LOADERS, TENSOR_SMITHS, DATASET_TOOLS, GROUP_SAMPLERS
 
 if TYPE_CHECKING:
     from .transform import Transform
     from .model_feeder import BaseModelFeeder
     from .transformable_loader import TransformableLoader
+    from .subepoch_manager import SubEpochManager
+    from .group_sampler import GroupSampler
 
 INF_DIST = 1e8
 
@@ -57,6 +61,13 @@ def _sign(x):
     return 2 * (x > 0) - 1
 
 
+def divide(dividend, divisor, drop_last=False):
+    if drop_last:
+        return dividend // divisor
+    else:
+        return int(np.ceil(dividend / divisor))
+
+
 def make_seed(base_number: int, *variables, base=17) -> int:
     """Create a new Integer seed based on `base_number` and extra varying input values such as i=0,1,2,...; j=0,1,2,... 
 
@@ -86,6 +97,7 @@ def get_cam_type(name):
         raise ValueError('Unknown camera type')
 
 
+@cached(cache=Cache(maxsize=float('inf')), key=lambda cfg: str(sorted((cfg or {}).items())))
 def build_tensor_smith(tensor_smith: dict = None):
     tensor_smith = copy.deepcopy(tensor_smith)
     if isinstance(tensor_smith, dict):
@@ -122,6 +134,25 @@ def build_model_feeder(model_feeder: Union["BaseModelFeeder", dict]) -> "BaseMod
         return MODEL_FEEDERS.build(model_feeder)
     return model_feeder
 
+
+def build_group_sampler(group_sampler: Union["GroupSampler", dict]) -> "GroupSampler":
+    if group_sampler is None:
+        raise ValueError("Group sampler is mandantory for dataset.")
+    group_sampler = copy.deepcopy(group_sampler)
+    if isinstance(group_sampler, dict):
+        return GROUP_SAMPLERS.build(group_sampler)
+    return group_sampler
+
+
+def build_subepoch_manager(subepoch_manager: Union["SubEpochManager", dict], batch_size: int):
+    if subepoch_manager is None:
+        return None
+    subepoch_manager = copy.deepcopy(subepoch_manager)
+    if isinstance(subepoch_manager, dict):
+        subepoch_manager = DATASET_TOOLS.build(subepoch_manager)
+    subepoch_manager.set_batch_size(batch_size)
+    return subepoch_manager
+
 def read_pcd(path: Union[str, Path], intensity: bool = True) -> np.ndarray:
     """read pcd file
 
@@ -150,3 +181,70 @@ def read_ego_mask(path):
     if ego_mask.max() == 255:
         ego_mask = ego_mask / 255
     return ego_mask
+
+
+def T4x4(rotation: np.ndarray, translation: np.ndarray):
+    """Create a 4x4 transformation matrix
+
+    Parameters
+    ----------
+    rotation : np.ndarray
+        of shape (3, 3)
+    translation : np.ndarray
+        of shape (3,) or (1, 3) or (3, 1)
+
+    Returns
+    -------
+    _type_
+        _description_
+    """
+    mat = np.eye(4)
+    mat[:3, :3] = rotation
+    mat[:3, 3] = translation.flatten()
+    return mat
+
+
+def get_reversed_mapping(mapping) -> Dict[str, str]:
+    """Get reversed mapping from mapping"""
+    reversed_mapping = {}
+    for k, v in mapping.items():
+        for vv in v:
+            reversed_mapping[vv] = k
+    return reversed_mapping
+
+
+def choose_index(index_im, choices):
+    """Alternative implementation (but support more than 32 choices) of 
+    >>> np.choose(index_im, choices)
+    """
+    max_batch_size = 16
+    assert len(choices) > 0
+    num_batches = (len(choices) + max_batch_size - 1) // max_batch_size
+    chosen = np.zeros_like(choices[0])
+    for b in range(num_batches):
+        start_ind = b * max_batch_size
+        end_ind = min(start_ind + max_batch_size, len(choices))
+        choices_batch = choices[start_ind:end_ind]
+        index_mask = (index_im >= start_ind) & (index_im < end_ind)
+        clipped_index_im = np.clip(index_im - start_ind, 0, len(choices_batch) - 1)
+        batch_result = np.choose(clipped_index_im, choices_batch)
+        chosen += batch_result * index_mask
+    return chosen
+
+
+def unstack_batch_size(batch_data: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    assert isinstance(batch_data, dict)
+    assert all(i.ndim >= 2 for i in batch_data.values())
+    assert len(set(i.shape[0] for i in batch_data.values())) == 1
+    unstacked_data = []
+    keys = list(batch_data.keys())
+    for inner_data in zip(*batch_data.values()):
+        _unstacked = {}
+        for key, single_inner_data in zip(keys, inner_data):
+            _unstacked[key] = single_inner_data
+        unstacked_data.append(_unstacked)
+    return unstacked_data
+
+
+def approx_equal(a, b, eps=1e-4):
+    return abs(a - b) < eps

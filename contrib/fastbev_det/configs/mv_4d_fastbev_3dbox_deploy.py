@@ -23,7 +23,7 @@ img_scale = 2
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
 front_perspective_img_size = [768, 384]
-batch_size = 3
+batch_size = 1
 group_size = 1
 bev_range = [-12, 36, -12, 12, -0.5, 2.5]
 
@@ -167,10 +167,11 @@ train_dataloader = dict(
         info_path=data_root + 'mv_4d_infos_val.pkl',
         transformables=transformables,
         transforms=train_pipeline,
-        phase='train',
+        group_sampler=dict(type="IndexGroupSampler",
+                           phase="train",
+                           possible_group_sizes=[1],
+                           possible_frame_intervals=[1]),
         batch_size=batch_size, 
-        possible_group_sizes=[1],
-        possible_frame_intervals=[1]
         ),
     )
 
@@ -187,10 +188,11 @@ val_dataloader = dict(
         info_path=data_root + 'mv_4d_infos_val.pkl',
         transformables=transformables,
         transforms=val_pipeline,
-        phase='val',
+        group_sampler=dict(type="IndexGroupSampler",
+                           phase="val",
+                           possible_group_sizes=[1],
+                           possible_frame_intervals=[1]),
         batch_size=batch_size, 
-        possible_group_sizes=[1],
-        possible_frame_intervals=[1]
         ),
     )
 
@@ -253,7 +255,7 @@ model = dict(
         label_start_idx=2, # process labels info start index of collection_info_type
     ),
     backbone_conf=dict(
-        type='FastRay_DP',
+        type='FastRay_DP_v3',
         x_bound=[36, -12, 0.2],  # BEV grids bounds and size (m)
         y_bound=[12, -12, 0.2],  # BEV grids bounds and size (m)
         z_bound=[-0.5, 2.5, 0.5],  # BEV grids bounds and size (m)
@@ -379,11 +381,11 @@ val_evaluator = [
 
 
 train_cfg = dict(type='GroupBatchTrainLoop', max_epochs=24, val_interval=1)  # -1 note don't eval
-val_cfg = dict(type='GroupValLoop')
+val_cfg = dict(type='GroupBatchValLoop')
 
 test_dataloader = val_dataloader
 test_evaluator = val_evaluator
-test_cfg = dict(type='GroupInferLoop')
+test_cfg = dict(type='GroupBatchInferLoop')
 
 env_cfg = dict(
     cudnn_benchmark=False,
@@ -392,7 +394,7 @@ env_cfg = dict(
 )
 find_unused_parameters = True
 
-runner_type = 'GroupRunner'
+runner_type = 'GroupBatchRunner'
 
 lr = 0.01  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(

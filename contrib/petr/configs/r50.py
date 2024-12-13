@@ -7,13 +7,13 @@ custom_imports = dict(imports=["prefusion", "contrib.petr"], allow_failed_import
 backend_args = None
 
 det_classes = [
-    'class.cycle.motorcycle',
-    'class.parking.text_icon',
-    'class.pedestrian.pedestrian',
-    'class.road_marker.arrow',
-    'class.traffic_facility.box',
-    'class.traffic_facility.speed_bump',
-    'class.vehicle.passenger_car'
+    'motorcycle',
+    'text_icon',
+    'pedestrian',
+    'arrow',
+    'box',
+    'speed_bump',
+    'passenger_car',
 ]
 
 def _calc_grid_size(_range, _voxel_size, n_axis=3):
@@ -48,10 +48,39 @@ train_dataloader = dict(
                     type="CameraImageTensor",
                     means=[123.675, 116.280, 103.530],
                     stds=[58.395, 57.120, 57.375])),
-            bbox_3d=dict(
+            bbox_3d=dict(  # bbox_directional
                 type="Bbox3D", 
-                loader=dict(type="Bbox3DLoader"),
-                dictionary={"classes": det_classes},
+                loader=dict(
+                    type="AdvancedBbox3DLoader",
+                    class_mapping=dict(
+                        motorcycle=['class.cycle.motorcycle'],
+                        arrow=['class.road_marker.arrow'],
+                        passenger_car=['class.vehicle.passenger_car'],
+                    ),
+                    attr_mapping=dict(
+                        is_door_open=["attr.vehicle.is_door_open.true"],
+                        is_trunk_open=["attr.vehicle.is_trunk_open.true"],
+                    )
+                ),
+                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
+            bbox_rect_cuboid=dict(
+                type="Bbox3D", 
+                loader=dict(
+                    type="AdvancedBbox3DLoader",
+                    class_mapping=dict(
+                        text_icon=['class.parking.text_icon'],
+                        box=['class.traffic_facility.box'],
+                        speed_bump=['class.traffic_facility.speed_bump'],
+                    ),
+                    axis_rearrange_method="longer_edge_as_y",
+                ),
+                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
+            bbox_cylinder_directional=dict(
+                type="Bbox3D", 
+                loader=dict(
+                    type="AdvancedBbox3DLoader",
+                    class_mapping=dict(pedestrian=['class.pedestrian.pedestrian']),
+                ),
                 tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
             ego_poses=dict(
                 type="EgoPoseSet",
@@ -65,19 +94,20 @@ train_dataloader = dict(
                 prob=0.0001,
             ),
         ],
-        phase="train",
+        group_sampler=dict(type="IndexGroupSampler",
+                           phase="train",
+                           possible_group_sizes=[1],
+                           possible_frame_intervals=[1]),
         batch_size=batch_size,
-        possible_group_sizes=[1],
-        possible_frame_intervals=[1],
     ),
 )
 
 val_dataloader = train_dataloader
 test_dataloader = train_dataloader
 
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=num_epochs, val_interval=-1)  # -1 note don't eval
-val_cfg = dict(type="GroupValLoop")
-test_cfg = dict(type="GroupTestLoop")
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=num_epochs, val_interval=1)  # -1 note don't eval
+val_cfg = dict(type="GroupBatchValLoop")
+test_cfg = dict(type="GroupBatchTestLoop")
 
 model = dict(
     type="StreamPETR",

@@ -10,8 +10,9 @@ from prefusion.dataset.transform import (
     random_transform_class_factory,
     CameraImage, CameraImageSet,
     RandomSetIntrinsicParam, RandomSetExtrinsicParam,
-    RenderIntrinsic, RenderExtrinsic, RandomRenderExtrinsic,
-    RandomChooseKTransform, RandomBrightness, RandomSharpness, RandomImEqualize
+    RenderIntrinsic, RenderExtrinsic, RenderVirtualCamera, RandomRenderExtrinsic,
+    RandomChooseKTransform, RandomBrightness, RandomSharpness, RandomImEqualize,
+    RandomRotateSpace
 )
 
 class MockTextTransformable:
@@ -151,6 +152,33 @@ def test_render_extrinsic(fisheye_image, perspective_image, camera_imageset):
     np.testing.assert_almost_equal(camera_imageset.transformables['front'].img, answer_perspective_img)
 
 
+def test_render_virtual_camera(fisheye_image, perspective_image, camera_imageset):
+    cameras = {
+        'VCAMERA_FISHEYE_FRONT': dict(
+            cam_type='FisheyeCamera',
+            resolution=(96, 48),
+            euler_angles=[-120, 0, -90],
+            translation=[3.5, 0, 0.5],
+            intrinsic='auto'
+        ),
+        'VCAMERA_PERSPECTIVE_FRONT': dict(
+            cam_type='PerspectiveCamera',
+            resolution=(96, 48),
+            euler_angles=[-90, 0, -90],
+            translation=[2, 0, 1.5],
+            intrinsic='auto'
+        )
+    }
+    transform = RenderVirtualCamera(cameras)
+    transform(fisheye_image, perspective_image, camera_imageset)
+    answer_fisheye_img = mmcv.imread('tests/prefusion/transform/test_render_imgs/test_fisheye_render_intrinsic_result.png')
+    answer_perspective_img = mmcv.imread('tests/prefusion/transform/test_render_imgs/test_perspective_render_intrinsic_result.png')
+    np.testing.assert_almost_equal(fisheye_image.img, answer_fisheye_img)
+    np.testing.assert_almost_equal(fisheye_image.intrinsic, [47.5, 23.5, 24.0, 24.0, 0.1, 0, 0, 0])
+    np.testing.assert_almost_equal(perspective_image.img, answer_perspective_img)
+    np.testing.assert_almost_equal(perspective_image.intrinsic, [47.5, 23.5, 48.0, 48.0])
+    np.testing.assert_almost_equal(camera_imageset.transformables['front'].img, answer_perspective_img)
+
 
 def test_random_render_extrinsic(fisheye_image, perspective_image, camera_imageset):
     transform = RandomRenderExtrinsic(
@@ -243,6 +271,10 @@ def cam_im():
         extrinsic=[np.eye(3), np.zeros((1, 3))],
     )
 
+@pytest.fixture
+def cam_im_set(cam_im):
+    return CameraImageSet('cam_im_set', transformables={'cam': cam_im})
+
 def test_random_set_intrinsic_param(cam_im):
     transform = RandomSetIntrinsicParam(prob=1.0, jitter_ratio=0.05, scope="group")
     assert transform.jitter_ratio == 0.05
@@ -257,6 +289,13 @@ def test_random_set_intrinsic_param_transformable_scope(cam_im):
     assert cam_im.intrinsic == pytest.approx([9.53855184, 19.07710368, 0.47692759, 0.763084147])
 
 
+def test_random_set_intrinsic_param_camera_image_set_transformable_scope(cam_im_set):
+    transform = RandomSetIntrinsicParam(prob=1.0, jitter_ratio=0.05, scope="transformable")
+    assert transform.jitter_ratio == 0.05
+    transform(cam_im_set, seeds={"frame": 42, "group": 1142})
+    assert cam_im_set.transformables['cam'].intrinsic == pytest.approx([9.53855184, 19.07710368, 0.47692759, 0.763084147])
+
+
 def test_random_set_extrinsic_param(cam_im):
     transform = RandomSetExtrinsicParam(prob=1.0, angle=10, translation=4, scope="batch")
     assert transform.angle == 10 and transform.translation == 4
@@ -267,6 +306,19 @@ def test_random_set_extrinsic_param(cam_im):
                   [-0.06285676,  0.02876781,  0.99760786]])
     ) 
     np.testing.assert_almost_equal(cam_im.extrinsic[1], np.array([[-0.11172955, -1.2373623, 2.66947292]]))
+
+
+def test_random_set_extrinsic_param_camera_image_set(cam_im_set):
+    transform = RandomSetExtrinsicParam(prob=1.0, angle=10, translation=4, scope="batch")
+    assert transform.angle == 10 and transform.translation == 4
+    transform(cam_im_set, seeds={"frame": 42, "batch": 142, "group": 1142})
+    np.testing.assert_almost_equal(cam_im_set.transformables['cam'].extrinsic[0], 
+        np.array([[ 0.99801237,  0.00632895,  0.06269974],
+                  [-0.00451007,  0.99956608, -0.02910845],
+                  [-0.06285676,  0.02876781,  0.99760786]])
+    ) 
+    np.testing.assert_almost_equal(cam_im_set.transformables['cam'].extrinsic[1], 
+                                   np.array([[-0.11172955, -1.2373623, 2.66947292]]))
 
 
 class MockNumberTransformable:
@@ -371,3 +423,8 @@ def test_random_isp_delegate_transform():
         [32, 35, 37, 40, 42, 44],
         [44, 46, 48, 51, 53, 55]]]
     ).transpose(1, 2, 0))
+
+def test_random_rotate_space(camera_imageset):
+    rotate_space = RandomRotateSpace(prob=1, prob_inverse_cameras_rotation=1)
+    transformed_camera_imageset = rotate_space(camera_imageset, seeds={'frame': 42, 'batch': 142, 'group': 1142})[0]
+    assert len(transformed_camera_imageset.transformables) == 2

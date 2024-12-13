@@ -25,7 +25,13 @@ class PlanarLoss(nn.Module):
     reduction_dim: Union[Tuple, List] = (0, 2, 3)
 
     def __init__(
-        self, *args, loss_name_prefix: str, weight_scheme: Dict[str, Dict], auto_loss_init_value: float = 1e-5, **kwargs
+        self,
+        *args,
+        loss_name_prefix: str = None,
+        seg_iou_method: str = "log",
+        weight_scheme: Dict[str, Dict] = None,
+        auto_loss_init_value: float = 1e-5,
+        **kwargs,
     ) -> None:
         """Specially designed loss for planar data.
 
@@ -33,6 +39,9 @@ class PlanarLoss(nn.Module):
         ----------
         loss_name_prefix : str
             the name prefix of the loss (used to distinguish between different losses)
+
+        seg_iou_method : str
+            the method to use in the calculation of SegIOU Loss. Valid choices are ['log', 'linear']
 
         weight_scheme : dict, optional
             the weight scheme for different losses, e.g. seg, cen, reg
@@ -76,11 +85,12 @@ class PlanarLoss(nn.Module):
 
         """
         super().__init__(*args, **kwargs)
+        assert loss_name_prefix is not None, "loss_name_prefix must be provided"
         self.loss_name_prefix = loss_name_prefix
         self.total_loss_name = complete_loss_name(self.loss_name_prefix)
         self.weight_scheme = edict(weight_scheme)
         self.auto_loss_init_value = float(auto_loss_init_value)
-        self.iou_loss = SegIouLoss(pred_logits=True, reduction_dim=self.reduction_dim)
+        self.iou_loss = SegIouLoss(method=seg_iou_method, pred_logits=True, reduction_dim=self.reduction_dim)
         self.init_auto_loss_weight_(self.weight_scheme)
         self.unify_reg_partition_weights_()
 
@@ -97,7 +107,7 @@ class PlanarLoss(nn.Module):
 
     def unify_reg_partition_weights_(self):
         """Unify single value index to standard 2-value slice"""
-        if "reg" not in self.weight_scheme:
+        if "reg" not in self.weight_scheme or "partition_weights" not in self.weight_scheme["reg"]:
             return
 
         for partition_name, partition_info in self.weight_scheme.reg.partition_weights.items():
@@ -117,14 +127,15 @@ class PlanarLoss(nn.Module):
         return tensor_dict
 
     def forward(self, pred: torch.Tensor, label: torch.Tensor):
-        assert set(pred.keys()) == set(label.keys()) == set(self.weight_scheme.keys())
+        assert set(pred.keys()) == set(label.keys())
         pred = self._ensure_shape_nchw(pred)
         label = self._ensure_shape_nchw(label)
 
         loss = {}
-        for task in self.weight_scheme:
+        for task in label:
             _loss_func = getattr(self, f"_{task}_loss")
             fg_mask = label["seg"][:, 0:1] if task in ["cen", "reg"] else None
+            self.weight_scheme.setdefault(task, {"loss_weight": 1.0})  # if not provided, use 1.0 as default
             task_related_loss = _loss_func(pred[task], label[task], fg_mask=fg_mask, **self.weight_scheme[task])
             loss.update(**task_related_loss)
 
@@ -147,6 +158,7 @@ class PlanarLoss(nn.Module):
         _channel_weights = torch.ones(num_cls)
         if channel_weights is not None:
             _channel_weights = [c["weight"] for _, c in channel_weights.items()]
+        channel_weights_sum = max(sum(_channel_weights), 1e-4)
 
         assert num_cls == len(_channel_weights), f"number of channel weights does not match with number of classes"
 
@@ -167,10 +179,10 @@ class PlanarLoss(nn.Module):
         loss_dict.update(seg_iou_loss_by_channel)
         loss_dict.update(seg_dual_focal_loss_by_channel)
         loss_dict[L("seg_iou")] = (
-            iou_loss_weight * sum(seg_iou_loss_by_channel.values()) / sum(_channel_weights)
+            iou_loss_weight * sum(seg_iou_loss_by_channel.values()) / channel_weights_sum
         )  # functools.reduce(lambda x, y: x + y, seg_iou_loss_by_channel.values())
         loss_dict[L("seg_dual_focal")] = (
-            dual_focal_loss_weight * sum(seg_dual_focal_loss_by_channel.values()) / sum(_channel_weights)
+            dual_focal_loss_weight * sum(seg_dual_focal_loss_by_channel.values()) / channel_weights_sum
         )
         loss_dict[L("seg")] = (loss_dict[L("seg_dual_focal")] + loss_dict[L("seg_iou")]) * loss_weight
         return loss_dict
@@ -186,7 +198,8 @@ class PlanarLoss(nn.Module):
         **kwargs,
     ):
         dual_loss = dual_focal_loss(pred, label, reduction="none").mean()
-        fg_dual_loss = (dual_focal_loss(pred, label, reduction="none") * fg_mask).sum() / fg_mask.sum()
+        mask_sum = max(fg_mask.sum(), 1e-4)  # fg_mask is assumed to be from label (gt), so no need to worry about backward
+        fg_dual_loss = (dual_focal_loss(pred, label, reduction="none") * fg_mask).sum() / mask_sum
         loss_dict = {}
         L = partial(complete_loss_name, self.loss_name_prefix)
         loss_dict[L("cen_dual_focal")] = bg_weight * dual_loss
@@ -203,12 +216,17 @@ class PlanarLoss(nn.Module):
         partition_weights: Dict[str, dict] = None,
         **kwargs,
     ):
+        if partition_weights is None:
+            partition_weights = edict(
+                {f"{c}": {"weight": 1.0, "slice": slice(c, c + 1)} for c in range(label.shape[1])}
+            )
+
         assert list(range(pred.shape[1])) == self.enumerate_slices(
             [p.slice for p in partition_weights.values()]
-        ), "partition weight slices doesn't meet MECE principle."
+        ), f"partition weight slices doesn't meet MECE principle. ({label.shape[1]=}, {pred.shape[1]=})"
         loss_dict = {}
         L = partial(complete_loss_name, self.loss_name_prefix)
-        mask_sum = fg_mask.sum()
+        mask_sum = max(fg_mask.sum(), 1e-4)  # fg_mask is assumed to be from label (gt), so no need to worry about backward
 
         def _calc_sub_loss(_weight, channel_slice):
             l1 = nn.L1Loss(reduction="none")(pred[:, channel_slice, ...], label[:, channel_slice, ...])

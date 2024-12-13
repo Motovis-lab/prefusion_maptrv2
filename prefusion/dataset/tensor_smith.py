@@ -11,10 +11,11 @@ from .utils import (
     expand_line_2d, _sign, INF_DIST,
     vec_point2line_along_direction, 
     dist_point2line_along_direction,
+    choose_index
 )
 from .transform import (
     CameraImage, CameraSegMask, CameraDepth,
-    Bbox3D, Polyline3D, SegBev, ParkingSlot3D
+    Bbox3D, Polyline3D, OccSdfBev, ParkingSlot3D
 )
 
 __all__ = [
@@ -26,7 +27,7 @@ __all__ = [
     "PlanarSquarePillar", 
     "PlanarCylinder3D", 
     "PlanarOrientedCylinder3D",
-    "PlanarSegBev", 
+    "PlanarOccSdfBev", 
     "PlanarPolyline3D", 
     "PlanarPolygon3D", 
     "PlanarParkingSlot3D",
@@ -129,12 +130,19 @@ class PlanarBbox3D(PlanarTensorSmith):
     def __init__(self, 
                  voxel_shape: tuple, 
                  voxel_range: Tuple[list, list, list], 
-                 use_bottom_center=False):
+                 use_bottom_center=False,
+                 has_velocity: bool=True,
+                 reverse_pre_conf: float=0.1,
+                 reverse_nms_ratio: float=0.7):
         """
         Parameters
         ----------
         voxel_shape : tuple
         voxel_range : Tuple[List]
+        use_bottom_center : bool
+        has_velocity : bool
+        reverse_pre_conf : float
+        reverse_nms_ratio : float
 
         Examples
         --------
@@ -145,6 +153,9 @@ class PlanarBbox3D(PlanarTensorSmith):
         """
         super().__init__(voxel_shape, voxel_range)
         self.use_bottom_center = use_bottom_center
+        self.has_velocity = has_velocity
+        self.reverse_pre_conf = reverse_pre_conf
+        self.reverse_nms_ratio = reverse_nms_ratio
 
     
     @staticmethod
@@ -170,9 +181,11 @@ class PlanarBbox3D(PlanarTensorSmith):
         ```
         elements[0] = {
             'class': 'class.vehicle.passenger_car',
-            'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
-                    'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
-                    'attr.vehicle.is_door_open': 'attr.vehicle.is_door_open.false'},
+            'attr': [
+                'attr.time_varying.object.state.stationary',
+                'attr.vehicle.is_trunk_open.false',
+                'attr.vehicle.is_door_open.false'
+            ],
             'size': [4.6486, 1.9505, 1.5845],
             'rotation': array([
                 [ 0.93915682, -0.32818596, -0.10138267],
@@ -243,7 +256,7 @@ class PlanarBbox3D(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -257,7 +270,10 @@ class PlanarBbox3D(PlanarTensorSmith):
         # maybe later, think about overlapped objects
         seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
         cen_im = np.zeros((1, X, Y), dtype=np.float32)
-        reg_im = np.zeros((20, X, Y), dtype=np.float32)
+        if self.has_velocity:
+            reg_im = np.zeros((20, X, Y), dtype=np.float32)
+        else:
+            reg_im = np.zeros((17, X, Y), dtype=np.float32)
         for unit_xvec, unit_yvec, points_bev, center, size, velo, class_ind, attr_list in zip(
             unit_xvecs, unit_yvecs, all_points_bev, centers, box_sizes, velocities, class_inds, attr_lists
         ):
@@ -294,9 +310,10 @@ class PlanarBbox3D(PlanarTensorSmith):
             reg_im[15] = reg_im[15] * (1 - region_box) + abs(sin_roll) * region_box
             reg_im[16] = reg_im[16] * (1 - region_box) + cos_roll * sin_roll * region_box
             # 17, 18, 19: velocity
-            reg_im[17] = reg_im[17] * (1 - region_box) + velo[0] * region_box
-            reg_im[18] = reg_im[18] * (1 - region_box) + velo[1] * region_box
-            reg_im[19] = reg_im[19] * (1 - region_box) + velo[2] * region_box
+            if self.has_velocity:
+                reg_im[17] = reg_im[17] * (1 - region_box) + velo[0] * region_box
+                reg_im[18] = reg_im[18] * (1 - region_box) + velo[1] * region_box
+                reg_im[19] = reg_im[19] * (1 - region_box) + velo[2] * region_box
             ## gen centerness
             center_line_l = np.float32([points_bev[[0, 1]].mean(0), points_bev[[2, 3]].mean(0)])
             center_line_w = np.float32([points_bev[[1, 2]].mean(0), points_bev[[0, 3]].mean(0)])
@@ -351,7 +368,7 @@ class PlanarBbox3D(PlanarTensorSmith):
         ])
     
     
-    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_xvecs, roll_vecs, velocities, ratio=0.7):
+    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_xvecs, roll_vecs, velocities):
         scores = cen_scores * seg_scores
         ranked_inds = np.argsort(scores)[::-1]
         kept_groups = []
@@ -371,9 +388,10 @@ class PlanarBbox3D(PlanarTensorSmith):
                     if j not in kept_inds:
                         center_j = centers[:, j]
                         delta_ij = center_i - center_j
-                        if self._is_in_bbox3d(delta_ij, sizes_i * ratio, unit_xvec_i, unit_yvec_i, unit_zvec_i):
+                        if self._is_in_bbox3d(delta_ij, sizes_i * self.reverse_nms_ratio, unit_xvec_i, unit_yvec_i, unit_zvec_i):
                             kept_inds.append(j)
                             grouped_inds.append(j)
+        _, _, fx, fy = self.bev_intrinsics
         ## get mean bbox in group
         pred_bboxes_3d = []
         for group in kept_groups:
@@ -397,22 +415,29 @@ class PlanarBbox3D(PlanarTensorSmith):
             # rotation matrix
             mean_rmat = np.float32([mean_unit_xvec, unit_yvec, unit_zvec]).T
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get area score
+            mean_count = seg_classes[0, group].sum()
+            mean_area = mean_size[0] * mean_size[1] * fx * fy * min(self.reverse_nms_ratio ** 2, 1)
+            area_score = min(1, mean_count / mean_area)
+            # get center
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * unit_zvec * mean_size[2]
-            mean_velocity = (velocities[:, group] * scores[group][None]).sum(1) / score_sum
             bbox_3d = {
                 'confs': mean_classes,
+                'area_score': area_score,
+                'score': mean_classes[0] * area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
-                'translation': mean_center,
-                'velocity': mean_velocity,
+                'translation': mean_center
             }
+            if self.has_velocity: 
+                bbox_3d['velocity'] = (velocities[:, group] * scores[group][None]).sum(1) / score_sum
             pred_bboxes_3d.append(bbox_3d)
         return pred_bboxes_3d
     
     
-    def reverse(self, tensor_dict, pre_conf=0.1):
+    def reverse(self, tensor_dict):
         """
         Parameters
         ----------
@@ -424,7 +449,6 @@ class PlanarBbox3D(PlanarTensorSmith):
             'reg': torch.Tensor
         }
         ```
-        pre_conf : float, optional, by default 0.1
 
         Notes
         -----
@@ -445,7 +469,7 @@ class PlanarBbox3D(PlanarTensorSmith):
         cen_pred = tensor_dict['cen'].detach().cpu().numpy()
         reg_pred = tensor_dict['reg'].detach().cpu().numpy()
         ## pickup bbox points
-        valid_points_map = seg_pred[0] > pre_conf
+        valid_points_map = seg_pred[0] > self.reverse_pre_conf 
         # valid postions
         valid_points_bev = self.points_grid_bev[:, valid_points_map]
         # pickup scores and classes
@@ -480,12 +504,15 @@ class PlanarBbox3D(PlanarTensorSmith):
         roll_vecs = np.array([cos_rolls, sin_rolls])
         roll_vecs /= np.maximum(np.linalg.norm(roll_vecs), 1e-6)
         # 17, 18, 19: velocities
-        velocities = reg_values[[17, 18, 19]]
+        if self.has_velocity:
+            velocities = reg_values[[17, 18, 19]]
+        else:
+            velocities = None
         
         ## group nms
         boxes_3d = self._group_nms(
             seg_scores, cen_scores, seg_classes, 
-            centers, sizes, unit_xvecs, roll_vecs, velocities
+            centers, sizes, unit_xvecs, roll_vecs, velocities,
         )
 
         return boxes_3d
@@ -506,9 +533,11 @@ class PlanarRectangularCuboid(PlanarBbox3D):
         ```
         elements[0] = {
             'class': 'class.vehicle.passenger_car',
-            'attr': {'attr.time_varying.object.state': 'attr.time_varying.object.state.stationary',
-                    'attr.vehicle.is_trunk_open': 'attr.vehicle.is_trunk_open.false',
-                    'attr.vehicle.is_door_open': 'attr.vehicle.is_door_open.false'},
+            'attr': [
+                'attr.time_varying.object.state.stationary',
+                'attr.vehicle.is_trunk_open.false',
+                'attr.vehicle.is_door_open.false'
+            ],
             'size': [4.6486, 1.9505, 1.5845],
             'rotation': array([
                 [ 0.93915682, -0.32818596, -0.10138267],
@@ -577,7 +606,7 @@ class PlanarRectangularCuboid(PlanarBbox3D):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -647,7 +676,7 @@ class PlanarRectangularCuboid(PlanarBbox3D):
         }
         return tensor_data
 
-    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_xvecs, roll_vecs, ratio=0.7):
+    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_xvecs, roll_vecs):
         scores = cen_scores * seg_scores
         ranked_inds = np.argsort(scores)[::-1]
         kept_groups = []
@@ -667,10 +696,11 @@ class PlanarRectangularCuboid(PlanarBbox3D):
                     if j not in kept_inds:
                         center_j = centers[:, j]
                         delta_ij = center_i - center_j
-                        if self._is_in_bbox3d(delta_ij, sizes_i * ratio, unit_xvec_i, unit_yvec_i, unit_zvec_i):
+                        if self._is_in_bbox3d(delta_ij, sizes_i * self.reverse_nms_ratio, unit_xvec_i, unit_yvec_i, unit_zvec_i):
                             kept_inds.append(j)
                             grouped_inds.append(j)
         ## get mean bbox in group
+        _, _, fx, fy = self.bev_intrinsics
         pred_bboxes_3d = []
         for group in kept_groups:
             # use score weighted mean
@@ -693,11 +723,17 @@ class PlanarRectangularCuboid(PlanarBbox3D):
             # rotation matrix
             mean_rmat = np.float32([mean_unit_xvec, unit_yvec, unit_zvec]).T
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get area score
+            mean_count = seg_classes[0, group].sum()
+            mean_area = mean_size[0] * mean_size[1] * fx * fy * min(self.reverse_nms_ratio ** 2, 1)
+            area_score = min(1, mean_count / mean_area)
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * unit_zvec * mean_size[2]
             bbox_3d = {
                 'confs': mean_classes,
+                'area_score': area_score,
+                'score': mean_classes[0] * area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
                 'translation': mean_center
@@ -706,7 +742,7 @@ class PlanarRectangularCuboid(PlanarBbox3D):
         return pred_bboxes_3d
     
     
-    def reverse(self, tensor_dict, pre_conf=0.1):
+    def reverse(self, tensor_dict):
         """
         Parameters
         ----------
@@ -718,7 +754,6 @@ class PlanarRectangularCuboid(PlanarBbox3D):
             'reg': torch.Tensor
         }
         ```
-        pre_conf : float, optional, by default 0.1
 
         Notes
         -----
@@ -737,7 +772,7 @@ class PlanarRectangularCuboid(PlanarBbox3D):
         cen_pred = tensor_dict['cen'].detach().cpu().numpy()
         reg_pred = tensor_dict['reg'].detach().cpu().numpy()
         ## pickup bbox points
-        valid_points_map = seg_pred[0] > pre_conf
+        valid_points_map = seg_pred[0] > self.reverse_pre_conf
         # valid postions
         valid_points_bev = self.points_grid_bev[:, valid_points_map]
         # pickup scores and classes
@@ -782,12 +817,17 @@ class PlanarSquarePillar(PlanarTensorSmith):
     def __init__(self, 
                  voxel_shape: tuple, 
                  voxel_range: Tuple[list, list, list], 
-                 use_bottom_center=True):
+                 use_bottom_center: bool=True,
+                 reverse_pre_conf: float=0.1,
+                 reverse_nms_ratio: float=1):
         """
         Parameters
         ----------
         voxel_shape : tuple
         voxel_range : Tuple[List]
+        use_bottom_center : bool, optional
+        reverse_pre_conf : float, optional
+        reverse_nms_ratio : float, optional
 
         Examples
         --------
@@ -798,6 +838,8 @@ class PlanarSquarePillar(PlanarTensorSmith):
         """
         super().__init__(voxel_shape, voxel_range)
         self.use_bottom_center = use_bottom_center
+        self.reverse_pre_conf = reverse_pre_conf
+        self.reverse_nms_ratio = reverse_nms_ratio
     
     
     @staticmethod
@@ -874,7 +916,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -887,7 +929,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
             num_attr_channels = 0
         seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
         cen_im = np.zeros((1, X, Y), dtype=np.float32)
-        reg_im = np.zeros((20, X, Y), dtype=np.float32)
+        reg_im = np.zeros((11, X, Y), dtype=np.float32)
         for unit_xvec, unit_zvec, points_bev, center, size, class_ind, attr_list in zip(
             unit_xvecs, unit_zvecs, all_points_bev, centers, box_sizes, class_inds, attr_lists
         ):
@@ -971,7 +1013,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
         ])
 
     
-    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_zvecs, vecs_4yaw, ratio=1):
+    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_zvecs, vecs_4yaw):
         scores = seg_scores * cen_scores
         ranked_inds = np.argsort(scores)[::-1]
         kept_groups = []
@@ -991,10 +1033,11 @@ class PlanarSquarePillar(PlanarTensorSmith):
                     if j not in kept_inds:
                         center_j = centers[:, j]
                         delta_ij = center_i - center_j
-                        if self._is_in_bbox3d(delta_ij, sizes_i * ratio, unit_xvec_i, unit_yvec_i, unit_zvec_i):
+                        if self._is_in_bbox3d(delta_ij, sizes_i * self.reverse_nms_ratio, unit_xvec_i, unit_yvec_i, unit_zvec_i):
                             kept_inds.append(j)
                             grouped_inds.append(j)
         ## get mean bbox in group
+        _, _, fx, fy = self.bev_intrinsics
         pred_pillars = []
         for group in kept_groups:
             # use score weighted mean
@@ -1014,11 +1057,17 @@ class PlanarSquarePillar(PlanarTensorSmith):
             # rotation matrix
             mean_rmat = np.float32([unit_xvec, unit_yvec, mean_unit_zvec]).T
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get area score
+            mean_count = seg_classes[0, group].sum()
+            mean_area = mean_size[0] * mean_size[1] * fx * fy * min(self.reverse_nms_ratio ** 2, 1)
+            area_score = min(1, mean_count / mean_area)
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[2]
             pillar_3d = {
                 'confs': mean_classes,
+                'area_score': area_score,
+                'score': mean_classes[0] * area_score,
                 'size': mean_size,
                 'rotation': mean_rmat,
                 'translation': mean_center
@@ -1027,7 +1076,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
         return pred_pillars
     
     
-    def reverse(self, tensor_dict, pre_conf=0.1):
+    def reverse(self, tensor_dict):
         """
         Parameters
         ----------
@@ -1039,7 +1088,6 @@ class PlanarSquarePillar(PlanarTensorSmith):
             'reg': torch.Tensor
         }
         ```
-        pre_conf : float, optional, by default 0.1
 
         Notes
         -----
@@ -1058,7 +1106,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
         cen_pred = tensor_dict['cen'].detach().cpu().numpy()
         reg_pred = tensor_dict['reg'].detach().cpu().numpy()
         ## pickup bbox points
-        valid_points_map = seg_pred[0] > pre_conf
+        valid_points_map = seg_pred[0] > self.reverse_pre_conf
         # valid postions
         valid_points_bev = self.points_grid_bev[:, valid_points_map]
         # pickup scores and classes
@@ -1100,12 +1148,17 @@ class PlanarCylinder3D(PlanarTensorSmith):
     def __init__(self, 
                  voxel_shape: tuple, 
                  voxel_range: Tuple[list, list, list], 
-                 use_bottom_center=False):
+                 use_bottom_center: bool=False,
+                 reverse_pre_conf: float=0.1,
+                 reverse_nms_ratio: float=1):
         """
         Parameters
         ----------
         voxel_shape : tuple
         voxel_range : Tuple[List]
+        use_bottom_center : bool
+        reverse_pre_conf : float
+        reverse_nms_ratio : float
 
         Examples
         --------
@@ -1116,6 +1169,8 @@ class PlanarCylinder3D(PlanarTensorSmith):
         """
         super().__init__(voxel_shape, voxel_range)
         self.use_bottom_center = use_bottom_center
+        self.reverse_pre_conf = reverse_pre_conf
+        self.reverse_nms_ratio = reverse_nms_ratio
         
     
     def __call__(self, transformable: Bbox3D):
@@ -1144,14 +1199,14 @@ class PlanarCylinder3D(PlanarTensorSmith):
                     center[2]
                 ], dtype=np.float32))
                 l, w, h = element['size']
-                radius = max(l, w)  # l, w should be the same
+                radius = 0.5 * max(l, w)  # l, w should be the same
                 radii.append(radius)
                 heights.append(h)
                 # get class and attr index
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -1164,7 +1219,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
             num_attr_channels = 0
         seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
         cen_im = np.zeros((1, X, Y), dtype=np.float32)
-        reg_im = np.zeros((10, X, Y), dtype=np.float32)
+        reg_im = np.zeros((8, X, Y), dtype=np.float32)
         for unit_zvec, center, radius, height, class_ind, attr_list in zip(
             unit_zvecs, centers, radii, heights, class_inds, attr_lists
         ):
@@ -1190,7 +1245,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
             reg_im[6] = reg_im[6] * (1 - region_obj) + unit_zvec[1] * region_obj
             reg_im[7] = reg_im[7] * (1 - region_obj) + unit_zvec[2] * region_obj
             ## gen centerness
-            centerness = (radius_bev ** 2 - (reg_im[0] ** 2 + reg_im[1] ** 2)) / radius ** 2
+            centerness = np.clip(radius_bev ** 2 - (reg_im[0] ** 2 + reg_im[1] ** 2) / radius_bev ** 2, 0, 1)
             cen_im[0] = cen_im[0] * (1 - region_obj) + centerness * region_obj
         ## tensor
         tensor_data= {
@@ -1206,12 +1261,12 @@ class PlanarCylinder3D(PlanarTensorSmith):
         zvec_vertical = np.array([0, zvec[2], -zvec[1]])
         zvec_vertical /= np.linalg.norm(zvec_vertical)
         return all([
-            np.linalg.norm(delta_ij * zvec_vertical) < 0.5 * sizes[0],
+            np.linalg.norm(delta_ij * zvec_vertical) < sizes[0],
             np.linalg.norm(delta_ij * zvec) < 0.5 * sizes[1]
         ])
 
     
-    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_zvecs, ratio=1):
+    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_zvecs):
         scores = seg_scores * cen_scores
         ranked_inds = np.argsort(scores)[::-1]
         kept_groups = []
@@ -1229,10 +1284,11 @@ class PlanarCylinder3D(PlanarTensorSmith):
                     if j not in kept_inds:
                         center_j = centers[:, j]
                         delta_ij = center_i - center_j
-                        if self._is_in_cylinder3d(delta_ij, sizes_i * ratio, unit_zvec_i):
+                        if self._is_in_cylinder3d(delta_ij, sizes_i * self.reverse_nms_ratio, unit_zvec_i):
                             kept_inds.append(j)
                             grouped_inds.append(j)
         ## get mean bbox in group
+        _, _, fx, fy = self.bev_intrinsics
         pred_cylinders = []
         for group in kept_groups:
             # use score weighted mean
@@ -1241,11 +1297,17 @@ class PlanarCylinder3D(PlanarTensorSmith):
             # get mean_unit_zvec
             mean_unit_zvec = (unit_zvecs[:, group] * scores[group][None]).sum(1) / score_sum
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get area score
+            mean_count = seg_classes[0, group].sum()
+            mean_area = mean_size[0] * mean_size[0] * fx * fy * min(self.reverse_nms_ratio ** 2, 1) * np.pi
+            area_score = min(1, mean_count / mean_area)
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[1]
             cylinder_3d = {
                 'confs': mean_classes,
+                'area_score': area_score,
+                'score': mean_classes[0] * area_score,
                 'radius': mean_size[0],
                 'height': mean_size[1],
                 'zvec': mean_unit_zvec,
@@ -1256,7 +1318,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
     
     
     
-    def reverse(self, tensor_dict, pre_conf=0.1):
+    def reverse(self, tensor_dict):
         """
         Parameters
         ----------
@@ -1268,7 +1330,6 @@ class PlanarCylinder3D(PlanarTensorSmith):
             'reg': torch.Tensor
         }
         ```
-        pre_conf : float, optional, by default 0.1
 
         Notes
         -----
@@ -1286,7 +1347,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
         cen_pred = tensor_dict['cen'].detach().cpu().numpy()
         reg_pred = tensor_dict['reg'].detach().cpu().numpy()
         ## pickup obj points
-        valid_points_map = seg_pred[0] > pre_conf
+        valid_points_map = seg_pred[0] > self.reverse_pre_conf
         # valid postions
         valid_points_bev = self.points_grid_bev[:, valid_points_map]
         # pickup scores and classes
@@ -1321,12 +1382,19 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
     def __init__(self, 
                  voxel_shape: tuple, 
                  voxel_range: Tuple[list, list, list], 
-                 use_bottom_center=False):
+                 use_bottom_center: bool=False,
+                 has_velocity: bool=True,
+                 reverse_pre_conf: float=0.1,
+                 reverse_nms_ratio: float=1):
         """
         Parameters
         ----------
         voxel_shape : tuple
         voxel_range : Tuple[List]
+        use_bottom_center : bool
+        has_velocity : bool
+        reverse_pre_conf : float
+        reverse_nms_ratio : float
 
         Examples
         --------
@@ -1337,6 +1405,9 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
         """
         super().__init__(voxel_shape, voxel_range)
         self.use_bottom_center = use_bottom_center
+        self.has_velocity = has_velocity
+        self.reverse_pre_conf = reverse_pre_conf
+        self.reverse_nms_ratio = reverse_nms_ratio
         
     
     @staticmethod
@@ -1396,7 +1467,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
                     center[2]
                 ], dtype=np.float32))
                 l, w, h = element['size']
-                radius = max(l, w)  # l, w should be the same
+                radius = 0.5 * max(l, w)  # l, w should be the same
                 radii.append(radius)
                 heights.append(h)
                 velocities.append(element['velocity'][:, 0])
@@ -1404,7 +1475,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -1417,7 +1488,10 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             num_attr_channels = 0
         seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
         cen_im = np.zeros((1, X, Y), dtype=np.float32)
-        reg_im = np.zeros((13, X, Y), dtype=np.float32)
+        if self.has_velocity:
+            reg_im = np.zeros((13, X, Y), dtype=np.float32)
+        else:
+            reg_im = np.zeros((10, X, Y), dtype=np.float32)
         for unit_xvec, unit_zvec, center, radius, height, velocity, class_ind, attr_list in zip(
             unit_xvecs, unit_zvecs, centers, radii, heights, velocities, class_inds, attr_lists
         ):
@@ -1447,11 +1521,12 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             reg_im[8] = reg_im[8] * (1 - region_obj) + np.cos(yaw_angle) * region_obj
             reg_im[9] = reg_im[9] * (1 - region_obj) + np.sin(yaw_angle) * region_obj
             # 10, 11, 12: velocity
-            reg_im[10] = reg_im[10] * (1 - region_obj) + velocity[0] * region_obj
-            reg_im[11] = reg_im[11] * (1 - region_obj) + velocity[1] * region_obj
-            reg_im[12] = reg_im[12] * (1 - region_obj) + velocity[2] * region_obj
+            if self.has_velocity:
+                reg_im[10] = reg_im[10] * (1 - region_obj) + velocity[0] * region_obj
+                reg_im[11] = reg_im[11] * (1 - region_obj) + velocity[1] * region_obj
+                reg_im[12] = reg_im[12] * (1 - region_obj) + velocity[2] * region_obj
             ## gen centerness
-            centerness = (radius_bev ** 2 - (reg_im[0] ** 2 + reg_im[1] ** 2)) / radius ** 2
+            centerness = np.clip(radius_bev ** 2 - (reg_im[0] ** 2 + reg_im[1] ** 2) / radius_bev ** 2, 0, 1)
             cen_im[0] = cen_im[0] * (1 - region_obj) + centerness * region_obj
         ## tensor
         tensor_data = {
@@ -1483,13 +1558,13 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
     @staticmethod
     def _is_in_cylinder3d(delta_ij, sizes, xvec, yvec, zvec):
         return all([
-            np.linalg.norm(delta_ij * xvec) < 0.5 * sizes[0],
-            np.linalg.norm(delta_ij * yvec) < 0.5 * sizes[0],
+            np.linalg.norm(delta_ij * xvec) < sizes[0],
+            np.linalg.norm(delta_ij * yvec) < sizes[0],
             np.linalg.norm(delta_ij * zvec) < 0.5 * sizes[1]
         ])
 
     
-    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_zvecs, vecs_yaw, velocities, ratio=0.7):
+    def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_zvecs, vecs_yaw, velocities):
         scores = seg_scores * cen_scores
         ranked_inds = np.argsort(scores)[::-1]
         kept_groups = []
@@ -1509,10 +1584,11 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
                     if j not in kept_inds:
                         center_j = centers[:, j]
                         delta_ij = center_i - center_j
-                        if self._is_in_cylinder3d(delta_ij, sizes_i * ratio, unit_xvec_i, unit_yvec_i, unit_zvec_i):
+                        if self._is_in_cylinder3d(delta_ij, sizes_i * self.reverse_nms_ratio, unit_xvec_i, unit_yvec_i, unit_zvec_i):
                             kept_inds.append(j)
                             grouped_inds.append(j)
         ## get mean bbox in group
+        _, _, fx, fy = self.bev_intrinsics
         pred_cylinders = []
         for group in kept_groups:
             # use score weighted mean
@@ -1525,29 +1601,33 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             # rotation matrix
             mean_rmat = np.float32([unit_xvec, unit_yvec, mean_unit_zvec]).T
             mean_size = (sizes[:, group] * scores[group][None]).sum(1) / score_sum
+            # get area score
+            mean_count = seg_classes[0, group].sum()
+            mean_area = mean_size[0] * mean_size[0] * fx * fy * min(self.reverse_nms_ratio ** 2, 1) * np.pi
+            area_score = min(1, mean_count / mean_area)
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[1]
-            mean_velocity = (velocities[:, group] * scores[group][None]).sum(1) / score_sum
             cylinder_3d = {
                 'confs': mean_classes,
-                'size': mean_size[[0, 0, 1]],
+                'area_score': area_score,
+                'score': mean_classes[0] * area_score,
+                'size': mean_size[[0, 0, 1]] * [2, 2, 1],
                 'rotation': mean_rmat,
-                'translation': mean_center,
-                'velocity': mean_velocity
+                'translation': mean_center
             }
+            if self.has_velocity:
+                cylinder_3d['velocity'] = (velocities[:, group] * scores[group][None]).sum(1) / score_sum
             pred_cylinders.append(cylinder_3d)
         return pred_cylinders
     
     
     
-    def reverse(self, tensor_dict, pre_conf=0.1):
+    def reverse(self, tensor_dict):
         """
         Parameters
         ----------
         tensor_dict : dict
-        
-        pre_conf : float, optional, by default 0.1
 
         Notes
         -----
@@ -1567,7 +1647,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
         cen_pred = tensor_dict['cen'].detach().cpu().numpy()
         reg_pred = tensor_dict['reg'].detach().cpu().numpy()
         ## pickup obj points
-        valid_points_map = seg_pred[0] > pre_conf
+        valid_points_map = seg_pred[0] > self.reverse_pre_conf
         # valid postions
         valid_points_bev = self.points_grid_bev[:, valid_points_map]
         # pickup scores and classes
@@ -1592,7 +1672,10 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
         vecs_yaw = np.array([cos_yaws, sin_yaws])
         vecs_yaw /= np.maximum(np.linalg.norm(vecs_yaw), 1e-6)
         # 10, 11, 12: velocities
-        velocities = reg_values[[10, 11, 12]]
+        if self.has_velocity:
+            velocities = reg_values[[10, 11, 12]]
+        else:
+            velocities = None
         
         ## group nms
         cylinders_3d = self._group_nms(
@@ -1606,15 +1689,107 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
 
 
 @TENSOR_SMITHS.register_module()
-class PlanarSegBev(PlanarTensorSmith):
-    def __call__(self, transformable: SegBev):
-        raise NotImplementedError
+class PlanarOccSdfBev(PlanarTensorSmith):
+    def __init__(self, 
+                 voxel_shape: tuple, 
+                 voxel_range: Tuple[list, list, list],
+                 sdf_range: tuple=(-0.1, 5)):
+        """
+        Parameters
+        ----------
+        voxel_shape : tuple
+        voxel_range : Tuple[List]
+        sdf_range : tuple
+
+        Examples
+        --------
+        - voxel_shape=(6, 320, 160)
+        - voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        - Z, X, Y = voxel_shape
+
+        """
+        super().__init__(voxel_shape, voxel_range)
+        self.sdf_range = sdf_range
+
+    def __call__(self, transformable: OccSdfBev):
+        """
+        Parameters
+        ----------
+        transformable : OccSdfBev
+
+        Returns
+        -------
+        tensor_dict : dict
+
+        Notes
+        -----
+        ```
+        seg_im  # 分割图
+        reg_im  # 回归图
+            0: truncated sdf
+            1: height_im
+        ```
+        """
+        # unproject dst_bev to ego
+        cx, cy, fx, fy = self.bev_intrinsics
+        ww, hh = self.points_grid_bev
+        xx = (hh - cx) / fx
+        yy = (ww - cy) / fy
+
+        # project ego to src_bev
+        cx_, cy_, fx_, fy_ = transformable._bev_intrinsics
+        hh_ = xx * fx_ + cx_
+        ww_ = yy * fy_ + cy_
+        
+        # bgr, b: unknown, g: freespace, r: occupied
+        occ = cv2.remap(transformable.occ, ww_, hh_, interpolation=cv2.INTER_NEAREST)
+        sdf = cv2.remap(transformable.sdf, ww_, hh_, interpolation=cv2.INTER_LINEAR)
+        sdf = np.clip(sdf, *self.sdf_range)
+        height = cv2.remap(transformable.height, ww_, hh_, interpolation=cv2.INTER_LINEAR)
+        mask = cv2.remap(transformable.mask, ww_, hh_, interpolation=cv2.INTER_NEAREST)
+        
+        seg_im = np.concatenate([occ.transpose(2, 0, 1) / 255, mask[None]], axis=0)
+        reg_im = np.concatenate([sdf[None], height[None]], axis=0)
+
+        tensor_data = {
+            'seg': torch.tensor(seg_im, dtype=torch.float32),
+            'reg': torch.tensor(reg_im, dtype=torch.float32)
+        }
+        
+        return tensor_data
 
 
 
 
 @TENSOR_SMITHS.register_module()
 class PlanarPolyline3D(PlanarTensorSmith):
+    
+    def __init__(self, 
+                 voxel_shape: tuple, 
+                 voxel_range: Tuple[list, list, list],
+                 reverse_pre_conf: float=0.1,
+                 reverse_group_dist_thresh: float=0.2,
+                 reverse_link_max_adist: float=1.5):
+        """
+        Parameters
+        ----------
+        voxel_shape : tuple
+        voxel_range : Tuple[List]
+        reverse_pre_conf : float
+        reverse_group_dist_thresh : float
+        reverse_link_max_adist : float
+
+        Examples
+        --------
+        - voxel_shape=(6, 320, 160)
+        - voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        - Z, X, Y = voxel_shape
+
+        """
+        super().__init__(voxel_shape, voxel_range)
+        self.reverse_pre_conf = reverse_pre_conf
+        self.reverse_group_dist_thresh = reverse_group_dist_thresh
+        self.reverse_link_max_adist = reverse_link_max_adist
         
     def __call__(self, transformable: Polyline3D):
         """
@@ -1656,7 +1831,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -1667,7 +1842,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
             num_attr_channels = len(transformable.dictionary['attrs'])
         else:
             num_attr_channels = 0
-        seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y))
+        seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
 
         line_ims = []
         dist_ims = []
@@ -1689,7 +1864,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
                 for attr_ind in attr_list:
                     cv2.fillPoly(seg_im[1 + num_class_channels + attr_ind], [polygon_int], 1)
                 # line segment
-                line_im = cv2.fillPoly(np.zeros((X, Y)), [polygon_int], 1)
+                line_im = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [polygon_int], 1)
                 line_ims.append(line_im)
                 # line direction regressions
                 line_dir = line_bev[1] - line_bev[0]
@@ -1713,12 +1888,17 @@ class PlanarPolyline3D(PlanarTensorSmith):
                     points_grid_bev + vec_map - line_bev[0][..., None, None], axis=0
                 )
                 height_ims.append(height_im)
-
-        index_im = np.argmin(np.array(dist_ims), axis=0)
-        vec_im = np.choose(index_im, vec_ims)
-        dist_im = np.choose(index_im, dist_ims)
-        dir_im = np.choose(index_im, dir_ims)
-        height_im = np.choose(index_im, height_ims)
+        if len(dist_ims) > 0:
+            index_im = np.argmin(np.array(dist_ims), axis=0)
+            vec_im = choose_index(index_im, vec_ims)
+            dist_im = choose_index(index_im, dist_ims)
+            dir_im = choose_index(index_im, dir_ims)
+            height_im = choose_index(index_im, height_ims)
+        else:
+            vec_im = np.zeros((2, X, Y), dtype=np.float32)
+            dist_im = np.zeros((X, Y), dtype=np.float32)
+            dir_im = np.zeros((3, X, Y), dtype=np.float32)
+            height_im = np.zeros((X, Y), dtype=np.float32)
 
         reg_im = np.concatenate([
             seg_im[:1] * dist_im[None],
@@ -1738,7 +1918,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
 
     @staticmethod
     @numba.njit
-    def _group_points(dst_points, seg_scores, dist_thresh=0.2):
+    def _group_points(dst_points, seg_scores, dist_thresh):
         ranked_ind = np.argsort(seg_scores)[::-1]
         kept_groups = []
         kept_inds = []
@@ -1759,47 +1939,15 @@ class PlanarPolyline3D(PlanarTensorSmith):
 
         return kept_groups
 
-
-    @staticmethod
-    def _angle_hook_dist(oriented_point_1, oriented_point_2, disth_thresh=2, z_weight=10):
-        point_1, abs_dir_1 = oriented_point_1
-        point_2, abs_dir_2 = oriented_point_2
-        
-        vec_1 = np.float32([abs_dir_1[0], abs_dir_1[1] * abs_dir_1[2]])
-        vec_2 = np.float32([abs_dir_2[0], abs_dir_2[1] * abs_dir_2[2]])
-        vec_1 /= np.linalg.norm(vec_1)
-        vec_2 /= np.linalg.norm(vec_2)
-        # vec_mean = 0.5 * (vec_1 + vec_2)
-        
-        dir_12 = point_2 - point_1
-        dist_12 = np.linalg.norm(dir_12)
-        unit_12 = dir_12 / dist_12
-
-        if dist_12 < disth_thresh:
-            # calc link_dir vs vec similarity
-            link_12 = dir_12[:2] / max(1e-5, np.linalg.norm(dir_12[:2]))
-            cos_link = np.sum(link_12 * vec_1)
-            # calc vec_1 vs vec_2 similarity
-            cos_12 = np.sum(vec_1 * vec_2)
-            # z distance
-            dist_z = np.abs(unit_12[2])
-            dir_gain = 0.5 * disth_thresh * (cos_link + cos_12)
-            dist = dist_12 + z_weight * dist_z - dir_gain
-        else:
-            dist = dist_12
-        
-        return dist
-        
-
     def _link_line_points(self, fused_points, fused_vecs, max_adist):
         points_ind = np.arange(fused_points.shape[1])
         # get groups of line segments
         line_segments = []
-        kept_inds = []
+        kept_inds = {}
 
         for i in points_ind:
             if i not in kept_inds:
-                kept_inds.append(i)
+                kept_inds[i] = 1
                 grouped_inds = [i]
                 line_segments.append(grouped_inds)
                 # go forward if direction is similar
@@ -1816,22 +1964,23 @@ class PlanarPolyline3D(PlanarTensorSmith):
                             abs_vec_j = fused_vecs[:, j]
                             oriented_point_j = [point_j, abs_vec_j]
                             point_vec = point_j - point_i_forward
-                            ward = np.sum(point_vec * vec_i_forward)
+                            ward = fast_inner_product(point_vec, vec_i_forward) # np.sum(point_vec * vec_i_forward)
                             if ward > 0:
-                                adist_ij = self._angle_hook_dist(oriented_point_i_forward, oriented_point_j, disth_thresh=max_adist)
+                                adist_ij = _angle_hook_dist(oriented_point_i_forward, oriented_point_j, disth_thresh=max_adist)
                                 if adist_ij < adist_forward_max:
                                     adist_forward_max = adist_ij
                                     adist_forward_max_ind = j
                     if adist_forward_max >= max_adist:
                         break
                     grouped_inds.append(adist_forward_max_ind)
-                    kept_inds.append(adist_forward_max_ind)
+                    kept_inds[adist_forward_max_ind] = 1
                     point_i_forward_old = point_i_forward
                     point_i_forward = fused_points[:, adist_forward_max_ind]
                     abs_vec_i_forward = fused_vecs[:, adist_forward_max_ind]
                     oriented_point_i_forward = [point_i_forward, abs_vec_i_forward]
                     vec_i_forward = np.float32([abs_vec_i_forward[0], abs_vec_i_forward[1] * abs_vec_i_forward[2], 0])
-                    if np.sum(vec_i_forward * (point_i_forward - point_i_forward_old)) <= 0:
+                    # if np.sum(vec_i_forward * (point_i_forward - point_i_forward_old)) <= 0:
+                    if fast_inner_product(vec_i_forward, (point_i_forward - point_i_forward_old)) <= 0:
                         vec_i_forward *= -1
                     
                 # go backward if direction is opposite
@@ -1848,22 +1997,23 @@ class PlanarPolyline3D(PlanarTensorSmith):
                             abs_vec_j = fused_vecs[:, j]
                             oriented_point_j = [point_j, abs_vec_j]
                             point_vec = point_j - point_i_backward
-                            ward = np.sum(point_vec * vec_i_backward)
+                            ward = fast_inner_product(point_vec, vec_i_backward) # np.sum(point_vec * vec_i_backward)
                             if ward <= 0:
-                                adist_ij = self._angle_hook_dist(oriented_point_i_backward, oriented_point_j, disth_thresh=max_adist)
+                                adist_ij = _angle_hook_dist(oriented_point_i_backward, oriented_point_j, disth_thresh=max_adist)
                                 if adist_ij < adist_backward_max:
                                     adist_backward_max = adist_ij
                                     adist_backward_max_ind = j
                     if adist_backward_max >= max_adist:
                         break
                     grouped_inds.insert(0, adist_backward_max_ind)
-                    kept_inds.append(adist_backward_max_ind)
+                    kept_inds[adist_backward_max_ind] = 1
                     point_i_backward_old = point_i_backward
                     point_i_backward = fused_points[:, adist_backward_max_ind]
                     abs_vec_i_backward = fused_vecs[:, adist_backward_max_ind]
                     oriented_point_i_backward = [point_i_backward, abs_vec_i_backward]
                     vec_i_backward = np.float32([abs_vec_i_backward[0], abs_vec_i_backward[1] * abs_vec_i_backward[2], 0])
-                    if np.sum(vec_i_backward * (point_i_backward - point_i_backward_old)) > 0:
+                    # if np.sum(vec_i_backward * (point_i_backward - point_i_backward_old)) > 0:
+                    if fast_inner_product(vec_i_backward, (point_i_backward - point_i_backward_old)) > 0:
                         vec_i_backward *= -1
         
         # remove isolated points
@@ -1875,13 +2025,11 @@ class PlanarPolyline3D(PlanarTensorSmith):
         return line_segments
 
 
-    def reverse(self, tensor_dict, pre_conf=0.1, max_adist=1.5):
+    def reverse(self, tensor_dict):
         """
         Parameters
         ----------
         tensor_dict : dict
-        
-        pre_conf : float, optional, by default 0.1
 
         Notes
         -----
@@ -1899,7 +2047,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
         reg_pred = tensor_dict['reg'].detach().cpu().numpy()
 
         ## pickup line points
-        valid_points_map = seg_pred[0] > pre_conf
+        valid_points_map = seg_pred[0] > self.reverse_pre_conf
         # line point postions
         valid_points_bev = self.points_grid_bev[:, valid_points_map]
         # pickup scores
@@ -1920,7 +2068,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
         
         ## fuse points, group nms
         # group points
-        kept_groups = self._group_points(dst_points, seg_scores)
+        kept_groups = self._group_points(dst_points, seg_scores, self.reverse_group_dist_thresh)
         # fuse points in one group
         fused_classes = []
         fused_points = []
@@ -1939,7 +2087,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
         fused_vecs = np.float32(fused_vecs).T
         
         ## link all points and get 3d polylines
-        line_segments = self._link_line_points(fused_points, fused_vecs, max_adist)
+        line_segments = self._link_line_points(fused_points, fused_vecs, self.reverse_link_max_adist)
         cx, cy, fx, fy = self.bev_intrinsics
         polylines_3d = []
         for g in line_segments:
@@ -1953,7 +2101,44 @@ class PlanarPolyline3D(PlanarTensorSmith):
         return polylines_3d
 
 
+@numba.jit(nopython=True)
+def fast_norm(x):
+    return np.sqrt(np.sum(x * x))
 
+
+@numba.jit(nopython=True)
+def fast_inner_product(x, y):
+    return (x[None, :] @ y[:, None])[0, 0]
+
+
+def _angle_hook_dist(oriented_point_1, oriented_point_2, disth_thresh=2, z_weight=10):
+    point_1, abs_dir_1 = oriented_point_1
+    point_2, abs_dir_2 = oriented_point_2
+    
+    vec_1 = np.float32([abs_dir_1[0], abs_dir_1[1] * abs_dir_1[2]])
+    vec_2 = np.float32([abs_dir_2[0], abs_dir_2[1] * abs_dir_2[2]])
+    vec_1 /= fast_norm(vec_1)
+    vec_2 /= fast_norm(vec_2)
+    # vec_mean = 0.5 * (vec_1 + vec_2)
+    
+    dir_12 = point_2 - point_1
+    dist_12 = fast_norm(dir_12)
+    unit_12 = dir_12 / dist_12
+
+    if dist_12 < disth_thresh:
+        # calc link_dir vs vec similarity
+        link_12 = dir_12[:2] / max(1e-5, fast_norm(dir_12[:2]))
+        cos_link = fast_inner_product(link_12, vec_1) # np.sum(link_12 * vec_1)
+        # calc vec_1 vs vec_2 similarity
+        cos_12 = fast_inner_product(vec_1, vec_2) # np.sum(vec_1 * vec_2)
+        # z distance
+        dist_z = np.abs(unit_12[2])
+        dir_gain = 0.5 * disth_thresh * (cos_link + cos_12)
+        dist = dist_12 + z_weight * dist_z - dir_gain
+    else:
+        dist = dist_12
+    
+    return dist
 
 
 @TENSOR_SMITHS.register_module()
@@ -1999,7 +2184,7 @@ class PlanarPolygon3D(PlanarTensorSmith):
                 class_inds.append(transformable.dictionary['classes'].index(element['class']))
                 attr_ind_list = []
                 if 'attr' in element and attr_available:
-                    element_attrs = element['attr'].values()
+                    element_attrs = element['attr']
                     for attr in element_attrs:
                         if attr in transformable.dictionary['attrs']:
                             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
@@ -2010,7 +2195,7 @@ class PlanarPolygon3D(PlanarTensorSmith):
             num_attr_channels = len(transformable.dictionary['attrs'])
         else:
             num_attr_channels = 0
-        seg_im = np.zeros((2 + num_class_channels + num_attr_channels, X, Y))
+        seg_im = np.zeros((2 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
 
         line_ims = []
         dist_ims = []
@@ -2019,8 +2204,9 @@ class PlanarPolygon3D(PlanarTensorSmith):
         height_ims = []
 
         for polyline, class_ind, attr_list in zip(polylines, class_inds, attr_lists):
-            polyline_int = np.round(polyline).astype(int)
+            polyline_int = np.round(polyline).astype(int)[:, :2]
             # seg_bev_im
+            cv2.fillPoly(seg_im[0], [polyline_int], 1)
             cv2.fillPoly(seg_im[2 + class_ind], [polyline_int], 1)
             for attr_ind in attr_list:
                 cv2.fillPoly(seg_im[2 + num_class_channels + attr_ind], [polyline_int], 1)
@@ -2030,9 +2216,9 @@ class PlanarPolygon3D(PlanarTensorSmith):
                 polygon = expand_line_2d(line_bev, radius=0.5)
                 polygon_int = np.round(polygon).astype(int)
                 # edge_seg_bev_im
-                cv2.fillPoly(seg_im[0], [polygon_int], 1)
+                cv2.fillPoly(seg_im[1], [polygon_int], 1)
                 # line segment
-                line_im = cv2.fillPoly(np.zeros((X, Y)), [polygon_int], 1)
+                line_im = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [polygon_int], 1)
                 line_ims.append(line_im)
                 # line direction regressions
                 line_dir = line_bev[1] - line_bev[0]
@@ -2057,14 +2243,20 @@ class PlanarPolygon3D(PlanarTensorSmith):
                 )
                 height_ims.append(height_im)
 
-        index_im = np.argmin(np.array(dist_ims), axis=0)
-        vec_im = np.choose(index_im, vec_ims)
-        dist_im = np.choose(index_im, dist_ims)
-        dir_im = np.choose(index_im, dir_ims)
-        height_im = np.choose(index_im, height_ims)
+        if len(dist_ims) > 0:
+            index_im = np.argmin(np.array(dist_ims), axis=0)
+            vec_im = choose_index(index_im, vec_ims)
+            dist_im = choose_index(index_im, dist_ims)
+            dir_im = choose_index(index_im, dir_ims)
+            height_im = choose_index(index_im, height_ims)
+        else:
+            vec_im = np.zeros((2, X, Y), dtype=np.float32)
+            dist_im = np.zeros((X, Y), dtype=np.float32)
+            dir_im = np.zeros((3, X, Y), dtype=np.float32)
+            height_im = np.zeros((X, Y), dtype=np.float32)
 
         reg_im = np.concatenate([
-            seg_im * dist_im[None],
+            seg_im[1:2] * dist_im[None],
             vec_im,
             dir_im,
             height_im[None]
@@ -2084,6 +2276,33 @@ class PlanarPolygon3D(PlanarTensorSmith):
 
 @TENSOR_SMITHS.register_module()
 class PlanarParkingSlot3D(PlanarTensorSmith):
+    
+    def __init__(self, 
+                 voxel_shape: tuple, 
+                 voxel_range: Tuple[list, list, list],
+                 reverse_pre_conf: float=0.5,
+                 reverse_dist_thresh: float=1.2,
+                 reverse_conf_thresh: float=0.5):
+        """
+        Parameters
+        ----------
+        voxel_shape : tuple
+        voxel_range : Tuple[List]
+        reverse_pre_conf : float
+        reverse_dist_thresh : float
+        reverse_conf_thresh : float
+
+        Examples
+        --------
+        - voxel_shape=(6, 320, 160)
+        - voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        - Z, X, Y = voxel_shape
+
+        """
+        super().__init__(voxel_shape, voxel_range)
+        self.reverse_pre_conf = reverse_pre_conf
+        self.reverse_dist_thresh = reverse_dist_thresh
+        self.reverse_conf_thresh = reverse_conf_thresh
     
     @staticmethod
     def _get_height_map(
@@ -2113,22 +2332,22 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
         a_012, b_012, c_012 = norm_vec_012 = np.cross(vec_01, vec_12)
         d_012 = - (norm_vec_012 * slot_points_3d[1]).sum()
         h_012 = - ((points_grid_bev[::-1] * [[[a_012]], [[b_012]]]).sum(axis=0) + d_012) / c_012
-        mask_012 = cv2.fillPoly(np.zeros((X, Y)), [slot_points_3d[[0, 1, 2], :2][..., [1, 0]].astype(int)], 1)
+        mask_012 = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [slot_points_3d[[0, 1, 2], :2][..., [1, 0]].astype(int)], 1)
         # plane based on triangle_230
         a_230, b_230, c_230 = norm_vec_230 = np.cross(vec_23, vec_30)
         d_230 = - (norm_vec_230 * slot_points_3d[3]).sum()
         h_230 = - ((points_grid_bev[::-1] * [[[a_230]], [[b_230]]]).sum(axis=0) + d_230) / c_230
-        mask_230 = cv2.fillPoly(np.zeros((X, Y)), [slot_points_3d[[2, 3, 0], :2][..., [1, 0]].astype(int)], 1)
+        mask_230 = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [slot_points_3d[[2, 3, 0], :2][..., [1, 0]].astype(int)], 1)
         # plane based on triangle_013
         a_013, b_013, c_013 = norm_vec_013 = np.cross(vec_01, vec_30)
         d_013 = - (norm_vec_013 * slot_points_3d[0]).sum()
         h_013 = - ((points_grid_bev[::-1] * [[[a_013]], [[b_013]]]).sum(axis=0) + d_013) / c_013
-        mask_013 = cv2.fillPoly(np.zeros((X, Y)), [slot_points_3d[[0, 1, 3], :2][..., [1, 0]].astype(int)], 1)
+        mask_013 = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [slot_points_3d[[0, 1, 3], :2][..., [1, 0]].astype(int)], 1)
         # plane based on triangle_123
         a_123, b_123, c_123 = norm_vec_123 = np.cross(vec_12, vec_23)
         d_123 = - (norm_vec_123 * slot_points_3d[2]).sum()
         h_123 = - ((points_grid_bev[::-1] * [[[a_123]], [[b_123]]]).sum(axis=0) + d_123) / c_123
-        mask_123 = cv2.fillPoly(np.zeros((X, Y)), [slot_points_3d[[1, 2, 3], :2][..., [1, 0]].astype(int)], 1)
+        mask_123 = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [slot_points_3d[[1, 2, 3], :2][..., [1, 0]].astype(int)], 1)
         # average on all four planes
         overlaps = mask_012 + mask_230 + mask_013 + mask_123 + 1e-3
         height_map = (mask_012 * h_012 + mask_230 * h_230 + mask_013 * h_013 + mask_123 * h_123) / overlaps
@@ -2190,16 +2409,16 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
             
             ## preparations for generating regressions
             # gen four regions, front, left, bottom, right
-            region_front = cv2.fillPoly(np.zeros((X, Y)), [np.concatenate([
+            region_front = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [np.concatenate([
                 slot_points_bev_int[[0, 1]], np.round(center_short_line).astype(int)
             ])], 1)
-            region_left = cv2.fillPoly(np.zeros((X, Y)), [np.concatenate([
+            region_left = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [np.concatenate([
                 slot_points_bev_int[[1, 2]], np.round(center_long_line).astype(int)[::-1]
             ])], 1)
-            region_bottom = cv2.fillPoly(np.zeros((X, Y)), [np.concatenate([
+            region_bottom = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [np.concatenate([
                 slot_points_bev_int[[2, 3]], np.round(center_short_line).astype(int)[::-1]
             ])], 1)
-            region_right = cv2.fillPoly(np.zeros((X, Y)), [np.concatenate([
+            region_right = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [np.concatenate([
                 slot_points_bev_int[[3, 0]], np.round(center_long_line).astype(int)
             ])], 1)
             # handle minor overlaps
@@ -2208,7 +2427,7 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
             region_front -= overlap_short
             region_left -= overlap_long
             # total region of the slot
-            region_slot = cv2.fillPoly(np.zeros((X, Y)), [slot_points_bev_int], 1)
+            region_slot = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [slot_points_bev_int], 1)
             # side directions, general directions
             side_direction_front = np.float32(slot_points_bev[1] - slot_points_bev[0])
             side_direction_front /= np.linalg.norm(side_direction_front)
@@ -2433,21 +2652,19 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
         return mean_slots
 
 
-    def reverse(self, tensor_dict: Dict[str, Tensor], pre_conf=0.3, dist_thresh=1):
+    def reverse(self, tensor_dict: Dict[str, Tensor]):
         """One should rearange model outputs to tensor_dict format.
 
         Parameters
         ----------
         tensor_dict : dict
-        pre_conf : float, optional, by default 0.3
-            filter valid points, by default 0.3
         """
         cen_pred = tensor_dict['cen'].detach().cpu().numpy()
         seg_pred = tensor_dict['seg'].detach().cpu().numpy()
         reg_pred = tensor_dict['reg'].detach().cpu().numpy()
 
         # get valid_points
-        valid_points_map = cen_pred[0] > pre_conf
+        valid_points_map = cen_pred[0] > self.reverse_pre_conf
         valid_points_bev = self.points_grid_bev[:, valid_points_map]
         
         ## pickup scores
@@ -2526,7 +2743,7 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
         ## groups_nms, get mean slot points_bev
         cx, cy, fx, fy = self.bev_intrinsics
         mean_slots_bev_no_entrance = self._group_nms(
-            cen_scores, seg_scores, corner_points_bev, abs(fx * dist_thresh)
+            cen_scores, seg_scores, corner_points_bev, abs(fx * self.reverse_dist_thresh)
         )
         # determine the entrance and calc 3D coordinates
         _, H, W = self.voxel_shape
@@ -2566,8 +2783,8 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
                     heights.append(None)
                 else:
                     heights.append(reg_pred[14][
-                        min(max(round(point[1]), 0), H), 
-                        min(max(round(point[0]), 0), W)
+                        min(max(round(point[1]), 0), H - 1), 
+                        min(max(round(point[0]), 0), W - 1)
                     ].mean())
             valid_heights = [height for height in heights if height is not None]
             if len(valid_heights) > 0:
@@ -2578,15 +2795,85 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
             # get 3d points
             mean_slot_3d = []
             for point, height in zip(mean_slot, heights):
-                mean_slot_3d.append(
-                    [(point[1] - cx) / fx, 
-                     (point[0] - cy) / fy, 
-                     height, 
-                     point[2]]
-                )
-            mean_slots_3d.append(np.float32(mean_slot_3d))
+                mean_slot_3d.append([(point[1] - cx) / fx, 
+                                     (point[0] - cy) / fy, 
+                                     height, 
+                                     point[2]])
+            mean_slot_3d = np.float32(mean_slot_3d)
+            conf = mean_slot_3d[:, 3].mean()
+            if conf > self.reverse_conf_thresh:
+                mean_slots_3d.append(mean_slot_3d)
         
         return mean_slots_3d
-            
-                
+
+
+@TENSOR_SMITHS.register_module()
+class PlanarPolyline3DSeg(PlanarTensorSmith):
+        
+    def __call__(self, transformable: Polyline3D):
+        """
+        Parameters
+        ----------
+        transformable : Polyline3D
+
+        Returns
+        -------
+        tensor_dict : dict
+
+        Notes
+        -----
+        ```
+        seg_im  # 分割图
+        ```
+        """
+        Z, X, Y = self.voxel_shape
+        cx, cy, fx, fy = self.bev_intrinsics
+
+        polylines = []
+        class_inds = []
+        attr_lists = []
+        attr_available = 'attrs' in transformable.dictionary
+        for element in transformable.elements:
+            if element['class'] in transformable.dictionary['classes']:
+                points = element['points']
+                polylines.append(np.array([
+                    points[..., 1] * fy + cy,
+                    points[..., 0] * fx + cx,
+                    points[..., 2]
+                ]).T)
+                class_inds.append(transformable.dictionary['classes'].index(element['class']))
+                attr_ind_list = []
+                if 'attr' in element and attr_available:
+                    element_attrs = element['attr']
+                    for attr in element_attrs:
+                        if attr in transformable.dictionary['attrs']:
+                            attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
+                attr_lists.append(attr_ind_list)
+                # TODO: add ignore_mask according to ignore classes and attrs
+        num_class_channels = len(transformable.dictionary['classes'])
+        if attr_available:
+            num_attr_channels = len(transformable.dictionary['attrs'])
+        else:
+            num_attr_channels = 0
+        seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y))
+
+        linewidth = int(max(0.51, abs(fx * 0.2)))
+        for polyline, class_ind, attr_list in zip(polylines, class_inds, attr_lists):
+            for line_3d in zip(polyline[:-1], polyline[1:]):
+                line_3d = np.float32(line_3d)
+                line_bev = line_3d[:, :2]
+                polygon = expand_line_2d(line_bev, radius=linewidth)
+                polygon_int = np.round(polygon).astype(int)
+                # seg_bev_im
+                cv2.fillPoly(seg_im[0], [polygon_int], 1)
+                cv2.fillPoly(seg_im[1 + class_ind], [polygon_int], 1)
+                for attr_ind in attr_list:
+                    cv2.fillPoly(seg_im[1 + num_class_channels + attr_ind], [polygon_int], 1)
+        # TODO: add ignore_seg_mask according to ignore classes and attrs
+        tensor_data = {
+            'seg': torch.tensor(seg_im, dtype=torch.float32)
+        }
+        
+        return tensor_data
+
 
