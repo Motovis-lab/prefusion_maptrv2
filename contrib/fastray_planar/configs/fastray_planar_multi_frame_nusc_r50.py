@@ -94,8 +94,9 @@ if debug_mode:
     possible_group_sizes = 20
     persistent_workers = False
 else:
-    batch_size = 4
-    num_workers = 0
+    batch_size = 6
+    num_workers = 3
+    # num_workers = 0
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
@@ -106,7 +107,8 @@ else:
         dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
     possible_group_sizes = 2
-    persistent_workers = False
+    persistent_workers = True
+    # persistent_workers = False
 
 ## Transformables
 transformables = dict(
@@ -187,7 +189,7 @@ train_dataset = dict(
                        possible_group_sizes=possible_group_sizes,
                        possible_frame_intervals=1,
                        transformable_cfg=transformables,
-                       cbgs_cfg=dict(desired_ratio=0.4)),
+                       cbgs_cfg=dict(desired_ratio=0.3)),
     batch_size=batch_size,
 )
 
@@ -461,7 +463,7 @@ model = dict(
 )
 
 ## log_processor
-log_processor = dict(type='GroupAwareLogProcessor', tabulate_ncols=3, tabulate_fmt="github")
+log_processor = dict(type='GroupAwareLogProcessor', tabulate_ncols=3, tabulate_fmt="pretty")
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 custom_hooks = [
     dict(type="InferAndDumpDetectionAsNuscenesJsonHook",
@@ -476,7 +478,7 @@ custom_hooks = [
 ## runner loop configs
 train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=24, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
-test_cfg = dict(type="GroupBatchInferLoop")
+# test_cfg = dict(type="GroupBatchInferLoop")
 
 ## evaluator and metrics
 val_evaluator = [
@@ -497,15 +499,19 @@ test_evaluator = [
 ## optimizer configs
 optim_wrapper = dict(
     type='OptimWrapper',
-    optimizer=dict(type='SGD',
-                lr=0.01,
-                momentum=0.9,
+    optimizer=dict(type='AdamW',
+                lr=0.00015,
+                # momentum=0.9,
                 weight_decay=0.01),
     clip_grad=dict(max_norm=10),
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[10, 22])
+param_scheduler = [
+    dict(type='LinearLR', start_factor=0.1, end_factor=1, by_epoch=False, begin=0, end=3000), # warmup
+    dict(type='PolyLR', by_epoch=False, begin=3000, eta_min=0, power=1.0)     # main LR Scheduler
+    # dict(type='MultiStepLR', milestones=[10, 22])
+]
 
 
 env_cfg = dict(
@@ -524,8 +530,8 @@ today = datetime.datetime.now().strftime("%m%d")
 # work_dir = "./work_dirs/fastray_planar_multi_frame_1112"
 # work_dir = "./work_dirs/fastray_planar_multi_frame_1112"
 work_dir = f'./work_dirs/{experiment_name}_{today}'
-# load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
-load_from = "./ckpts/multi_frame_nusc_r50_1201_epoch_40.pth"
+# load_from = "./work_dirs/fastray_planar_multi_frame_nusc_r50_1212/multi_frame_nusc_r50_1212_epoch_1.pth"
+# load_from = "./ckpts/fastray_planar_single_frame_nusc_4planar_types_1113_epoch_1.pth"
 # load_from = "./ckpts/multi_frame_nusc_r50_1203_epoch_48.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_nusc_r50_1125/multi_frame_nusc_r50_epoch_1.pth"
 
