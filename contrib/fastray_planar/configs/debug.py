@@ -87,7 +87,7 @@ if debug_mode:
     ]
 else:
     batch_size = 4
-    num_workers = 8
+    num_workers = 4
     persistent_workers = False
     transforms = [
         dict(type='RenderIntrinsic', 
@@ -109,8 +109,8 @@ train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='../MV4D-PARKING',
-    info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
-    # info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
+    # info_path='../MV4D-PARKING/mv_4d_infos_20231028_150815.pkl',
+    info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -139,7 +139,7 @@ train_dataset = dict(
     transforms=transforms,
     group_sampler=dict(type="IndexGroupSampler",
                        phase="train",
-                       possible_group_sizes=[1],
+                       possible_group_sizes=[2],
                        possible_frame_intervals=[1]),
     batch_size=batch_size,
 )
@@ -149,8 +149,7 @@ train_dataloader = dict(
     num_workers=num_workers,
     collate_fn=dict(type="collate_dict"),
     dataset=train_dataset,
-    persistent_workers=persistent_workers,
-    prefetch_factor=1
+    # pin_memory=True
 )
 
 # val_dataloader = train_dataloader
