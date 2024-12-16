@@ -218,7 +218,11 @@ transformables=dict(
         tensor_smith=dict(type='PlanarOrientedCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
     polyline_3d=dict(
         type='Polyline3D', dictionary=dictionary_polylines,
-        tensor_smith=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+        tensor_smith=dict(type='PlanarPolyline3D', 
+                          voxel_shape=voxel_shape, 
+                          voxel_range=voxel_range,
+                          reverse_group_dist_thresh=5,
+                          reverse_link_max_adist=15)),
     polygon_3d=dict(
         type='Polygon3D', dictionary=dictionary_polygons,
         tensor_smith=dict(type='PlanarPolygon3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
@@ -263,8 +267,8 @@ val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='../MV4D-PARKING',
-    info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
-    # info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
+    info_path='../MV4D-PARKING/mv_4d_demo_info.pkl',
+    # info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -274,7 +278,7 @@ val_dataset = dict(
     transformables=transformables,
     transforms=[dict(type='RenderIntrinsic', resolutions=camera_resolution_configs)],
     group_sampler=dict(type="IndexGroupSampler",
-                       phase="train",
+                       phase="val",
                        possible_group_sizes=10,
                        possible_frame_intervals=10),
     batch_size=batch_size,
@@ -292,9 +296,10 @@ train_dataloader = dict(
 val_dataloader = dict(
     sampler=dict(type='DefaultSampler'),
     num_workers=num_workers,
+    # num_workers=0,
     collate_fn=dict(type="collate_dict"),
     dataset=val_dataset,
-    pin_memory=True  # better for station or server
+    # pin_memory=True  # better for station or server
 )
 
 
@@ -629,7 +634,8 @@ env_cfg = dict(
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1129"
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1130"
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1201"
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1204"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1204"
+work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1212"
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
 # load_from = "./work_dirs/collected_models/apa_epoch_10.pth"
 # load_from = "./work_dirs/collected_models/apa_epoch_20_enhanced.pth"

@@ -123,6 +123,13 @@ class PlanarTensorSmith(TensorSmith):
         self.points_grid_bev = np.float32([yy, xx])
 
 
+def is_in_bbox3d(delta_ij, sizes, xvec, yvec, zvec, min_radius=0):
+    return all([
+        np.linalg.norm(delta_ij * xvec) < max(min_radius, 0.5 * sizes[0]),
+        np.linalg.norm(delta_ij * yvec) < max(min_radius, 0.5 * sizes[1]),
+        np.linalg.norm(delta_ij * zvec) < max(min_radius, 0.5 * sizes[2])
+    ])
+
 
 @TENSOR_SMITHS.register_module()
 class PlanarBbox3D(PlanarTensorSmith):
@@ -133,7 +140,8 @@ class PlanarBbox3D(PlanarTensorSmith):
                  use_bottom_center=False,
                  has_velocity: bool=True,
                  reverse_pre_conf: float=0.1,
-                 reverse_nms_ratio: float=0.7):
+                 reverse_nms_ratio: float=0.7,
+                 reverse_nms_min_radius: float=0.25):
         """
         Parameters
         ----------
@@ -143,6 +151,7 @@ class PlanarBbox3D(PlanarTensorSmith):
         has_velocity : bool
         reverse_pre_conf : float
         reverse_nms_ratio : float
+        reverse_nms_min_radius : float
 
         Examples
         --------
@@ -156,6 +165,7 @@ class PlanarBbox3D(PlanarTensorSmith):
         self.has_velocity = has_velocity
         self.reverse_pre_conf = reverse_pre_conf
         self.reverse_nms_ratio = reverse_nms_ratio
+        self.reverse_nms_min_radius = reverse_nms_min_radius
 
     
     @staticmethod
@@ -229,7 +239,7 @@ class PlanarBbox3D(PlanarTensorSmith):
                 unit_xvecs.append(element['rotation'][:, 0])
                 unit_yvecs.append(element['rotation'][:, 1])
                 # get the position of the box
-                center = element['translation'][:, 0]
+                center = np.float32(element['translation'][:, 0])
                 if self.use_bottom_center:
                     center -= 0.5 * element['size'][2] * element['rotation'][:, 2]
                 centers.append(np.array([
@@ -359,14 +369,6 @@ class PlanarBbox3D(PlanarTensorSmith):
         return yvecs, zvecs
         
     
-    @staticmethod
-    def _is_in_bbox3d(delta_ij, sizes, xvec, yvec, zvec):
-        return all([
-            np.linalg.norm(delta_ij * xvec) < 0.5 * sizes[0],
-            np.linalg.norm(delta_ij * yvec) < 0.5 * sizes[1],
-            np.linalg.norm(delta_ij * zvec) < 0.5 * sizes[2]
-        ])
-    
     
     def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_xvecs, roll_vecs, velocities):
         scores = cen_scores * seg_scores
@@ -388,7 +390,11 @@ class PlanarBbox3D(PlanarTensorSmith):
                     if j not in kept_inds:
                         center_j = centers[:, j]
                         delta_ij = center_i - center_j
-                        if self._is_in_bbox3d(delta_ij, sizes_i * self.reverse_nms_ratio, unit_xvec_i, unit_yvec_i, unit_zvec_i):
+                        if is_in_bbox3d(
+                            delta_ij, sizes_i * self.reverse_nms_ratio, 
+                            unit_xvec_i, unit_yvec_i, unit_zvec_i,
+                            self.reverse_nms_min_radius
+                        ):
                             kept_inds.append(j)
                             grouped_inds.append(j)
         _, _, fx, fy = self.bev_intrinsics
@@ -580,7 +586,7 @@ class PlanarRectangularCuboid(PlanarBbox3D):
                 unit_xvecs.append(element['rotation'][:, 0])
                 unit_yvecs.append(element['rotation'][:, 1])
                 # get the position of the box
-                center = element['translation'][:, 0]
+                center = np.float32(element['translation'][:, 0])
                 if self.use_bottom_center:
                     center -= 0.5 * element['size'][2] * element['rotation'][:, 2]
                 centers.append(np.array([
@@ -696,7 +702,11 @@ class PlanarRectangularCuboid(PlanarBbox3D):
                     if j not in kept_inds:
                         center_j = centers[:, j]
                         delta_ij = center_i - center_j
-                        if self._is_in_bbox3d(delta_ij, sizes_i * self.reverse_nms_ratio, unit_xvec_i, unit_yvec_i, unit_zvec_i):
+                        if is_in_bbox3d(
+                            delta_ij, sizes_i * self.reverse_nms_ratio, 
+                            unit_xvec_i, unit_yvec_i, unit_zvec_i,
+                            self.reverse_nms_min_radius
+                        ):
                             kept_inds.append(j)
                             grouped_inds.append(j)
         ## get mean bbox in group
@@ -819,7 +829,8 @@ class PlanarSquarePillar(PlanarTensorSmith):
                  voxel_range: Tuple[list, list, list], 
                  use_bottom_center: bool=True,
                  reverse_pre_conf: float=0.1,
-                 reverse_nms_ratio: float=1):
+                 reverse_nms_ratio: float=1,
+                 reverse_nms_min_radius: float=0.25):
         """
         Parameters
         ----------
@@ -828,6 +839,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
         use_bottom_center : bool, optional
         reverse_pre_conf : float, optional
         reverse_nms_ratio : float, optional
+        reverse_nms_min_radius : float, optional
 
         Examples
         --------
@@ -840,6 +852,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
         self.use_bottom_center = use_bottom_center
         self.reverse_pre_conf = reverse_pre_conf
         self.reverse_nms_ratio = reverse_nms_ratio
+        self.reverse_nms_min_radius = reverse_nms_min_radius
     
     
     @staticmethod
@@ -890,7 +903,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
                 unit_xvecs.append(element['rotation'][:, 0])
                 unit_zvecs.append(element['rotation'][:, 2])
                 # get the position of the box
-                center = element['translation'][:, 0]
+                center = np.float32(element['translation'][:, 0])
                 if self.use_bottom_center:
                     center -= 0.5 * element['size'][2] * element['rotation'][:, 2]
                 centers.append(np.array([
@@ -1003,14 +1016,6 @@ class PlanarSquarePillar(PlanarTensorSmith):
         yvecs = np.cross(zvecs, xvecs, axis=0)
         return xvecs, yvecs
         
-    
-    @staticmethod
-    def _is_in_bbox3d(delta_ij, sizes, xvec, yvec, zvec):
-        return all([
-            np.linalg.norm(delta_ij * xvec) < 0.5 * sizes[0],
-            np.linalg.norm(delta_ij * yvec) < 0.5 * sizes[1],
-            np.linalg.norm(delta_ij * zvec) < 0.5 * sizes[2]
-        ])
 
     
     def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_zvecs, vecs_4yaw):
@@ -1033,7 +1038,11 @@ class PlanarSquarePillar(PlanarTensorSmith):
                     if j not in kept_inds:
                         center_j = centers[:, j]
                         delta_ij = center_i - center_j
-                        if self._is_in_bbox3d(delta_ij, sizes_i * self.reverse_nms_ratio, unit_xvec_i, unit_yvec_i, unit_zvec_i):
+                        if is_in_bbox3d(
+                            delta_ij, sizes_i * self.reverse_nms_ratio, 
+                            unit_xvec_i, unit_yvec_i, unit_zvec_i,
+                            self.reverse_nms_min_radius
+                        ):
                             kept_inds.append(j)
                             grouped_inds.append(j)
         ## get mean bbox in group
@@ -1150,7 +1159,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
                  voxel_range: Tuple[list, list, list], 
                  use_bottom_center: bool=False,
                  reverse_pre_conf: float=0.1,
-                 reverse_nms_ratio: float=1):
+                 reverse_nms_ratio: float=1.4):
         """
         Parameters
         ----------
@@ -1190,7 +1199,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
                 # unit vector of z_axis of the box
                 unit_zvecs.append(element['rotation'][:, 2])
                 # get the position of the box
-                center = element['translation'][:, 0]
+                center = np.float32(element['translation'][:, 0])
                 if self.use_bottom_center:
                     center -= 0.5 * element['size'][2] * element['rotation'][:, 2]
                 centers.append(np.array([
@@ -1458,7 +1467,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
                 unit_xvecs.append(element['rotation'][:, 0])
                 unit_zvecs.append(element['rotation'][:, 2])
                 # get the position of the box
-                center = element['translation'][:, 0]
+                center = np.float32(element['translation'][:, 0])
                 if self.use_bottom_center:
                     center -= 0.5 * element['size'][2] * element['rotation'][:, 2]
                 centers.append(np.array([
@@ -1767,8 +1776,8 @@ class PlanarPolyline3D(PlanarTensorSmith):
     def __init__(self, 
                  voxel_shape: tuple, 
                  voxel_range: Tuple[list, list, list],
-                 reverse_pre_conf: float=0.1,
-                 reverse_group_dist_thresh: float=0.2,
+                 reverse_pre_conf: float=0.5,
+                 reverse_group_dist_thresh: float=0.5,
                  reverse_link_max_adist: float=1.5):
         """
         Parameters
@@ -2022,7 +2031,7 @@ class PlanarPolyline3D(PlanarTensorSmith):
             if len(segment) > 2:
                 selected_line_segments.append(segment)
 
-        return line_segments
+        return selected_line_segments
 
 
     def reverse(self, tensor_dict):
@@ -2085,6 +2094,9 @@ class PlanarPolyline3D(PlanarTensorSmith):
         fused_classes = np.float32(fused_classes).T
         fused_points = np.float32(fused_points).T
         fused_vecs = np.float32(fused_vecs).T
+
+        if len(fused_classes) == 0:
+            return []
         
         ## link all points and get 3d polylines
         line_segments = self._link_line_points(fused_points, fused_vecs, self.reverse_link_max_adist)

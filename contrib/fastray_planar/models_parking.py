@@ -369,13 +369,14 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
                 seg=out_parkingslot_3d[0][:, 1:],
                 reg=out_parkingslot_3d[1])
             # occ_sdf_bev=dict(
-            #     seg=out_occ_sdf_bev[0][:, 0:1],
-            #     reg=out_occ_sdf_bev[1][:, 0:2]
+            #     seg=out_occ_sdf_bev[0][:, 0:3],
+            #     reg=out_occ_sdf_bev[1]
             # )
         )
         
         if self.debug_mode:
-            draw_outputs(pred_dict, batched_input_dict)
+            # draw_outputs(pred_dict, batched_input_dict)
+            save_outputs(pred_dict, batched_input_dict)
         
         if mode == 'tensor':
             return pred_dict
