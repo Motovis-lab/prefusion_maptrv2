@@ -258,6 +258,7 @@ class GroupBatchDataset(Dataset):
             self._sample_groups()
             self.subepoch_manager.reset(len(self.groups))
 
+
     def __getitem__(self, idx) -> GroupBatch:
         if self.subepoch_manager is not None:
             idx = self.subepoch_manager.translate_index(idx)
@@ -265,27 +266,22 @@ class GroupBatchDataset(Dataset):
         batched_groups = self._batch_groups(idx, self.groups, self.batch_size)
 
         batch = []
+        batch_seed = int.from_bytes(os.urandom(2), byteorder="big")
         for group in batched_groups:
             group_of_inputs = []
+            group_seed = int.from_bytes(os.urandom(2), byteorder="big")
             for i, index_info in enumerate(group):
+                frame_seed = int.from_bytes(os.urandom(2), byteorder="big")
+                transformables = self.load_all_transformables(index_info)
+                for transform in self.transforms:
+                    transform(*transformables.values(), seeds={"group": group_seed, "batch": batch_seed, "frame": frame_seed})
                 input_dict = {
                     "index_info": index_info,
-                    "transformables": self.load_all_transformables(index_info),
-                }  # TODO: add ego pose transformation
+                    "transformables": transformables,
+                }
                 group_of_inputs.append(input_dict)
             batch.append(group_of_inputs)
-
-        # apply transforms
-        # TODO: set seed using seed_dataset
-        batch_seed = int.from_bytes(os.urandom(2), byteorder="big")
-        for group_of_inputs in batch:
-            group_seed = int.from_bytes(os.urandom(2), byteorder="big")
-            for input_dict in group_of_inputs:
-                frame_seed = int.from_bytes(os.urandom(2), byteorder="big")
-                transformables = input_dict["transformables"].values()
-                for transform in self.transforms:
-                    transform(*transformables, seeds={"group": group_seed, "batch": batch_seed, "frame": frame_seed})
-
+        
         group_batch = []
         for frame_batch in zip(*batch):
             group_batch.append(frame_batch)
@@ -293,6 +289,7 @@ class GroupBatchDataset(Dataset):
         model_food = self.model_feeder(group_batch)
 
         return model_food
+
 
     def _build_transformable(self, name: str, scene_data: Dict, index_info: "IndexInfo", loader: "TransformableLoader", tensor_smith: "TensorSmith" = None, **kwargs) -> "Transformable":
         return loader.load(name, scene_data, index_info, tensor_smith=tensor_smith, **kwargs)
