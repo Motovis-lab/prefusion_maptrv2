@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import torch
@@ -13,7 +14,8 @@ __all__ = [
     'draw_aligned_voxel_feats',
     'get_bbox_3d',
     'get_parkingslot_3d',
-    'draw_outputs'
+    'draw_outputs',
+    'save_outputs'
 ]
 
 
@@ -629,4 +631,90 @@ def draw_outputs(pred_dict, batched_input_dict):
     plt.savefig(save_path)
     plt.close()
     # plt.show()
+                
+
+def save_outputs(pred_dict, batched_input_dict):
+
+    camera_tensors_dict = batched_input_dict['camera_tensors']
+    gt_dict = batched_input_dict['annotations']
+    transformables = batched_input_dict['transformables'][0]
+    scene_frame_id = batched_input_dict['index_infos'][0].scene_frame_id
+
+    save_dir = Path('work_dirs/infered_results')
+    # # save vitual camera images
+    # for cam_id in camera_tensors_dict:
+    #     img = camera_tensors_dict[cam_id].detach().cpu().numpy()[0].transpose(1, 2, 0)[..., ::-1] * 255 + 128
+    #     img = img.astype(np.uint8)
+    #     save_jpg = save_dir / cam_id / f'{scene_frame_id}.jpg'
+    #     save_jpg.parent.mkdir(parents=True, exist_ok=True)
+    #     plt.imsave(save_jpg, img)
+
+    # get preds and gts
+    result_dict = {
+        'gt': dict(bboxes=[], slots=[], polylines=[]), 
+        'pred': dict(bboxes=[], slots=[], polylines=[]), 
+    }
+    for branch in pred_dict:
+        gt_dict_branch = gt_dict[branch]
+        pred_dict_branch = pred_dict[branch]
+        # extract batch_0
+        gt_dict_branch_0 = {**gt_dict_branch}
+        pred_dict_branch_0 = {**pred_dict_branch}
+        for key in pred_dict_branch_0:
+            if key in ['cen', 'seg']:
+                gt_dict_branch_0[key] = gt_dict_branch[key][0].detach().cpu().float()
+                pred_dict_branch_0[key] = pred_dict_branch[key][0].sigmoid().detach().cpu().float()
+            else:
+                gt_dict_branch_0[key] = gt_dict_branch[key][0].detach().cpu().float()
+                pred_dict_branch_0[key] = pred_dict_branch[key][0].detach().cpu().float()
+        tensor_smith = transformables[branch].tensor_smith
+        voxel_range = tensor_smith.voxel_range
+        match tensor_smith:
+            case PlanarBbox3D() | PlanarRectangularCuboid() | PlanarSquarePillar():
+                # bboxes
+                for element in transformables[branch].elements:
+                    for key in element:
+                        if type(element[key]) == np.ndarray:
+                            element[key] = element[key].reshape(-1).tolist()
+                    zrange = voxel_range[0]
+                    xrange = voxel_range[1]
+                    yrange = voxel_range[2]
+                    in_x = element['translation'][0] < max(xrange) and element['translation'][0] > min(xrange)
+                    in_y = element['translation'][1] < max(yrange) and element['translation'][1] > min(yrange)
+                    in_z = element['translation'][2] < max(zrange) and element['translation'][2] > min(zrange)
+                    if in_x and in_y and in_z:
+                        result_dict['gt']['bboxes'].append(element)
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                class_name_list = transformables[branch].dictionary['classes']
+                num_class_channels = len(class_name_list)
+                for element in results:
+                    if (element['score'] * element['area_score']) < 0.7:
+                        continue
+                    element['class'] = class_name_list[np.argmax(element['confs'][1:num_class_channels + 1])]
+                    for key in element:
+                        if type(element[key]) == np.ndarray:
+                            element[key] = element[key].reshape(-1).tolist()
+                    element.pop('confs')
+                    result_dict['pred']['bboxes'].append(element)
+            case PlanarParkingSlot3D():
+                results = tensor_smith.reverse(gt_dict_branch_0)
+                for slot in results:
+                    result_dict['gt']['slots'].append(slot[:, :3].reshape(-1).tolist())
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                for slot in results:
+                    result_dict['pred']['slots'].append(slot[:, :3].reshape(-1).tolist())
+            case PlanarPolyline3D():
+                results = tensor_smith.reverse(gt_dict_branch_0)
+                for polyline in results:
+                    result_dict['gt']['polylines'].append(polyline[:, :3].reshape(-1).tolist())
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                for polyline in results:
+                    result_dict['pred']['polylines'].append(polyline[:, :3].reshape(-1).tolist())
+            case PlanarPolygon3D():
+                pass
+    
+    save_path = save_dir / 'gts_and_preds_new' / f'{scene_frame_id}.json'
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(save_path, 'w') as fw:
+        json.dump(result_dict, fw, indent=4)
                 

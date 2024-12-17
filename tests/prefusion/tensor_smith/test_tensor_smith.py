@@ -7,6 +7,7 @@ from easydict import EasyDict as edict
 from prefusion.dataset.transform import Bbox3D, ParkingSlot3D, Polyline3D, OccSdfBev
 from prefusion.dataset.tensor_smith import (
     get_bev_intrinsics, 
+    is_in_bbox3d,
     CameraImageTensor,
     PlanarBbox3D,
     PlanarRectangularCuboid,
@@ -84,7 +85,7 @@ def test_planar_bbox_3d_is_in_bbox3d():
     xvec = np.float32([1, 0, 0])
     yvec = np.float32([0, 1, 0])
     zvec = np.float32([0, 0, 1])
-    assert PlanarBbox3D._is_in_bbox3d(delta_ij, sizes, xvec, yvec, zvec) is True
+    assert is_in_bbox3d(delta_ij, sizes, xvec, yvec, zvec) is True
 
 
 
