@@ -1,16 +1,17 @@
 #!/bin/bash
 
+# 20230820_131402
+# 20230820_105813
+# 20230822_104856
+# 20230822_110856
+# 20230822_154430
+# 20230823_110018
+# 20230823_162939
+# 20230824_115840
+# 20230824_134824
+# 20230824_153239
+
 scene_names="
-        20230820_131402
-        20230820_105813
-        20230822_104856
-        20230822_110856
-        20230822_154430
-        20230823_110018
-        20230823_162939
-        20230824_115840
-        20230824_134824
-        20230824_153239
         20230826_102054
         20230826_122208
         20230828_134528
@@ -70,8 +71,8 @@ process_folder() {
     s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 32 --retry-count 100 cp --sp s3://mv-4d-annotation/data/MV4D_12V3L/$scene_name_/trajectory.txt ./data/MV4D_12V3L/$scene_name_/
     s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 32 --retry-count 100 cp --sp s3://mv-4d-annotation/data/MV4D_12V3L/$scene_name_/calibration_center.yml ./data/MV4D_12V3L/$scene_name_/
     s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 32 --retry-count 100 cp --sp s3://mv-4d-annotation/data/MV4D_12V3L/$scene_name_/calibration_back.yml ./data/MV4D_12V3L/$scene_name_/
-    python tools/dataset_converters/gene_info_4d_v2.py $scene_name_
-    rm -rf ./data/MV4D_12V3L/$scene_name_/undistort_static_merged_lidar1
+    # python tools/dataset_converters/gene_info_4d_v2.py $scene_name_
+    # rm -rf ./data/MV4D_12V3L/$scene_name_/undistort_static_merged_lidar1
     
     echo "processed $scene_name"
 }
