@@ -144,15 +144,15 @@ class GroupBatchInferLoop(ValLoop):
 
     def run(self):
         """Launch validation."""
-        self.runner.call_hook('before_val')
-        self.runner.call_hook('before_val_epoch')
+        self.runner.call_hook('before_test')
+        self.runner.call_hook('before_test_epoch')
         self.runner.model.eval()
         for group_idx, group_batch in enumerate(self.dataloader):
             for frame_idx, frame_batch in enumerate(group_batch):
                 idx = group_idx * self.dataloader.dataset.group_size + frame_idx
-                self.run_iter(idx, [frame_batch])
-        
-        return None
+                self.run_iter(idx, frame_batch)
+        self.runner.call_hook('after_test_epoch')
+        self.runner.call_hook('after_test')
     
     @torch.no_grad()
     def run_iter(self, idx, data_batch: Sequence[dict]):
@@ -162,9 +162,8 @@ class GroupBatchInferLoop(ValLoop):
             data_batch (Sequence[dict]): Batch of data
                 from dataloader.
         """
-        self.runner.call_hook(
-            'before_val_iter', batch_idx=idx, data_batch=data_batch)
+        self.runner.call_hook('before_test_iter', batch_idx=idx, data_batch=data_batch)
         # outputs should be sequence of BaseDataElement
         with autocast(enabled=self.fp16):
-            outputs = self.runner.model.val_step(data_batch)
-
+            outputs = self.runner.model.test_step(data_batch)
+        self.runner.call_hook('after_test_iter', batch_idx=idx, data_batch=data_batch, outputs=outputs)

@@ -114,12 +114,7 @@ class NuscenesFastRayPlanarSingleFrameModel(BaseModel):
         )
 
         if self.debug_mode:
-            draw_out_feats(batched_input_dict,
-                           camera_tensors_dict,
-                           pred_bbox_3d=pred_dict['bbox_3d'],
-                           pred_bbox_3d_rect_cuboid=pred_dict['bbox_3d_rect_cuboid'],
-                           pred_bbox_3d_cylinder=pred_dict['bbox_3d_cylinder'],
-                           pred_bbox_3d_oriented_cylinder=pred_dict['bbox_3d_oriented_cylinder'])
+            draw_outputs(pred_dict, batched_input_dict)
 
         if mode == 'tensor':
             return pred_dict
@@ -206,6 +201,9 @@ class NuscenesFastRayPlanarMultiFrameModel(BaseModel):
         for branch in loss_cfg:
             self.losses_dict[branch] = MODELS.build(loss_cfg[branch])
 
+    def test_step(self, data: Union[dict, tuple, list]) -> list:
+        data = self.data_preprocessor(data, False)
+        return self._run_forward(data, mode='tensor')  # type: ignore
 
     def forward(self, mode='tensor', **batched_input_dict):
         """
@@ -265,8 +263,8 @@ class NuscenesFastRayPlanarMultiFrameModel(BaseModel):
             aligned_voxel_feats_cat.append(self.temporal_transform(
                 self.cached_voxel_feats[f'pre_{pre_i+1}'], self.cached_delta_poses[f'pre_{pre_i+1}']
             ))
-        if self.debug_mode:
-            draw_aligned_voxel_feats(aligned_voxel_feats_cat)
+        # if self.debug_mode:
+        #     draw_aligned_voxel_feats(aligned_voxel_feats_cat)
             # draw_aligned_voxel_feats(list(self.cached_voxel_feats.values()))
         # cache voxel features
         for pre_i in range(self.pre_nframes, 0, -1):
@@ -304,12 +302,7 @@ class NuscenesFastRayPlanarMultiFrameModel(BaseModel):
         
 
         if self.debug_mode:
-            draw_out_feats(batched_input_dict,
-                           camera_tensors_dict,
-                           pred_bbox_3d=pred_dict['bbox_3d'],
-                           pred_bbox_3d_rect_cuboid=pred_dict['bbox_3d_rect_cuboid'],
-                           pred_bbox_3d_cylinder=pred_dict['bbox_3d_cylinder'],
-                           pred_bbox_3d_oriented_cylinder=pred_dict['bbox_3d_oriented_cylinder'])
+            draw_outputs(pred_dict, batched_input_dict)
 
         if mode == 'tensor':
             return pred_dict
