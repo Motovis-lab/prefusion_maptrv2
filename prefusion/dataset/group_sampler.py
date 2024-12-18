@@ -179,7 +179,6 @@ class GroupSampler:
         seed: int = None,
         **kwargs,
     ):
-        assert phase.lower() in ["train", "val", "test", "test_scene_by_scene"]
         self.phase = phase.lower()
         self.possible_group_sizes = [possible_group_sizes] if isinstance(possible_group_sizes, int) else possible_group_sizes
         self.possible_frame_intervals = [possible_frame_intervals] if isinstance(possible_frame_intervals, int) else possible_frame_intervals
@@ -226,25 +225,21 @@ class IndexGroupSampler(GroupSampler):
             Random seed for randomization operations. It's usually for testing and debugging purpose.
         """
         super().__init__(phase, possible_group_sizes, possible_frame_intervals, seed)
+        assert phase in ["train", "val", "test"]
         self.indices_path = indices_path
 
-    def sample(self, data_root: Path, info: Dict, output_str_index: bool = False, **kwargs) -> List[Group["IndexInfo"]]:
+    def sample(self, data_root: Path, info: Dict, **kwargs) -> List[Group["IndexInfo"]]:
         """Sample groups
 
         Parameters
         ----------
         info : Dict
             the full info (pkl) of the dataset
-        output_str_index: bool, optional, deprecated
-            whether to output str index or IndexInfo; default is False.
         Returns
         -------
         List[Group["IndexInfo"]]
             Generated groups
         """
-        if output_str_index:
-            warnings.warn("Outputting groups as string indices is deprecated.", DeprecationWarning)
-
         # generate scene_frame_inds
         if self.indices_path is not None:
             indices = [line.strip() for line in open(self.indices_path, "w")]
@@ -258,27 +253,20 @@ class IndexGroupSampler(GroupSampler):
                 groups = self.sample_train_groups(scene_frame_inds)
             case "val" | "test":
                 groups = self.sample_val_groups(scene_frame_inds)
-            case "test_scene_by_scene" :
-                groups = self.sample_scene_groups(scene_frame_inds)
-        if not output_str_index:
-            return convert_str_index_to_index_info(groups)
+
+        return groups
 
     def sample_train_groups(self, scene_frame_inds: Dict[str, List[str]]) -> List[List[str]]:
         if self.seed: random.seed(self.seed)
         self._cur_train_group_size = random.choice(self.possible_group_sizes)
-        return self._generate_groups(scene_frame_inds, self._cur_train_group_size, random_start_ind=True, shuffle=True, seed=self.seed)
+        groups: List[List[str]] = self._generate_groups(scene_frame_inds, self._cur_train_group_size, random_start_ind=True, shuffle=True, seed=self.seed)
+        groups: List[List["IndexInfo"]] = convert_str_index_to_index_info(groups)
+        return groups
 
     def sample_val_groups(self, scene_frame_inds: Dict[str, List[str]]) -> List[List[str]]:
-        return self._generate_groups(scene_frame_inds, self.possible_group_sizes[0], frame_interval=self.possible_frame_intervals[0], start_ind=0, random_start_ind=False, shuffle=False)
-
-    def sample_scene_groups(self, scene_frame_inds: Dict[str, List[str]]) -> List[List[str]]:
-        return list(scene_frame_inds.values())
-
-    def sample_groups_by_class_balance(self):
-        raise NotImplementedError
-
-    def sample_groups_by_meta_info(self):
-        raise NotImplementedError
+        groups: List[List[str]] = self._generate_groups(scene_frame_inds, self.possible_group_sizes[0], frame_interval=self.possible_frame_intervals[0], start_ind=0, random_start_ind=False, shuffle=False)
+        groups: List[List["IndexInfo"]] = convert_str_index_to_index_info(groups)
+        return groups
     
     def _generate_groups(
         self, 
@@ -302,6 +290,28 @@ class IndexGroupSampler(GroupSampler):
             if self.seed: random.seed(self.seed)
             random.shuffle(all_groups)
         return all_groups
+
+
+@GROUP_SAMPLERS.register_module()
+class SequentialSceneFrameGroupSampler(GroupSampler):
+    def __init__(self, phase: str, seed: int = None, **kwargs):
+        """Prepare groups frame by frame, scene by scene.
+
+        Parameters
+        ----------
+        phase : str
+            Specifies the phase ('train', 'val', 'test' or 'test_scene_by_scene') of the dataset; default is 'train'.
+        seed : int, optional
+            Random seed for randomization operations. It's usually for testing and debugging purpose.
+        """
+        super().__init__(phase, 1, 1, seed)
+        assert phase == "test_scene_by_scene"
+
+    def sample(self, data_root: Path, info: Dict, **kwargs) -> List[Group["IndexInfo"]]:
+        scene_frame_inds = get_scene_frame_inds(info)
+        groups = convert_str_index_to_index_info(list(scene_frame_inds.values()))
+        groups = [Group([frm]) for grp in groups for frm in grp]
+        return groups
 
 
 @GROUP_SAMPLERS.register_module()
