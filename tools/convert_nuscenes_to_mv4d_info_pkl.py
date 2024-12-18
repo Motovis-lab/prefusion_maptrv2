@@ -134,6 +134,7 @@ def build_frame_info(nusc: NuScenes, nusc_map, first_sample_token) -> Dict:
         frame_info[ts]["3d_polylines"] = build_3d_polylines(nusc, nusc_map, cur_sample, lidar_ego_pose)
         frame_info[ts]["ego_pose"] = lidar_ego_pose
         frame_info[ts]["timestamp_window"] = [None]
+        frame_info[ts]["sample_token"] = cur_sample["token"]
 
         if cur_sample["next"] == "":
             break
