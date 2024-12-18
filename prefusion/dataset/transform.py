@@ -3,9 +3,7 @@ from copy import deepcopy
 import inspect
 import functools
 import abc
-import warnings
-from pathlib import Path
-from typing import List, Tuple, Dict, Callable, Union, Sequence, TYPE_CHECKING
+from typing import List, Tuple, Dict, Union, Sequence, TYPE_CHECKING, Any
 
 import cv2
 import mmcv
@@ -1286,6 +1284,27 @@ class OccSdf3D(SpatialTransformable):
     
     def rotate_3d(self, *args, **kwargs):
         raise NotImplementedError
+
+
+class Variable(Transformable):
+    def __init__(self, name: str, value: Any, tensor_smith: "TensorSmith" = None):
+        """Arbitrary Variable (usually, we use this transformable to pass static data through)
+
+        Parameters
+        ----------
+        name : str
+            arbitrary string, will be set to each Transformable object to distinguish it with others
+        value : Any
+            arbitrary variable value that needs to pass through
+        tensor_smith : TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
+        """
+        super().__init__(name)
+        self.value = deepcopy(value)
+        self.tensor_smith = tensor_smith
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self.name}, {self.value})'
 
 #--------------------------------#
 
