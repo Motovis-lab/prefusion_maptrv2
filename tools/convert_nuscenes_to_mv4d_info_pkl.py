@@ -144,17 +144,6 @@ def build_frame_info(nusc: NuScenes, nusc_map, first_sample_token) -> Dict:
     return defaultdict2dict(frame_info)
 
 
-def build_camera_calibration(nusc_calibrated_sensor: Dict):
-    intr = np.array(nusc_calibrated_sensor["camera_intrinsic"])
-    rot_quat = np.array(nusc_calibrated_sensor["rotation"])[[1, 2, 3, 0]]
-    calib = {
-        "camera_type": "PerspectiveCamera",
-        "extrinsic": (Rotation.from_quat(rot_quat).as_matrix(), np.array(nusc_calibrated_sensor["translation"])),
-        "intrinsic": np.array([intr[0, 2], intr[1, 2], intr[0, 0], intr[1, 1]]),
-    }
-    return calib
-
-
 def build_ego_pose(nusc: NuScenes, cur_sample):
     lidar_info = nusc.get("sample_data", cur_sample["data"]["LIDAR_TOP"])
     ego_pose = nusc.get("ego_pose", lidar_info["ego_pose_token"])
