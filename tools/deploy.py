@@ -152,7 +152,7 @@ def main():
               fish_intrinsic, fish_extrinsic, pv_intrinsic, pv_extrinsic, front_intrinsic, front_extrinsic
     )
     model = fuse_conv_bn(model)
-    model = model.backbone
+    # model = model.backbone
     out = model(preprecess_inputs['batch_data']["fish_data"]['imgs'], preprecess_inputs['batch_data']["pv_data"]['imgs'], preprecess_inputs['batch_data']["front_data"]['imgs'],
               fish_intrinsic, fish_extrinsic, pv_intrinsic, pv_extrinsic, front_intrinsic, front_extrinsic)
     save_root = "./work_dirs/deploy/fast_bev_det.onnx"
@@ -174,6 +174,10 @@ def main():
     print("ONNX file saved in {}".format(save_root))
 
     print('finished')
+    from torchinfo import summary
+    summary(model, input_size=[preprecess_inputs['batch_data']["fish_data"]['imgs'].shape, preprecess_inputs['batch_data']["pv_data"]['imgs'].shape, preprecess_inputs['batch_data']["front_data"]['imgs'].shape,
+              fish_intrinsic.shape, fish_extrinsic.shape, pv_intrinsic.shape, pv_extrinsic.shape, front_intrinsic.shape, front_extrinsic.shape])
+
 
 
 if __name__ == '__main__':

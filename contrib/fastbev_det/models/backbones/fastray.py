@@ -273,7 +273,7 @@ class FastRay_DP_v3(FastRay):
         img_depth_feats_front, supervised_depth_feat_front = self.depth_net_front(img_feats_front, front_intrinsic, front_extrinsic)
 
         # C, H, W = img_depth_feats_fish.shape[-3:]
-        img_bev_feats = self.plugin(self.dummy_conv(img_feats_fish).permute(0,2,3,1), self.dummy_conv(img_feats_pv).permute(0,2,3,1), self.dummy_conv(img_feats_front).permute(0,2,3,1), \
+        img_bev_feats = self.plugin(img_feats_fish.permute(0,2,3,1), img_feats_pv.permute(0,2,3,1), img_feats_front.permute(0,2,3,1), \
                                     supervised_depth_feat_fish.permute(0,2,3,1), supervised_depth_feat_pv.permute(0,2,3,1), supervised_depth_feat_front.permute(0,2,3,1)
                                                 )
     
