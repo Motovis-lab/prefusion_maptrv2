@@ -183,11 +183,11 @@ train_dataset = dict(
     #                       drop_last_group_batch=False,
     #                       drop_last_subepoch=False,
     #                       verbose=True,
-    #                       debug_mode=True),       
+    #                       debug_mode=True),
     group_sampler=dict(type="ClassBalancedGroupSampler",
                        phase="train",
                        possible_group_sizes=possible_group_sizes,
-                       possible_frame_intervals=10,
+                       possible_frame_intervals=1,
                        transformable_cfg=transformables,
                        cbgs_cfg=dict(desired_ratio=0.3)),
     batch_size=batch_size,
@@ -213,7 +213,7 @@ val_dataset = dict(
     group_sampler=dict(type="IndexGroupSampler",
                        phase="val",
                        possible_group_sizes=possible_group_sizes,
-                       possible_frame_intervals=10),
+                       possible_frame_intervals=1),
     batch_size=batch_size,
 )
 
@@ -244,9 +244,9 @@ bev_mode = True
 camera_feat_channels = 128
 backbones = dict(
     pv_sides=dict(
-        type='VoVNetFPN', 
-        out_stride=feature_downscale, 
-        out_channels=camera_feat_channels, 
+        type='VoVNetFPN',
+        out_stride=feature_downscale,
+        out_channels=camera_feat_channels,
         init_cfg=dict(type="Pretrained", checkpoint="./ckpts/vovnet_seg_pretrain_backbone_epoch_24.pth")
     )
 )
@@ -444,10 +444,10 @@ val_evaluator = [
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW',
-                lr=0.001,
+                lr=0.0005,
                 # momentum=0.9,
                 weight_decay=0.0001),
-    clip_grad=dict(max_norm=10),
+    clip_grad=dict(max_norm=5),
 )
 
 ## scheduler configs
