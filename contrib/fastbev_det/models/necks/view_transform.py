@@ -258,7 +258,7 @@ class VoxelProjection_V2(nn.Module):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.plugin = ProjectPlugin_v4()
-        self.plugin.set_output_size([1, 2016, 240, 120])
+        self.plugin.set_output_size([1, 384, 240, 120])
         
         self.length = 172800
         

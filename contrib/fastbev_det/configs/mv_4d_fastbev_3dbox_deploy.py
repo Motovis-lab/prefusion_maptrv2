@@ -289,7 +289,7 @@ model = dict(
                             context_channels=80, 
                             d_bound=[0.1, 36.1, 0.2],  # Categorical Depth bounds and division (m)
                             ),
-        bev_feature_reducer_conf=dict(type='BEV_Feat_Reducer', in_channels=(256+80)*voxel_feature_config['voxel_shape'][0]),
+        bev_feature_reducer_conf=dict(type='BEV_Feat_Reducer', in_channels=(64)*voxel_feature_config['voxel_shape'][0]),
         voxel_shape=voxel_feature_config['voxel_shape'] + [1]
         # depth_reducer_conf=dict(type='DepthReducer', img_channels=80, mid_channels=80),
         # horiconv_conf=dict(type='HoriConv', in_channels=80, mid_channels=128, out_channels=80),
