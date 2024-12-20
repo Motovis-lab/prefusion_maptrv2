@@ -250,9 +250,9 @@ class IndexGroupSampler(GroupSampler):
         # sample groups
         match self.phase:
             case "train":
-                groups = self.sample_train_groups(scene_frame_inds)
+                groups: List[List[str]] = self.sample_train_groups(scene_frame_inds)
             case "val" | "test":
-                groups = self.sample_val_groups(scene_frame_inds)
+                groups: List[List[str]] = self.sample_val_groups(scene_frame_inds)
 
         return convert_str_index_to_index_info(groups)
 
