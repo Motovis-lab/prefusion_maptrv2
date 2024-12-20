@@ -586,13 +586,13 @@ class VoxelStreamFusion(BaseModule):
 
 @MODELS.register_module()
 class VoxelConcatFusion(BaseModule):
-    def __init__(self, in_channels, pre_nframes, bev_mode=False, init_cfg=None):
+    def __init__(self, in_channels, pre_nframes, bev_mode=False, dilation=1, init_cfg=None):
         super().__init__(init_cfg=init_cfg)
         self.bev_mode = bev_mode
         self.cat = Concat()
         if bev_mode:
             self.fuse = nn.Sequential(
-                nn.Conv2d(in_channels * (pre_nframes + 1), in_channels, kernel_size=3, padding=1),
+                nn.Conv2d(in_channels * (pre_nframes + 1), in_channels, kernel_size=3, padding=1, dilation=dilation),
                 nn.BatchNorm2d(in_channels)
             )
         else:
