@@ -235,7 +235,7 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
         self.head_bbox_3d = MODELS.build(heads['bbox_3d'])
         self.head_polyline_3d = MODELS.build(heads['polyline_3d'])
         self.head_parkingslot_3d = MODELS.build(heads['parkingslot_3d'])
-        # self.head_occ_sdf_bev = MODELS.build(heads['occ_sdf_bev'])
+        self.head_occ_sdf_bev = MODELS.build(heads['occ_sdf_bev'])
         # hidden voxel features for temporal fusion
         self.pre_nframes = pre_nframes
         self.cached_voxel_feats = {}
@@ -331,7 +331,7 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
         out_bbox_3d = self.head_bbox_3d(bev_feats)
         out_polyline_3d = self.head_polyline_3d(bev_feats)
         out_parkingslot_3d = self.head_parkingslot_3d(bev_feats)
-        # out_occ_sdf_bev = self.head_occ_sdf_bev(bev_feats)
+        out_occ_sdf_bev = self.head_occ_sdf_bev(bev_feats)
         
         pred_dict = dict(
             bbox_3d_heading=dict(
@@ -367,12 +367,19 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
             parkingslot_3d=dict(
                 cen=out_parkingslot_3d[0][:, :1],
                 seg=out_parkingslot_3d[0][:, 1:],
-                reg=out_parkingslot_3d[1])
-            # occ_sdf_bev=dict(
-            #     seg=out_occ_sdf_bev[0][:, 0:3],
-            #     reg=out_occ_sdf_bev[1]
-            # )
+                reg=out_parkingslot_3d[1]),
+            occ_sdf_bev=dict(
+                seg=out_occ_sdf_bev[0],
+                reg=out_occ_sdf_bev[1]
+            )
         )
+
+        if 'annotations' in batched_input_dict:
+            gt_dict = batched_input_dict['annotations']
+            if ('occ_sdf_bev' in gt_dict) and ('occ_sdf_bev' in pred_dict):
+                mask = gt_dict['occ_sdf_bev']['seg'][:, 2:3]
+                pred_dict['occ_sdf_bev']['seg'] = pred_dict['occ_sdf_bev']['seg'] * mask
+                gt_dict['occ_sdf_bev']['seg'] = gt_dict['occ_sdf_bev']['seg'][:, :2] * mask
         
         if self.debug_mode:
             # draw_outputs(pred_dict, batched_input_dict)
@@ -381,12 +388,10 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
         if mode == 'tensor':
             return pred_dict
         if mode == 'loss':
-            gt_dict = batched_input_dict['annotations']
             losses = self.compute_losses(pred_dict, gt_dict)
             return losses
 
         if mode == 'predict':
-            gt_dict = batched_input_dict['annotations']
             losses = self.compute_losses(pred_dict, gt_dict)
             return (
                 *[{trsfmbl_name: {t: v.cpu() for t, v in _pred.items()}} for trsfmbl_name, _pred in pred_dict.items()],

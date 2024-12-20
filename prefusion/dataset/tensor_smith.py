@@ -1702,7 +1702,7 @@ class PlanarOccSdfBev(PlanarTensorSmith):
     def __init__(self, 
                  voxel_shape: tuple, 
                  voxel_range: Tuple[list, list, list],
-                 sdf_range: tuple=(-0.1, 5)):
+                 sdf_range: tuple = (-0.1, 5)):
         """
         Parameters
         ----------
@@ -1719,6 +1719,27 @@ class PlanarOccSdfBev(PlanarTensorSmith):
         """
         super().__init__(voxel_shape, voxel_range)
         self.sdf_range = sdf_range
+    
+
+    def _get_occ_edge(self, occ):
+        """
+        Parameters
+        ----------
+        occ : np.ndarray
+        """
+        kernel_edge = np.array([
+            [-1, -1, -1],
+            [-1,  8, -1],
+            [-1, -1, -1]
+        ], dtype=np.int8)
+        kernel_dilate = np.ones((3, 3), np.int8)
+        mask_freespace = occ[..., 1] < 128
+
+        edge_color = cv2.dilate(cv2.filter2D(occ, -1, kernel_edge), kernel_dilate)
+        occ_edge = cv2.dilate(edge_color[..., 2] * edge_color[..., 1], kernel_dilate) * mask_freespace
+        
+        return occ_edge
+
 
     def __call__(self, transformable: OccSdfBev):
         """
@@ -1734,6 +1755,9 @@ class PlanarOccSdfBev(PlanarTensorSmith):
         -----
         ```
         seg_im  # 分割图
+            0: freespace
+            1: occupied edge
+            2: mask
         reg_im  # 回归图
             0: truncated sdf
             1: height_im
@@ -1752,13 +1776,16 @@ class PlanarOccSdfBev(PlanarTensorSmith):
         
         # bgr, b: unknown, g: freespace, r: occupied
         occ = cv2.remap(transformable.occ, ww_, hh_, interpolation=cv2.INTER_NEAREST)
+        freespace = occ[..., 1] / 255
+        occ_edge = self._get_occ_edge(occ)
+
         sdf = cv2.remap(transformable.sdf, ww_, hh_, interpolation=cv2.INTER_LINEAR)
         sdf = np.clip(sdf, *self.sdf_range)
         height = cv2.remap(transformable.height, ww_, hh_, interpolation=cv2.INTER_LINEAR)
         mask = cv2.remap(transformable.mask, ww_, hh_, interpolation=cv2.INTER_NEAREST)
         
-        seg_im = np.concatenate([occ.transpose(2, 0, 1) / 255, mask[None]], axis=0)
-        reg_im = np.concatenate([sdf[None], height[None]], axis=0)
+        seg_im = np.stack([freespace, occ_edge, mask])
+        reg_im = np.stack([sdf, height])
 
         tensor_data = {
             'seg': torch.tensor(seg_im, dtype=torch.float32),
