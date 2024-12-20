@@ -23,6 +23,8 @@ from prefusion.dataset.transform import (
     ParkingSlot3D,
     OccSdfBev,
     EgoPose,
+    Variable,
+    RenderIntrinsic,
 )
 
 
@@ -704,3 +706,22 @@ def test_pose_rotate_3d(pose0, pose1):
                                                              [ -0.9659258,  0.258819,  0.],
                                                              [ 0.       ,  0.       ,  1.]]))
     np.testing.assert_almost_equal(pose1.translation.flatten().tolist(), [3, -2, 2.1])
+
+
+def test_variable_creation():
+    var = Variable("sample_token", "18283747face123")
+    assert var.name == "sample_token"
+    assert var.value == "18283747face123"
+    
+    
+def test_variable_transform():
+    transform = RenderIntrinsic(
+        resolutions={
+            'VCAMERA_FISHEYE_FRONT': (96, 48),
+            'VCAMERA_PERSPECTIVE_FRONT': (96, 48),
+        }
+    )
+    var = Variable("sample_token", "18283747face123")
+    transform(var)
+    assert var.name == "sample_token"
+    assert var.value == "18283747face123"

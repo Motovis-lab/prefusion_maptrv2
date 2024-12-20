@@ -134,6 +134,7 @@ def build_frame_info(nusc: NuScenes, nusc_map, first_sample_token) -> Dict:
         frame_info[ts]["3d_polylines"] = build_3d_polylines(nusc, nusc_map, cur_sample, lidar_ego_pose)
         frame_info[ts]["ego_pose"] = lidar_ego_pose
         frame_info[ts]["timestamp_window"] = [None]
+        frame_info[ts]["sample_token"] = cur_sample["token"]
 
         if cur_sample["next"] == "":
             break
@@ -141,17 +142,6 @@ def build_frame_info(nusc: NuScenes, nusc_map, first_sample_token) -> Dict:
             cur_sample = nusc.get("sample", cur_sample["next"])
 
     return defaultdict2dict(frame_info)
-
-
-def build_camera_calibration(nusc_calibrated_sensor: Dict):
-    intr = np.array(nusc_calibrated_sensor["camera_intrinsic"])
-    rot_quat = np.array(nusc_calibrated_sensor["rotation"])[[1, 2, 3, 0]]
-    calib = {
-        "camera_type": "PerspectiveCamera",
-        "extrinsic": (Rotation.from_quat(rot_quat).as_matrix(), np.array(nusc_calibrated_sensor["translation"])),
-        "intrinsic": np.array([intr[0, 2], intr[1, 2], intr[0, 0], intr[1, 1]]),
-    }
-    return calib
 
 
 def build_ego_pose(nusc: NuScenes, cur_sample):

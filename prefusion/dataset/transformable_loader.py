@@ -30,6 +30,7 @@ from prefusion.dataset.transform import (
     OccSdfBev,
     SegBev,
     OccSdf3D,
+    Variable,
 )
 
 
@@ -474,3 +475,15 @@ class AttrMapping(UserDict):
         """Get mapped attr name from attrs"""
         reversed_mapping = get_reversed_mapping(self)
         return sorted({reversed_mapping[attr] for attr in ele_attrs.values() if attr in reversed_mapping})
+
+
+
+@TRANSFORMABLE_LOADERS.register_module()
+class VariableLoader(TransformableLoader):
+    def __init__(self, data_root: Path, variable_key: str) -> None:
+        super().__init__(data_root)
+        self.data_root = data_root
+        self.variable_key = variable_key
+    def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None) -> ParkingSlot3D:
+        variable_value = deepcopy(scene_data["frame_info"][index_info.frame_id][self.variable_key])
+        return Variable(name, variable_value, tensor_smith=tensor_smith)
