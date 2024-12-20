@@ -254,19 +254,15 @@ class IndexGroupSampler(GroupSampler):
             case "val" | "test":
                 groups = self.sample_val_groups(scene_frame_inds)
 
-        return groups
+        return convert_str_index_to_index_info(groups)
 
     def sample_train_groups(self, scene_frame_inds: Dict[str, List[str]]) -> List[List[str]]:
         if self.seed: random.seed(self.seed)
         self._cur_train_group_size = random.choice(self.possible_group_sizes)
-        groups: List[List[str]] = self._generate_groups(scene_frame_inds, self._cur_train_group_size, random_start_ind=True, shuffle=True, seed=self.seed)
-        groups: List[List["IndexInfo"]] = convert_str_index_to_index_info(groups)
-        return groups
+        return self._generate_groups(scene_frame_inds, self._cur_train_group_size, random_start_ind=True, shuffle=True, seed=self.seed)
 
     def sample_val_groups(self, scene_frame_inds: Dict[str, List[str]]) -> List[List[str]]:
-        groups: List[List[str]] = self._generate_groups(scene_frame_inds, self.possible_group_sizes[0], frame_interval=self.possible_frame_intervals[0], start_ind=0, random_start_ind=False, shuffle=False)
-        groups: List[List["IndexInfo"]] = convert_str_index_to_index_info(groups)
-        return groups
+        return self._generate_groups(scene_frame_inds, self.possible_group_sizes[0], frame_interval=self.possible_frame_intervals[0], start_ind=0, random_start_ind=False, shuffle=False)
     
     def _generate_groups(
         self, 
@@ -304,13 +300,13 @@ class SequentialSceneFrameGroupSampler(GroupSampler):
         seed : int, optional
             Random seed for randomization operations. It's usually for testing and debugging purpose.
         """
-        super().__init__(phase, 1, 1, seed)
+        super().__init__(phase, possible_group_sizes=1, possible_frame_intervals=1, seed=seed)
         assert phase == "test_scene_by_scene"
 
     def sample(self, data_root: Path, info: Dict, **kwargs) -> List[Group["IndexInfo"]]:
         scene_frame_inds = get_scene_frame_inds(info)
-        groups = convert_str_index_to_index_info(list(scene_frame_inds.values()))
-        groups = [Group([frm]) for grp in groups for frm in grp]
+        groups = convert_str_index_to_index_info(list(scene_frame_inds.values())) # build prev/next connections between adjacent frames in the same scene
+        groups = [Group([frm]) for grp in groups for frm in grp] # flatten all scenes into single-frame groups
         return groups
 
 
