@@ -379,12 +379,12 @@ class OccSdfBevLoader(TransformableLoader):
 
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> OccSdfBev:
         frame = scene_data["frame_info"][index_info.frame_id]
-        occ = mmcv.imread(frame["occ_sdf"]["occ_bev"])
+        occ = mmcv.imread(frame["occ_sdf"]["occ_2d"])
         if self.load_sdf:
-            sdf = cv2.imread(frame["occ_sdf"]["sdf_bev"], cv2.IMREAD_UNCHANGED).astype(np.float32) / 860 - 36,
+            sdf = cv2.imread(frame["occ_sdf"]["sdf"], cv2.IMREAD_UNCHANGED).astype(np.float32) / 860 - 36,
         else:
             sdf = None
-        height = cv2.imread(frame["occ_sdf"]["height_bev"], cv2.IMREAD_UNCHANGED).astype(np.float32) / 3000 - 10,
+        height = cv2.imread(frame["occ_sdf"]["ground"], cv2.IMREAD_UNCHANGED).astype(np.float32) / 3000 - 10,
         if self.src_voxel_range is None:
             src_voxel_range = scene_data["meta_info"]["space_range"]["occ"]
         else:
