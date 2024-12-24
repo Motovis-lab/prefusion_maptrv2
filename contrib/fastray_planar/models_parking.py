@@ -524,7 +524,7 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
                 reg=out_parkingslot_3d[1]),
             occ_sdf_bev=dict(
                 seg=out_occ_sdf_bev[0],
-                reg=out_occ_sdf_bev[1]
+                reg=out_occ_sdf_bev[1],
             )
         )
 
@@ -536,8 +536,14 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
                 gt_dict['occ_sdf_bev']['seg'] = gt_dict['occ_sdf_bev']['seg'][:, :2] * mask
         
         if self.debug_mode:
+            import matplotlib.pyplot as plt
+            freespace = pred_dict['occ_sdf_bev']['seg'][0][0].sigmoid().detach().cpu().numpy() > 0.5
+            plt.imshow(freespace); plt.show()
+            plt.imshow(pred_dict['occ_sdf_bev']['seg'][0][1].sigmoid().detach().cpu().numpy() > 0.5); plt.show()
+            plt.imshow(pred_dict['occ_sdf_bev']['reg'][0][0].detach().cpu().numpy() * freespace); plt.show()
+            plt.imshow(pred_dict['occ_sdf_bev']['reg'][0][1].detach().cpu().numpy() * freespace); plt.show()
             # draw_outputs(pred_dict, batched_input_dict)
-            save_outputs(pred_dict, batched_input_dict)
+            # save_outputs(pred_dict, batched_input_dict)
         
         if mode == 'tensor':
             return pred_dict
