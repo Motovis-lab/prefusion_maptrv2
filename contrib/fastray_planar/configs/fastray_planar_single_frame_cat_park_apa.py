@@ -156,10 +156,12 @@ dictionary_polygons = dict(
 
 # virtual_camera_transform = dict(type='RenderVirtualCamera', camera_settings=virtual_camera_settings)
 
-fisheye_cameras=['VCAMERA_FISHEYE_FRONT',
-                 'VCAMERA_FISHEYE_LEFT',
-                 'VCAMERA_FISHEYE_BACK',
-                 'VCAMERA_FISHEYE_RIGHT']
+fisheye_camera_mapping = dict(
+    VCAMERA_FISHEYE_FRONT='VCAMERA_FISHEYE_FRONT',
+    VCAMERA_FISHEYE_LEFT='VCAMERA_FISHEYE_LEFT',
+    VCAMERA_FISHEYE_BACK='VCAMERA_FISHEYE_BACK',
+    VCAMERA_FISHEYE_RIGHT='VCAMERA_FISHEYE_RIGHT' 
+)
 
 fisheye_resolution = (640, 384)
 
@@ -199,8 +201,7 @@ else:
 transformables=dict(
     camera_images=dict(
         type='CameraImageSet', 
-        loader=dict(type='CameraImageSetLoader', selected_cameras=fisheye_cameras),
-        # loader=dict(type='CameraImageSetLoader', camera_mapping=fisheye_camera_mapping),
+        loader=dict(type='CameraImageSetLoader', camera_mapping=fisheye_camera_mapping),
         tensor_smith=dict(type='CameraImageTensor')),
     ego_poses=dict(type='EgoPoseSet'),
     bbox_3d_heading=dict(

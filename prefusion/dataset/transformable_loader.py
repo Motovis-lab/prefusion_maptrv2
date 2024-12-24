@@ -84,9 +84,8 @@ class TransformableLoader:
 
 
 class CameraSetLoader(TransformableLoader):
-    def __init__(self, data_root: Path, selected_cameras: List | str = 'all', camera_mapping: dict = None) -> None:
+    def __init__(self, data_root: Path, camera_mapping: dict = None) -> None:
         super().__init__(data_root)
-        self.selected_cameras = selected_cameras
         self.camera_mapping = camera_mapping
 
 
@@ -98,21 +97,12 @@ class CameraImageSetLoader(CameraSetLoader):
         calib = scene_data["scene_info"]["calibration"]
         camera_images = {}
         if self.camera_mapping is None:
+            self.camera_mapping = {}
             for cam_id in frame_info["camera_image"]:
-                if self.selected_cameras == 'all' or cam_id in self.selected_cameras:
-                    camera_images[cam_id] = CameraImage(
-                        name=f"{name}:{cam_id}",
-                        cam_id=cam_id,
-                        cam_type=calib[cam_id]["camera_type"],
-                        img=mmcv.imread(self.data_root / frame_info["camera_image"][cam_id]),
-                        ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id]),
-                        extrinsic=calib[cam_id]["extrinsic"],
-                        intrinsic=calib[cam_id]["intrinsic"],
-                        tensor_smith=tensor_smith,
-                    )
-        else:
-            for cam_id in self.camera_mapping:
-                cam_id_ori = self.camera_mapping[cam_id]
+                self.camera_mapping[cam_id] = cam_id
+        for cam_id in self.camera_mapping:
+            cam_id_ori = self.camera_mapping[cam_id]
+            if cam_id_ori in frame_info["camera_image"]:
                 camera_images[cam_id] = CameraImage(
                     name=f"{name}:{cam_id}",
                     cam_id=cam_id,
@@ -155,22 +145,12 @@ class CameraDepthSetLoader(CameraSetLoader):
         calib = scene_data["scene_info"]["calibration"]
         camera_depths = {}
         if self.camera_mapping is None:
+            self.camera_mapping = {}
             for cam_id in frame_info["camera_image_depth"]:
-                if self.selected_cameras == 'all' or cam_id in self.selected_cameras:
-                    camera_depths[cam_id] = CameraDepth(
-                        name=f"{name}:{cam_id}",
-                        cam_id=cam_id,
-                        cam_type=calib[cam_id]["camera_type"],
-                        img=np.load(self.data_root / frame_info['camera_image_depth'][cam_id])['depth'][..., None].astype(np.float32),
-                        ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id]),
-                        extrinsic=calib[cam_id]["extrinsic"],
-                        intrinsic=calib[cam_id]["intrinsic"],
-                        depth_mode="d",
-                        tensor_smith=tensor_smith,
-                    )
-        else:
-            for cam_id in self.camera_mapping:
-                cam_id_ori = self.camera_mapping[cam_id]
+                self.camera_mapping[cam_id] = cam_id
+        for cam_id in self.camera_mapping:
+            cam_id_ori = self.camera_mapping[cam_id]
+            if cam_id_ori in frame_info["camera_image_depth"]:
                 camera_depths[cam_id] = CameraDepth(
                     name=f"{name}:{cam_id}",
                     cam_id=cam_id,
@@ -193,22 +173,12 @@ class CameraSegMaskSetLoader(CameraSetLoader):
         calib = scene_data["scene_info"]["calibration"]
         camera_segs = {}
         if self.camera_mapping is None:
+            self.camera_mapping = {}
             for cam_id in frame_info["camera_image_seg"]:
-                if self.selected_cameras == 'all' or cam_id in self.selected_cameras:
-                    camera_segs[cam_id] = CameraSegMask(
-                        name=f"{name}:{cam_id}",
-                        cam_id=cam_id,
-                        cam_type=calib[cam_id]["camera_type"],
-                        img=mmcv.imread(self.data_root / frame_info["camera_image_seg"][cam_id], flag="unchanged"),
-                        ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id]),
-                        extrinsic=calib[cam_id]["extrinsic"],
-                        intrinsic=calib[cam_id]["intrinsic"],
-                        dictionary=dictionary,
-                        tensor_smith=tensor_smith,
-                    )
-        else:
-            for cam_id in self.camera_mapping:
-                cam_id_ori = self.camera_mapping[cam_id]
+                self.camera_mapping[cam_id] = cam_id
+        for cam_id in self.camera_mapping:
+            cam_id_ori = self.camera_mapping[cam_id]
+            if cam_id_ori in frame_info["camera_image_seg"]:
                 camera_segs[cam_id] = CameraSegMask(
                     name=f"{name}:{cam_id}",
                     cam_id=cam_id,
