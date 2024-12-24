@@ -592,7 +592,7 @@ class VoxelConcatFusion(BaseModule):
         self.cat = Concat()
         if bev_mode:
             self.fuse = nn.Sequential(
-                nn.Conv2d(in_channels * (pre_nframes + 1), in_channels, kernel_size=3, padding=1, dilation=dilation),
+                nn.Conv2d(in_channels * (pre_nframes + 1), in_channels, kernel_size=3, padding=dilation, dilation=dilation),
                 nn.BatchNorm2d(in_channels)
             )
         else:
