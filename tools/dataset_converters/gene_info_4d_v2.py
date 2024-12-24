@@ -11,8 +11,8 @@ warnings.filterwarnings("ignore")
 import sys
 import pdb
 sys.path.append(".")
-sys.path.append("/home/wuhan/mtv4d/scripts/")
-sys.path.append("/home/wuhan/mtv4d/")
+sys.path.append("/mnt/ssd1/wuhan/mtv4d/scripts/")
+sys.path.append("/mnt/ssd1/wuhan/mtv4d/")
 import open3d as o3d
 import mmcv
 import mmengine
@@ -52,19 +52,6 @@ from mtv4d.annos_4d.misc import read_ego_paths  # type: ignore
 from scripts.generate_4d_frame_clean import generate_DS4d_from_4dMapJson, solve_ds_occlusion_sub_id, generate_4d_frame_json_data, read_ts_json # type: ignore
 
 
-label_to_class = {
-    "101": "Box_truck",
-    "102": "Truck",
-    "103": "Car",
-    "104": "Van",
-    "105": "Bus",
-    "106": "Engineering_vehicle",
-    "201": "Pedestrian",
-    "202": "Cyclist",
-    "301": "Bicycle",
-    "100": "DontCare",
-}
-
 
 def generate_labels_scene_from_4dMapjson(scene_root, Twes):
     (
@@ -100,89 +87,6 @@ def generate_labels_scene_from_4dMapjson(scene_root, Twes):
     #     )
     return output_json_frame_dlist
 
-def convert_virtual_camera(src_camear_root, save_img_root, save_mask_root, real_cam_model, v_cam_paramter, calib_back, W=1280, H=960):
-    src_image = mmcv.imread(src_camear_root, channel_order="bgr")
-    R = Rotation.from_euler('xyz', angles=v_cam_paramter, degrees=True).as_matrix()
-    # R = Quaternion(v_cam_paramter).rotation_matrix
-    t = [0,0,0]
-    v_cam_rmatrix = R
-    v_cam_t = np.array(calib_back['extrinsic'][:3]).reshape(3)
-    if 'FISHEYE' not in save_img_root:
-        cx = (W - 1) / 2
-        cy = (H - 1) / 2
-        fx = fy = W / 2
-        intrinsic = (cx, cy, fx, fy)
-        vcamera = PerspectiveCamera((W,H), (R, t), intrinsic)
-    else:
-        W = 1024
-        H = 640
-        cx = (W - 1) / 2
-        cy = (H - 1) / 2
-        fx = fy = W / 4
-        intrinsic = (cx, cy, fx, fy, 0.1, 0, 0, 0)
-        vcamera = FisheyeCamera((W,H), (R, t), intrinsic, fov=180)
-    dst_image, dst_mask = render_image(src_image, real_cam_model, vcamera)
-    mmcv.imwrite(dst_image, save_img_root)
-    # mmcv.imwrite(dst_mask, save_mask_root)
-
-    return v_cam_rmatrix, v_cam_t, intrinsic, src_image, real_cam_model, vcamera
-
-def lidar_point2depth(v_cam_rmatrix, v_cam_t, src_image, real_cam_model, vcamera, lidar_point_path, dst_lidar_hpr, lidar_val_mask, v_camera_depth_root):
-    cam_m = np.eye(4)
-    cam_m[:3, :3] = v_cam_rmatrix.T
-    cam_m[:3, 3] = -(v_cam_rmatrix.T) @ v_cam_t.reshape(3)
-
-    hpr_points = o3d.io.read_point_cloud(lidar_point_path)
-    _, pt_map = hpr_points.hidden_point_removal(camera_location=v_cam_t, radius=2000)
-    hpr_lidar_point = np.asarray(hpr_points.select_by_index(pt_map).points).T
-    hpr_lidar_point = np.concatenate([hpr_lidar_point, np.ones((1, hpr_lidar_point.shape[1]))], axis=0)
-    hpr_lidar_point = cam_m @ deepcopy(hpr_lidar_point)
-    # o3d.io.write_point_cloud("/ssd4/home/wuhan/MatrixVT_tda4/tmp/hpr_lidar_point.pcd", hpr_lidar_point)
-    
-    mask_matrix = np.eye(4)
-    if dst_lidar_hpr:
-        mask_matrix[:3, :3] = Quaternion(axis=[0,1,0], angle=(dst_lidar_hpr[0])*np.pi/180).rotation_matrix
-        hpr_lidar_point = mask_matrix @ hpr_lidar_point
-        if dst_lidar_hpr[1]=='b':
-            x = hpr_lidar_point[0, ...] > 0
-        elif dst_lidar_hpr[1]=='s':
-            x = hpr_lidar_point[0, ...] < 0
-        if dst_lidar_hpr[2]=='b':
-            z = hpr_lidar_point[2, ...] > 0
-        elif dst_lidar_hpr[2]=='s':
-            z = hpr_lidar_point[2, ...] < 0
-        mask_cam = np.logical_and(x, z)
-        hpr_lidar_point = hpr_lidar_point[..., mask_cam]
-        hpr_lidar_point = mask_matrix.T @ hpr_lidar_point
-
-    dst_image, dst_img_w_point, dst_mask, depth = render_image_with_src_camera_points(src_image, real_cam_model, vcamera, hpr_lidar_point, return_depth=True)
-    # plt.imshow(dst_img_w_point[..., ::-1])
-    # plt.show()
-    sensor_root_tmp = "/home/wuhan/MV4D_12V3L/"
-    lidar_mask = mmcv.imread(sensor_root_tmp + lidar_val_mask)[..., 0]
-    depth[lidar_mask==0] = -1
-    np.savez_compressed(v_camera_depth_root, depth=depth.astype(np.float16))
-
-
-def dummy_lidar_process(calib_back):
-    cam1_lidar = load_point_cloud(P("/ssd3/data/mv4d_sample/20230823_110018/lidar/undistort_static_lidar1/000007_1692759619664.bin"), discard_intensity=False)
-    # cam1_lidar = load_point_cloud(P("/ssd4/home/wuhan/MatrixVT_tda4/test/show_data/lidar_data/cam5/002395_1698826056864.bin"), discard_intensity=False)
-    cams_lidar_point = np.concatenate([cam1_lidar], 0).T
-
-    lidar1_calibration = calib_back['rig']['lidar1']['extrinsic']
-    lidar1_R_T = np.eye(4)  
-    lidar1_R_T[:3, :3] = Quaternion([lidar1_calibration[-1], lidar1_calibration[3], lidar1_calibration[4], lidar1_calibration[5]]).rotation_matrix
-    lidar1_R_T[:3, 3]  = lidar1_calibration[:3]
-    intensity = deepcopy(cams_lidar_point[3, :])
-    cams_lidar_point[3, :] = 1
-    # cams_lidar_point = lidar1_R_T @ cams_lidar_point
-    R_nus = np.eye(4)
-    R_nus[:3, :3] = Rotation.from_euler("XYZ", angles=(0,0,90), degrees=True).as_matrix()
-    lidar_point = R_nus.T @ (lidar1_R_T @ cams_lidar_point)
-    lidar_point[3, :] = intensity
-    # pcd_lidar_point("/ssd3/data/mv4d_sample/20230823_110018/lidar/undistort_lidar1/1692759619664.pcd", cams_lidar_point.T)
-    pcd_lidar_point("./test.pcd", lidar_point.T)
-
 def single_lidar_process(lidar1_filename, save_root):
     try:
         cams_lidar1_point = read_pcd_lidar(lidar1_filename).T
@@ -196,7 +100,19 @@ def single_lidar_process(lidar1_filename, save_root):
     R_nus[:3, :3] = Rotation.from_euler("XYZ", angles=(0,0,90), degrees=True).as_matrix()
     lidar_point = R_nus.T @ deepcopy(cams_lidar_point)
     lidar_point[3, :] = intensity
-    pcd_lidar_point(save_root, lidar_point.T)
+    ori_pcd_lidar_point(save_root, lidar_point.T)
+
+def ori_pcd_lidar_point(save_path, lidar_points):
+    device = o3d.core.Device("CPU:0")
+    dtype = o3d.core.float32
+    points_intensities = lidar_points[:, 3][:, None]
+    points_positions = lidar_points[:,:3]
+    lidar_map = o3d.t.geometry.PointCloud(device)
+    
+    lidar_map.point.positions = o3d.core.Tensor(points_positions , dtype, device)
+    lidar_map.point.intensity = o3d.core.Tensor(points_intensities , dtype, device)
+    
+    o3d.t.io.write_point_cloud(str(save_path), lidar_map)
 
 def create_moving_object(all_frames_infos, timestamps):
     R_nus = Rotation.from_euler("xyz", angles=(0,0,90), degrees=True).as_matrix()
@@ -237,7 +153,7 @@ if __name__ == "__main__":
         "camera1", "camera5", "camera8", "camera11"
     ]
 
-    scene_root = "/home/wuhan/MV4D_12V3L/"
+    scene_root = "./data/MV4D_12V3L/"
     # scene_names = [str(p).split('/')[-1] for p in P(scene_root).rglob("2023*") if p.is_dir()]
     scene_names = [args.scene_name]
     print("=="*60)
@@ -306,9 +222,9 @@ if __name__ == "__main__":
             polyline_3d = []
             lidar_point = {}
             src_lidar_path = f"{scene_root}/lidar/undistort_static_merged_lidar1/{times_id}.pcd"
-            dist_lidar_path = f"{scene_root}/lidar/undistort_static_merged_lidar1_model/{times_id}.pcd"
+            dst_lidar_path = f"{scene_root}/lidar/undistort_static_merged_lidar1_model/{times_id}.pcd"
             P(f"{scene_root}/lidar/undistort_static_merged_lidar1_model/").mkdir(parents=True, exist_ok=True)
-            # single_lidar_process(src_lidar_path, dist_lidar_path)
+            single_lidar_process(src_lidar_path, dst_lidar_path)
             scene_info["scene_info"]['calibration'].update({'lidar1':(lidar1_cali_r, lidar1_cali_t)})
             lidar_point['lidar1'] = f"{scene_name}/lidar/undistort_static_merged_lidar1_model/{times_id}.pcd"
             if "lidar1" in timestamp_window:

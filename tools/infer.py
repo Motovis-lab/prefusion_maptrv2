@@ -7,10 +7,6 @@ from mmengine.config import Config, DictAction
 from mmengine.logging import print_log
 from prefusion.registry import RUNNERS
 from mmengine.runner import Runner 
-import torch
-import onnxsim
-import onnx
-from mmcv.cnn.utils import fuse_conv_bn
 
 
 def parse_args():
@@ -132,52 +128,9 @@ def main():
         # if 'runner_type' is set in the cfg
         runner = RUNNERS.build(cfg)
 
-    # start training
+    # start validation
     runner.logger.name = "prefusion"
-    model = runner.model.module
-    preprecess_inputs = model.data_preprocessor(next(iter(runner.train_dataloader))[0])
-    
-    fish_intrinsic=preprecess_inputs['batch_data']["fish_data"]['intrinsic'].view(-1, 8)
-    fish_extrinsic=preprecess_inputs['batch_data']["fish_data"]['extrinsic'][:, :3, :].view(-1, 12)
-    
-    pv_intrinsic = torch.zeros(preprecess_inputs['batch_data']["pv_data"]['extrinsic'].shape[0], 8).to(preprecess_inputs['batch_data']["pv_data"]['extrinsic'].device)
-    pv_intrinsic[:, :4] = preprecess_inputs['batch_data']["pv_data"]['intrinsic']
-    pv_extrinsic=preprecess_inputs['batch_data']["pv_data"]['extrinsic'][:, :3, :].view(-1, 12)
-
-    front_intrinsic = torch.zeros(preprecess_inputs['batch_data']["front_data"]['extrinsic'].shape[0], 8).to(preprecess_inputs['batch_data']["front_data"]['extrinsic'].device)
-    front_intrinsic[:, :4] = preprecess_inputs['batch_data']["front_data"]['intrinsic']
-    front_extrinsic=preprecess_inputs['batch_data']["front_data"]['extrinsic'][:, :3, :].view(-1, 12)
-    
-    inputs = (preprecess_inputs['batch_data']["fish_data"]['imgs'], preprecess_inputs['batch_data']["pv_data"]['imgs'], preprecess_inputs['batch_data']["front_data"]['imgs'],
-              fish_intrinsic, fish_extrinsic, pv_intrinsic, pv_extrinsic, front_intrinsic, front_extrinsic
-    )
-    model = fuse_conv_bn(model)
-    # model = model.backbone
-    out = model(preprecess_inputs['batch_data']["fish_data"]['imgs'], preprecess_inputs['batch_data']["pv_data"]['imgs'], preprecess_inputs['batch_data']["front_data"]['imgs'],
-              fish_intrinsic, fish_extrinsic, pv_intrinsic, pv_extrinsic, front_intrinsic, front_extrinsic)
-    save_root = "./work_dirs/deploy/fast_bev_det.onnx"
-    torch.onnx.export(model, inputs, save_root, opset_version=11,
-                      input_names = ["fish_img", "pv_img", "front_img", "fish_intrinsic", "fish_extrinsic", "pv_intrinsic", "pv_extrinsic", "front_intrinsic", "front_extrinsic"],
-                      # output_names = ["output"],
-                      operator_export_type=torch.onnx.OperatorExportTypes.ONNX_ATEN_FALLBACK
-                      )
-    from onnxsim import simplify
-    import onnx
-    # 加载导出的 ONNX 模型
-    onnx_model = onnx.load(save_root)
-
-    # 简化模型
-    simplified_model, check = simplify(onnx_model, perform_optimization=False, skip_shape_inference=True)
-
-    # 保存简化后的模型
-    onnx.save_model(simplified_model, save_root,)
-    print("ONNX file saved in {}".format(save_root))
-
-    print('finished')
-    from torchinfo import summary
-    summary(model, input_size=[preprecess_inputs['batch_data']["fish_data"]['imgs'].shape, preprecess_inputs['batch_data']["pv_data"]['imgs'].shape, preprecess_inputs['batch_data']["front_data"]['imgs'].shape,
-              fish_intrinsic.shape, fish_extrinsic.shape, pv_intrinsic.shape, pv_extrinsic.shape, front_intrinsic.shape, front_extrinsic.shape])
-
+    runner.test()
 
 
 if __name__ == '__main__':

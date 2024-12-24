@@ -164,7 +164,7 @@ train_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_val.pkl',
+        info_path=data_root + 'mv_4d_infos_20231027_185823.pkl',
         transformables=transformables,
         transforms=train_pipeline,
         group_sampler=dict(type="IndexGroupSampler",
@@ -185,7 +185,7 @@ val_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_val.pkl',
+        info_path=data_root + 'mv_4d_infos_20231027_185823.pkl',
         transformables=transformables,
         transforms=val_pipeline,
         group_sampler=dict(type="IndexGroupSampler",
@@ -289,7 +289,7 @@ model = dict(
                             context_channels=80, 
                             d_bound=[0.1, 36.1, 0.2],  # Categorical Depth bounds and division (m)
                             ),
-        bev_feature_reducer_conf=dict(type='BEV_Feat_Reducer', in_channels=(256+80)*voxel_feature_config['voxel_shape'][0]),
+        bev_feature_reducer_conf=dict(type='BEV_Feat_Reducer', in_channels=(64)*voxel_feature_config['voxel_shape'][0]),
         voxel_shape=voxel_feature_config['voxel_shape'] + [1]
         # depth_reducer_conf=dict(type='DepthReducer', img_channels=80, mid_channels=80),
         # horiconv_conf=dict(type='HoriConv', in_channels=80, mid_channels=128, out_channels=80),

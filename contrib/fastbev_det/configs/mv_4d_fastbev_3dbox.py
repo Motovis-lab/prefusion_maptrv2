@@ -19,7 +19,7 @@ bev_left = 60
 voxel_size = [0.2, 0.2, 0.5]
 downsample_factor=4
 
-img_scale = 2
+img_scale = 1
 fish_img_size = [256 * img_scale, 160 * img_scale]
 perspective_img_size = [256 * img_scale, 192 * img_scale]
 front_perspective_img_size = [768, 384]
@@ -164,7 +164,7 @@ train_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_val.pkl',
+        info_path=data_root + 'mv_4d_infos_20231027_185823.pkl',
         transformables=transformables,
         transforms=train_pipeline,
         group_sampler=dict(type="IndexGroupSampler",
@@ -185,7 +185,7 @@ val_dataloader = dict(
         type='GroupBatchDataset',
         name="mv_4d",
         data_root=data_root,
-        info_path=data_root + 'mv_4d_infos_val.pkl',
+        info_path=data_root + 'mv_4d_infos_20231027_185823.pkl',
         transformables=transformables,
         transforms=val_pipeline,
         batch_size=batch_size, 
