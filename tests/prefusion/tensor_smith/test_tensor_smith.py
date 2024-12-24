@@ -459,5 +459,5 @@ def test_planar_occ_sdf_bev():
     )
     occ_sdf_bev.to_tensor()
     tensor_dict = occ_sdf_bev.tensor
-    assert tensor_dict['seg'].shape == (4, 160, 120)
+    assert tensor_dict['seg'].shape == (3, 160, 120)
     assert tensor_dict['reg'].shape == (2, 160, 120)

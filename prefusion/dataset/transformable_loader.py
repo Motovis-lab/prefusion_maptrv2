@@ -157,7 +157,7 @@ class CameraDepthSetLoader(CameraSetLoader):
         if self.camera_mapping is None:
             for cam_id in frame_info["camera_image_depth"]:
                 if self.selected_cameras == 'all' or cam_id in self.selected_cameras:
-                    camera_depths[cam_id] = CameraImage(
+                    camera_depths[cam_id] = CameraDepth(
                         name=f"{name}:{cam_id}",
                         cam_id=cam_id,
                         cam_type=calib[cam_id]["camera_type"],
@@ -171,7 +171,7 @@ class CameraDepthSetLoader(CameraSetLoader):
         else:
             for cam_id in self.camera_mapping:
                 cam_id_ori = self.camera_mapping[cam_id]
-                camera_depths[cam_id] = CameraImage(
+                camera_depths[cam_id] = CameraDepth(
                     name=f"{name}:{cam_id}",
                     cam_id=cam_id,
                     cam_type=calib[cam_id_ori]["camera_type"],
@@ -195,7 +195,7 @@ class CameraSegMaskSetLoader(CameraSetLoader):
         if self.camera_mapping is None:
             for cam_id in frame_info["camera_image_seg"]:
                 if self.selected_cameras == 'all' or cam_id in self.selected_cameras:
-                    camera_segs[cam_id] = CameraImage(
+                    camera_segs[cam_id] = CameraSegMask(
                         name=f"{name}:{cam_id}",
                         cam_id=cam_id,
                         cam_type=calib[cam_id]["camera_type"],
@@ -209,7 +209,7 @@ class CameraSegMaskSetLoader(CameraSetLoader):
         else:
             for cam_id in self.camera_mapping:
                 cam_id_ori = self.camera_mapping[cam_id]
-                camera_segs[cam_id] = CameraImage(
+                camera_segs[cam_id] = CameraSegMask(
                     name=f"{name}:{cam_id}",
                     cam_id=cam_id,
                     cam_type=calib[cam_id_ori]["camera_type"],
