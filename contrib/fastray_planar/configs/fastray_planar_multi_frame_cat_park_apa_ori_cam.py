@@ -139,10 +139,10 @@ dictionary_polygons = dict(
 ## camera configs for model inputs
 
 fisheye_camera_mapping = dict(
-    VCAMERA_FISHEYE_FRONT='VCAMERA_FISHEYE_FRONT',
-    VCAMERA_FISHEYE_LEFT='VCAMERA_FISHEYE_LEFT',
-    VCAMERA_FISHEYE_BACK='VCAMERA_FISHEYE_BACK',
-    VCAMERA_FISHEYE_RIGHT='VCAMERA_FISHEYE_RIGHT' 
+    VCAMERA_FISHEYE_FRONT='camera8',
+    VCAMERA_FISHEYE_LEFT='camera5',
+    VCAMERA_FISHEYE_BACK='camera1',
+    VCAMERA_FISHEYE_RIGHT='camera11' 
 )
 
 fisheye_resolution = (640, 384)
