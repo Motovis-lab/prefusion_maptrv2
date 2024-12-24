@@ -158,14 +158,14 @@ def test_render_virtual_camera(fisheye_image, perspective_image, camera_imageset
             cam_type='FisheyeCamera',
             resolution=(96, 48),
             euler_angles=[-120, 0, -90],
-            translation=[3.5, 0, 0.5],
+            # translation=[3.5, 0, 0.5],
             intrinsic='auto'
         ),
         'VCAMERA_PERSPECTIVE_FRONT': dict(
             cam_type='PerspectiveCamera',
             resolution=(96, 48),
             euler_angles=[-90, 0, -90],
-            translation=[2, 0, 1.5],
+            # translation=[2, 0, 1.5],
             intrinsic='auto'
         )
     }
