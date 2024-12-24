@@ -3,9 +3,7 @@ from copy import deepcopy
 import inspect
 import functools
 import abc
-import warnings
-from pathlib import Path
-from typing import List, Tuple, Dict, Callable, Union, Sequence, TYPE_CHECKING
+from typing import List, Tuple, Dict, Union, Sequence, TYPE_CHECKING, Any
 
 import cv2
 import mmcv
@@ -437,6 +435,7 @@ class CameraImage(CameraTransformable):
             self.intrinsic,
             ego_mask=self.ego_mask
         )
+        camera_new.extrinsic = (camera_new.extrinsic[0], self.extrinsic[1])
         self.img, self.ego_mask = vc.render_image(self.img, camera_old, camera_new)
         self.extrinsic = camera_new.extrinsic
         self.intrinsic = camera_new.intrinsic
@@ -590,6 +589,7 @@ class CameraSegMask(CameraTransformable):
             self.intrinsic,
             ego_mask=self.ego_mask
         )
+        camera_new.extrinsic = (camera_new.extrinsic[0], self.extrinsic[1])
         self.img, self.ego_mask = vc.render_image(
             self.img, camera_old, camera_new, interpolation=cv2.INTER_NEAREST
         )
@@ -750,6 +750,7 @@ class CameraDepth(CameraTransformable):
             self.intrinsic,
             ego_mask=self.ego_mask
         )
+        camera_new.extrinsic = (camera_new.extrinsic[0], self.extrinsic[1])
         if self.depth_mode == 'd':
             self.img, self.ego_mask = vc.render_image(
                 self.img, camera_old, camera_new, interpolation=cv2.INTER_NEAREST
@@ -1136,7 +1137,7 @@ class OccSdfBev(SpatialTransformable):
     def __init__(
         self,
         name: str, 
-        src_voxel_range: dict,
+        src_voxel_range: tuple,
         occ: np.ndarray,
         height: np.ndarray,
         sdf: np.ndarray = None,
@@ -1149,7 +1150,7 @@ class OccSdfBev(SpatialTransformable):
         ----------
         name : str
             arbitrary string, will be set to each Transformable object to distinguish it with others
-        src_voxel_range : dict
+        src_voxel_range : tuple
             voxel_range=([-0.5, 2.5], [-12, 36], [12, -12]), from axis min to max
         occ : np.ndarray
             occ info, of shape (X, Y, C), where C denote the nubmer of occ classes
@@ -1286,6 +1287,27 @@ class OccSdf3D(SpatialTransformable):
     
     def rotate_3d(self, *args, **kwargs):
         raise NotImplementedError
+
+
+class Variable(Transformable):
+    def __init__(self, name: str, value: Any, tensor_smith: "TensorSmith" = None):
+        """Arbitrary Variable (usually, we use this transformable to pass static data through)
+
+        Parameters
+        ----------
+        name : str
+            arbitrary string, will be set to each Transformable object to distinguish it with others
+        value : Any
+            arbitrary variable value that needs to pass through
+        tensor_smith : TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
+        """
+        super().__init__(name)
+        self.value = deepcopy(value)
+        self.tensor_smith = tensor_smith
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}({self.name}, {self.value})'
 
 #--------------------------------#
 
@@ -1696,7 +1718,6 @@ class RenderVirtualCamera(Transform):
             {<cam_id>: dict(cam_type='PerspectiveCamera' | 'FisheyeCamera',
                             resolution=(W, H),
                             euler_angles=[<ang>, <ang>, <ang>], # ego x-y-z euler angles,
-                            translation=[<x>, <y>, <z>],
                             intrinsic='auto' or (cx, cy, fx, fy, *dist_params)),
             ...}
             ```
@@ -1712,7 +1733,7 @@ class RenderVirtualCamera(Transform):
             resolution = camera_settings[cam_id]['resolution']
             extrinsic = (
                 Rotation.from_euler('xyz', camera_settings[cam_id]['euler_angles'], degrees=True).as_matrix(),
-                np.array(camera_settings[cam_id]['translation'])
+                np.array((0, 0, 0))
             )
             intrinsic = camera_settings[cam_id]['intrinsic']
             cam_type = camera_settings[cam_id]['cam_type']
@@ -1722,12 +1743,12 @@ class RenderVirtualCamera(Transform):
                     cx = (W - 1) / 2
                     cy = (H - 1) / 2
                     fx = fy = W / 2
-                    intrinsic = (cx, cy, fx, fy)
+                    intrinsic = [cx, cy, fx, fy]
                 if cam_type == 'FisheyeCamera':
                     cx = (W - 1) / 2
                     cy = (H - 1) / 2
                     fx = fy = W / 4
-                    intrinsic = (cx, cy, fx, fy, 0.1, 0, 0, 0)
+                    intrinsic = [cx, cy, fx, fy, 0.1, 0, 0, 0]
             camera_class = getattr(vc, camera_settings[cam_id]['cam_type'])
             self.cameras[cam_id] = camera_class(resolution, extrinsic, intrinsic)            
     
@@ -1904,6 +1925,7 @@ available_transforms = [
     RandomImageISP, 
     RenderIntrinsic, 
     RenderExtrinsic, 
+    RenderVirtualCamera, 
     RandomRenderExtrinsic, 
     RandomRotateSpace, 
     RandomMirrorSpace, 

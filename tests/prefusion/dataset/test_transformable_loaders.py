@@ -18,6 +18,7 @@ from prefusion.dataset.transformable_loader import (
     AdvancedBbox3DLoader,
     ClassMapping,
     AttrMapping,
+    VariableLoader,
 )
 
 _approx = functools.partial(pytest.approx, rel=1e-4)
@@ -408,3 +409,14 @@ def test_advanced_bbox3d_loader_no_clsmap_no_attrmap():
     bbox3d = loader.load("bbox3d", info_data["20231101_160337"], ii, dictionary={"classes": ["class.traffic_facility.speed_bump"]})
     assert bbox3d.dictionary == { "classes": ["class.traffic_facility.speed_bump"], "attrs": [] }
     assert len(bbox3d.elements) == 1
+
+
+def test_variable_loader():
+    loader = VariableLoader(Path("any"), variable_key="sample_token")
+    with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
+        info_data = pickle.load(f)
+    info_data["20231101_160337"]["frame_info"]["1698825817864"]["sample_token"] = "18283747face123"
+    ii = IndexInfo('20231101_160337', '1698825817864')
+    var = loader.load("sample_token", info_data["20231101_160337"], ii)
+    assert var.name == "sample_token"
+    assert var.value == "18283747face123"

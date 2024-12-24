@@ -1,5 +1,5 @@
 default_scope = "prefusion"
-experiment_name = "fastray_planar_multi_frame_nusc_r50"
+experiment_name = "infer_example"
 
 custom_imports = dict(
     imports=["prefusion", "contrib.fastray_planar"],
@@ -81,7 +81,7 @@ camera_intrinsic_configs = dict(
 
 
 
-debug_mode = False
+debug_mode = True
 
 if debug_mode:
     batch_size = 1
@@ -115,6 +115,7 @@ transformables = dict(
         loader=dict(type="NuscenesCameraImageSetLoader"),
         tensor_smith=dict(type='CameraImageTensor'),
     ),
+    sample_token=dict(type='Variable', loader=dict(type="VariableLoader", variable_key="sample_token")),
     ego_poses=dict(type='EgoPoseSet'),
     bbox_3d=dict(
         type='Bbox3D',
@@ -170,7 +171,7 @@ train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/nuScenes',
-    info_path='/data/datasets/nuScenes/nusc_train_info.pkl',
+    info_path='/data/datasets/nuScenes/nusc_t2v1_train_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -178,16 +179,22 @@ train_dataset = dict(
         debug_mode=debug_mode),
     transformables=transformables,
     transforms=transforms,
-    # group_sampler=dict(type="IndexGroupSampler",
-    #                 phase="train",
-    #                 possible_group_sizes=possible_group_sizes,
-    #                 possible_frame_intervals=1),
-    group_sampler=dict(type="ClassBalancedGroupSampler",
+    # subepoch_manager=dict(type="SubEpochManager",
+    #                       num_group_batches_per_subepoch=4,
+    #                       drop_last_group_batch=False,
+    #                       drop_last_subepoch=False,
+    #                       verbose=True,
+    #                       debug_mode=True),
+    group_sampler=dict(type="IndexGroupSampler",
                        phase="train",
                        possible_group_sizes=possible_group_sizes,
-                       possible_frame_intervals=1,
-                       transformable_cfg=transformables,
-                       cbgs_cfg=dict(desired_ratio=0.4)),
+                       possible_frame_intervals=1),
+    # group_sampler=dict(type="ClassBalancedGroupSampler",
+    #                    phase="train",
+    #                    possible_group_sizes=possible_group_sizes,
+    #                    possible_frame_intervals=10,
+    #                    transformable_cfg=transformables,
+    #                    cbgs_cfg=dict(desired_ratio=0.5)),
     batch_size=batch_size,
 )
 
@@ -196,7 +203,7 @@ val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/nuScenes',
-    info_path='/data/datasets/nuScenes/nusc_val_info.pkl',
+    info_path='/data/datasets/nuScenes/nusc_t2v1_val_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -220,9 +227,9 @@ test_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/nuScenes',
-    info_path='/data/datasets/nuScenes/nusc_t2v1_val_info.pkl',
+    info_path='/data/datasets/nuScenes/nusc_val_info.pkl',
     model_feeder=dict(
-        type="FastRayPlanarModelFeeder",
+        type="NuscenesFastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
         camera_feature_configs=camera_feature_configs,
         debug_mode=debug_mode,
@@ -233,11 +240,9 @@ test_dataset = dict(
              resolutions=camera_resolution_configs,
              intrinsics=camera_intrinsic_configs)
     ],
-    group_sampler=dict(type="IndexGroupSampler",
-                       phase="test_scene_by_scene",
-                       possible_group_sizes=possible_group_sizes,
-                       possible_frame_intervals=1),
-    batch_size=batch_size,
+    group_sampler=dict(type="SequentialSceneFrameGroupSampler",
+                       phase="test_scene_by_scene"),
+    batch_size=1,
 )
 
 
@@ -252,7 +257,7 @@ train_dataloader = dict(
 )
 
 val_dataloader = dict(
-    num_workers=num_workers,
+    num_workers=0,
     sampler=dict(type="DefaultSampler"),
     collate_fn=dict(type="collate_dict"),
     dataset=val_dataset,
@@ -262,7 +267,7 @@ val_dataloader = dict(
 
 test_dataloader = dict(
     num_workers=num_workers,
-    sampler=dict(type="DefaultSampler"),
+    sampler=dict(type="DefaultSampler", shuffle=False),
     collate_fn=dict(type="collate_dict"),
     dataset=test_dataset,
     persistent_workers=persistent_workers,
@@ -276,19 +281,10 @@ bev_mode = True
 camera_feat_channels = 128
 backbones = dict(
     pv_sides=dict(
-        type='ResNetFPN',
-        depth=50,
-        num_stages=4,
-        out_indices=(0, 1, 2, 3),
-        frozen_stages=1,
-        norm_cfg=dict(type='SyncBN', requires_grad=True),
-        norm_eval=True,
-        style='pytorch',
-        # init_cfg=dict(type='Pretrained', checkpoint='./ckpts/resnet50.pth'),
-        fpn_lateral_channel=128,
-        fpn_in_channels=[256, 512, 1024, 2048],
-        out_stride=feature_downscale,
-        out_channels=camera_feat_channels,
+        type='VoVNetFPN', 
+        out_stride=feature_downscale, 
+        out_channels=camera_feat_channels, 
+        # init_cfg=dict(type="Pretrained", checkpoint="./ckpts/vovnet_seg_pretrain_backbone_epoch_24.pth")
     )
 )
 # spatial_transform
@@ -316,14 +312,14 @@ voxel_fusion = dict(
 
 # heads
 heads = dict(
-    voxel_encoder=dict(type='M2BevEncoder',
+    voxel_encoder=dict(type='VoVNetEncoder',
                        in_channels=camera_feat_channels * voxel_shape[0],
-                       shrink_channels=384,
-                       out_channels=256,
-                       repeat=2),
+                       mid_channels=128,
+                       out_channels=128,
+                       repeat=3),
     bbox_3d=dict(type='PlanarHead',
-                 in_channels=256,
-                 mid_channels=256,
+                 in_channels=128,
+                 mid_channels=128,
                  cen_seg_channels=sum([
                     # cen: 0
                     1,
@@ -346,80 +342,40 @@ heads = dict(
 )
 # loss configs
 bbox_3d_weight_scheme = dict(
-    cen=dict(loss_weight=1.0,
-             fg_weight=0.5,
+    cen=dict(loss_weight=0.5,
+             fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
              iou_loss_weight=1,
-             dual_focal_loss_weight=10, # 10
-             channel_weights=dict(any={"weight": 0.5}, # 0.5
-                                  bicycle={"weight": 5}, # 5
-                                  car={"weight": 1},
-                                  construction_vehicle={"weight": 2}, # 2
-                                  motorcycle={"weight": 5}, # 5
-                                  trailer={"weight": 1},
-                                  truck={"weight": 1},
-                                  bus={"weight": 1})),
-    reg=dict(loss_weight=1.0,
-             partition_weights=dict(center_xy={"weight": 0.3, "slice": (0, 2)},
-                                    center_z={"weight": 0.6, "slice": 2},
-                                    size={"weight": 0.5, "slice": (3, 6)},
-                                    unit_xvec={"weight": 0.5, "slice": (6, 9)},
-                                    abs_xvec={"weight": 1.0, "slice": (9, 12)},
-                                    xvec_product={"weight": 1.0, "slice": (12, 14)},
-                                    abs_roll_angle={"weight": 1.0, "slice": (14, 16)},
-                                    roll_angle_product={"weight": 1.0, "slice": 16},
-                                    velo={"weight": 0.5, "slice": (17, 20)})))
+             dual_focal_loss_weight=2),
+    reg=dict(loss_weight=1.0))
 
 bbox_3d_cylinder_weight_scheme = dict(
     cen=dict(loss_weight=0.5,
-             fg_weight=0.3,
+             fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
              iou_loss_weight=1,
-             dual_focal_loss_weight=10, # 10
-             channel_weights=dict(any={"weight": 1.0},
-                                  traffic_cone={"weight": 1.0})),
-    reg=dict(loss_weight=1.0,
-             partition_weights=dict(center_xy={"weight": 0.6, "slice": (0, 2)},
-                                    center_z={"weight": 0.3, "slice": 2},
-                                    size={"weight": 0.6, "slice": (3, 5)},
-                                    unit_xvec={"weight": 1.0, "slice": (5, 8)})))
+             dual_focal_loss_weight=2),
+    reg=dict(loss_weight=1.0))
 
 bbox_3d_oriented_cylinder_weight_scheme = dict(
     cen=dict(loss_weight=0.5,
-             fg_weight=0.3,
+             fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
              iou_loss_weight=1,
-             dual_focal_loss_weight=10, # 10
-             channel_weights=dict(any={"weight": 1.0},
-                                  pedestrian={"weight": 1.0})),
-    reg=dict(loss_weight=1.0,
-             partition_weights=dict(center_xy={"weight": 1.0, "slice": (0, 2)},
-                                    center_z={"weight": 0.3, "slice": 2},
-                                    size={"weight": 1.0, "slice": (3, 5)},
-                                    unit_xvec={"weight": 1.0, "slice": (5, 8)},
-                                    zvec_yaw={"weight": 0.5, "slice": (8, 10)},
-                                    velo={"weight": 0.5, "slice": (10, 13)})))
+             dual_focal_loss_weight=2),
+    reg=dict(loss_weight=1.0))
 
 bbox_3d_rect_cuboid_weight_scheme = dict(
     cen=dict(loss_weight=0.5,
-             fg_weight=0.3,
+             fg_weight=1.0,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
              iou_loss_weight=1,
-             dual_focal_loss_weight=10, # 10
-             channel_weights=dict(any={"weight": 1.0},
-                                  barrier={"weight": 1.0})),
-    reg=dict(loss_weight=1.0,
-             partition_weights=dict(center_xy={"weight": 0.3, "slice": (0, 2)},
-                                    center_z={"weight": 0.3, "slice": 2},
-                                    size={"weight": 0.5, "slice": (3, 6)},
-                                    abs_xvec={"weight": 0.3, "slice": (6, 9)},
-                                    xvec_product={"weight": 1.0, "slice": (9, 11)},
-                                    abs_roll_angle={"weight": 1.0, "slice": (11, 13)},
-                                    roll_angle_product={"weight": 1.0, "slice": 13})))
+             dual_focal_loss_weight=2),
+    reg=dict(loss_weight=1.0))
 
 loss_cfg = dict(
     bbox_3d=dict(
@@ -461,7 +417,7 @@ model = dict(
 )
 
 ## log_processor
-log_processor = dict(type='GroupAwareLogProcessor', tabulate_ncols=3, tabulate_fmt="github")
+log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 custom_hooks = [
     dict(type="InferAndDumpDetectionAsNuscenesJsonHook",
@@ -474,7 +430,7 @@ custom_hooks = [
 ]
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=24, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
 test_cfg = dict(type="GroupBatchInferLoop")
 
@@ -490,9 +446,7 @@ val_evaluator = [
     # )
 ]
 
-test_evaluator = [
-    dict(type="PlanarSegIou")
-]
+test_evaluator = [dict(type="PlanarSegIou")]
 
 ## optimizer configs
 optim_wrapper = dict(
@@ -500,12 +454,11 @@ optim_wrapper = dict(
     optimizer=dict(type='SGD',
                 lr=0.01,
                 momentum=0.9,
-                weight_decay=0.01),
-    clip_grad=dict(max_norm=10),
+                weight_decay=0.0001)
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[10, 22])
+param_scheduler = dict(type='MultiStepLR', milestones=[30, 48])
 
 
 env_cfg = dict(
@@ -525,8 +478,8 @@ today = datetime.datetime.now().strftime("%m%d")
 # work_dir = "./work_dirs/fastray_planar_multi_frame_1112"
 work_dir = f'./work_dirs/{experiment_name}_{today}'
 # load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
-load_from = "./ckpts/multi_frame_nusc_r50_1201_epoch_40.pth"
-# load_from = "./ckpts/multi_frame_nusc_r50_1203_epoch_48.pth"
-# load_from = "./work_dirs/fastray_planar_multi_frame_nusc_r50_1125/multi_frame_nusc_r50_epoch_1.pth"
+# load_from = "./ckpts/fastray_planar_single_frame_nusc_4planar_types_1113_epoch_1.pth"
+load_from = "./ckpts/fastray_planar_multi_frame_nusc_1216_epoch_15.pth"
+# load_from = "./work_dirs/fastray_planar_single_frame_nusc_1120/single_frame_nusc_1120_epoch_500.pth"
 
 resume = False

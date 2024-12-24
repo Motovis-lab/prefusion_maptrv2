@@ -138,6 +138,24 @@ dictionary_polygons = dict(
 
 ## camera configs for model inputs
 
+# fisheye_camera_mapping = dict(
+#     VCAMERA_FISHEYE_FRONT='camera8',
+#     VCAMERA_FISHEYE_LEFT='camera5',
+#     VCAMERA_FISHEYE_BACK='camera1',
+#     VCAMERA_FISHEYE_RIGHT='camera11' 
+# )
+
+# fisheye_resolution = (640, 384)
+
+# virtual_camera_settings = dict(
+#     VCAMERA_FISHEYE_FRONT=dict(cam_type='FisheyeCamera', resolution=fisheye_resolution, euler_angles=[-120, 0, -90], intrinsic='auto'),
+#     VCAMERA_FISHEYE_LEFT=dict(cam_type='FisheyeCamera', resolution=fisheye_resolution, euler_angles=[-135, 0, 0], intrinsic='auto'),
+#     VCAMERA_FISHEYE_BACK=dict(cam_type='FisheyeCamera', resolution=fisheye_resolution, euler_angles=[-120, 0, 90], intrinsic='auto'),
+#     VCAMERA_FISHEYE_RIGHT=dict(cam_type='FisheyeCamera', resolution=fisheye_resolution, euler_angles=[-135, 0, 180], intrinsic='auto'),
+# )
+
+# virtual_camera_transform = dict(type='RenderVirtualCamera', camera_settings=virtual_camera_settings)
+
 fisheye_camera_mapping = dict(
     VCAMERA_FISHEYE_FRONT='VCAMERA_FISHEYE_FRONT',
     VCAMERA_FISHEYE_LEFT='VCAMERA_FISHEYE_LEFT',
@@ -147,28 +165,27 @@ fisheye_camera_mapping = dict(
 
 fisheye_resolution = (640, 384)
 
-virtual_camera_settings = dict(
-    VCAMERA_FISHEYE_FRONT=dict(cam_type='FisheyeCamera', resolution=fisheye_resolution, euler_angles=[-120, 0, -90], intrinsic='auto'),
-    VCAMERA_FISHEYE_LEFT=dict(cam_type='FisheyeCamera', resolution=fisheye_resolution, euler_angles=[-135, 0, 0], intrinsic='auto'),
-    VCAMERA_FISHEYE_BACK=dict(cam_type='FisheyeCamera', resolution=fisheye_resolution, euler_angles=[-120, 0, 90], intrinsic='auto'),
-    VCAMERA_FISHEYE_RIGHT=dict(cam_type='FisheyeCamera', resolution=fisheye_resolution, euler_angles=[-135, 0, 180], intrinsic='auto'),
-)
-
-virtual_camera_transform = dict(type='RenderVirtualCamera', camera_settings=virtual_camera_settings)
+camera_resolution_configs = dict(
+    VCAMERA_FISHEYE_FRONT=fisheye_resolution,
+    VCAMERA_FISHEYE_LEFT=fisheye_resolution,
+    VCAMERA_FISHEYE_BACK=fisheye_resolution,
+    VCAMERA_FISHEYE_RIGHT=fisheye_resolution)
 
 debug_mode = False
 
 if debug_mode:
     batch_size = 1
     num_workers = 0
-    transforms = [virtual_camera_transform]
+    # transforms = [virtual_camera_transform]
+    transforms = [dict(type='RenderIntrinsic', resolutions=camera_resolution_configs)]
     possible_group_sizes = 2
 else:
     batch_size = 8
     num_workers = 8
     transforms = [
         dict(type='RandomRenderExtrinsic'),
-        virtual_camera_transform,
+        # virtual_camera_transform,
+        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs),
         dict(type='RandomRotateSpace', angles=(0, 0, 90), prob_inverse_cameras_rotation=0),
         dict(type='RandomMirrorSpace'),
         dict(type='RandomImageISP', prob=0.2),
@@ -184,8 +201,7 @@ else:
 transformables=dict(
     camera_images=dict(
         type='CameraImageSet', 
-        loader=dict(type='CameraImageSetLoader',
-                    camera_mapping=fisheye_camera_mapping),
+        loader=dict(type='CameraImageSetLoader', camera_mapping=fisheye_camera_mapping),
         tensor_smith=dict(type='CameraImageTensor')),
     ego_poses=dict(type='EgoPoseSet'),
     bbox_3d_heading=dict(
@@ -287,7 +303,8 @@ val_dataset = dict(
         debug_mode=debug_mode
     ),
     transformables=transformables,
-    transforms=[virtual_camera_transform],
+    # transforms=[virtual_camera_transform],
+    transforms=[dict(type='RenderIntrinsic', resolutions=camera_resolution_configs)],
     group_sampler=dict(type="IndexGroupSampler",
                        phase="val",
                        possible_group_sizes=10,
@@ -317,7 +334,7 @@ val_dataloader = dict(
 ## model configs
 bev_mode = True
 # backbones
-camera_feat_channels = 80
+camera_feat_channels = 64
 backbone = dict(type='VoVNetSlimFPN', out_channels=camera_feat_channels)
 # spatial_transform
 spatial_transform = dict(
@@ -328,29 +345,29 @@ spatial_transform = dict(
     bev_mode=bev_mode,
     reduce_channels=True,
     in_channels=camera_feat_channels * voxel_shape[0],
-    out_channels=128)
-# temporal_transform
-temporal_transform = dict(
-    type='VoxelTemporalAlign',
-    voxel_shape=voxel_shape,
-    voxel_range=voxel_range,
-    bev_mode=bev_mode,
-    interpolation='bilinear')
+    out_channels=64)
+# # temporal_transform
+# temporal_transform = dict(
+#     type='VoxelTemporalAlign',
+#     voxel_shape=voxel_shape,
+#     voxel_range=voxel_range,
+#     bev_mode=bev_mode,
+#     interpolation='bilinear')
 ## voxel encoder
 voxel_encoder = dict(
     type='VoxelEncoderFPN', 
-    in_channels=128, 
-    mid_channels_list=[128, 128, 128],
-    out_channels=128,
+    in_channels=64, 
+    mid_channels_list=[64, 96, 128],
+    out_channels=64,
     repeats=[3, 3, 3])
-# temporal fusion
-pre_nframes = 1
-voxel_fusion = dict(
-    type='VoxelConcatFusion',
-    in_channels=128,
-    pre_nframes=pre_nframes,
-    bev_mode=bev_mode,
-    dilation=3)
+# # temporal fusion
+# pre_nframes = 1
+# voxel_fusion = dict(
+#     type='VoxelConcatFusion',
+#     in_channels=128,
+#     pre_nframes=pre_nframes,
+#     bev_mode=bev_mode,
+#     dilation=3)
 
 # heads
 all_bbox_3d_cen_seg_channels = sum([
@@ -371,22 +388,22 @@ all_bbox_3d_reg_channels = sum([
 ])
 heads = dict(
     bbox_3d=dict(type='PlanarHeadSimple',
-                 in_channels=128,
-                 mid_channels=128,
+                 in_channels=64,
+                 mid_channels=64,
                  cen_seg_channels=all_bbox_3d_cen_seg_channels,
                  reg_channels=all_bbox_3d_reg_channels),
     polyline_3d=dict(type='PlanarHeadSimple',
-                     in_channels=128,
+                     in_channels=64,
                      mid_channels=64,
                      cen_seg_channels=1 + 8 + 2 + 4,
                      reg_channels=7 + 7),
     parkingslot_3d=dict(type='PlanarHeadSimple',
-                        in_channels=128,
+                        in_channels=64,
                         mid_channels=64,
                         cen_seg_channels=5,
                         reg_channels=15),
     occ_sdf_bev=dict(type='PlanarHeadSimple',
-                     in_channels=128,
+                     in_channels=64,
                      mid_channels=64,
                      cen_seg_channels=2,
                      reg_channels=2)
@@ -597,17 +614,13 @@ loss_cfg = dict(
 
 # integrated model config
 model = dict(
-    type='ParkingFastRayPlanarMultiFrameModelAPA',
+    type='ParkingFastRayPlanarSingleFrameModelAPA',
     backbone=backbone,
     spatial_transform=spatial_transform,
-    temporal_transform=temporal_transform,
-    voxel_fusion=voxel_fusion,
     voxel_encoder=voxel_encoder,
     heads=heads,
     loss_cfg=loss_cfg,
-    debug_mode=debug_mode,
-    pre_nframes=pre_nframes,
-    voxel_fusion_before_encoder=True
+    debug_mode=debug_mode
 )
 
 ## log_processor

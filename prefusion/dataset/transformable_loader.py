@@ -30,6 +30,7 @@ from prefusion.dataset.transform import (
     OccSdfBev,
     SegBev,
     OccSdf3D,
+    Variable,
 )
 
 
@@ -83,9 +84,9 @@ class TransformableLoader:
 
 
 class CameraSetLoader(TransformableLoader):
-    def __init__(self, data_root: Path, selected_cameras: List | str = 'all') -> None:
+    def __init__(self, data_root: Path, camera_mapping: dict = None) -> None:
         super().__init__(data_root)
-        self.selected_cameras = selected_cameras
+        self.camera_mapping = camera_mapping
 
 
 @TRANSFORMABLE_LOADERS.register_module()
@@ -94,20 +95,24 @@ class CameraImageSetLoader(CameraSetLoader):
         scene_info = scene_data["scene_info"]
         frame_info = scene_data["frame_info"][index_info.frame_id]
         calib = scene_data["scene_info"]["calibration"]
-        camera_images = {
-            cam_id: CameraImage(
-                name=f"{name}:{cam_id}",
-                cam_id=cam_id,
-                cam_type=calib[cam_id]["camera_type"],
-                img=mmcv.imread(self.data_root / frame_info["camera_image"][cam_id]),
-                ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id]),
-                extrinsic=calib[cam_id]["extrinsic"],
-                intrinsic=calib[cam_id]["intrinsic"],
-                tensor_smith=tensor_smith,
-            )
-            for cam_id in frame_info["camera_image"]
-            if self.selected_cameras == 'all' or cam_id in self.selected_cameras
-        }
+        camera_images = {}
+        if self.camera_mapping is None:
+            self.camera_mapping = {}
+            for cam_id in frame_info["camera_image"]:
+                self.camera_mapping[cam_id] = cam_id
+        for cam_id in self.camera_mapping:
+            cam_id_ori = self.camera_mapping[cam_id]
+            if cam_id_ori in frame_info["camera_image"]:
+                camera_images[cam_id] = CameraImage(
+                    name=f"{name}:{cam_id}",
+                    cam_id=cam_id,
+                    cam_type=calib[cam_id_ori]["camera_type"],
+                    img=mmcv.imread(self.data_root / frame_info["camera_image"][cam_id_ori]),
+                    ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id_ori]),
+                    extrinsic=calib[cam_id_ori]["extrinsic"],
+                    intrinsic=calib[cam_id_ori]["intrinsic"],
+                    tensor_smith=tensor_smith,
+                )
         return CameraImageSet(name, camera_images)
 
 
@@ -138,22 +143,25 @@ class CameraDepthSetLoader(CameraSetLoader):
         scene_info = scene_data["scene_info"]
         frame_info = scene_data["frame_info"][index_info.frame_id]
         calib = scene_data["scene_info"]["calibration"]
-
-        camera_depths = {
-            cam_id: CameraDepth(
-                name=f"{name}:{cam_id}",
-                cam_id=cam_id,
-                cam_type=calib[cam_id]["camera_type"],
-                img=np.load(self.data_root / frame_info['camera_image_depth'][cam_id])['depth'][..., None].astype(np.float32),
-                ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id]),
-                extrinsic=calib[cam_id]["extrinsic"],
-                intrinsic=calib[cam_id]["intrinsic"],
-                depth_mode="d",
-                tensor_smith=tensor_smith,
-            )
-            for cam_id in frame_info["camera_image_depth"]
-            if self.selected_cameras == 'all' or cam_id in self.selected_cameras
-        }
+        camera_depths = {}
+        if self.camera_mapping is None:
+            self.camera_mapping = {}
+            for cam_id in frame_info["camera_image_depth"]:
+                self.camera_mapping[cam_id] = cam_id
+        for cam_id in self.camera_mapping:
+            cam_id_ori = self.camera_mapping[cam_id]
+            if cam_id_ori in frame_info["camera_image_depth"]:
+                camera_depths[cam_id] = CameraDepth(
+                    name=f"{name}:{cam_id}",
+                    cam_id=cam_id,
+                    cam_type=calib[cam_id_ori]["camera_type"],
+                    img=np.load(self.data_root / frame_info['camera_image_depth'][cam_id_ori])['depth'][..., None].astype(np.float32),
+                    ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id_ori]),
+                    extrinsic=calib[cam_id_ori]["extrinsic"],
+                    intrinsic=calib[cam_id_ori]["intrinsic"],
+                    depth_mode="d",
+                    tensor_smith=tensor_smith,
+                )
         return CameraDepthSet(name, camera_depths)
 
 
@@ -163,22 +171,25 @@ class CameraSegMaskSetLoader(CameraSetLoader):
         scene_info = scene_data["scene_info"]
         frame_info = scene_data["frame_info"][index_info.frame_id]
         calib = scene_data["scene_info"]["calibration"]
-
-        camera_segs = {
-            cam_id: CameraSegMask(
-                name=f"{name}:{cam_id}",
-                cam_id=cam_id,
-                cam_type=calib[cam_id]["camera_type"],
-                img=mmcv.imread(self.data_root / frame_info["camera_image_seg"][cam_id], flag="unchanged"),
-                ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id]),
-                extrinsic=calib[cam_id]["extrinsic"],
-                intrinsic=calib[cam_id]["intrinsic"],
-                dictionary=dictionary,
-                tensor_smith=tensor_smith,
-            )
-            for cam_id in frame_info["camera_image_seg"]
-            if self.selected_cameras == 'all' or cam_id in self.selected_cameras
-        }
+        camera_segs = {}
+        if self.camera_mapping is None:
+            self.camera_mapping = {}
+            for cam_id in frame_info["camera_image_seg"]:
+                self.camera_mapping[cam_id] = cam_id
+        for cam_id in self.camera_mapping:
+            cam_id_ori = self.camera_mapping[cam_id]
+            if cam_id_ori in frame_info["camera_image_seg"]:
+                camera_segs[cam_id] = CameraSegMask(
+                    name=f"{name}:{cam_id}",
+                    cam_id=cam_id,
+                    cam_type=calib[cam_id_ori]["camera_type"],
+                    img=mmcv.imread(self.data_root / frame_info["camera_image_seg"][cam_id_ori], flag="unchanged"),
+                    ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id_ori]),
+                    extrinsic=calib[cam_id_ori]["extrinsic"],
+                    intrinsic=calib[cam_id_ori]["intrinsic"],
+                    dictionary=dictionary,
+                    tensor_smith=tensor_smith,
+                )
         return CameraSegMaskSet(name, camera_segs)
 
 
@@ -379,12 +390,12 @@ class OccSdfBevLoader(TransformableLoader):
 
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> OccSdfBev:
         frame = scene_data["frame_info"][index_info.frame_id]
-        occ = mmcv.imread(frame["occ_sdf"]["occ_bev"])
+        occ = mmcv.imread(self.data_root / frame["occ_sdf"]["occ_2d"])
         if self.load_sdf:
-            sdf = cv2.imread(frame["occ_sdf"]["sdf_bev"], cv2.IMREAD_UNCHANGED).astype(np.float32) / 860 - 36,
+            sdf = cv2.imread(str(self.data_root / frame["occ_sdf"]["sdf"]), cv2.IMREAD_UNCHANGED).astype(np.float32) / 860 - 36
         else:
             sdf = None
-        height = cv2.imread(frame["occ_sdf"]["height_bev"], cv2.IMREAD_UNCHANGED).astype(np.float32) / 3000 - 10,
+        height = cv2.imread(str(self.data_root / frame["occ_sdf"]["ground"]), cv2.IMREAD_UNCHANGED).astype(np.float32) / 3000 - 10
         if self.src_voxel_range is None:
             src_voxel_range = scene_data["meta_info"]["space_range"]["occ"]
         else:
@@ -474,3 +485,15 @@ class AttrMapping(UserDict):
         """Get mapped attr name from attrs"""
         reversed_mapping = get_reversed_mapping(self)
         return sorted({reversed_mapping[attr] for attr in ele_attrs.values() if attr in reversed_mapping})
+
+
+
+@TRANSFORMABLE_LOADERS.register_module()
+class VariableLoader(TransformableLoader):
+    def __init__(self, data_root: Path, variable_key: str) -> None:
+        super().__init__(data_root)
+        self.data_root = data_root
+        self.variable_key = variable_key
+    def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None) -> ParkingSlot3D:
+        variable_value = deepcopy(scene_data["frame_info"][index_info.frame_id][self.variable_key])
+        return Variable(name, variable_value, tensor_smith=tensor_smith)

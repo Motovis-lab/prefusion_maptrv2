@@ -139,10 +139,10 @@ dictionary_polygons = dict(
 ## camera configs for model inputs
 
 fisheye_camera_mapping = dict(
-    VCAMERA_FISHEYE_FRONT='VCAMERA_FISHEYE_FRONT',
-    VCAMERA_FISHEYE_LEFT='VCAMERA_FISHEYE_LEFT',
-    VCAMERA_FISHEYE_BACK='VCAMERA_FISHEYE_BACK',
-    VCAMERA_FISHEYE_RIGHT='VCAMERA_FISHEYE_RIGHT' 
+    VCAMERA_FISHEYE_FRONT='camera8',
+    VCAMERA_FISHEYE_LEFT='camera5',
+    VCAMERA_FISHEYE_BACK='camera1',
+    VCAMERA_FISHEYE_RIGHT='camera11' 
 )
 
 fisheye_resolution = (640, 384)
@@ -156,7 +156,7 @@ virtual_camera_settings = dict(
 
 virtual_camera_transform = dict(type='RenderVirtualCamera', camera_settings=virtual_camera_settings)
 
-debug_mode = False
+debug_mode = True
 
 if debug_mode:
     batch_size = 1
@@ -277,8 +277,8 @@ train_dataset = dict(
 val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='../MV4D-PARKING',
-    info_path='../MV4D-PARKING/mv_4d_demo_info.pkl',
+    data_root='/data/datasets/MV4D_12V3L',
+    info_path='/data/datasets/MV4D_12V3L/mv_4d_infos_20230901_152553.pkl',
     # info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
@@ -648,11 +648,13 @@ env_cfg = dict(
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1201"
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1204"
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1212"
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1220"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1220"
+work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1224"
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
 # load_from = "./work_dirs/collected_models/apa_epoch_10.pth"
 # load_from = "./work_dirs/collected_models/apa_epoch_20_enhanced.pth"
 # load_from = "./work_dirs/collected_models/apa_epoch_20_better.pth"
-load_from = "./work_dirs/collected_models/apa_epoch_14_tf.pth"
+# load_from = "./work_dirs/collected_models/apa_epoch_14_tf.pth"
+load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1220/epoch_100.pth"
 
 resume = False
