@@ -52,6 +52,18 @@ from mtv4d.annos_4d.misc import read_ego_paths  # type: ignore
 from scripts.generate_4d_frame_clean import generate_DS4d_from_4dMapJson, solve_ds_occlusion_sub_id, generate_4d_frame_json_data, read_ts_json # type: ignore
 
 
+align_real_v = {"camera8": "VCAMERA_FISHEYE_FRONT",
+                "camera5": "VCAMERA_FISHEYE_LEFT",
+                "camera1": "VCAMERA_FISHEYE_BACK",
+                'camera11': "VCAMERA_FISHEYE_RIGHT"
+}
+
+parm_cameras_v = {
+    "VCAMERA_FISHEYE_FRONT":(-120, 0, -90),
+    "VCAMERA_FISHEYE_LEFT":(-135, 0, 0),
+    "VCAMERA_FISHEYE_RIGHT":(-135, 0, -180),
+    "VCAMERA_FISHEYE_BACK":(-120, 0, 90)
+}
 
 def generate_labels_scene_from_4dMapjson(scene_root, Twes):
     (
@@ -86,6 +98,34 @@ def generate_labels_scene_from_4dMapjson(scene_root, Twes):
     #         frames_labels, op.join(scene_root, f"4d_anno_infos/4d_anno_infos_frame/frames_labels_all/{int(ts)}.json"), format_float=True, indent=4
     #     )
     return output_json_frame_dlist
+
+def convert_virtual_camera(src_camear_root, save_img_root, save_mask_root, real_cam_model, v_cam_paramter, calib_back, W=1280, H=960):
+    src_image = mmcv.imread(src_camear_root, channel_order="bgr")
+    R = Rotation.from_euler('xyz', angles=v_cam_paramter, degrees=True).as_matrix()
+    # R = Quaternion(v_cam_paramter).rotation_matrix
+    t = [0,0,0]
+    v_cam_rmatrix = R
+    v_cam_t = np.array(calib_back['extrinsic'][:3]).reshape(3)
+    if 'FISHEYE' not in save_img_root:
+        cx = (W - 1) / 2
+        cy = (H - 1) / 2
+        fx = fy = W / 2
+        intrinsic = (cx, cy, fx, fy)
+        vcamera = PerspectiveCamera((W,H), (R, t), intrinsic)
+    else:
+        W = 768
+        H = 512
+        cx = (W - 1) / 2
+        cy = (H - 1) / 2
+        fx = fy = W / 4
+        intrinsic = (cx, cy, fx, fy, 0.1, 0, 0, 0)
+        vcamera = FisheyeCamera((W,H), (R, t), intrinsic, fov=180)
+    dst_image, dst_mask = render_image(src_image, real_cam_model, vcamera)
+    mmcv.imwrite(dst_image, save_img_root)
+    # mmcv.imwrite(dst_mask, save_mask_root)
+
+    return v_cam_rmatrix, v_cam_t, intrinsic, src_image, real_cam_model, vcamera
+
 
 def single_lidar_process(lidar1_filename, save_root):
     try:
@@ -169,6 +209,20 @@ if __name__ == "__main__":
         lidar1_cali_r = R_nus.T @ Rotation.from_quat(calib_center['rig']['lidar1']['extrinsic'][3:]).as_matrix()
         lidar1_cali_t = R_nus.T @ np.array(calib_center['rig']['lidar1']['extrinsic'][:3]).reshape(3)
 
+        calib_back = Config.fromfile(f"{scene_root}/calibration_back.yml")
+        R_nus = Rotation.from_euler("xyz", angles=(0,0,90), degrees=True).as_matrix()
+        calib_back['rig']['camera8']['extrinsic'] = [*((R_nus.T @ np.array(calib_back['rig']['camera8']['extrinsic'][:3]).reshape(3)).tolist()), *(Rotation.from_matrix((R_nus.T @ Rotation.from_quat(calib_back['rig']['camera8']['extrinsic'][3:]).as_matrix())).as_quat().tolist())]
+        calib_back['rig']['camera5']['extrinsic'] = [*((R_nus.T @ np.array(calib_back['rig']['camera5']['extrinsic'][:3]).reshape(3)).tolist()), *(Rotation.from_matrix((R_nus.T @ Rotation.from_quat(calib_back['rig']['camera5']['extrinsic'][3:]).as_matrix())).as_quat().tolist())]
+        calib_back['rig']['camera1']['extrinsic'] = [*((R_nus.T @ np.array(calib_back['rig']['camera1']['extrinsic'][:3]).reshape(3)).tolist()), *(Rotation.from_matrix((R_nus.T @ Rotation.from_quat(calib_back['rig']['camera1']['extrinsic'][3:]).as_matrix())).as_quat().tolist())]
+        calib_back['rig']['camera11']['extrinsic'] = [*((R_nus.T @ np.array(calib_back['rig']['camera11']['extrinsic'][:3]).reshape(3)).tolist()), *(Rotation.from_matrix((R_nus.T @ Rotation.from_quat(calib_back['rig']['camera11']['extrinsic'][3:]).as_matrix())).as_quat().tolist())]
+        
+        cameras_real = {
+            "camera8":FisheyeCamera.init_from_motovis_cfg(calib_back.rig['camera8']),
+            "camera5":FisheyeCamera.init_from_motovis_cfg(calib_back.rig['camera5']),
+            "camera1":FisheyeCamera.init_from_motovis_cfg(calib_back.rig['camera1']),
+            "camera11":FisheyeCamera.init_from_motovis_cfg(calib_back.rig['camera11'])
+        }
+
         ts_4d_rel_path = "4d_anno_infos/ts.json"
         trajectory_prefix = "trajectory"
         calib = read_cal_data(op.join(scene_root, "calibration_center.yml")) # dummy load
@@ -197,6 +251,10 @@ if __name__ == "__main__":
             "camera11": "ego_mask/camera11.png",
             "camera12": "ego_mask/camera12.png",
             "camera15": "ego_mask/camera15.png",
+            "VCAMERA_FISHEYE_FRONT": "ego_mask/VCAMERA_FISH_FRONT.png",
+            "VCAMERA_FISHEYE_BACK": "ego_mask/VCAMERA_FISH_BACK.png",
+            "VCAMERA_FISHEYE_LEFT": "ego_mask/VCAMERA_FISH_LEFT.png",
+            "VCAMERA_FISHEYE_RIGHT": "ego_mask/VCAMERA_FISH_RIGHT.png",
         }
         scene_info["scene_info"]['calibration'] = {}
         scene_info["scene_info"]['moving_objects_track_id_trajectory'] = create_moving_object(all_frames_infos, timestamps)
@@ -224,7 +282,7 @@ if __name__ == "__main__":
             src_lidar_path = f"{scene_root}/lidar/undistort_static_merged_lidar1/{times_id}.pcd"
             dst_lidar_path = f"{scene_root}/lidar/undistort_static_merged_lidar1_model/{times_id}.pcd"
             P(f"{scene_root}/lidar/undistort_static_merged_lidar1_model/").mkdir(parents=True, exist_ok=True)
-            single_lidar_process(src_lidar_path, dst_lidar_path)
+            # single_lidar_process(src_lidar_path, dst_lidar_path)
             scene_info["scene_info"]['calibration'].update({'lidar1':(lidar1_cali_r, lidar1_cali_t)})
             lidar_point['lidar1'] = f"{scene_name}/lidar/undistort_static_merged_lidar1_model/{times_id}.pcd"
             if "lidar1" in timestamp_window:
@@ -245,6 +303,16 @@ if __name__ == "__main__":
                     extrinsic_t = R_nus.T @ np.array(calib_center['rig'][camera_name]['extrinsic'][:3]).reshape(3)
                     scene_info["scene_info"]['calibration'][camera_name] = {"extrinsic":(extrinsic_r, extrinsic_t), 
                                                                             "intrinsic": tuple(fish_camera.intrinsic), 'camera_type': 'FisheyeCamera'}
+                    camera_image[camera_name] = f"{scene_name}/camera/{camera_name}/{camera_filename}"
+                    
+                    src_camera_root = f"{scene_root}/camera/{camera_name}/{camera_filename}"
+                    v_camera_root = f"{scene_root}/camera/{align_real_v[camera_name]}/{camera_filename}"
+                    P(f"{scene_root}/camera/{align_real_v[camera_name]}").mkdir(parents=True, exist_ok=True)
+                    camera_model = cameras_real[camera_name]
+                    v_camera_rmatrix, v_camera_t, v_camera_intrinsic, d_src_image, d_real_cam_model, d_vcamera \
+                        = convert_virtual_camera(src_camera_root, v_camera_root, None, camera_model, parm_cameras_v[align_real_v[camera_name]], calib_back.rig[camera_name])
+                    scene_info["scene_info"]['calibration'][align_real_v[camera_name]] = {"extrinsic":(v_camera_rmatrix, v_camera_t), "intrinsic": v_camera_intrinsic, 'camera_type': 'FisheyeCamera'}
+                    camera_image[align_real_v[camera_name]] = f"{scene_name}/camera/{align_real_v[camera_name]}/{camera_filename}"
                 else:
                     W = calib_center['rig'][camera_name]['image_size'][0]
                     H = calib_center['rig'][camera_name]['image_size'][1]
@@ -255,7 +323,8 @@ if __name__ == "__main__":
                     extrinsic_t = R_nus.T @ np.array(calib_center['rig'][camera_name]['extrinsic'][:3]).reshape(3)
                     scene_info["scene_info"]['calibration'][camera_name] = {"extrinsic":(extrinsic_r, extrinsic_t), 
                                                                             "intrinsic": (cx, cy, fx, fy), 'camera_type': 'PERSPECTIVECamera'}
-                camera_image[camera_name] = f"{scene_name}/camera/{camera_name}/{camera_filename}"
+                    camera_image[camera_name] = f"{scene_name}/camera/{camera_name}/{camera_filename}"
+                
                 if camera_name in timestamp_window:
                     if len(timestamp_window[camera_name])<=max_sweeps:
                         timestamp_window[camera_name].append(f"{scene_name}/camera/{camera_name}/{camera_filename}")
