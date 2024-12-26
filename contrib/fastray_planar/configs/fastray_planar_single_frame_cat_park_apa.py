@@ -558,58 +558,53 @@ parkingslot_3d_weight_scheme = dict(
             })
 )
 
-occ_sdf_bev_weight_scheme = dict(
-    seg=dict(loss_weight=1.0,
-             iou_loss_weight=5,
-             dual_focal_loss_weight=10),
-    reg=dict(loss_weight=10,
-             partition_weights={
-                "sdf": {"weight": 1, "slice": (0, 1)},
-                "height": {"weight": 1, "slice": (1, 2)},
-            })
-)
 
 loss_cfg = dict(
     bbox_3d_heading=dict(
         type='PlanarLoss',
+        seg_iou_method='linear',
         loss_name_prefix='bbox_3d_heading',
         weight_scheme=bbox_3d_heading_weight_scheme),
     bbox_3d_plane_heading=dict(
         type='PlanarLoss',
+        seg_iou_method='linear',
         loss_name_prefix='bbox_3d_plane_heading',
         weight_scheme=bbox_3d_plane_heading_weight_scheme),
     bbox_3d_no_heading=dict(
         type='PlanarLoss',
+        seg_iou_method='linear',
         loss_name_prefix='bbox_3d_no_heading',
         weight_scheme=bbox_3d_no_heading_weight_scheme),
     bbox_3d_square=dict(
         type='PlanarLoss',
+        seg_iou_method='linear',
         loss_name_prefix='bbox_3d_square',
         weight_scheme=bbox_3d_square_weight_scheme),
     bbox_3d_cylinder=dict(
         type='PlanarLoss',
+        seg_iou_method='linear',
         loss_name_prefix='bbox_3d_cylinder',
         weight_scheme=bbox_3d_cylinder_weight_scheme),
     bbox_3d_oriented_cylinder=dict(
         type='PlanarLoss',
+        seg_iou_method='linear',
         loss_name_prefix='bbox_3d_oriented_cylinder',
         weight_scheme=bbox_3d_oriented_cylinder_weight_scheme),    
     polyline_3d=dict(
         type='PlanarLoss',
+        seg_iou_method='linear',
         loss_name_prefix='polyline_3d',
         weight_scheme=polyline_3d_weight_scheme),
     polygon_3d=dict(
         type='PlanarLoss',
+        seg_iou_method='linear',
         loss_name_prefix='polygon_3d',
         weight_scheme=polygon_3d_weight_scheme),
     parkingslot_3d=dict(
         type='PlanarLoss',
+        seg_iou_method='linear',
         loss_name_prefix='parkingslot_3d',
         weight_scheme=parkingslot_3d_weight_scheme),
-    occ_sdf_bev=dict(
-        type='PlanarLoss',
-        loss_name_prefix='occ_sdf_bev',
-        weight_scheme=occ_sdf_bev_weight_scheme),
 )
 
 # integrated model config
