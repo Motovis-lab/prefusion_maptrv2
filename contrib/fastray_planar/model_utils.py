@@ -557,7 +557,7 @@ def draw_outputs(pred_dict, batched_input_dict):
         axes[irow, 1].set_title(f'pred_seg_0')
 
         match tensor_smith:
-            case PlanarBbox3D() | PlanarRectangularCuboid() | PlanarSquarePillar():
+            case PlanarBbox3D() | PlanarRectangularCuboid() | PlanarSquarePillar() | PlanarOrientedCylinder3D():
                 # plot gt bboxes
                 axes[irow, 2].set_aspect('equal')
                 axes[irow, 2].set_xlim(voxel_range[2])
@@ -600,6 +600,52 @@ def draw_outputs(pred_dict, batched_input_dict):
                                        corner_points[[0, 1, 2, 3, 0], 0], 'r')
                 for icol in range(4, ncols):
                     axes[irow, icol].axis('off')
+
+            case PlanarCylinder3D():
+                # plot gt bboxes
+                axes[irow, 2].set_aspect('equal')
+                axes[irow, 2].set_xlim(voxel_range[2])
+                axes[irow, 2].set_ylim(voxel_range[1][::-1])
+                axes[irow, 2].set_title(f'gt_bboxes')
+                for element in transformables[branch].elements:
+                    center = element['translation'][:, 0]
+                    xvec = element['size'][0] * element['rotation'][:, 0]
+                    yvec = element['size'][1] * element['rotation'][:, 1]
+                    corner_points = np.array([
+                        center + 0.5 * xvec - 0.5 * yvec,
+                        center + 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec - 0.5 * yvec
+                    ], dtype=np.float32)
+                    axes[irow, 2].plot(corner_points[[0, 1, 2, 3, 0], 1], 
+                                       corner_points[[0, 1, 2, 3, 0], 0], 'g')
+                # plot pred bboxes
+                axes[irow, 3].set_aspect('equal')
+                axes[irow, 3].set_xlim(voxel_range[2])
+                axes[irow, 3].set_ylim(voxel_range[1][::-1])
+                axes[irow, 3].set_title(f'pred_bboxes')
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                for element in results:
+                    if element['score'] < 0.7:
+                        continue
+                    center = element['translation']
+                    xvec = np.array([element['radius'] * 2, element['radius'] * 2, element['height']]) * np.array([1, 0, 0])
+                    yvec = np.array([element['radius'] * 2, element['radius'] * 2, element['height']]) * np.array([0, 1, 0])
+
+                    corner_points = np.array([
+                        center + 0.5 * xvec - 0.5 * yvec,
+                        center + 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec - 0.5 * yvec
+                    ], dtype=np.float32)
+                    # axes[irow, 3].text(center[1], center[0], 
+                    #                    '{:.2f}'.format(element['area_score'] * element['confs'][0]),
+                    #                    color='r', ha='center', va='center')
+                    axes[irow, 3].plot(corner_points[[0, 1, 2, 3, 0], 1], 
+                                       corner_points[[0, 1, 2, 3, 0], 0], 'r')
+                for icol in range(4, ncols):
+                    axes[irow, icol].axis('off')
+
             case PlanarParkingSlot3D():
                 # plot gt slots
                 axes[irow, 2].set_aspect('equal')
