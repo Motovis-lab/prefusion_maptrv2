@@ -148,9 +148,13 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
                                 anno_batch_dict[transformable.name]['cen'].append(annotation_tensor['cen'])
                                 anno_batch_dict[transformable.name]['seg'].append(annotation_tensor['seg'])
                                 anno_batch_dict[transformable.name]['reg'].append(annotation_tensor['reg'])
-                            case PlanarPolyline3D() | PlanarPolygon3D() | PlanarOccSdfBev():
+                            case PlanarPolyline3D() | PlanarPolygon3D():
                                 anno_batch_dict[transformable.name]['seg'].append(annotation_tensor['seg'])
                                 anno_batch_dict[transformable.name]['reg'].append(annotation_tensor['reg'])
+                            case PlanarOccSdfBev():
+                                anno_batch_dict[transformable.name]['seg'].append(annotation_tensor['seg'])
+                                anno_batch_dict[transformable.name]['sdf'].append(annotation_tensor['sdf'])
+                                anno_batch_dict[transformable.name]['height'].append(annotation_tensor['height'])
                             case _:
                                 anno_batch_dict[transformable.name].append(annotation_tensor)
 
@@ -170,12 +174,6 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
                 anno_batch_dict[transformable_name] = torch.stack(data_batch)
         return defaultdict2dict(processed_frame_batch)
     
-    def __call__(self, group_batch: list):
-        processed_group_batch = []
-        for frame_batch in group_batch:
-            processed_group_batch.append(self.process(frame_batch))
-        
-        return processed_group_batch
 
 
 

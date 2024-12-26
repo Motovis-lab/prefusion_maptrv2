@@ -1757,10 +1757,11 @@ class PlanarOccSdfBev(PlanarTensorSmith):
         seg_im  # 分割图
             0: freespace
             1: occupied edge
-            2: mask
-        reg_im  # 回归图
+        sdf_im  # 回归图
             0: truncated sdf
-            1: height_im
+        height_im  # 高度图
+            0: height
+            1: height mask
         ```
         """
         # unproject dst_bev to ego
@@ -1782,14 +1783,16 @@ class PlanarOccSdfBev(PlanarTensorSmith):
         sdf = cv2.remap(transformable.sdf, ww_, hh_, interpolation=cv2.INTER_LINEAR)
         sdf = np.clip(sdf, *self.sdf_range)
         height = cv2.remap(transformable.height, ww_, hh_, interpolation=cv2.INTER_LINEAR)
-        mask = cv2.remap(transformable.mask, ww_, hh_, interpolation=cv2.INTER_NEAREST)
+        heigh_mask = cv2.remap(transformable.mask, ww_, hh_, interpolation=cv2.INTER_LINEAR)
         
-        seg_im = np.stack([freespace, occ_edge, mask])
-        reg_im = np.stack([sdf, height])
+        seg_im = np.stack([freespace, occ_edge])
+        sdf_im = np.stack([sdf])
+        height_im = np.stack([height, heigh_mask])
 
         tensor_data = {
             'seg': torch.tensor(seg_im, dtype=torch.float32),
-            'reg': torch.tensor(reg_im, dtype=torch.float32)
+            'sdf': torch.tensor(sdf_im, dtype=torch.float32),
+            'height': torch.tensor(height_im, dtype=torch.float32)
         }
         
         return tensor_data

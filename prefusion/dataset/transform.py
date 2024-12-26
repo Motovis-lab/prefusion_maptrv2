@@ -1160,7 +1160,6 @@ class OccSdfBev(SpatialTransformable):
             height of the ground, of shape (X, Y)
         mask : np.ndarray, optional
             if provided, only positions with value 1 will be take into consideration, by default None
-            This feature is useful when we train on multiple different data source, where they have different BEV size/range.
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
