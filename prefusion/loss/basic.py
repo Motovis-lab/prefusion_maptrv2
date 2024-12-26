@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 from prefusion.registry import MODELS
 
-__all__ = ['seg_iou', 'SegIouLoss', 'dual_focal_loss']
+__all__ = ['seg_iou', 'SegIouLoss', 'dual_focal_loss', 'DualFocalLoss']
 
 def seg_iou(pred, label, dim=None):
     """
@@ -58,3 +58,13 @@ def dual_focal_loss(pred, label, reduction='mean', pos_weight=None):
         return loss.sum()
     else:
         return loss.mean()
+
+
+@MODELS.register_module()
+class DualFocalLoss(nn.Module):
+    def __init__(self, reduction='mean'):
+        super().__init__()
+        self.reduction = reduction
+    
+    def forward(self, pred, label, pos_weight=None):
+        return dual_focal_loss(pred, label, self.reduction, pos_weight)
