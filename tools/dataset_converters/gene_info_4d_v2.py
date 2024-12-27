@@ -325,7 +325,7 @@ if __name__ == "__main__":
                     extrinsic_r = R_nus.T @ Rotation.from_quat(calib_center['rig'][camera_name]['extrinsic'][3:]).as_matrix()
                     extrinsic_t = R_nus.T @ np.array(calib_center['rig'][camera_name]['extrinsic'][:3]).reshape(3)
                     scene_info["scene_info"]['calibration'][camera_name] = {"extrinsic":(extrinsic_r, extrinsic_t), 
-                                                                            "intrinsic": (cx, cy, fx, fy), 'camera_type': 'PERSPECTIVECamera'}
+                                                                            "intrinsic": (cx, cy, fx, fy), 'camera_type': 'PerspectiveCamera'}
                     camera_image[camera_name] = f"{scene_name}/camera/{camera_name}/{camera_filename}"
                 
                 if camera_name in timestamp_window:
