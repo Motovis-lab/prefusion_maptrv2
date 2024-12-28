@@ -2396,6 +2396,35 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
         return height_map
  
 
+    def _valid_slot(self, slot_points_3d: np.ndarray[Tuple[int, int]]) -> bool:
+        """_summary_
+
+        Parameters
+        ----------
+        slot_points_3d : np.ndarray[Tuple[int, int]]
+            of shape (4, 3)
+
+        Returns
+        -------
+        bool
+            _description_
+        """
+        vec_01 = slot_points_3d[1] - slot_points_3d[0]
+        vec_12 = slot_points_3d[2] - slot_points_3d[1]
+        vec_23 = slot_points_3d[3] - slot_points_3d[2]
+        vec_30 = slot_points_3d[0] - slot_points_3d[3]
+        # check parallelism
+        if np.abs(np.cross(vec_01, vec_12)[2]) < 1e-3:
+            return False
+        if np.abs(np.cross(vec_12, vec_23)[2]) < 1e-3:
+            return False
+        if np.abs(np.cross(vec_23, vec_30)[2]) < 1e-3:
+            return False
+        if np.abs(np.cross(vec_30, vec_01)[2]) < 1e-3:
+            return False
+        return True
+
+
     def __call__(self, transformable: ParkingSlot3D) -> dict:
         Z, X, Y = self.voxel_shape
         cx, cy, fx, fy = self.bev_intrinsics
@@ -2414,6 +2443,8 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
             side_length = np.linalg.norm(element['points'][3] - element['points'][0])
             if entrance_length > side_length:
                 slot_points_3d = slot_points_3d[[1, 2, 3, 0]]
+            if not self._valid_slot(slot_points_3d):
+                continue
             slot_points_bev = slot_points_3d[..., [1, 0]]
             slot_points_bev_int = np.round(slot_points_bev).astype(int)
 
