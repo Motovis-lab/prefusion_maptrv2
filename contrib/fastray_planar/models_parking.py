@@ -235,8 +235,8 @@ class ParkingFastRayPlanarSingleFrameModelAPA(BaseModel):
             self.planar_losses_dict[branch] = MODELS.build(loss_cfg[branch])
         self.occ_seg_iou_loss = SegIouLoss(method='linear')
         self.occ_seg_dfl_loss = DualFocalLoss()
-        self.occ_sdf_l1_loss = nn.L1Loss()
-        self.occ_height_l1_loss = nn.L1Loss()
+        self.occ_sdf_l1_loss = nn.L1Loss(reduction='none')
+        self.occ_height_l1_loss = nn.L1Loss(reduction='none')
 
     def forward(self, mode='tensor', **batched_input_dict):
         """
