@@ -12,7 +12,7 @@ from prefusion.dataset.transform import (
     RandomSetIntrinsicParam, RandomSetExtrinsicParam,
     RenderIntrinsic, RenderExtrinsic, RenderVirtualCamera, RandomRenderExtrinsic,
     RandomChooseKTransform, RandomBrightness, RandomSharpness, RandomImEqualize,
-    RandomRotateSpace
+    RandomRotateSpace, RandomMirrorSpace
 )
 
 class MockTextTransformable:
@@ -178,6 +178,73 @@ def test_render_virtual_camera(fisheye_image, perspective_image, camera_imageset
     np.testing.assert_almost_equal(perspective_image.img, answer_perspective_img)
     np.testing.assert_almost_equal(perspective_image.intrinsic, [47.5, 23.5, 48.0, 48.0])
     np.testing.assert_almost_equal(camera_imageset.transformables['front'].img, answer_perspective_img)
+
+
+def test_random_mirror_space_for_camera():
+    from scipy.spatial.transform import Rotation
+    rand_img = np.array(np.random.randint(256, size=(120, 160, 3)), dtype=np.uint8)
+    # test 1
+    R_ = Rotation.from_euler('xyz', [-90, 0, -45], degrees=True).as_matrix()
+    camera_images = CameraImageSet("camera_images", dict(
+        cam_6=CameraImage(
+            name="camera_images:cam_6",
+            cam_id='cam_6',
+            cam_type='PerspectiveCamera',
+            img=rand_img,
+            ego_mask=np.ones((120, 160)),
+            extrinsic=[R_, np.array([0, 1, 1])],
+            intrinsic=[79.5, 59.5, 80, 80]            
+        )
+    ))
+    transform = RandomMirrorSpace(prob=1)
+    transform(camera_images)
+    R_mirror, t_mirror = camera_images.transformables['cam_6'].extrinsic
+    answer_R_mirror = Rotation.from_euler('xyz', [-90, 0, -135], degrees=True).as_matrix()
+    answer_t_mirror = np.array([0, -1, 1])
+    np.testing.assert_almost_equal(R_mirror, answer_R_mirror)
+    np.testing.assert_almost_equal(t_mirror, answer_t_mirror)
+    np.testing.assert_almost_equal(camera_images.transformables['cam_6'].img, np.flip(rand_img, axis=1))
+    # test 2
+    R_ = Rotation.from_euler('xyz', [-90, 0, -90], degrees=True).as_matrix()
+    camera_images = CameraImageSet("camera_images", dict(
+        cam_6=CameraImage(
+            name="camera_images:cam_6",
+            cam_id='cam_6',
+            cam_type='PerspectiveCamera',
+            img=rand_img,
+            ego_mask=np.ones((120, 160)),
+            extrinsic=[R_, np.array([1, 0, 0])],
+            intrinsic=[79.5, 59.5, 80, 80]            
+        )
+    ))
+    transform = RandomMirrorSpace(prob=1)
+    transform(camera_images)
+    R_mirror, t_mirror = camera_images.transformables['cam_6'].extrinsic
+    answer_R_mirror = Rotation.from_euler('xyz', [-90, 0, -90], degrees=True).as_matrix()
+    answer_t_mirror = np.array([1, 0, 0])
+    np.testing.assert_almost_equal(R_mirror, answer_R_mirror)
+    np.testing.assert_almost_equal(t_mirror, answer_t_mirror)
+    # test 3
+    R_ = Rotation.from_euler('xyz', [-135, 0, 180], degrees=True).as_matrix()
+    camera_images = CameraImageSet("camera_images", dict(
+        cam_6=CameraImage(
+            name="camera_images:cam_6",
+            cam_id='cam_6',
+            cam_type='PerspectiveCamera',
+            img=rand_img,
+            ego_mask=np.ones((120, 160)),
+            extrinsic=[R_, np.array([0, 1, 1])],
+            intrinsic=[79.5, 59.5, 80, 80]            
+        )
+    ))
+    transform = RandomMirrorSpace(prob=1)
+    transform(camera_images)
+    R_mirror, t_mirror = camera_images.transformables['cam_6'].extrinsic
+    answer_R_mirror = Rotation.from_euler('xyz', [-135, 0, 0], degrees=True).as_matrix()
+    answer_t_mirror = np.array([0, -1, 1])
+    np.testing.assert_almost_equal(R_mirror, answer_R_mirror)
+    np.testing.assert_almost_equal(t_mirror, answer_t_mirror)
+
 
 
 def test_random_render_extrinsic(fisheye_image, perspective_image, camera_imageset):
