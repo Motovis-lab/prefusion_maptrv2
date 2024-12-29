@@ -164,12 +164,13 @@ virtual_camera_settings = dict(
 
 virtual_camera_transform = dict(type='RenderVirtualCamera', camera_settings=virtual_camera_settings)
 
-debug_mode = False
+debug_mode = True
 
 if debug_mode:
     batch_size = 1
     num_workers = 0
-    transforms = [virtual_camera_transform]
+    # transforms = [virtual_camera_transform]
+    transforms = [virtual_camera_transform, dict(type='RandomMirrorSpace', prob=1.0),]
     possible_group_sizes = 2
 else:
     batch_size = 8
@@ -291,7 +292,7 @@ val_dataset = dict(
         debug_mode=debug_mode
     ),
     transformables=transformables,
-    transforms=[virtual_camera_transform],
+    transforms=transforms,
     group_sampler=dict(type="IndexGroupSampler",
                        phase="val",
                        possible_group_sizes=10,

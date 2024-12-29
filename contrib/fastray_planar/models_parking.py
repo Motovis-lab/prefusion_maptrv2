@@ -587,7 +587,7 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
             plt.imshow(gt_occ_sdf_bev['height'][0][0].detach().cpu().numpy()); plt.show()
             plt.imshow(pred_occ_sdf_bev['height'][0][0].detach().cpu().numpy()); plt.show()
 
-            # draw_outputs(pred_dict, batched_input_dict)
+            draw_outputs(pred_dict, batched_input_dict)
             # save_outputs(pred_dict, batched_input_dict)
             # TODO: save occ_sdf_bev
         
