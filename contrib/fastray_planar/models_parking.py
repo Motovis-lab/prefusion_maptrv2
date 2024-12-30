@@ -641,10 +641,9 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
         occ_height_loss = self.occ_height_l1_loss(pred_height * gt_height_mask, gt_height * gt_height_mask)
         losses['occ_height_loss'] = occ_height_loss.sum() / gt_height_mask.sum()
 
-        losses['occ_sdf_bev_loss'] = 2 * (
-            5 * losses['occ_seg_iou_0_loss'] + 10 * losses['occ_seg_iou_1_loss'] + \
+        losses['occ_sdf_bev_loss'] = 5 * losses['occ_seg_iou_0_loss'] + 10 * losses['occ_seg_iou_1_loss'] + \
             10 * losses['occ_seg_dfl_0_loss'] + 20 * losses['occ_seg_dfl_1_loss'] + \
-            20 * losses['occ_sdf_loss'] + 20 * losses['occ_height_loss'])
+            20 * losses['occ_sdf_loss'] + 20 * losses['occ_height_loss']
         
         return losses
  
