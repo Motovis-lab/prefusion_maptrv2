@@ -623,8 +623,8 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
-# train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=100, val_interval=-1)
+# train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=100, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
 
 ## evaluator and metrics
@@ -640,8 +640,8 @@ optim_wrapper = dict(
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[20, 40, 46])
-# param_scheduler = dict(type='MultiStepLR', milestones=[50, 75, 90])
+# param_scheduler = dict(type='MultiStepLR', milestones=[20, 40, 46])
+param_scheduler = dict(type='MultiStepLR', milestones=[50, 75, 90])
 
 
 env_cfg = dict(
