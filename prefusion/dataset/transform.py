@@ -940,6 +940,7 @@ class Bbox3D(SpatialTransformable):
         # rmat = R_e'e = R_ee'.T
         # R_c = R_ec
         # R_c' = R_e'c = R_e'e @ R_ec
+        # P_e' = R_e'e @ P_e
         for ele in self.elements:
             ele['rotation'] = rmat @ ele['rotation']
             ele['translation'] = rmat @ ele['translation']
@@ -1157,7 +1158,7 @@ class OccSdfBev(SpatialTransformable):
         name : str
             arbitrary string, will be set to each Transformable object to distinguish it with others
         src_voxel_range : tuple
-            voxel_range=([-0.5, 2.5], [-12, 36], [12, -12]), from axis min to max
+            voxel_range=([-0.5, 2.5], [-15, 15], [15, -15]), from axis min to max
         occ : np.ndarray
             occ info, of shape (X, Y, C), where C denote the nubmer of occ classes
         sdf : np.ndarray
@@ -1178,7 +1179,14 @@ class OccSdfBev(SpatialTransformable):
         self._bev_intrinsics = self._calc_bev_intrinsics()
         self.sdf = self._generate_sdf() if sdf is None else sdf
         self.mask = mask if mask is not None else np.ones_like(self.sdf, dtype=np.uint8)
-        self._ego_points = self._unproject_bev_to_ego()
+        self._src_ego_points = self._unproject_bev_to_ego()
+        # src ego coords is different from ego coords
+        _, _, fx, fy = self._bev_intrinsics
+        self._es_mat = np.float32([
+            [-np.sign(fx), 0, 0], 
+            [0, -np.sign(fy), 0], 
+            [0, 0, 1]
+        ])
 
     def _generate_sdf(self):
         cx, cy, fx, fy = self._bev_intrinsics
@@ -1221,9 +1229,11 @@ class OccSdfBev(SpatialTransformable):
         # 2. apply flip_mat
         # 3. project to bev
         # 4. remap
+        # flip_mat = M_e'e = M_ee'.T
+        # P_e' = M_e'e @ P_e = flip_mat @ P_e
         assert flip_mat[2, 2] == 1, 'up-down flipping is unnecessary!'
-        self._ego_points = flip_mat @ self._ego_points
-        uu_, vv_ = self._project_ego_to_bev(self._ego_points)
+        flipped_points = flip_mat @ self._src_ego_points
+        uu_, vv_ = self._project_ego_to_bev(flipped_points)
         
         self.occ = cv2.remap(
             self.occ, 
@@ -1258,11 +1268,10 @@ class OccSdfBev(SpatialTransformable):
         # 3. project to bev
 
         # rmat = R_e'e = R_ee'.T
-        # R_c = R_ec
-        # R_c' = R_e'c = R_e'e @ R_ec
+        # P_s' = M_s'e' @ R_e'e @ M_es @ P_s = M_s'e' @ rmat @ M_es @ P_s
         
-        self._ego_points = rmat @ self._ego_points
-        uu_, vv_ = self._project_ego_to_bev(self._ego_points)
+        rotated_points = self._es_mat.T @ rmat @ self._es_mat @ self._src_ego_points
+        uu_, vv_ = self._project_ego_to_bev(rotated_points)
         
         self.occ = cv2.remap(
             self.occ, 
