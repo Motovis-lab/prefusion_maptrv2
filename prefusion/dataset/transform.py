@@ -1222,8 +1222,8 @@ class OccSdfBev(SpatialTransformable):
         # 3. project to bev
         # 4. remap
         assert flip_mat[2, 2] == 1, 'up-down flipping is unnecessary!'
-        flipped_points = flip_mat @ self._ego_points
-        uu_, vv_ = self._project_ego_to_bev(flipped_points)
+        self._ego_points = flip_mat @ self._ego_points
+        uu_, vv_ = self._project_ego_to_bev(self._ego_points)
         
         self.occ = cv2.remap(
             self.occ, 
@@ -1256,8 +1256,13 @@ class OccSdfBev(SpatialTransformable):
         # 1. get ego coordinates from bev
         # 2. apply rotation
         # 3. project to bev
-        rotated_points = rmat @ self._ego_points
-        uu_, vv_ = self._project_ego_to_bev(rotated_points)
+
+        # rmat = R_e'e = R_ee'.T
+        # R_c = R_ec
+        # R_c' = R_e'c = R_e'e @ R_ec
+        
+        self._ego_points = rmat @ self._ego_points
+        uu_, vv_ = self._project_ego_to_bev(self._ego_points)
         
         self.occ = cv2.remap(
             self.occ, 
@@ -1865,6 +1870,8 @@ class RandomMirrorSpace(RandomTransform):
         for transformable in transformables:
             if transformable is not None:
                 transformable.flip_3d(self.flip_mat)
+        
+        return transformables
 
 
 class MirrorTime(Transform):
