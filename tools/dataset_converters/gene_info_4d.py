@@ -107,6 +107,7 @@ def convert_virtual_camera(src_camear_root, save_img_root, save_mask_root, real_
     t = [0,0,0]
     v_cam_rmatrix = R
     v_cam_t = np.array(calib_back['extrinsic'][:3]).reshape(3)
+    v_cam_t[0] += (3.816862089990445 - 2.436862089990445)
     if 'FISHEYE' not in save_img_root:
         cx = (W - 1) / 2
         cy = (H - 1) / 2
