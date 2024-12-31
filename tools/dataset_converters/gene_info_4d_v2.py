@@ -99,13 +99,13 @@ def generate_labels_scene_from_4dMapjson(scene_root, Twes):
     #     )
     return output_json_frame_dlist
 
-def convert_virtual_camera(src_camear_root, save_img_root, save_mask_root, real_cam_model, v_cam_paramter, calib_back, W=1280, H=960):
+def convert_virtual_camera(src_camear_root, save_img_root, save_mask_root, real_cam_model, v_cam_paramter, calib, W=1280, H=960):
     src_image = mmcv.imread(src_camear_root, channel_order="bgr")
     R = Rotation.from_euler('xyz', angles=v_cam_paramter, degrees=True).as_matrix()
     # R = Quaternion(v_cam_paramter).rotation_matrix
     t = [0,0,0]
     v_cam_rmatrix = R
-    v_cam_t = np.array(calib_back['extrinsic'][:3]).reshape(3)
+    v_cam_t = np.array(calib['extrinsic'][:3]).reshape(3)
     if 'FISHEYE' not in save_img_root:
         cx = (W - 1) / 2
         cy = (H - 1) / 2
@@ -209,18 +209,16 @@ if __name__ == "__main__":
         lidar1_cali_r = R_nus.T @ Rotation.from_quat(calib_center['rig']['lidar1']['extrinsic'][3:]).as_matrix()
         lidar1_cali_t = R_nus.T @ np.array(calib_center['rig']['lidar1']['extrinsic'][:3]).reshape(3)
 
-        calib_back = Config.fromfile(f"{scene_root}/calibration_back.yml")
-        R_nus = Rotation.from_euler("xyz", angles=(0,0,90), degrees=True).as_matrix()
-        calib_back['rig']['camera8']['extrinsic'] = [*((R_nus.T @ np.array(calib_back['rig']['camera8']['extrinsic'][:3]).reshape(3)).tolist()), *(Rotation.from_matrix((R_nus.T @ Rotation.from_quat(calib_back['rig']['camera8']['extrinsic'][3:]).as_matrix())).as_quat().tolist())]
-        calib_back['rig']['camera5']['extrinsic'] = [*((R_nus.T @ np.array(calib_back['rig']['camera5']['extrinsic'][:3]).reshape(3)).tolist()), *(Rotation.from_matrix((R_nus.T @ Rotation.from_quat(calib_back['rig']['camera5']['extrinsic'][3:]).as_matrix())).as_quat().tolist())]
-        calib_back['rig']['camera1']['extrinsic'] = [*((R_nus.T @ np.array(calib_back['rig']['camera1']['extrinsic'][:3]).reshape(3)).tolist()), *(Rotation.from_matrix((R_nus.T @ Rotation.from_quat(calib_back['rig']['camera1']['extrinsic'][3:]).as_matrix())).as_quat().tolist())]
-        calib_back['rig']['camera11']['extrinsic'] = [*((R_nus.T @ np.array(calib_back['rig']['camera11']['extrinsic'][:3]).reshape(3)).tolist()), *(Rotation.from_matrix((R_nus.T @ Rotation.from_quat(calib_back['rig']['camera11']['extrinsic'][3:]).as_matrix())).as_quat().tolist())]
+        calib_center['rig']['camera8']['extrinsic'] = [*((R_nus.T @ np.array(calib_center['rig']['camera8']['extrinsic'][:3]).reshape(3)).tolist()), *(Rotation.from_matrix((R_nus.T @ Rotation.from_quat(calib_center['rig']['camera8']['extrinsic'][3:]).as_matrix())).as_quat().tolist())]
+        calib_center['rig']['camera5']['extrinsic'] = [*((R_nus.T @ np.array(calib_center['rig']['camera5']['extrinsic'][:3]).reshape(3)).tolist()), *(Rotation.from_matrix((R_nus.T @ Rotation.from_quat(calib_center['rig']['camera5']['extrinsic'][3:]).as_matrix())).as_quat().tolist())]
+        calib_center['rig']['camera1']['extrinsic'] = [*((R_nus.T @ np.array(calib_center['rig']['camera1']['extrinsic'][:3]).reshape(3)).tolist()), *(Rotation.from_matrix((R_nus.T @ Rotation.from_quat(calib_center['rig']['camera1']['extrinsic'][3:]).as_matrix())).as_quat().tolist())]
+        calib_center['rig']['camera11']['extrinsic'] = [*((R_nus.T @ np.array(calib_center['rig']['camera11']['extrinsic'][:3]).reshape(3)).tolist()), *(Rotation.from_matrix((R_nus.T @ Rotation.from_quat(calib_center['rig']['camera11']['extrinsic'][3:]).as_matrix())).as_quat().tolist())]
         
         cameras_real = {
-            "camera8":FisheyeCamera.init_from_motovis_cfg(calib_back.rig['camera8']),
-            "camera5":FisheyeCamera.init_from_motovis_cfg(calib_back.rig['camera5']),
-            "camera1":FisheyeCamera.init_from_motovis_cfg(calib_back.rig['camera1']),
-            "camera11":FisheyeCamera.init_from_motovis_cfg(calib_back.rig['camera11'])
+            "camera8":FisheyeCamera.init_from_motovis_cfg(calib_center.rig['camera8']),
+            "camera5":FisheyeCamera.init_from_motovis_cfg(calib_center.rig['camera5']),
+            "camera1":FisheyeCamera.init_from_motovis_cfg(calib_center.rig['camera1']),
+            "camera11":FisheyeCamera.init_from_motovis_cfg(calib_center.rig['camera11'])
         }
 
         ts_4d_rel_path = "4d_anno_infos/ts.json"
@@ -313,7 +311,7 @@ if __name__ == "__main__":
                     camera_model.ego_mask = mmcv.imread(f"{dump_root}/ego_mask/{camera_name}.png")[..., 0]
                     # process camera to virtual camera 
                     v_camera_rmatrix, v_camera_t, v_camera_intrinsic, d_src_image, d_real_cam_model, d_vcamera \
-                        = convert_virtual_camera(src_camera_root, v_camera_root, None, camera_model, parm_cameras_v[align_real_v[camera_name]], calib_back.rig[camera_name])
+                        = convert_virtual_camera(src_camera_root, v_camera_root, None, camera_model, parm_cameras_v[align_real_v[camera_name]], calib_center.rig[camera_name])
                     scene_info["scene_info"]['calibration'][align_real_v[camera_name]] = {"extrinsic":(v_camera_rmatrix, v_camera_t), "intrinsic": v_camera_intrinsic, 'camera_type': 'FisheyeCamera'}
                     camera_image[align_real_v[camera_name]] = f"{scene_name}/camera/{align_real_v[camera_name]}/{camera_filename}"
                 else:
