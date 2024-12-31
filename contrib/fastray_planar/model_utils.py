@@ -514,27 +514,26 @@ def draw_outputs(pred_dict, batched_input_dict):
     transformables = batched_input_dict['transformables'][0]
     scene_frame_id = batched_input_dict['index_infos'][0].scene_frame_id
 
-    ncols = max(4, (len(camera_tensors_dict) + 1) // 2)
-    irow_plus = (ncols + 1) // 4
-    nrows = len(pred_dict) + irow_plus
+    nrows_cam = (len(camera_tensors_dict) - 1) // 4 + 1
+    nrows = len(pred_dict) + nrows_cam
 
-    fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 2, nrows * 2))
+    fig, axes = plt.subplots(nrows, 4, figsize=(4 * 2, nrows * 2))
     fig.suptitle(f'scene_frame_id: {scene_frame_id}')
 
     # plot camera images
     for i, cam_id in enumerate(camera_tensors_dict):
         img = camera_tensors_dict[cam_id].detach().cpu().numpy()[0].transpose(1, 2, 0)[..., ::-1] * 255 + 128
         img = img.astype(np.uint8)
-        irow = i // ncols
-        icol = i % ncols
+        irow = i // 4
+        icol = i % 4
         axes[irow, icol].imshow(img)
         axes[irow, icol].set_title(cam_id.replace('VCAMERA_', '').lower())
-    for i in range(icol + 1, ncols):
-        axes[1, icol].axis('off')
+    for i in range(icol + 1, 4):
+        axes[irow, icol].axis('off')
 
     # plot preds with labels
     for i, branch in enumerate(pred_dict):
-        irow = i + irow_plus
+        irow = i + nrows_cam
         pred_dict_branch = pred_dict[branch]
         gt_dict_branch = gt_dict[branch]
         # extract batch_0
@@ -557,7 +556,7 @@ def draw_outputs(pred_dict, batched_input_dict):
         axes[irow, 1].set_title(f'pred_seg_0')
 
         match tensor_smith:
-            case PlanarBbox3D() | PlanarRectangularCuboid() | PlanarSquarePillar():
+            case PlanarBbox3D() | PlanarRectangularCuboid() | PlanarSquarePillar() | PlanarOrientedCylinder3D():
                 # plot gt bboxes
                 axes[irow, 2].set_aspect('equal')
                 axes[irow, 2].set_xlim(voxel_range[2])
@@ -598,8 +597,52 @@ def draw_outputs(pred_dict, batched_input_dict):
                     #                    color='r', ha='center', va='center')
                     axes[irow, 3].plot(corner_points[[0, 1, 2, 3, 0], 1], 
                                        corner_points[[0, 1, 2, 3, 0], 0], 'r')
-                for icol in range(4, ncols):
-                    axes[irow, icol].axis('off')
+                
+
+            case PlanarCylinder3D():
+                # plot gt bboxes
+                axes[irow, 2].set_aspect('equal')
+                axes[irow, 2].set_xlim(voxel_range[2])
+                axes[irow, 2].set_ylim(voxel_range[1][::-1])
+                axes[irow, 2].set_title(f'gt_bboxes')
+                for element in transformables[branch].elements:
+                    center = element['translation'][:, 0]
+                    xvec = element['size'][0] * element['rotation'][:, 0]
+                    yvec = element['size'][1] * element['rotation'][:, 1]
+                    corner_points = np.array([
+                        center + 0.5 * xvec - 0.5 * yvec,
+                        center + 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec - 0.5 * yvec
+                    ], dtype=np.float32)
+                    axes[irow, 2].plot(corner_points[[0, 1, 2, 3, 0], 1], 
+                                       corner_points[[0, 1, 2, 3, 0], 0], 'g')
+                # plot pred bboxes
+                axes[irow, 3].set_aspect('equal')
+                axes[irow, 3].set_xlim(voxel_range[2])
+                axes[irow, 3].set_ylim(voxel_range[1][::-1])
+                axes[irow, 3].set_title(f'pred_bboxes')
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                for element in results:
+                    if element['score'] < 0.7:
+                        continue
+                    center = element['translation']
+                    xvec = np.array([element['radius'] * 2, element['radius'] * 2, element['height']]) * np.array([1, 0, 0])
+                    yvec = np.array([element['radius'] * 2, element['radius'] * 2, element['height']]) * np.array([0, 1, 0])
+
+                    corner_points = np.array([
+                        center + 0.5 * xvec - 0.5 * yvec,
+                        center + 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec - 0.5 * yvec
+                    ], dtype=np.float32)
+                    # axes[irow, 3].text(center[1], center[0], 
+                    #                    '{:.2f}'.format(element['area_score'] * element['confs'][0]),
+                    #                    color='r', ha='center', va='center')
+                    axes[irow, 3].plot(corner_points[[0, 1, 2, 3, 0], 1], 
+                                       corner_points[[0, 1, 2, 3, 0], 0], 'r')
+                
+
             case PlanarParkingSlot3D():
                 # plot gt slots
                 axes[irow, 2].set_aspect('equal')
@@ -617,20 +660,19 @@ def draw_outputs(pred_dict, batched_input_dict):
                 results = tensor_smith.reverse(pred_dict_branch_0)
                 for points in results:
                     axes[irow, 3].plot(points[[1, 2, 3, 0], 1], points[[1, 2, 3, 0], 0], 'r')
-                for icol in range(4, ncols):
-                    axes[irow, icol].axis('off')
+                
             
             case _:
-                for icol in range(2, ncols):
+                for icol in range(2, 4):
                     axes[irow, icol].axis('off')
     
     
     plt.tight_layout()
     save_path = Path('work_dirs/result_pngs') / f'{scene_frame_id}.png'
     save_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(save_path)
-    plt.close()
-    # plt.show()
+    # plt.savefig(save_path)
+    # plt.close()
+    plt.show()
                 
 
 def save_outputs(pred_dict, batched_input_dict):

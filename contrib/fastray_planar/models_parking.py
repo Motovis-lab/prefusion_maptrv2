@@ -5,6 +5,7 @@ from mmengine.model import BaseModel
 from mmengine.structures import BaseDataElement
 
 from prefusion.registry import MODELS
+from prefusion import SegIouLoss, DualFocalLoss
 
 from .modules import *
 from .model_utils import *
@@ -229,9 +230,13 @@ class ParkingFastRayPlanarSingleFrameModelAPA(BaseModel):
         self.head_parkingslot_3d = MODELS.build(heads['parkingslot_3d'])
         self.head_occ_sdf_bev = MODELS.build(heads['occ_sdf_bev'])
         # init losses
-        self.losses_dict = {}
+        self.planar_losses_dict = {}
         for branch in loss_cfg:
-            self.losses_dict[branch] = MODELS.build(loss_cfg[branch])
+            self.planar_losses_dict[branch] = MODELS.build(loss_cfg[branch])
+        self.occ_seg_iou_loss = SegIouLoss(method='linear')
+        self.occ_seg_dfl_loss = DualFocalLoss()
+        self.occ_sdf_l1_loss = nn.L1Loss(reduction='none')
+        self.occ_height_l1_loss = nn.L1Loss(reduction='none')
 
     def forward(self, mode='tensor', **batched_input_dict):
         """
@@ -261,7 +266,6 @@ class ParkingFastRayPlanarSingleFrameModelAPA(BaseModel):
         """
         camera_tensors_dict = batched_input_dict['camera_tensors']
         camera_lookups = batched_input_dict['camera_lookups']
-        delta_poses = batched_input_dict['delta_poses']
         ## backbone
         camera_feats_dict = {}
         for cam_id in camera_tensors_dict:
@@ -314,46 +318,76 @@ class ParkingFastRayPlanarSingleFrameModelAPA(BaseModel):
                 cen=out_parkingslot_3d[0][:, :1],
                 seg=out_parkingslot_3d[0][:, 1:],
                 reg=out_parkingslot_3d[1]),
-            occ_sdf_bev=dict(
-                seg=out_occ_sdf_bev[0],
-                reg=out_occ_sdf_bev[1]
-            )
         )
-
+        pred_occ_sdf_bev=dict(
+            seg=out_occ_sdf_bev[0],
+            sdf=out_occ_sdf_bev[1][:, 0:1],
+            height=out_occ_sdf_bev[1][0:, 1:2],
+        )
+        
         if 'annotations' in batched_input_dict:
             gt_dict = batched_input_dict['annotations']
-            if ('occ_sdf_bev' in gt_dict) and ('occ_sdf_bev' in pred_dict):
-                mask = gt_dict['occ_sdf_bev']['seg'][:, 2:3]
-                pred_dict['occ_sdf_bev']['seg'] = pred_dict['occ_sdf_bev']['seg'] * mask
-                gt_dict['occ_sdf_bev']['seg'] = gt_dict['occ_sdf_bev']['seg'][:, :2] * mask
+            gt_occ_sdf_bev = gt_dict['occ_sdf_bev']
         
         if self.debug_mode:
-            # draw_outputs(pred_dict, batched_input_dict)
             save_outputs(pred_dict, batched_input_dict)
-        
+            # TODO: save occ_sdf_bev
+
         if mode == 'tensor':
+            pred_dict['occ_sdf_bev'] = pred_occ_sdf_bev
             return pred_dict
         if mode == 'loss':
-            losses = self.compute_losses(pred_dict, gt_dict)
+            losses = {}
+            losses.update(self.compute_planar_losses(pred_dict, gt_dict))
+            losses.update(self.compute_occ_sdf_losses(pred_occ_sdf_bev, gt_occ_sdf_bev))
+            losses['loss'] += losses['occ_sdf_bev_loss']
             return losses
-
         if mode == 'predict':
-            losses = self.compute_losses(pred_dict, gt_dict)
+            losses = {}
+            losses.update(self.compute_planar_losses(pred_dict, gt_dict))
+            losses.update(self.compute_occ_sdf_losses(pred_occ_sdf_bev, gt_occ_sdf_bev))
+            losses['loss'] += losses['occ_sdf_bev_loss']
             return (
-                *[{trsfmbl_name: {t: v.cpu() for t, v in _pred.items()}} for trsfmbl_name, _pred in pred_dict.items()],
+                *[{branch: {t: v.cpu() for t, v in _pred.items()}} for branch, _pred in pred_dict.items()],
                 BaseDataElement(loss=losses),
             )
 
-    def compute_losses(self, pred_dict, gt_dict):
+    def compute_planar_losses(self, pred_dict, gt_dict):
         losses = dict(loss=0)
-        for branch in self.losses_dict:
-            losses_branch = self.losses_dict[branch](pred_dict[branch], gt_dict[branch])
+        for branch in self.planar_losses_dict:
+            losses_branch = self.planar_losses_dict[branch](pred_dict[branch], gt_dict[branch])
             losses['loss'] += losses_branch[branch + '_loss']
-            if branch + '_seg_iou_0_loss' in losses_branch:
-                losses[branch + '_seg_iou_0_loss'] = losses_branch[branch + '_seg_iou_0_loss']
-            # losses.update(losses_branch)
+            losses.update(losses_branch)
 
         return losses
+    
+    def compute_occ_sdf_losses(self, pred_occ_sdf_bev, gt_occ_sdf_bev):
+        # seg_im = np.stack([freespace, occ_edge])
+        # sdf_im = np.stack([sdf])
+        # height_im = np.stack([height, heigh_mask])
+        losses = {}
+        losses['occ_seg_iou_0_loss'] = self.occ_seg_iou_loss(pred_occ_sdf_bev['seg'][:, 0:1], gt_occ_sdf_bev['seg'][:, 0:1])
+        losses['occ_seg_dfl_0_loss'] = self.occ_seg_dfl_loss(pred_occ_sdf_bev['seg'][:, 0:1], gt_occ_sdf_bev['seg'][:, 0:1])
+        losses['occ_seg_iou_1_loss'] = self.occ_seg_iou_loss(pred_occ_sdf_bev['seg'][:, 1:2], gt_occ_sdf_bev['seg'][:, 1:2])
+        losses['occ_seg_dfl_1_loss'] = self.occ_seg_dfl_loss(pred_occ_sdf_bev['seg'][:, 1:2], gt_occ_sdf_bev['seg'][:, 1:2])
+        
+        sdf_mask = gt_occ_sdf_bev['seg'][:, 0:1] + 0.1
+        sdf_loss = self.occ_sdf_l1_loss(pred_occ_sdf_bev['sdf'] * sdf_mask, gt_occ_sdf_bev['sdf'] * sdf_mask)
+        losses['occ_sdf_loss'] = sdf_loss.sum() / sdf_mask.sum()
+
+        gt_height = gt_occ_sdf_bev['height'][:, 0:1]
+        gt_height_mask = gt_occ_sdf_bev['height'][:, 1:2]
+        pred_height = pred_occ_sdf_bev['height']
+        occ_height_loss = self.occ_height_l1_loss(pred_height * gt_height_mask, gt_height * gt_height_mask)
+        losses['occ_height_loss'] = occ_height_loss.sum() / gt_height_mask.sum()
+
+        losses['occ_sdf_bev_loss'] = 2 * (
+            5 * losses['occ_seg_iou_0_loss'] + 10 * losses['occ_seg_iou_1_loss'] + \
+            10 * losses['occ_seg_dfl_0_loss'] + 20 * losses['occ_seg_dfl_1_loss'] + \
+            20 * losses['occ_sdf_loss'] + 20 * losses['occ_height_loss'])
+        
+        return losses
+ 
 
 
 
@@ -395,9 +429,13 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
         self.cached_voxel_feats = {}
         self.cached_delta_poses = {}
         # init losses
-        self.losses_dict = {}
+        self.planar_losses_dict = {}
         for branch in loss_cfg:
-            self.losses_dict[branch] = MODELS.build(loss_cfg[branch])
+            self.planar_losses_dict[branch] = MODELS.build(loss_cfg[branch])
+        self.occ_seg_iou_loss = SegIouLoss()
+        self.occ_seg_dfl_loss = DualFocalLoss()
+        self.occ_sdf_l1_loss = nn.L1Loss(reduction='none')
+        self.occ_height_l1_loss = nn.L1Loss(reduction='none')
 
 
     def temporal_fusion(self, batched_input_dict, voxel_feats_cur, delta_poses):
@@ -522,50 +560,91 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
                 cen=out_parkingslot_3d[0][:, :1],
                 seg=out_parkingslot_3d[0][:, 1:],
                 reg=out_parkingslot_3d[1]),
-            occ_sdf_bev=dict(
-                seg=out_occ_sdf_bev[0],
-                reg=out_occ_sdf_bev[1],
-            )
         )
-
+        pred_occ_sdf_bev=dict(
+            seg=out_occ_sdf_bev[0],
+            sdf=out_occ_sdf_bev[1][:, 0:1],
+            height=out_occ_sdf_bev[1][0:, 1:2],
+        )
         if 'annotations' in batched_input_dict:
             gt_dict = batched_input_dict['annotations']
-            if ('occ_sdf_bev' in gt_dict) and ('occ_sdf_bev' in pred_dict):
-                mask = gt_dict['occ_sdf_bev']['seg'][:, 2:3]
-                pred_dict['occ_sdf_bev']['seg'] = pred_dict['occ_sdf_bev']['seg'] * mask
-                gt_dict['occ_sdf_bev']['seg'] = gt_dict['occ_sdf_bev']['seg'][:, :2] * mask
-        
+            gt_occ_sdf_bev = gt_dict['occ_sdf_bev']
+
         if self.debug_mode:
             import matplotlib.pyplot as plt
-            freespace = pred_dict['occ_sdf_bev']['seg'][0][0].sigmoid().detach().cpu().numpy() > 0.5
+
+            plt.imshow(gt_occ_sdf_bev['seg'][0][0].detach().cpu().numpy()); plt.show()
+            freespace = pred_occ_sdf_bev['seg'][0][0].sigmoid().detach().cpu().numpy() > 0.5
             plt.imshow(freespace); plt.show()
-            plt.imshow(pred_dict['occ_sdf_bev']['seg'][0][1].sigmoid().detach().cpu().numpy() > 0.5); plt.show()
-            plt.imshow(pred_dict['occ_sdf_bev']['reg'][0][0].detach().cpu().numpy() * freespace); plt.show()
-            plt.imshow(pred_dict['occ_sdf_bev']['reg'][0][1].detach().cpu().numpy() * freespace); plt.show()
-            # draw_outputs(pred_dict, batched_input_dict)
+
+            plt.imshow(gt_occ_sdf_bev['seg'][0][1].detach().cpu().numpy()); plt.show()
+            plt.imshow(pred_occ_sdf_bev['seg'][0][1].sigmoid().detach().cpu().numpy() > 0.5); plt.show()
+
+            plt.imshow(gt_occ_sdf_bev['sdf'][0][0].detach().cpu().numpy()); plt.show()
+            plt.imshow(pred_occ_sdf_bev['sdf'][0][0].detach().cpu().numpy()); plt.show()
+            plt.imshow(pred_occ_sdf_bev['sdf'][0][0].detach().cpu().numpy() > 0); plt.show()
+
+            plt.imshow(gt_occ_sdf_bev['height'][0][0].detach().cpu().numpy()); plt.show()
+            plt.imshow(pred_occ_sdf_bev['height'][0][0].detach().cpu().numpy()); plt.show()
+
+            draw_outputs(pred_dict, batched_input_dict)
             # save_outputs(pred_dict, batched_input_dict)
+            # TODO: save occ_sdf_bev
         
         if mode == 'tensor':
+            pred_dict['occ_sdf_bev'] = pred_occ_sdf_bev
             return pred_dict
         if mode == 'loss':
-            losses = self.compute_losses(pred_dict, gt_dict)
+            losses = {}
+            losses.update(self.compute_planar_losses(pred_dict, gt_dict))
+            losses.update(self.compute_occ_sdf_losses(pred_occ_sdf_bev, gt_occ_sdf_bev))
+            losses['loss'] += losses['occ_sdf_bev_loss']
             return losses
-
         if mode == 'predict':
-            losses = self.compute_losses(pred_dict, gt_dict)
+            losses = {}
+            losses.update(self.compute_planar_losses(pred_dict, gt_dict))
+            losses.update(self.compute_occ_sdf_losses(pred_occ_sdf_bev, gt_occ_sdf_bev))
+            losses['loss'] += losses['occ_sdf_bev_loss']
             return (
-                *[{trsfmbl_name: {t: v.cpu() for t, v in _pred.items()}} for trsfmbl_name, _pred in pred_dict.items()],
+                *[{branch: {t: v.cpu() for t, v in _pred.items()}} for branch, _pred in pred_dict.items()],
                 BaseDataElement(loss=losses),
             )
 
-    def compute_losses(self, pred_dict, gt_dict):
+    def compute_planar_losses(self, pred_dict, gt_dict):
         losses = dict(loss=0)
-        for branch in self.losses_dict:
-            losses_branch = self.losses_dict[branch](pred_dict[branch], gt_dict[branch])
+        for branch in self.planar_losses_dict:
+            losses_branch = self.planar_losses_dict[branch](pred_dict[branch], gt_dict[branch])
             losses['loss'] += losses_branch[branch + '_loss']
-            if branch + '_seg_iou_0_loss' in losses_branch:
-                losses[branch + '_seg_iou_0_loss'] = losses_branch[branch + '_seg_iou_0_loss']
-            # losses.update(losses_branch)
+            # if branch + '_seg_iou_0_loss' in losses_branch:
+            #     losses[branch + '_seg_iou_0_loss'] = losses_branch[branch + '_seg_iou_0_loss']
+            losses.update(losses_branch)
 
+        return losses
+    
+    def compute_occ_sdf_losses(self, pred_occ_sdf_bev, gt_occ_sdf_bev):
+        # seg_im = np.stack([freespace, occ_edge])
+        # sdf_im = np.stack([sdf])
+        # height_im = np.stack([height, heigh_mask])
+        losses = {}
+        losses['occ_seg_iou_0_loss'] = self.occ_seg_iou_loss(pred_occ_sdf_bev['seg'][:, 0:1], gt_occ_sdf_bev['seg'][:, 0:1])
+        losses['occ_seg_dfl_0_loss'] = self.occ_seg_dfl_loss(pred_occ_sdf_bev['seg'][:, 0:1], gt_occ_sdf_bev['seg'][:, 0:1])
+        losses['occ_seg_iou_1_loss'] = self.occ_seg_iou_loss(pred_occ_sdf_bev['seg'][:, 1:2], gt_occ_sdf_bev['seg'][:, 1:2])
+        losses['occ_seg_dfl_1_loss'] = self.occ_seg_dfl_loss(pred_occ_sdf_bev['seg'][:, 1:2], gt_occ_sdf_bev['seg'][:, 1:2])
+        
+        sdf_mask = gt_occ_sdf_bev['seg'][:, 0:1] + 0.1
+        sdf_loss = self.occ_sdf_l1_loss(pred_occ_sdf_bev['sdf'] * sdf_mask, gt_occ_sdf_bev['sdf'] * sdf_mask)
+        losses['occ_sdf_loss'] = sdf_loss.sum() / sdf_mask.sum()
+
+        gt_height = gt_occ_sdf_bev['height'][:, 0:1]
+        gt_height_mask = gt_occ_sdf_bev['height'][:, 1:2]
+        pred_height = pred_occ_sdf_bev['height']
+        occ_height_loss = self.occ_height_l1_loss(pred_height * gt_height_mask, gt_height * gt_height_mask)
+        losses['occ_height_loss'] = occ_height_loss.sum() / gt_height_mask.sum()
+
+        losses['occ_sdf_bev_loss'] = 2 * (
+            5 * losses['occ_seg_iou_0_loss'] + 10 * losses['occ_seg_iou_1_loss'] + \
+            10 * losses['occ_seg_dfl_0_loss'] + 20 * losses['occ_seg_dfl_1_loss'] + \
+            20 * losses['occ_sdf_loss'] + 20 * losses['occ_height_loss'])
+        
         return losses
  

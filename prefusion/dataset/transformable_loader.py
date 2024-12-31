@@ -387,15 +387,36 @@ class OccSdfBevLoader(TransformableLoader):
         super().__init__(data_root)
         self.src_voxel_range = src_voxel_range
         self.load_sdf = load_sdf
+    
+    def _gen_height_and_mask(self, height_lidar, mask_lidar, height_ground, mask_ground):
+        mask = mask_lidar + mask_ground
+        mask_left = (mask_ground - mask_lidar) > 0.5
+        height = height_lidar * mask_lidar + height_ground * mask_left
+        return height, mask
 
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> OccSdfBev:
         frame = scene_data["frame_info"][index_info.frame_id]
-        occ = mmcv.imread(self.data_root / frame["occ_sdf"]["occ_2d"])
+        # get sdf
         if self.load_sdf:
             sdf = cv2.imread(str(self.data_root / frame["occ_sdf"]["sdf"]), cv2.IMREAD_UNCHANGED).astype(np.float32) / 860 - 36
         else:
             sdf = None
-        height = cv2.imread(str(self.data_root / frame["occ_sdf"]["ground"]), cv2.IMREAD_UNCHANGED).astype(np.float32) / 3000 - 10
+        # get occ
+        occ_path = str(self.data_root / frame["occ_sdf"]["occ_2d"])
+        occ = mmcv.imread(occ_path)
+        # get height
+        mask_ground = np.float32(occ[..., 1] > 128)
+
+        height_ground_path = str(self.data_root / frame["occ_sdf"]["ground"])
+        height_ground = mmcv.imread(height_ground_path, 'unchanged').astype(np.float32) / 3000 - 10
+
+        height_lidar_path = str(self.data_root / frame["occ_sdf"]["bev_height_map"])
+        mask_lidar_path = str(self.data_root / frame["occ_sdf"]["bev_lidar_mask"])
+        height_lidar = mmcv.imread(height_lidar_path, 'unchanged').astype(np.float32) * 3.0 / 255.0 - 1
+        mask_lidar = np.float32(mmcv.imread(mask_lidar_path, 'unchanged') > 128)
+
+        height, mask = self._gen_height_and_mask(height_lidar, mask_lidar, height_ground, mask_ground)
+
         if self.src_voxel_range is None:
             src_voxel_range = scene_data["meta_info"]["space_range"]["occ"]
         else:
@@ -404,7 +425,7 @@ class OccSdfBevLoader(TransformableLoader):
             name=name,
             src_voxel_range=src_voxel_range,  # ego system,
             occ=occ, sdf=sdf, height=height,
-            mask=None,
+            mask=mask,
             tensor_smith=tensor_smith,
         )
 

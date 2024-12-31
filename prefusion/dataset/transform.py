@@ -446,10 +446,12 @@ class CameraImage(CameraTransformable):
 
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
-        # in the mirror world, assume that a object is left-right symmetrical
+        # in the mirror world, assume that a camera is left-right symmetrical, 
+        # however, x-axis of camera coordinate is left-right
         flip_mat_self = np.eye(3)
-        flip_mat_self[1, 1] = -1
+        flip_mat_self[0, 0] = -1
         R_new = flip_mat @ self.extrinsic[0] @ flip_mat_self.T
+        # R_new = flip_mat.T @ self.extrinsic[0]
         # here translation is a row array
         t_new = self.extrinsic[1] @ flip_mat.T
         self.extrinsic = (R_new, t_new)
@@ -602,9 +604,10 @@ class CameraSegMask(CameraTransformable):
 
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
-        # in the mirror world, assume that a object is left-right symmetrical
+        # in the mirror world, assume that a camera is left-right symmetrical, 
+        # however, x-axis of camera coordinate is left-right
         flip_mat_self = np.eye(3)
-        flip_mat_self[1, 1] = -1
+        flip_mat_self[0, 0] = -1
         R_new = flip_mat @ self.extrinsic[0] @ flip_mat_self.T
         # here translation is a row array
         t_new = self.extrinsic[1] @ flip_mat.T
@@ -767,9 +770,10 @@ class CameraDepth(CameraTransformable):
 
     def flip_3d(self, flip_mat, **kwargs):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
-        # in the mirror world, assume that a object is left-right symmetrical
+        # in the mirror world, assume that a camera is left-right symmetrical, 
+        # however, x-axis of camera coordinate is left-right
         flip_mat_self = np.eye(3)
-        flip_mat_self[1, 1] = -1
+        flip_mat_self[0, 0] = -1
         R_new = flip_mat @ self.extrinsic[0] @ flip_mat_self.T
         # here translation is a row array
         t_new = self.extrinsic[1] @ flip_mat.T
@@ -914,6 +918,7 @@ class Bbox3D(SpatialTransformable):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
         
         # in the mirror world, assume that a object is left-right symmetrical
+        # however, y-axis of object coordinate is left-right
         flip_mat_self = np.eye(3)
         flip_mat_self[1, 1] = -1
         for ele in self.elements:
@@ -1059,7 +1064,7 @@ class ParkingSlot3D(SpatialTransformable):
         for parkslot in self.elements:
             parkslot['points'] = parkslot['points'] @ flip_mat.T
         
-            # in the mirror world, the assumed order of parking slot corners is break, 
+            # in the mirror world, the assumed order of parking slot corners is broken, 
             # so we need to manually change the order
             parkslot['points'] = parkslot['points'][[1, 0, 3, 2], :]
 
@@ -1101,6 +1106,7 @@ class EgoPose(SpatialTransformable):
         assert flip_mat[2, 2] == 1, 'up down flip is unnecessary.'
         
         # in the mirror world, assume that a object is left-right symmetrical
+        # however, y-axis of object coordinate is left-right
         flip_mat_self = np.eye(3)
         flip_mat_self[1, 1] = -1  # apply了flip_map之后，坐标系变为了左手坐标系。用flip_mat_self将其重新转回右手坐标系
         self.rotation = flip_mat @ self.rotation @ flip_mat_self.T
@@ -1160,7 +1166,6 @@ class OccSdfBev(SpatialTransformable):
             height of the ground, of shape (X, Y)
         mask : np.ndarray, optional
             if provided, only positions with value 1 will be take into consideration, by default None
-            This feature is useful when we train on multiple different data source, where they have different BEV size/range.
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
         """

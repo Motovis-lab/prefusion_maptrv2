@@ -138,12 +138,20 @@ dictionary_polygons = dict(
 
 ## camera configs for model inputs
 
+# fisheye_camera_mapping = dict(
+#     VCAMERA_FISHEYE_FRONT='VCAMERA_FISHEYE_FRONT',
+#     VCAMERA_FISHEYE_LEFT='VCAMERA_FISHEYE_LEFT',
+#     VCAMERA_FISHEYE_BACK='VCAMERA_FISHEYE_BACK',
+#     VCAMERA_FISHEYE_RIGHT='VCAMERA_FISHEYE_RIGHT' 
+# )
+
 fisheye_camera_mapping = dict(
-    VCAMERA_FISHEYE_FRONT='VCAMERA_FISHEYE_FRONT',
-    VCAMERA_FISHEYE_LEFT='VCAMERA_FISHEYE_LEFT',
-    VCAMERA_FISHEYE_BACK='VCAMERA_FISHEYE_BACK',
-    VCAMERA_FISHEYE_RIGHT='VCAMERA_FISHEYE_RIGHT' 
+    VCAMERA_FISHEYE_FRONT='camera8',
+    VCAMERA_FISHEYE_LEFT='camera5',
+    VCAMERA_FISHEYE_BACK='camera1',
+    VCAMERA_FISHEYE_RIGHT='camera11' 
 )
+
 
 fisheye_resolution = (640, 384)
 
@@ -156,24 +164,25 @@ virtual_camera_settings = dict(
 
 virtual_camera_transform = dict(type='RenderVirtualCamera', camera_settings=virtual_camera_settings)
 
-debug_mode = False
+debug_mode = True
 
 if debug_mode:
     batch_size = 1
     num_workers = 0
-    transforms = [virtual_camera_transform]
+    # transforms = [virtual_camera_transform]
+    transforms = [virtual_camera_transform, dict(type='RandomMirrorSpace', prob=1.0),]
     possible_group_sizes = 2
 else:
     batch_size = 8
     num_workers = 8
     transforms = [
-        dict(type='RandomRenderExtrinsic'),
+        # dict(type='RandomRenderExtrinsic'),
         virtual_camera_transform,
         dict(type='RandomRotateSpace', angles=(0, 0, 90), prob_inverse_cameras_rotation=0),
         dict(type='RandomMirrorSpace'),
-        dict(type='RandomImageISP', prob=0.2),
-        dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
-        dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
+        dict(type='RandomImageISP', prob=0.1),
+        dict(type='RandomSetIntrinsicParam', prob=0.1, jitter_ratio=0.01),
+        dict(type='RandomSetExtrinsicParam', prob=0.1, angle=1, translation=0.02)
     ]
     possible_group_sizes = 2
 
@@ -244,10 +253,7 @@ train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/MV4D_12V3L',
-    info_path='/data/datasets/MV4D_12V3L/mv_4d_infos_20230901_152553.pkl',
-    # data_root='../MV4D-PARKING',
-    # info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
-    # info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
+    info_path='/data/datasets/MV4D_12V3L/mv_4d_infos_20231029_195612.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -255,16 +261,16 @@ train_dataset = dict(
         debug_mode=debug_mode),
     transformables=transformables,
     transforms=transforms,
-    # group_sampler=dict(type="IndexGroupSampler",
-    #                    phase="train",
-    #                    possible_group_sizes=possible_group_sizes,
-    #                    possible_frame_intervals=10),
-    group_sampler=dict(type="ClassBalancedGroupSampler",
+    group_sampler=dict(type="IndexGroupSampler",
                        phase="train",
                        possible_group_sizes=possible_group_sizes,
-                       possible_frame_intervals=10,
-                       transformable_cfg=transformables,
-                       cbgs_cfg=dict(desired_ratio=0.2, counter_type='group')),
+                       possible_frame_intervals=10),
+    # group_sampler=dict(type="ClassBalancedGroupSampler",
+    #                    phase="train",
+    #                    possible_group_sizes=possible_group_sizes,
+    #                    possible_frame_intervals=10,
+    #                    transformable_cfg=transformables,
+    #                    cbgs_cfg=dict(desired_ratio=0.2, counter_type='group')),
     batch_size=batch_size,
     # subepoch_manager=dict(type="SubEpochManager",
     #                       num_group_batches_per_subepoch=128,
@@ -277,9 +283,8 @@ train_dataset = dict(
 val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='../MV4D-PARKING',
-    info_path='../MV4D-PARKING/mv_4d_demo_info.pkl',
-    # info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
+    data_root='/data/datasets/MV4D_12V3L',
+    info_path='/data/datasets/MV4D_12V3L/mv_4d_infos_20231029_195612.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -287,7 +292,7 @@ val_dataset = dict(
         debug_mode=debug_mode
     ),
     transformables=transformables,
-    transforms=[virtual_camera_transform],
+    transforms=transforms,
     group_sampler=dict(type="IndexGroupSampler",
                        phase="val",
                        possible_group_sizes=10,
@@ -315,7 +320,6 @@ val_dataloader = dict(
 
 
 ## model configs
-bev_mode = True
 # backbones
 camera_feat_channels = 80
 backbone = dict(type='VoVNetSlimFPN', out_channels=camera_feat_channels)
@@ -325,7 +329,7 @@ spatial_transform = dict(
     voxel_shape=voxel_shape,
     fusion_mode='bilinear_weighted',
     # fusion_mode='weighted',
-    bev_mode=bev_mode,
+    bev_mode=True,
     reduce_channels=True,
     in_channels=camera_feat_channels * voxel_shape[0],
     out_channels=128)
@@ -334,7 +338,7 @@ temporal_transform = dict(
     type='VoxelTemporalAlign',
     voxel_shape=voxel_shape,
     voxel_range=voxel_range,
-    bev_mode=bev_mode,
+    bev_mode=True,
     interpolation='bilinear')
 ## voxel encoder
 voxel_encoder = dict(
@@ -349,7 +353,7 @@ voxel_fusion = dict(
     type='VoxelConcatFusion',
     in_channels=128,
     pre_nframes=pre_nframes,
-    bev_mode=bev_mode,
+    bev_mode=True,
     dilation=3)
 
 # heads
@@ -541,58 +545,53 @@ parkingslot_3d_weight_scheme = dict(
             })
 )
 
-occ_sdf_bev_weight_scheme = dict(
-    seg=dict(loss_weight=1.0,
-             iou_loss_weight=5,
-             dual_focal_loss_weight=10),
-    reg=dict(loss_weight=10,
-             partition_weights={
-                "sdf": {"weight": 1, "slice": (0, 1)},
-                "height": {"weight": 1, "slice": (1, 2)},
-            })
-)
 
 loss_cfg = dict(
     bbox_3d_heading=dict(
         type='PlanarLoss',
+        # seg_iou_method='linear',
         loss_name_prefix='bbox_3d_heading',
         weight_scheme=bbox_3d_heading_weight_scheme),
     bbox_3d_plane_heading=dict(
         type='PlanarLoss',
+        # seg_iou_method='linear',
         loss_name_prefix='bbox_3d_plane_heading',
         weight_scheme=bbox_3d_plane_heading_weight_scheme),
     bbox_3d_no_heading=dict(
         type='PlanarLoss',
+        # seg_iou_method='linear',
         loss_name_prefix='bbox_3d_no_heading',
         weight_scheme=bbox_3d_no_heading_weight_scheme),
     bbox_3d_square=dict(
         type='PlanarLoss',
+        # seg_iou_method='linear',
         loss_name_prefix='bbox_3d_square',
         weight_scheme=bbox_3d_square_weight_scheme),
     bbox_3d_cylinder=dict(
         type='PlanarLoss',
+        # seg_iou_method='linear',
         loss_name_prefix='bbox_3d_cylinder',
         weight_scheme=bbox_3d_cylinder_weight_scheme),
     bbox_3d_oriented_cylinder=dict(
         type='PlanarLoss',
+        # seg_iou_method='linear',
         loss_name_prefix='bbox_3d_oriented_cylinder',
         weight_scheme=bbox_3d_oriented_cylinder_weight_scheme),    
     polyline_3d=dict(
         type='PlanarLoss',
+        # seg_iou_method='linear',
         loss_name_prefix='polyline_3d',
         weight_scheme=polyline_3d_weight_scheme),
     polygon_3d=dict(
         type='PlanarLoss',
+        # seg_iou_method='linear',
         loss_name_prefix='polygon_3d',
         weight_scheme=polygon_3d_weight_scheme),
     parkingslot_3d=dict(
         type='PlanarLoss',
+        # seg_iou_method='linear',
         loss_name_prefix='parkingslot_3d',
         weight_scheme=parkingslot_3d_weight_scheme),
-    occ_sdf_bev=dict(
-        type='PlanarLoss',
-        loss_name_prefix='occ_sdf_bev',
-        weight_scheme=occ_sdf_bev_weight_scheme),
 )
 
 # integrated model config
@@ -615,6 +614,7 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
+# train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
 train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=100, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
 
@@ -632,6 +632,7 @@ optim_wrapper = dict(
 
 ## scheduler configs
 param_scheduler = dict(type='MultiStepLR', milestones=[50, 75, 90])
+# param_scheduler = dict(type='MultiStepLR', milestones=[20, 40, 46])
 
 
 env_cfg = dict(
@@ -640,19 +641,13 @@ env_cfg = dict(
 )
 
 
-# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1127"
-# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1128_val"
-# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1129_val"
-# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1129"
-# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1130"
-# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1201"
-# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1204"
-# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1212"
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1220"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1226"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1227"
+work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1228"
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
-# load_from = "./work_dirs/collected_models/apa_epoch_10.pth"
-# load_from = "./work_dirs/collected_models/apa_epoch_20_enhanced.pth"
-# load_from = "./work_dirs/collected_models/apa_epoch_20_better.pth"
-load_from = "./work_dirs/collected_models/apa_epoch_14_tf.pth"
+# load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1226/epoch_50.pth"
+# load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1227/epoch_50.pth"
+load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1228/epoch_100.pth"
+# load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1220/epoch_100.pth"
 
 resume = False
