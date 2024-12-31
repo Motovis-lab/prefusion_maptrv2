@@ -164,22 +164,22 @@ virtual_camera_settings = dict(
 
 virtual_camera_transform = dict(type='RenderVirtualCamera', camera_settings=virtual_camera_settings)
 
-debug_mode = False
+debug_mode = True
 
 if debug_mode:
     batch_size = 1
     num_workers = 0
-    # transforms = [virtual_camera_transform]
+    transforms = [virtual_camera_transform]
     # transforms = [virtual_camera_transform, dict(type='RandomMirrorSpace', prob=1.0),]
-    transforms = [
-        # dict(type='RandomRenderExtrinsic'),
-        virtual_camera_transform,
-        dict(type='RandomRotateSpace', prob=1.0, angles=(0, 0, 360), prob_inverse_cameras_rotation=0),
-        # dict(type='RandomMirrorSpace', prob=1.0),
-        # dict(type='RandomImageISP', prob=0.1),
-        # dict(type='RandomSetIntrinsicParam', prob=0.1, jitter_ratio=0.01),
-        # dict(type='RandomSetExtrinsicParam', prob=0.1, angle=1, translation=0.02)
-    ]
+    # transforms = [
+    #     # dict(type='RandomRenderExtrinsic'),
+    #     virtual_camera_transform,
+    #     dict(type='RandomRotateSpace', prob=1.0, angles=(0, 0, 360), prob_inverse_cameras_rotation=0),
+    #     # dict(type='RandomMirrorSpace', prob=1.0),
+    #     # dict(type='RandomImageISP', prob=0.1),
+    #     # dict(type='RandomSetIntrinsicParam', prob=0.1, jitter_ratio=0.01),
+    #     # dict(type='RandomSetExtrinsicParam', prob=0.1, angle=1, translation=0.02)
+    # ]
     possible_group_sizes = 2
 else:
     batch_size = 8
@@ -602,7 +602,7 @@ loss_cfg = dict(
         loss_name_prefix='parkingslot_3d',
         weight_scheme=parkingslot_3d_weight_scheme),
 )
-
+2.436862
 # integrated model config
 model = dict(
     type='ParkingFastRayPlanarMultiFrameModelAPA',
@@ -656,12 +656,13 @@ env_cfg = dict(
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1229"
 work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1230"
 # load_from = "./work_dirs/collected_models/apa_bev_occ_epoch_14.pth"
-load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
+# load_from = "./work_dirs/collected_models/apa_bev_occ_epoch_33.pth"
+# load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1226/epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1227/epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1228/epoch_100.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1220/epoch_100.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1229/epoch_100.pth"
-# load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1230/epoch_60.pth"
+load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1230/epoch_100.pth"
 
 # resume = True
