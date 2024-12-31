@@ -169,8 +169,17 @@ debug_mode = True
 if debug_mode:
     batch_size = 1
     num_workers = 0
-    # transforms = [virtual_camera_transform]
-    transforms = [virtual_camera_transform, dict(type='RandomMirrorSpace', prob=1.0),]
+    transforms = [virtual_camera_transform]
+    # transforms = [virtual_camera_transform, dict(type='RandomMirrorSpace', prob=1.0),]
+    # transforms = [
+    #     # dict(type='RandomRenderExtrinsic'),
+    #     virtual_camera_transform,
+    #     dict(type='RandomRotateSpace', prob=1.0, angles=(0, 0, 360), prob_inverse_cameras_rotation=0),
+    #     # dict(type='RandomMirrorSpace', prob=1.0),
+    #     # dict(type='RandomImageISP', prob=0.1),
+    #     # dict(type='RandomSetIntrinsicParam', prob=0.1, jitter_ratio=0.01),
+    #     # dict(type='RandomSetExtrinsicParam', prob=0.1, angle=1, translation=0.02)
+    # ]
     possible_group_sizes = 2
 else:
     batch_size = 8
@@ -178,9 +187,9 @@ else:
     transforms = [
         # dict(type='RandomRenderExtrinsic'),
         virtual_camera_transform,
-        dict(type='RandomRotateSpace', angles=(0, 0, 90), prob_inverse_cameras_rotation=0),
+        dict(type='RandomRotateSpace', angles=(0, 0, 360), prob_inverse_cameras_rotation=0),
         dict(type='RandomMirrorSpace'),
-        dict(type='RandomImageISP', prob=0.1),
+        dict(type='RandomImageISP', prob=0.2),
         dict(type='RandomSetIntrinsicParam', prob=0.1, jitter_ratio=0.01),
         dict(type='RandomSetExtrinsicParam', prob=0.1, angle=1, translation=0.02)
     ]
@@ -261,16 +270,16 @@ train_dataset = dict(
         debug_mode=debug_mode),
     transformables=transformables,
     transforms=transforms,
-    group_sampler=dict(type="IndexGroupSampler",
-                       phase="train",
-                       possible_group_sizes=possible_group_sizes,
-                       possible_frame_intervals=10),
-    # group_sampler=dict(type="ClassBalancedGroupSampler",
+    # group_sampler=dict(type="IndexGroupSampler",
     #                    phase="train",
     #                    possible_group_sizes=possible_group_sizes,
-    #                    possible_frame_intervals=10,
-    #                    transformable_cfg=transformables,
-    #                    cbgs_cfg=dict(desired_ratio=0.2, counter_type='group')),
+    #                    possible_frame_intervals=10),
+    group_sampler=dict(type="ClassBalancedGroupSampler",
+                       phase="train",
+                       possible_group_sizes=possible_group_sizes,
+                       possible_frame_intervals=10,
+                       transformable_cfg=transformables,
+                       cbgs_cfg=dict(desired_ratio=0.2, counter_type='group')),
     batch_size=batch_size,
     # subepoch_manager=dict(type="SubEpochManager",
     #                       num_group_batches_per_subepoch=128,
@@ -593,7 +602,7 @@ loss_cfg = dict(
         loss_name_prefix='parkingslot_3d',
         weight_scheme=parkingslot_3d_weight_scheme),
 )
-
+2.436862
 # integrated model config
 model = dict(
     type='ParkingFastRayPlanarMultiFrameModelAPA',
@@ -631,8 +640,8 @@ optim_wrapper = dict(
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[50, 75, 90])
 # param_scheduler = dict(type='MultiStepLR', milestones=[20, 40, 46])
+param_scheduler = dict(type='MultiStepLR', milestones=[50, 75, 90])
 
 
 env_cfg = dict(
@@ -643,11 +652,17 @@ env_cfg = dict(
 
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1226"
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1227"
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1228"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1228"
+# work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1229"
+work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1230"
+# load_from = "./work_dirs/collected_models/apa_bev_occ_epoch_14.pth"
+# load_from = "./work_dirs/collected_models/apa_bev_occ_epoch_33.pth"
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1226/epoch_50.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1227/epoch_50.pth"
-load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1228/epoch_100.pth"
+# load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1228/epoch_100.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1220/epoch_100.pth"
+# load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1229/epoch_100.pth"
+load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1230/epoch_100.pth"
 
-resume = False
+# resume = True
