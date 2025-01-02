@@ -271,6 +271,8 @@ if __name__ == "__main__":
         timestamp_window = defaultdict(list)
         for timestamp in track(timestamps, "Process timestamp ... "):
             times_id = str(int(timestamp))
+            if times_id[-2:] == "74":
+                continue
             frame_info[times_id] = {}
             # convert real_cam to v_cam
             camera_image = {}
@@ -362,13 +364,15 @@ if __name__ == "__main__":
                     }
                     polyline_3d.append(polyline)
             sdf_about = {
-                'occ_2d': f"{scene_name}/occ/occ_2d/occ_map_sdf_-15_-15_15_15/{times_id}.png",
-                'ground': f"{scene_name}/ground/ground_height_map_-15_-15_15_15/{times_id}.tif",
-                'sdf': f"{scene_name}/sdf/sdf_2d_-15_-15_15_15/{times_id}.tif",
+                'occ_map': f"{scene_name}/occ/occ_2d/occ_map_-15_-15_15_15/{times_id}.png",
+                'ground_height_map': f"{scene_name}/ground/ground_height_map_-15_-15_15_15/{times_id}.tif",
+                # 'sdf_2d': f"{scene_name}/sdf/sdf_2d_-15_-15_15_15/{times_id}.tif",  # 暂时不用，可以不要
                 'bev_height_map': f"{scene_name}/occ/occ_2d/bev_height_map_-15_-15_15_15/{times_id}.png",
                 'bev_lidar_mask': f"{scene_name}/occ/occ_2d/bev_lidar_mask_-15_-15_15_15/{times_id}.png",
                 'occ_edge_height_map': f"{scene_name}/occ/occ_2d/occ_edge_height_map_-15_-15_15_15/{times_id}.png",
                 'occ_edge_lidar_mask': f"{scene_name}/occ/occ_2d/occ_edge_lidar_mask_-15_-15_15_15/{times_id}.png",
+                'occ_map_sdf': f"{scene_name}/occ/occ_2d/occ_map_sdf_-15_-15_15_15/{times_id}.png",
+                'occ_map_overlapped_lidar': f"{scene_name}/occ/occ_2d/occ_map_overlapped_lidar_-15_-15_15_15/{times_id}.png",
                 'occ_sdf_3d': None
             }
             R_t = np.eye(4)

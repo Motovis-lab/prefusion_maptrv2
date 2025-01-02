@@ -21,8 +21,8 @@ def mv4d_merge_data(scene_root):
     for scene_name in scene_names:
         data = mmengine.load(P(scene_root) / P(scene_name))
         name = scene_name[12:-4]
-        if name not in ["20231101_150226", "20231031_144111", "20230824_153239", "20230828_134528", "20231104_115532", "20231028_145730", # 没有OK的 
-                        "20230820_131402", "20230822_104856", "20231027_185823", "20231107_212029"]:                         # 缺失很多occ的 
+        if name not in ["20231101_150226", "20231031_144111", "20230824_153239", "20230828_134528", "20231104_115532", "20231028_145730",]:  # 没有OK的 
+                        # "20231027_185823", "20231107_212029"]:                         # 缺失很多occ的 
             # Attention: look the gene_info_4d.py set camera_type
             for key in data[name]['scene_info']['calibration']:
                 if "PERSPECTIVE" in key:

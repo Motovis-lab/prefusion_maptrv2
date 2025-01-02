@@ -1,10 +1,5 @@
 #!/bin/bash
-# 20231101_150226
-# 20231031_144111
-# 20230824_153239
-# 20230828_134528
-# 20231104_115532
-# 20231028_145730
+# 20230830_141232
 
 scene_names="
         20230820_131402
@@ -63,14 +58,17 @@ process_folder() {
     # do
     #     s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/MV4D_12V3L/$scene_name_/camera/$fish_camera_id/* ./data/MV4D_12V3L/$scene_name_/camera/$fish_camera_id
     # done
-    # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/MV4D_12V3L/$scene_name_/sdf/sdf_2d_-15_-15_15_15/* ./data/MV4D_12V3L/$scene_name_/sdf/sdf_2d_-15_-15_15_15
-    # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/MV4D_12V3L/$scene_name_/occ/occ_2d/occ_map_sdf_-15_-15_15_15/* ./data/MV4D_12V3L/$scene_name_/occ/occ_2d/occ_map_sdf_-15_-15_15_15
-    # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/MV4D_12V3L/$scene_name_/ground/ground_height_map_-15_-15_15_15/* ./data/MV4D_12V3L/$scene_name_/ground/ground_height_map_-15_-15_15_15
     # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/MV4D_12V3L/$scene_name_/lidar/undistort_static_merged_lidar1/* ./data/MV4D_12V3L/$scene_name_/lidar/undistort_static_merged_lidar1
     # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/MV4D_12V3L/$scene_name_/4d_anno_infos/* ./data/MV4D_12V3L/$scene_name_/4d_anno_infos
     # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/MV4D_12V3L/$scene_name_/trajectory.txt ./data/MV4D_12V3L/$scene_name_/
     # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/MV4D_12V3L/$scene_name_/calibration_center.yml ./data/MV4D_12V3L/$scene_name_/
     # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/MV4D_12V3L/$scene_name_/calibration_back.yml ./data/MV4D_12V3L/$scene_name_/
+    # rm -rf ./data/MV4D_12V3L/$scene_name_/occ
+    # rm -rf ./data/MV4D_12V3L/$scene_name_/ground
+    # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/multimodel_data_baidu/$scene_name_/ground_height_map/ground_height_map_-15_-15_15_15/* ./data/MV4D_12V3L/$scene_name_/ground/ground_height_map_-15_-15_15_15
+    # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/multimodel_data_baidu/$scene_name_/occ_map/occ_map_-15_-15_15_15/* ./data/MV4D_12V3L/$scene_name_/occ/occ_2d/occ_map_-15_-15_15_15
+    # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/multimodel_data_baidu/$scene_name_/occ_map/occ_map_overlapped_lidar_-15_-15_15_15/* ./data/MV4D_12V3L/$scene_name_/occ/occ_2d/occ_map_overlapped_lidar_-15_-15_15_15
+    # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/multimodel_data_baidu/$scene_name_/occ_map/occ_map_sdf_-15_-15_15_15/* ./data/MV4D_12V3L/$scene_name_/occ/occ_2d/occ_map_sdf_-15_-15_15_15
     # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/multimodel_data_baidu/$scene_name_/occ_map/bev_height_map_-15_-15_15_15/* ./data/MV4D_12V3L/$scene_name_/occ/occ_2d/bev_height_map_-15_-15_15_15
     # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/multimodel_data_baidu/$scene_name_/occ_map/bev_lidar_mask_-15_-15_15_15/* ./data/MV4D_12V3L/$scene_name_/occ/occ_2d/bev_lidar_mask_-15_-15_15_15
     # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/multimodel_data_baidu/$scene_name_/occ_map/occ_edge_height_map_-15_-15_15_15/* ./data/MV4D_12V3L/$scene_name_/occ/occ_2d/occ_edge_height_map_-15_-15_15_15
@@ -96,3 +94,5 @@ do
         ((job_count--))
     fi
 done
+
+rsync -avzLP --include="*.pkl" --exclude='*' "$SOURCE_DIR/" wuhan@192.168.3.148:/share/home/wuhan/MV4D_12V3L/
