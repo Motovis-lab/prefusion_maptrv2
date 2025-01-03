@@ -395,6 +395,7 @@ class CmtDetector(MVXTwoStageDetector):
         losses = dict()
         if pts_feats or img_feats:
             for meta, bbox, img in zip(img_metas, bbox_3d, imgs):
+                bbox[:, 2] -= bbox[:, 5]/2
                 meta['gt_bboxes_3d'] = BaseInstance3DBoxes(bbox[:, :9], box_dim=9)
                 meta['gt_labels_3d'] = meta['bbox_3d']['classes']
                 meta['pad_shape'] = [[img.shape[-2], img.shape[-1], 3]]

@@ -95,8 +95,8 @@ if debug_mode:
     ]
 else:
     batch_size = 8
-    num_workers = 4
-    persistent_workers = False
+    num_workers = 2
+    persistent_workers = True
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
@@ -177,10 +177,16 @@ train_dataset = dict(
         debug_mode=debug_mode),
     transformables=transformables,
     transforms=transforms,
-    group_sampler=dict(type="IndexGroupSampler",
+    # group_sampler=dict(type="IndexGroupSampler",
+    #                    phase="train",
+    #                    possible_group_sizes=1,
+    #                    possible_frame_intervals=1),
+    group_sampler=dict(type="ClassBalancedGroupSampler",
                        phase="train",
                        possible_group_sizes=1,
-                       possible_frame_intervals=1),
+                       possible_frame_intervals=1,
+                       transformable_cfg=transformables,
+                       cbgs_cfg=dict(desired_ratio=0.3)),
     batch_size=batch_size,
 )
 
@@ -233,7 +239,7 @@ backbones = dict(
         type='VoVNetFPN',
         out_stride=feature_downscale,
         out_channels=camera_feat_channels,
-        # init_cfg=dict(type="Pretrained", checkpoint="./ckpts/vovnet_seg_pretrain_backbone_epoch_24.pth")
+        init_cfg=dict(type="Pretrained", checkpoint="./ckpts/vovnet_seg_pretrain_backbone_epoch_24.pth")
     )
 )
 # spatial_transform
@@ -270,44 +276,85 @@ heads = dict(
                     # seg: slice(16, 18)
                     1 + len(transformables["bbox_3d_rect_cuboid"]["loader"]["class_mapping"]),
                  ]),
-                 reg_channels=20), # + 8 + 13 + 14),
+                 reg_channels=20 + 8 + 13 + 14),
 )
 # loss configs
 bbox_3d_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
-             fg_weight=1.0,
+    cen=dict(loss_weight=1.0,
+             fg_weight=0.5,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
              iou_loss_weight=1,
-             dual_focal_loss_weight=2),
-    reg=dict(loss_weight=1.0))
+             dual_focal_loss_weight=10, # 10
+             channel_weights=dict(any={"weight": 0.5}, # 0.5
+                                  bicycle={"weight": 5}, # 5
+                                  car={"weight": 1},
+                                  construction_vehicle={"weight": 2}, # 2
+                                  motorcycle={"weight": 5}, # 5
+                                  trailer={"weight": 1},
+                                  truck={"weight": 1},
+                                  bus={"weight": 1})),
+    reg=dict(loss_weight=1.0,
+             partition_weights=dict(center_xy={"weight": 0.3, "slice": (0, 2)},
+                                    center_z={"weight": 0.6, "slice": 2},
+                                    size={"weight": 0.5, "slice": (3, 6)},
+                                    unit_xvec={"weight": 0.5, "slice": (6, 9)},
+                                    abs_xvec={"weight": 1.0, "slice": (9, 12)},
+                                    xvec_product={"weight": 1.0, "slice": (12, 14)},
+                                    abs_roll_angle={"weight": 1.0, "slice": (14, 16)},
+                                    roll_angle_product={"weight": 1.0, "slice": 16},
+                                    velo={"weight": 0.5, "slice": (17, 20)})))
 
 bbox_3d_cylinder_weight_scheme = dict(
     cen=dict(loss_weight=0.5,
-             fg_weight=1.0,
+             fg_weight=0.3,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
              iou_loss_weight=1,
-             dual_focal_loss_weight=2),
-    reg=dict(loss_weight=1.0))
+             dual_focal_loss_weight=10, # 10
+             channel_weights=dict(any={"weight": 1.0},
+                                  traffic_cone={"weight": 1.0})),
+    reg=dict(loss_weight=1.0,
+             partition_weights=dict(center_xy={"weight": 0.6, "slice": (0, 2)},
+                                    center_z={"weight": 0.3, "slice": 2},
+                                    size={"weight": 0.6, "slice": (3, 5)},
+                                    unit_xvec={"weight": 1.0, "slice": (5, 8)})))
 
 bbox_3d_oriented_cylinder_weight_scheme = dict(
     cen=dict(loss_weight=0.5,
-             fg_weight=1.0,
+             fg_weight=0.3,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
              iou_loss_weight=1,
-             dual_focal_loss_weight=2),
-    reg=dict(loss_weight=1.0))
+             dual_focal_loss_weight=10, # 10
+             channel_weights=dict(any={"weight": 1.0},
+                                  pedestrian={"weight": 1.0})),
+    reg=dict(loss_weight=1.0,
+             partition_weights=dict(center_xy={"weight": 1.0, "slice": (0, 2)},
+                                    center_z={"weight": 0.3, "slice": 2},
+                                    size={"weight": 1.0, "slice": (3, 5)},
+                                    unit_xvec={"weight": 1.0, "slice": (5, 8)},
+                                    zvec_yaw={"weight": 0.5, "slice": (8, 10)},
+                                    velo={"weight": 0.5, "slice": (10, 13)})))
 
 bbox_3d_rect_cuboid_weight_scheme = dict(
     cen=dict(loss_weight=0.5,
-             fg_weight=1.0,
+             fg_weight=0.3,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
              iou_loss_weight=1,
-             dual_focal_loss_weight=2),
-    reg=dict(loss_weight=1.0))
+             dual_focal_loss_weight=10, # 10
+             channel_weights=dict(any={"weight": 1.0},
+                                  barrier={"weight": 1.0})),
+    reg=dict(loss_weight=1.0,
+             partition_weights=dict(center_xy={"weight": 0.3, "slice": (0, 2)},
+                                    center_z={"weight": 0.3, "slice": 2},
+                                    size={"weight": 0.5, "slice": (3, 6)},
+                                    abs_xvec={"weight": 0.3, "slice": (6, 9)},
+                                    xvec_product={"weight": 1.0, "slice": (9, 11)},
+                                    abs_roll_angle={"weight": 1.0, "slice": (11, 13)},
+                                    roll_angle_product={"weight": 1.0, "slice": 13})))
+
 
 loss_cfg = dict(
     bbox_3d=dict(
@@ -350,7 +397,7 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=30, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
 
 ## evaluator and metrics
@@ -368,16 +415,18 @@ val_evaluator = [
 ## optimizer configs
 optim_wrapper = dict(
     type='OptimWrapper',
-    optimizer=dict(type='SGD',
-                lr=0.01,
-                momentum=0.9,
+    optimizer=dict(type='AdamW',
+                lr=0.0007,
+                # momentum=0.9,
                 weight_decay=0.0001),
-    # dtype='bfloat16'
+    clip_grad=dict(max_norm=5),
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[30, 48])
-
+param_scheduler = [
+    dict(type='LinearLR', start_factor=0.1, end_factor=1, by_epoch=False, begin=0, end=1000), # warmup
+    dict(type='PolyLR', by_epoch=False, begin=1000, eta_min=0, power=1.0)     # main LR Scheduler
+]
 
 env_cfg = dict(
     cudnn_benchmark=False,
@@ -392,7 +441,7 @@ today = datetime.datetime.now().strftime("%m%d")
 
 # load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
 # load_from = "./ckpts/single_frame_nusc_1118_epoch_200.pth"
-load_from = "./ckpts/single_frame_nusc_1121_epoch_1.pth"
+# load_from = "./ckpts/single_frame_nusc_1121_epoch_1.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
 # work_dir = './work_dirs/fastray_planar_single_frame_1105_infer'
