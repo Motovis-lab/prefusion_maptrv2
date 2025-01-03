@@ -121,7 +121,7 @@ def convert_virtual_camera(src_camear_root, save_img_root, save_mask_root, real_
         intrinsic = (cx, cy, fx, fy, 0.1, 0, 0, 0)
         vcamera = FisheyeCamera((W,H), (R, t), intrinsic, fov=180)
     dst_image, dst_mask = render_image(src_image, real_cam_model, vcamera)
-    # mmcv.imwrite(dst_image, save_img_root)
+    mmcv.imwrite(dst_image, save_img_root)
     # mmcv.imwrite(dst_mask, save_mask_root)
 
     return v_cam_rmatrix, v_cam_t, intrinsic, src_image, real_cam_model, vcamera
@@ -283,7 +283,7 @@ if __name__ == "__main__":
             dst_lidar_path = f"{scene_root}/lidar/undistort_static_merged_lidar1_model/{times_id}.pcd"
             P(f"{scene_root}/lidar/undistort_static_merged_lidar1_model/").mkdir(parents=True, exist_ok=True)
             # process lidar
-            # single_lidar_process(src_lidar_path, dst_lidar_path)
+            single_lidar_process(src_lidar_path, dst_lidar_path)
             scene_info["scene_info"]['calibration'].update({'lidar1':(lidar1_cali_r, lidar1_cali_t)})
             lidar_point['lidar1'] = f"{scene_name}/lidar/undistort_static_merged_lidar1_model/{times_id}.pcd"
             if "lidar1" in timestamp_window:
@@ -366,7 +366,7 @@ if __name__ == "__main__":
             sdf_about = {
                 'occ_map': f"{scene_name}/occ/occ_2d/occ_map_-15_-15_15_15/{times_id}.png",
                 'ground_height_map': f"{scene_name}/ground/ground_height_map_-15_-15_15_15/{times_id}.tif",
-                # 'sdf_2d': f"{scene_name}/sdf/sdf_2d_-15_-15_15_15/{times_id}.tif",  # 暂时不用，可以不要
+                'sdf_2d': f"{scene_name}/sdf/sdf_2d_-15_-15_15_15/{times_id}.tif",  # 暂时不用，可以不要
                 'bev_height_map': f"{scene_name}/occ/occ_2d/bev_height_map_-15_-15_15_15/{times_id}.png",
                 'bev_lidar_mask': f"{scene_name}/occ/occ_2d/bev_lidar_mask_-15_-15_15_15/{times_id}.png",
                 'occ_edge_height_map': f"{scene_name}/occ/occ_2d/occ_edge_height_map_-15_-15_15_15/{times_id}.png",

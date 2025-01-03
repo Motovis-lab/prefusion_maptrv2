@@ -7,7 +7,7 @@ data_root = P("./data/MV4D_12V3L/")
 
 camera_check_elements = ['VCAMERA_FISHEYE_FRONT', 'VCAMERA_FISHEYE_LEFT', 'VCAMERA_FISHEYE_BACK', 'VCAMERA_FISHEYE_RIGHT']
 lidar_check_elements = ['lidar1']
-sdf_check_elements = ['occ_map', 'ground_height_map', 'sdf_2d', 'bev_height_map', 'bev_lidar_mask', 'occ_edge_height_map', 'occ_edge_lidar_mask', 'occ_map_sdf', 'occ_map_overlapped_lidar']
+sdf_check_elements = ['occ_map', 'ground_height_map', 'bev_height_map', 'bev_lidar_mask', 'occ_edge_height_map', 'occ_edge_lidar_mask', 'occ_map_sdf', 'occ_map_overlapped_lidar']
 
 data = mmengine.load(data_root / "mv_4d_infos_train.pkl")
 for scene_name in track(data, "process check info"):
