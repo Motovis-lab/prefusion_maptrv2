@@ -7,3 +7,4 @@ from .models_base import *
 from .models_parking import *
 from .models_nuscenes import *
 from .model_utils import *
+from .hooks import *
