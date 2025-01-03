@@ -305,11 +305,11 @@ heads = dict(
 )
 # loss configs
 bbox_3d_weight_scheme = dict(
-    cen=dict(loss_weight=1.0,
+    cen=dict(loss_weight=2.5,
              fg_weight=0.5,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
+             iou_loss_weight=5.0,
              dual_focal_loss_weight=10, # 10
              channel_weights=dict(any={"weight": 0.5}, # 0.5
                                   bicycle={"weight": 5}, # 5
@@ -319,7 +319,7 @@ bbox_3d_weight_scheme = dict(
                                   trailer={"weight": 1},
                                   truck={"weight": 1},
                                   bus={"weight": 1})),
-    reg=dict(loss_weight=1.0,
+    reg=dict(loss_weight=10.0,
              partition_weights=dict(center_xy={"weight": 0.3, "slice": (0, 2)},
                                     center_z={"weight": 0.6, "slice": 2},
                                     size={"weight": 0.5, "slice": (3, 6)},
@@ -331,30 +331,30 @@ bbox_3d_weight_scheme = dict(
                                     velo={"weight": 0.5, "slice": (17, 20)})))
 
 bbox_3d_cylinder_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=2.5,
              fg_weight=0.3,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
+             iou_loss_weight=5.0,
              dual_focal_loss_weight=10, # 10
              channel_weights=dict(any={"weight": 1.0},
                                   traffic_cone={"weight": 1.0})),
-    reg=dict(loss_weight=1.0,
+    reg=dict(loss_weight=10.0,
              partition_weights=dict(center_xy={"weight": 0.6, "slice": (0, 2)},
                                     center_z={"weight": 0.3, "slice": 2},
                                     size={"weight": 0.6, "slice": (3, 5)},
                                     unit_xvec={"weight": 1.0, "slice": (5, 8)})))
 
 bbox_3d_oriented_cylinder_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=2.5,
              fg_weight=0.3,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
+             iou_loss_weight=5.0,
              dual_focal_loss_weight=10, # 10
              channel_weights=dict(any={"weight": 1.0},
                                   pedestrian={"weight": 1.0})),
-    reg=dict(loss_weight=1.0,
+    reg=dict(loss_weight=10.0,
              partition_weights=dict(center_xy={"weight": 1.0, "slice": (0, 2)},
                                     center_z={"weight": 0.3, "slice": 2},
                                     size={"weight": 1.0, "slice": (3, 5)},
@@ -363,15 +363,15 @@ bbox_3d_oriented_cylinder_weight_scheme = dict(
                                     velo={"weight": 0.5, "slice": (10, 13)})))
 
 bbox_3d_rect_cuboid_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=2.5,
              fg_weight=0.3,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
+             iou_loss_weight=5.0,
              dual_focal_loss_weight=10, # 10
              channel_weights=dict(any={"weight": 1.0},
                                   barrier={"weight": 1.0})),
-    reg=dict(loss_weight=1.0,
+    reg=dict(loss_weight=10.0,
              partition_weights=dict(center_xy={"weight": 0.3, "slice": (0, 2)},
                                     center_z={"weight": 0.3, "slice": 2},
                                     size={"weight": 0.5, "slice": (3, 6)},
