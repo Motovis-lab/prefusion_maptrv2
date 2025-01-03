@@ -39,7 +39,7 @@ class Bbox3D_XYZ_LWH_Yaw_VxVy(TensorSmith):
                 np.array(
                     [
                         bx["translation"].flatten().tolist()
-                        + bx["size"]
+                        + np.array(bx["size"]).tolist()
                         + Rotation.from_matrix(bx["rotation"]).as_euler("XYZ", degrees=False)[2:].tolist()
                         + bx["velocity"].flatten()[:2].tolist()
                         for bx in transformable.elements
