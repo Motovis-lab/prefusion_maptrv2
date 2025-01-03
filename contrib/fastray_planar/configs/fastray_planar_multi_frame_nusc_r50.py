@@ -355,10 +355,10 @@ bbox_3d_weight_scheme = dict(
              iou_loss_weight=5.0,
              dual_focal_loss_weight=10, # 10
              channel_weights=dict(any={"weight": 0.5}, # 0.5
-                                  bicycle={"weight": 5}, # 5
+                                  bicycle={"weight": 3}, # 5
                                   car={"weight": 1},
                                   construction_vehicle={"weight": 2}, # 2
-                                  motorcycle={"weight": 5}, # 5
+                                  motorcycle={"weight": 3}, # 5
                                   trailer={"weight": 1},
                                   truck={"weight": 1},
                                   bus={"weight": 1})),
