@@ -1,5 +1,5 @@
 default_scope = "prefusion"
-experiment_name = "fastray_planar_multi_frame_nusc"
+experiment_name = "fastray_planar_single_frame_nusc_r50"
 
 custom_imports = dict(
     imports=["prefusion", "contrib.fastray_planar"],
@@ -32,6 +32,9 @@ voxel_feature_config = dict(
     voxel_range=voxel_range,
     ego_distance_max=75,  # 50 * sqrt(2)
     ego_distance_step=5)
+
+## dictionaries and mappings for different types of tasks
+
 
 ## camera configs for model inputs
 
@@ -79,34 +82,32 @@ camera_intrinsic_configs = dict(
     CAM_FRONT_LEFT=[363.711, 71.091, 559.943, 559.943],
 )
 
-
-
 debug_mode = False
 
 if debug_mode:
     batch_size = 1
     num_workers = 0
+    persistent_workers = False
     transforms = [
         dict(type='RenderIntrinsic',
              resolutions=camera_resolution_configs,
              intrinsics=camera_intrinsic_configs)
     ]
     possible_group_sizes = 20
-    persistent_workers = False
 else:
     batch_size = 8
-    num_workers = 3
-    transforms = [
-        dict(type='RandomRenderExtrinsic'),
-        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
-        dict(type='RandomRotateSpace'),
-        dict(type='RandomMirrorSpace'),
-        dict(type='RandomImageISP', prob=0.2),
-        dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
-        dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
-    ]
-    possible_group_sizes = 2
+    num_workers = 2
     persistent_workers = True
+    transforms = [
+        # dict(type='RandomRenderExtrinsic'),
+        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
+        dict(type='RandomRotateSpace', angles=[0, 0, 360], prob_inverse_cameras_rotation=0),
+        dict(type='RandomMirrorSpace'),
+        # dict(type='RandomImageISP', prob=0.2),
+        # dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
+        # dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
+    ]
+    possible_group_sizes = 1
 
 ## Transformables
 transformables = dict(
@@ -178,21 +179,18 @@ train_dataset = dict(
         debug_mode=debug_mode),
     transformables=transformables,
     transforms=transforms,
-    # subepoch_manager=dict(type="SubEpochManager",
-    #                       num_group_batches_per_subepoch=4,
-    #                       drop_last_group_batch=False,
-    #                       drop_last_subepoch=False,
-    #                       verbose=True,
-    #                       debug_mode=True),
+    # group_sampler=dict(type="IndexGroupSampler",
+    #                    phase="train",
+    #                    possible_group_sizes=1,
+    #                    possible_frame_intervals=1),
     group_sampler=dict(type="ClassBalancedGroupSampler",
                        phase="train",
-                       possible_group_sizes=possible_group_sizes,
+                       possible_group_sizes=1,
                        possible_frame_intervals=1,
                        transformable_cfg=transformables,
                        cbgs_cfg=dict(desired_ratio=0.3)),
     batch_size=batch_size,
 )
-
 
 val_dataset = dict(
     type='GroupBatchDataset',
@@ -203,20 +201,16 @@ val_dataset = dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
         camera_feature_configs=camera_feature_configs,
+        debug_mode=debug_mode,
     ),
     transformables=transformables,
-    transforms=[
-        dict(type='RenderIntrinsic',
-             resolutions=camera_resolution_configs,
-             intrinsics=camera_intrinsic_configs)
-    ],
+    transforms=[dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs)],
     group_sampler=dict(type="IndexGroupSampler",
                        phase="val",
                        possible_group_sizes=possible_group_sizes,
                        possible_frame_intervals=1),
     batch_size=batch_size,
 )
-
 
 ## dataloader configs
 train_dataloader = dict(
@@ -229,11 +223,11 @@ train_dataloader = dict(
 )
 
 val_dataloader = dict(
-    num_workers=0,
+    num_workers=num_workers,
     sampler=dict(type="DefaultSampler"),
     collate_fn=dict(type="collate_dict"),
     dataset=val_dataset,
-    persistent_workers=False,
+    persistent_workers=persistent_workers,
     pin_memory=True,
 )
 
@@ -244,10 +238,19 @@ bev_mode = True
 camera_feat_channels = 128
 backbones = dict(
     pv_sides=dict(
-        type='VoVNetFPN',
+        type='ResNetFPN',
+        depth=50,
+        num_stages=4,
+        out_indices=(0, 1, 2, 3),
+        frozen_stages=1,
+        norm_cfg=dict(type='SyncBN', requires_grad=True),
+        norm_eval=True,
+        style='pytorch',
+        init_cfg=dict(type='Pretrained', checkpoint='./ckpts/resnet50.pth'),
+        fpn_lateral_channel=128,
+        fpn_in_channels=[256, 512, 1024, 2048],
         out_stride=feature_downscale,
         out_channels=camera_feat_channels,
-        init_cfg=dict(type="Pretrained", checkpoint="./ckpts/vovnet_seg_pretrain_backbone_epoch_24.pth")
     )
 )
 # spatial_transform
@@ -255,51 +258,34 @@ spatial_transform = dict(
     type='FastRaySpatialTransform',
     voxel_shape=voxel_shape,
     fusion_mode='bilinear_weighted',
-    # fusion_mode='weighted',
     bev_mode=bev_mode)
-# temporal_transform
-temporal_transform = dict(
-    type='VoxelTemporalAlign',
-    voxel_shape=voxel_shape,
-    voxel_range=voxel_range,
-    bev_mode=bev_mode,
-    interpolation='bilinear')
-# voxel fusion
-pre_nframes = 1
-# voxel_fusion = dict(type='EltwiseAdd')
-voxel_fusion = dict(
-    type='VoxelConcatFusion',
-    in_channels=camera_feat_channels * voxel_shape[0],
-    pre_nframes=pre_nframes,
-    bev_mode=bev_mode)
-
 # heads
 heads = dict(
-    voxel_encoder=dict(type='VoVNetEncoder',
+    voxel_encoder=dict(type='M2BevEncoder',
                        in_channels=camera_feat_channels * voxel_shape[0],
-                       mid_channels=128,
-                       out_channels=128,
-                       repeat=3),
+                       shrink_channels=384,
+                       out_channels=256,
+                       repeat=2),
     bbox_3d=dict(type='PlanarHead',
-                 in_channels=128,
-                 mid_channels=128,
+                 in_channels=256,
+                 mid_channels=256,
                  cen_seg_channels=sum([
                     # cen: 0
                     1,
                     # seg: slice(1, 9)
-                    1 + len(train_dataset["transformables"]["bbox_3d"]["loader"]["class_mapping"]), #
+                    1 + len(transformables["bbox_3d"]["loader"]["class_mapping"]),
                     # cen: 9
                     1,
                     # seg: slice(10, 12)
-                    1 + len(train_dataset["transformables"]["bbox_3d_cylinder"]["loader"]["class_mapping"]),
+                    1 + len(transformables["bbox_3d_cylinder"]["loader"]["class_mapping"]),
                     # cen: 12
                     1,
                     # seg: slice(13, 15)
-                    1 + len(train_dataset["transformables"]["bbox_3d_oriented_cylinder"]["loader"]["class_mapping"]),
+                    1 + len(transformables["bbox_3d_oriented_cylinder"]["loader"]["class_mapping"]),
                     # cen: 15
                     1,
                     # seg: slice(16, 18)
-                    1 + len(train_dataset["transformables"]["bbox_3d_rect_cuboid"]["loader"]["class_mapping"]),
+                    1 + len(transformables["bbox_3d_rect_cuboid"]["loader"]["class_mapping"]),
                  ]),
                  reg_channels=20 + 8 + 13 + 14),
 )
@@ -408,16 +394,13 @@ loss_cfg = dict(
 
 # integrated model config
 model = dict(
-    type='NuscenesFastRayPlanarMultiFrameModel',
+    type='NuscenesFastRayPlanarSingleFrameModel',
     camera_groups=camera_groups,
     backbones=backbones,
     spatial_transform=spatial_transform,
-    temporal_transform=temporal_transform,
-    voxel_fusion=voxel_fusion,
     heads=heads,
     loss_cfg=loss_cfg,
     debug_mode=debug_mode,
-    pre_nframes=pre_nframes,
 )
 
 ## log_processor
@@ -435,7 +418,7 @@ val_evaluator = [
     #     type="PlanarBbox3DAveragePrecision",
     #     transformable_name="bbox_3d" ,
     #     tensor_smith_cfg=val_dataset['transformables']['bbox_3d']['tensor_smith'],
-    #     dictionary={"classes": ['class.vehicle.passenger_car']},
+    #     dictionary={"classes": ['truck' ,'motorcycle' ,'car' ,'construction' ,'bicycle']},
     #     max_conf_as_pred_class=True,
     # )
 ]
@@ -444,7 +427,7 @@ val_evaluator = [
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW',
-                lr=0.0005,
+                lr=0.0003,
                 # momentum=0.9,
                 weight_decay=0.0001),
     clip_grad=dict(max_norm=5),
@@ -455,7 +438,6 @@ param_scheduler = [
     dict(type='LinearLR', start_factor=0.1, end_factor=1, by_epoch=False, begin=0, end=1000), # warmup
     dict(type='PolyLR', by_epoch=False, begin=1000, eta_min=0, power=1.0)     # main LR Scheduler
 ]
-
 
 env_cfg = dict(
     cudnn_benchmark=False,
@@ -468,14 +450,15 @@ visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"),
 import datetime
 today = datetime.datetime.now().strftime("%m%d")
 
-# work_dir = "./work_dirs/fastray_planar_multi_frame_1107"
-# work_dir = "./work_dirs/fastray_planar_multi_frame_1107_infer"
-# work_dir = "./work_dirs/fastray_planar_multi_frame_1112"
-# work_dir = "./work_dirs/fastray_planar_multi_frame_1112"
-work_dir = f'./work_dirs/{experiment_name}_{today}'
-# load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
-# load_from = "./ckpts/fastray_planar_single_frame_nusc_4planar_types_1113_epoch_1.pth"
+# load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
+# load_from = "./ckpts/single_frame_nusc_1118_epoch_200.pth"
 # load_from = "./ckpts/single_frame_nusc_1121_epoch_1.pth"
-# load_from = "./work_dirs/fastray_planar_single_frame_nusc_1120/single_frame_nusc_1120_epoch_500.pth"
+# load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
+# work_dir = './work_dirs/fastray_planar_single_frame_1104'
+# work_dir = './work_dirs/fastray_planar_single_frame_1105_infer'
+# work_dir = './work_dirs/fastray_planar_single_frame_1106_sampled'
+# work_dir = './work_dirs/fastray_planar_single_frame_1106_sampled_infer'
+# work_dir = './work_dirs/fastray_planar_single_frame_1107'
+work_dir = f'./work_dirs/{experiment_name}_{today}'
 
 resume = False
