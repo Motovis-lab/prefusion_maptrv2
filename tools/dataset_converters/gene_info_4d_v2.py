@@ -300,8 +300,8 @@ if __name__ == "__main__":
                 
                 if camera_name in fish_cameras:
                     fish_camera = FisheyeCamera.init_from_motovis_cfg(calib_center['rig'][camera_name])
-                    extrinsic_r = R_nus.T @ Rotation.from_quat(calib_center['rig'][camera_name]['extrinsic'][3:]).as_matrix()
-                    extrinsic_t = R_nus.T @ np.array(calib_center['rig'][camera_name]['extrinsic'][:3]).reshape(3)
+                    extrinsic_r = Rotation.from_quat(calib_center['rig'][camera_name]['extrinsic'][3:]).as_matrix()
+                    extrinsic_t = np.array(calib_center['rig'][camera_name]['extrinsic'][:3]).reshape(3)
                     scene_info["scene_info"]['calibration'][camera_name] = {"extrinsic":(extrinsic_r, extrinsic_t), 
                                                                             "intrinsic": tuple(fish_camera.intrinsic), 'camera_type': 'FisheyeCamera'}
                     camera_image[camera_name] = f"{scene_name}/camera/{camera_name}/{camera_filename}"
@@ -322,8 +322,8 @@ if __name__ == "__main__":
                     cx = (W - 1) / 2
                     cy = (H - 1) / 2
                     fx = fy = W / 2
-                    extrinsic_r = R_nus.T @ Rotation.from_quat(calib_center['rig'][camera_name]['extrinsic'][3:]).as_matrix()
-                    extrinsic_t = R_nus.T @ np.array(calib_center['rig'][camera_name]['extrinsic'][:3]).reshape(3)
+                    extrinsic_r = Rotation.from_quat(calib_center['rig'][camera_name]['extrinsic'][3:]).as_matrix()
+                    extrinsic_t = np.array(calib_center['rig'][camera_name]['extrinsic'][:3]).reshape(3)
                     scene_info["scene_info"]['calibration'][camera_name] = {"extrinsic":(extrinsic_r, extrinsic_t), 
                                                                             "intrinsic": (cx, cy, fx, fy), 'camera_type': 'PerspectiveCamera'}
                     camera_image[camera_name] = f"{scene_name}/camera/{camera_name}/{camera_filename}"

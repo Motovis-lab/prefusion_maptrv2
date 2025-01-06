@@ -30,9 +30,10 @@ for file in file_names:
     data = mmengine.load(file)
     scene_name = file.stem[12:]
     for key in data[scene_name]['scene_info']['calibration']:
-        if key in fish_filenames:
-            t = np.array((R_nus.T @ np.array(calib['rig'][fishcamera_map[key]]['extrinsic'][:3]).reshape(3)).tolist()).reshape(3)
-            R = Rotation.from_euler('xyz', angles=parm_cameras_v[key], degrees=True).as_matrix()
-            data[scene_name]['scene_info']['calibration'][key] = {"extrinsic":(R, t), "intrinsic": v_camera_intrinsic, 'camera_type': 'FisheyeCamera'}
-
+        if "camera" in key:
+            r = R_nus @ data[scene_name]['scene_info']['calibration'][key]['extrinsic'][0]
+            t = R_nus @ data[scene_name]['scene_info']['calibration'][key]['extrinsic'][1]
+            data[scene_name]['scene_info']['calibration'][key]['extrinsic'] = (r, t)
+            
+            
     mmengine.dump(data, file)
