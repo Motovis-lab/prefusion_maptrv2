@@ -1702,7 +1702,7 @@ class PlanarOccSdfBev(PlanarTensorSmith):
     def __init__(self, 
                  voxel_shape: tuple, 
                  voxel_range: Tuple[list, list, list],
-                 sdf_range: tuple = (-0.1, 5)):
+                 sdf_range: tuple = (-0.5, 0.5)):
         """
         Parameters
         ----------
@@ -1775,7 +1775,7 @@ class PlanarOccSdfBev(PlanarTensorSmith):
         hh_ = xx * fx_ + cx_
         ww_ = yy * fy_ + cy_
         
-        # bgr, b: unknown, g: freespace, r: occupied
+        # bgr, b: unknown, g: freespace, r: occupied, blank: lidar blind
         occ = cv2.remap(transformable.occ, ww_, hh_, interpolation=cv2.INTER_NEAREST)
         freespace = occ[..., 1] / 255
         occ_edge = self._get_occ_edge(occ)
@@ -1895,6 +1895,13 @@ class PlanarPolyline3D(PlanarTensorSmith):
             for line_3d in zip(polyline[:-1], polyline[1:]):
                 line_3d = np.float32(line_3d)
                 line_bev = line_3d[:, :2]
+                # get line dir
+                line_dir = line_bev[1] - line_bev[0]
+                line_length = np.linalg.norm(line_dir)
+                if line_length < 1e-3:
+                    continue
+                line_dir /= line_length
+                # expand line to polygon
                 polygon = expand_line_2d(line_bev, radius=linewidth)
                 polygon_int = np.round(polygon).astype(int)
                 # seg_bev_im
@@ -1906,9 +1913,6 @@ class PlanarPolyline3D(PlanarTensorSmith):
                 line_im = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [polygon_int], 1)
                 line_ims.append(line_im)
                 # line direction regressions
-                line_dir = line_bev[1] - line_bev[0]
-                line_length = np.linalg.norm(line_dir)
-                line_dir /= line_length
                 line_dir_vert = line_dir[::-1] * [1, -1]
                 vec_map = vec_point2line_along_direction(points_grid_bev, line_bev, line_dir_vert)
                 dist_im = line_im * np.linalg.norm(vec_map, axis=0) + (1 - line_im) * INF_DIST
@@ -2255,6 +2259,13 @@ class PlanarPolygon3D(PlanarTensorSmith):
             for line_3d in zip(polyline[:-1], polyline[1:]):
                 line_3d = np.float32(line_3d)
                 line_bev = line_3d[:, :2]
+                # get line dir
+                line_dir = line_bev[1] - line_bev[0]
+                line_length = np.linalg.norm(line_dir)
+                if line_length < 1e-3:
+                    continue
+                line_dir /= line_length
+                # expand line to polygon
                 polygon = expand_line_2d(line_bev, radius=0.5)
                 polygon_int = np.round(polygon).astype(int)
                 # edge_seg_bev_im
@@ -2263,9 +2274,6 @@ class PlanarPolygon3D(PlanarTensorSmith):
                 line_im = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [polygon_int], 1)
                 line_ims.append(line_im)
                 # line direction regressions
-                line_dir = line_bev[1] - line_bev[0]
-                line_length = np.linalg.norm(line_dir)
-                line_dir /= line_length
                 line_dir_vert = line_dir[::-1] * [1, -1]
                 vec_map = vec_point2line_along_direction(points_grid_bev, line_bev, line_dir_vert)
                 dist_im = line_im * np.linalg.norm(vec_map, axis=0) + (1 - line_im) * INF_DIST
