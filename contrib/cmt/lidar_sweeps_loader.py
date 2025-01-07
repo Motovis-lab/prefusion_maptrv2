@@ -1,6 +1,5 @@
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict
-
 import numpy as np
 
 from prefusion.registry import TRANSFORMABLE_LOADERS
@@ -21,9 +20,9 @@ class LidarSweepsLoader(TransformableLoader):
         sweep_infos = frame['lidar_points']['lidar1_sweeps']
 
         def Rt2T(R, t):
-            T = np.ones(4)
+            T = np.eye(4)
             T[:3, :3] = R
-            t[:3, 3] = t
+            T[:3, 3] = t
             return T
 
         def to_homo(points: np.array) -> np.array:
@@ -44,18 +43,21 @@ class LidarSweepsLoader(TransformableLoader):
         Twe = Rt2T(frame["ego_pose"]["rotation"], frame['ego_pose']["translation"])
         Tew = np.linalg.inv(Twe)
         ts = float(Path(frame["lidar_points"]["lidar1"]).stem) / 1000
-        output_points = [points]
+        output_points = [
+                         np.concatenate([ points, np.zeros_like(points[:, :1])], axis=1)
+                         
+                         ]
         for sweep in sweep_infos:
             path = sweep['path']  # input points in ego coord
             Twei = sweep['Twe']
-            sweep_ts = sweep['timestamps'] / 1000  # use as s
+            sweep_ts = float(sweep['timestamp']) / 1000  # use as s
             Te0ei = Tew @ Twei
             points = read_pcd(self.data_root / path)
             points = np.concatenate([
                 transform_pts_with_T(points[:, :3], Te0ei),
                 points[:, 3:],
                 np.zeros_like(points[:, :1]) + ts - sweep_ts
-            ])
+            ], axis=1)
             output_points += [points]
         output_points = np.concatenate(output_points, axis=0)
         return LidarPoints(name, output_points[:, :3], output_points[:, 3:], tensor_smith=tensor_smith)

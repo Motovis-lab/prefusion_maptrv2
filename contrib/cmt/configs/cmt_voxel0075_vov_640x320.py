@@ -68,9 +68,11 @@ train_dataloader = dict(
     dataset=dict(
         type="GroupBatchDataset",
         name="MvParkingTest",
+        # data_root="/ssd1/data/4d",
         data_root="/ssd1/data/4d",
         # info_path="/ssd1/data/4d/mv4d_infos_mini_lidar.pkl",
-        info_path="/ssd1/data/4d/mv4d_infos_tmp_mini1.pkl",
+        # info_path="/ssd1/data/4d/mv4d_infos_tmp_mini1.pkl",
+        info_path="/ssd1/data/4d/cmt_prefusion_dbg.pkl",  # 224
         transformables=dict(
             camera_images=dict(
                 type="CameraImageSet",
@@ -107,160 +109,24 @@ train_dataloader = dict(
             #     prob=0.5,
             # ),
         ],
-        phase="val",
-        batch_size=2,
-        possible_group_sizes=[3, 4, 5],
-        possible_frame_intervals=[1, 2],
+        # phase="val",
+        
+        group_sampler=dict(type="IndexGroupSampler",
+                           phase="train",  # i forget it
+                           possible_group_sizes=[1],
+                           possible_frame_intervals=[1]),
+        batch_size=4,
+        # possible_group_sizes=[3, 4, 5],
+        # possible_frame_intervals=[1, 2],
     ),
 )
 val_dataloader = train_dataloader
 test_dataloader = val_dataloader
 
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=24, val_interval=-1)  # -1 note don't eval
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=100, val_interval=-1)  # -1 note don't eval
 val_cfg = dict(type="GroupBatchValLoop")
 test_cfg = dict(type="GroupBatchTestLoop")
-# img_norm_cfg = dict(
-#     mean=[103.530, 116.280, 123.675], std=[57.375, 57.120, 58.395], to_rgb=False)
-#
-# ida_aug_conf = {
-#     "resize_lim": (0.3, 0.4),
-#     "final_dim": (352, 576),
-#     "bot_pct_lim": (0.0, 0.0),
-#     "rot_lim": (0.0, 0.0),
-#     "H": 1080,
-#     "W": 1920,
-#     "rand_flip": True,
-# }
 
-# train_pipeline = [
-#     dict(
-#         type='LoadPointsFromPCD',
-#         coord_type='LIDAR',
-#         load_dim=5,
-#         use_dim=[0, 1, 2, 3, 4],
-#     ),
-#     dict(
-#         type='LoadPointsFromMultiSweepsPCD',
-#         sweeps_num=10,
-#         use_dim=[0, 1, 2, 3, 4],
-#     ),
-#     dict(type='LoadMultiViewImageFromFiles'),
-#     dict(type='LoadAnnotations3D', with_bbox_3d=True, with_label_3d=True),
-#
-#     dict(type='ModalMask3D', mode='train'),
-#     dict(  # lidar
-#         type='GlobalRotScaleTransAll',
-#         # rot_range=[-0.3925 * 8, 0.3925 * 8],  # -45, 45;r
-#         rot_range=[-0.3925 * 2, 0.3925 * 2],  # -45, 45;r
-#         scale_ratio_range=[0.9, 1.1],
-#         translation_std=[0.5, 0.5, 0.5]),
-#     dict(  # flip
-#         type='CustomRandomFlip3D',
-#         sync_2d=False,
-#         flip_ratio_bev_horizontal=0.5,
-#         flip_ratio_bev_vertical=0.5),
-#     dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
-#     dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
-#     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
-#     dict(type='ObjectNameFilter', classes=class_names),
-#     dict(type='PointShuffle'),
-#     dict(type='ResizeCropFlipImage', data_aug_conf=ida_aug_conf, training=True),
-#     dict(type='NormalizeMultiviewImage', **img_norm_cfg),
-#     dict(type='PadMultiViewImage', size_divisor=32),
-#     dict(type='DefaultFormatBundle3D', class_names=class_names),
-#     dict(type='Collect3D', keys=['points', 'img', 'gt_bboxes_3d', 'gt_labels_3d'],
-#          meta_keys=('filename', 'ori_shape', 'img_shape', 'lidar2img',
-#                     'depth2img', 'cam2img', 'pad_shape',
-#                     'scale_factor', 'flip', 'pcd_horizontal_flip',
-#                     'pcd_vertical_flip', 'box_mode_3d', 'box_type_3d',
-#                     'img_norm_cfg', 'pcd_trans', 'sample_idx',
-#                     'pcd_scale_factor', 'pcd_rotation', 'pts_filename',
-#                     'transformation_3d_flow', 'rot_degree',
-#                     'gt_bboxes_3d', 'gt_labels_3d',
-#                     'cam_intrinsic', 'lidar2cam', 'cam_inv_poly'
-#                     ))
-# ]
-# test_pipeline = [
-#     dict(
-#         type='LoadPointsFromPCD',
-#         coord_type='LIDAR',
-#         load_dim=5,
-#         use_dim=[0, 1, 2, 3, 4],
-#     ),
-#     dict(
-#         type='LoadPointsFromMultiSweepsPCD',
-#         sweeps_num=10,
-#         use_dim=[0, 1, 2, 3, 4],
-#     ),
-#     dict(type='LoadMultiViewImageFromFiles'),
-#     dict(
-#         type='MultiScaleFlipAug3D',
-#         img_scale=(1333, 800),
-#         pts_scale_ratio=1,
-#         flip=False,
-#         transforms=[
-#             dict(
-#                 type='GlobalRotScaleTrans',
-#                 rot_range=[0, 0],
-#                 scale_ratio_range=[1.0, 1.0],
-#                 translation_std=[0, 0, 0]),
-#             dict(type='RandomFlip3D'),
-#             dict(type='ResizeCropFlipImage', data_aug_conf=ida_aug_conf, training=False),
-#             dict(type='NormalizeMultiviewImage', **img_norm_cfg),
-#             dict(type='PadMultiViewImage', size_divisor=32),
-#             dict(
-#                 type='DefaultFormatBundle3D',
-#                 class_names=class_names,
-#                 with_label=False),
-#             dict(type='Collect3D',
-#                  keys=[
-#                      'points', 'img', 'cam_intrinsic', 'lidar2cam', 'cam_inv_poly', # 'gt_labels_3d'
-#                  ],
-#                  meta_keys=[
-#                      'pad_shape', 'lidar2img', 'lidar2cam',
-#                      'cam_intrinsic', 'lidar2cam', 'cam_inv_poly', 'intrinsic',
-#                      'box_type_3d', 'filename', 'gt_labels_3d'
-#                  ])
-#         ])
-# ]
-# data = dict(
-#     samples_per_gpu=2,  # gpu = 4
-#     workers_per_gpu=2,
-#     train=dict(
-#         type='CBGSDataset',
-#         dataset=dict(
-#             type=dataset_type,
-#             data_root=data_root,
-#             ann_file=data_root + 'cmt_pkl_lidar_ego.pkl',
-#             load_interval=1,
-#             pipeline=train_pipeline,
-#             classes=class_names,
-#             modality=input_modality,
-#             test_mode=False,
-#             box_type_3d='LiDAR')),
-#     val=dict(
-#         type=dataset_type,
-#         data_root=data_root,
-#         ann_file=data_root + 'cmt_pkl_lidar_ego.pkl',
-#         load_interval=1,
-#         pipeline=test_pipeline,
-#         classes=class_names,
-#         modality=input_modality,
-#         test_mode=True,
-#         box_type_3d='LiDAR'),
-#     test=dict(
-#         type=dataset_type,
-#         data_root=data_root,
-#         ann_file=data_root + '/cmt_pkl_lidar_ego_validate_train.pkl',
-#         load_interval=1,
-#         pipeline=test_pipeline,
-#         classes=class_names,
-#         modality=input_modality,
-#         test_mode=True,
-#         box_type_3d='LiDAR'),
-#     shuffler_sampler=dict(type='InfiniteGroupEachSampleInBatchSampler'),
-#     nonshuffler_sampler=dict(type='DistributedSampler'),
-# )
 out_size_factor = 8
 model = dict(
     type='CmtDetector',
@@ -418,7 +284,7 @@ env_cfg = dict(
     dist_cfg=dict(backend="nccl"),
 )
 lr = 2e-4  # total lr per gpu lr is lr/n
-num_epochs = 3
+num_epochs = 100
 
 optim_wrapper = dict(
     type="OptimWrapper",
@@ -505,4 +371,4 @@ resume = False
 # resume_from = None
 # workflow = [('train', 1)]
 # gpu_ids = range(0, 8)
-#
+load_from = 'ckpts/epoch_1.pth'

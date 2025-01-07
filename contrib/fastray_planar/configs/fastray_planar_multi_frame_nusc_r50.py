@@ -94,8 +94,9 @@ if debug_mode:
     possible_group_sizes = 20
     persistent_workers = False
 else:
-    batch_size = 4
-    num_workers = 0
+    batch_size = 6
+    num_workers = 3
+    # num_workers = 0
     transforms = [
         dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
@@ -106,7 +107,8 @@ else:
         dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
     possible_group_sizes = 2
-    persistent_workers = False
+    persistent_workers = True
+    # persistent_workers = False
 
 ## Transformables
 transformables = dict(
@@ -187,7 +189,7 @@ train_dataset = dict(
                        possible_group_sizes=possible_group_sizes,
                        possible_frame_intervals=1,
                        transformable_cfg=transformables,
-                       cbgs_cfg=dict(desired_ratio=0.4)),
+                       cbgs_cfg=dict(desired_ratio=0.3)),
     batch_size=batch_size,
 )
 
@@ -346,21 +348,21 @@ heads = dict(
 )
 # loss configs
 bbox_3d_weight_scheme = dict(
-    cen=dict(loss_weight=1.0,
+    cen=dict(loss_weight=2.5,
              fg_weight=0.5,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
+             iou_loss_weight=5.0,
              dual_focal_loss_weight=10, # 10
              channel_weights=dict(any={"weight": 0.5}, # 0.5
-                                  bicycle={"weight": 5}, # 5
+                                  bicycle={"weight": 3}, # 5
                                   car={"weight": 1},
                                   construction_vehicle={"weight": 2}, # 2
-                                  motorcycle={"weight": 5}, # 5
+                                  motorcycle={"weight": 3}, # 5
                                   trailer={"weight": 1},
                                   truck={"weight": 1},
                                   bus={"weight": 1})),
-    reg=dict(loss_weight=1.0,
+    reg=dict(loss_weight=10.0,
              partition_weights=dict(center_xy={"weight": 0.3, "slice": (0, 2)},
                                     center_z={"weight": 0.6, "slice": 2},
                                     size={"weight": 0.5, "slice": (3, 6)},
@@ -372,30 +374,30 @@ bbox_3d_weight_scheme = dict(
                                     velo={"weight": 0.5, "slice": (17, 20)})))
 
 bbox_3d_cylinder_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=2.5,
              fg_weight=0.3,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
+             iou_loss_weight=5.0,
              dual_focal_loss_weight=10, # 10
              channel_weights=dict(any={"weight": 1.0},
                                   traffic_cone={"weight": 1.0})),
-    reg=dict(loss_weight=1.0,
+    reg=dict(loss_weight=10.0,
              partition_weights=dict(center_xy={"weight": 0.6, "slice": (0, 2)},
                                     center_z={"weight": 0.3, "slice": 2},
                                     size={"weight": 0.6, "slice": (3, 5)},
                                     unit_xvec={"weight": 1.0, "slice": (5, 8)})))
 
 bbox_3d_oriented_cylinder_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=2.5,
              fg_weight=0.3,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
+             iou_loss_weight=5.0,
              dual_focal_loss_weight=10, # 10
              channel_weights=dict(any={"weight": 1.0},
                                   pedestrian={"weight": 1.0})),
-    reg=dict(loss_weight=1.0,
+    reg=dict(loss_weight=10.0,
              partition_weights=dict(center_xy={"weight": 1.0, "slice": (0, 2)},
                                     center_z={"weight": 0.3, "slice": 2},
                                     size={"weight": 1.0, "slice": (3, 5)},
@@ -404,15 +406,15 @@ bbox_3d_oriented_cylinder_weight_scheme = dict(
                                     velo={"weight": 0.5, "slice": (10, 13)})))
 
 bbox_3d_rect_cuboid_weight_scheme = dict(
-    cen=dict(loss_weight=0.5,
+    cen=dict(loss_weight=2.5,
              fg_weight=0.3,
              bg_weight=1),
     seg=dict(loss_weight=1.0,
-             iou_loss_weight=1,
+             iou_loss_weight=5.0,
              dual_focal_loss_weight=10, # 10
              channel_weights=dict(any={"weight": 1.0},
                                   barrier={"weight": 1.0})),
-    reg=dict(loss_weight=1.0,
+    reg=dict(loss_weight=10.0,
              partition_weights=dict(center_xy={"weight": 0.3, "slice": (0, 2)},
                                     center_z={"weight": 0.3, "slice": 2},
                                     size={"weight": 0.5, "slice": (3, 6)},
@@ -424,22 +426,22 @@ bbox_3d_rect_cuboid_weight_scheme = dict(
 loss_cfg = dict(
     bbox_3d=dict(
         type='PlanarLoss',
-        seg_iou_method='linear',
+        seg_iou_method='log',
         loss_name_prefix='bbox_3d',
         weight_scheme=bbox_3d_weight_scheme),
     bbox_3d_cylinder=dict(
         type='PlanarLoss',
-        seg_iou_method='linear',
+        seg_iou_method='log',
         loss_name_prefix='bbox_3d_cylinder',
         weight_scheme=bbox_3d_cylinder_weight_scheme),
     bbox_3d_oriented_cylinder=dict(
         type='PlanarLoss',
-        seg_iou_method='linear',
+        seg_iou_method='log',
         loss_name_prefix='bbox_3d_oriented_cylinder',
         weight_scheme=bbox_3d_oriented_cylinder_weight_scheme),
     bbox_3d_rect_cuboid=dict(
         type='PlanarLoss',
-        seg_iou_method='linear',
+        seg_iou_method='log',
         loss_name_prefix='bbox_3d_rect_cuboid',
         weight_scheme=bbox_3d_rect_cuboid_weight_scheme),
 )
@@ -461,10 +463,10 @@ model = dict(
 )
 
 ## log_processor
-log_processor = dict(type='GroupAwareLogProcessor', tabulate_ncols=3, tabulate_fmt="github")
+log_processor = dict(type='GroupAwareLogProcessor', tabulate_ncols=3, tabulate_fmt="pretty")
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 custom_hooks = [
-    dict(type="InferAndDumpDetectionAsNuscenesJsonHook",
+    dict(type="DumpDetectionAsNuscenesJsonHook",
          det_anno_transformable_keys=["bbox_3d", "bbox_3d_rect_cuboid", "bbox_3d_cylinder", "bbox_3d_oriented_cylinder"],
          voxel_shape=voxel_shape,
          voxel_range=voxel_range,
@@ -476,7 +478,7 @@ custom_hooks = [
 ## runner loop configs
 train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=24, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
-test_cfg = dict(type="GroupBatchInferLoop")
+# test_cfg = dict(type="GroupBatchInferLoop")
 
 ## evaluator and metrics
 val_evaluator = [
@@ -497,15 +499,19 @@ test_evaluator = [
 ## optimizer configs
 optim_wrapper = dict(
     type='OptimWrapper',
-    optimizer=dict(type='SGD',
-                lr=0.01,
-                momentum=0.9,
+    optimizer=dict(type='AdamW',
+                lr=0.00015,
+                # momentum=0.9,
                 weight_decay=0.01),
     clip_grad=dict(max_norm=10),
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[10, 22])
+param_scheduler = [
+    dict(type='LinearLR', start_factor=0.1, end_factor=1, by_epoch=False, begin=0, end=3000), # warmup
+    dict(type='PolyLR', by_epoch=False, begin=3000, eta_min=0, power=1.0)     # main LR Scheduler
+    # dict(type='MultiStepLR', milestones=[10, 22])
+]
 
 
 env_cfg = dict(
@@ -524,8 +530,8 @@ today = datetime.datetime.now().strftime("%m%d")
 # work_dir = "./work_dirs/fastray_planar_multi_frame_1112"
 # work_dir = "./work_dirs/fastray_planar_multi_frame_1112"
 work_dir = f'./work_dirs/{experiment_name}_{today}'
-# load_from = "./work_dirs/fastray_planar_multi_frame_1107/epoch_50.pth"
-load_from = "./ckpts/multi_frame_nusc_r50_1201_epoch_40.pth"
+# load_from = "./work_dirs/fastray_planar_multi_frame_nusc_r50_1212/multi_frame_nusc_r50_1212_epoch_1.pth"
+# load_from = "./ckpts/fastray_planar_single_frame_nusc_4planar_types_1113_epoch_1.pth"
 # load_from = "./ckpts/multi_frame_nusc_r50_1203_epoch_48.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_nusc_r50_1125/multi_frame_nusc_r50_epoch_1.pth"
 
