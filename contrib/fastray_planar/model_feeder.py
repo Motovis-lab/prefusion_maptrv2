@@ -162,7 +162,8 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
         for cam_id in processed_frame_batch['camera_tensors']:
             processed_frame_batch['camera_tensors'][cam_id] = torch.stack(
                 processed_frame_batch['camera_tensors'][cam_id])
-        processed_frame_batch['delta_poses'] = torch.stack(processed_frame_batch['delta_poses'])
+        if processed_frame_batch['delta_poses']:
+            processed_frame_batch['delta_poses'] = torch.stack(processed_frame_batch['delta_poses'])
         for transformable_name, data_batch in anno_batch_dict.items():
             # stack known one-sub-layer tensor_dict
             if isinstance(data_batch, dict):
