@@ -179,7 +179,7 @@ class GroupAwareLogProcessor(LogProcessor):
         return tag, log_str
 
     def _generate_tabulate_loss_report(self, log_tag: OrderedDict, mode: str):
-        losses = np.array(list(f"{k}_#_#_{v:.4f}" for k, v in log_tag.items() if mode != 'val' or v.startswith('val/loss')))
+        losses = np.array(list(f"{k}_#_#_{v:.4f}" for k, v in log_tag.items() if mode != 'val' or k.startswith('val/loss')))
         if len(losses) % self.tabulate_ncols != 0:
             losses = np.pad(losses, ((0, self.tabulate_ncols - len(losses) % self.tabulate_ncols)), constant_values='plh')
         losses = losses.reshape(-1, self.tabulate_ncols, order="F").tolist()
