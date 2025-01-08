@@ -444,12 +444,14 @@ class OccSdfBevLoader(TransformableLoader):
         else:
             sdf = None
         # get occ
-        occ_path = str(self.data_root / frame["occ_sdf"]["occ_2d"])
+        # occ_path = str(self.data_root / frame["occ_sdf"]["occ_2d"])
+        occ_path = str(self.data_root / frame["occ_sdf"]["occ_map_sdf"])
         occ = mmcv.imread(occ_path)
         # get height
         mask_ground = np.float32(occ[..., 1] > 128)
 
-        height_ground_path = str(self.data_root / frame["occ_sdf"]["ground"])
+        # height_ground_path = str(self.data_root / frame["occ_sdf"]["ground"])
+        height_ground_path = str(self.data_root / frame["occ_sdf"]["ground_height_map"])
         height_ground = mmcv.imread(height_ground_path, 'unchanged').astype(np.float32) / 3000 - 10
 
         height_lidar_path = str(self.data_root / frame["occ_sdf"]["bev_height_map"])

@@ -258,7 +258,7 @@ train_dataloader = dict(
 
 val_dataloader = dict(
     num_workers=0,
-    sampler=dict(type="DefaultSampler"),
+    sampler=dict(type="DefaultSampler", shuffle=False),
     collate_fn=dict(type="collate_dict"),
     dataset=val_dataset,
     persistent_workers=persistent_workers,
@@ -420,7 +420,7 @@ model = dict(
 log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 custom_hooks = [
-    dict(type="InferAndDumpDetectionAsNuscenesJsonHook",
+    dict(type="DumpDetectionAsNuscenesJsonHook",
          det_anno_transformable_keys=["bbox_3d", "bbox_3d_rect_cuboid", "bbox_3d_cylinder", "bbox_3d_oriented_cylinder"],
          voxel_shape=voxel_shape,
          voxel_range=voxel_range,

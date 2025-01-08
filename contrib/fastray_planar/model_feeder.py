@@ -162,7 +162,8 @@ class FastRayPlanarModelFeeder(BaseModelFeeder):
         for cam_id in processed_frame_batch['camera_tensors']:
             processed_frame_batch['camera_tensors'][cam_id] = torch.stack(
                 processed_frame_batch['camera_tensors'][cam_id])
-        processed_frame_batch['delta_poses'] = torch.stack(processed_frame_batch['delta_poses'])
+        if processed_frame_batch['delta_poses']:
+            processed_frame_batch['delta_poses'] = torch.stack(processed_frame_batch['delta_poses'])
         for transformable_name, data_batch in anno_batch_dict.items():
             # stack known one-sub-layer tensor_dict
             if isinstance(data_batch, dict):
@@ -327,10 +328,11 @@ class FastRayLidarPlanarModelFeeder(BaseModelFeeder):
 class NuscenesFastRayPlanarModelFeeder(FastRayPlanarModelFeeder):
     def process(self, frame_batch: list) -> Union[dict, list]:
         processed_frame_batch = super().process(frame_batch)
-        processed_frame_batch.update(sample_token=[], dictionaries=[])
+        processed_frame_batch.update(sample_token=[], dictionaries=[], ego_poses=[])
         
         for input_dict in frame_batch:
             processed_frame_batch['sample_token'].append(input_dict["transformables"]["sample_token"])
             processed_frame_batch['dictionaries'].append({k: t.dictionary for k, t in input_dict["transformables"].items() if isinstance(t, Bbox3D)})
+            processed_frame_batch['ego_poses'].append(input_dict["transformables"]["ego_poses"])
         
         return processed_frame_batch

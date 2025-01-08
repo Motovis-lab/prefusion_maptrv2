@@ -64,7 +64,7 @@ scene_names="
         "
 # 先把所有的数据都软连接到这个文件夹下，全部数据可能一个位置放不下
 SOURCE_DIR="/mnt/ssd1/wuhan/prefusion/data/MV4D_12V3L"
-num_cores=5
+num_cores=2
 
 process_folder(){
     local scene_name=$1
