@@ -617,7 +617,43 @@ class VoxelConcatFusion(BaseModule):
         cat = self.cat(*aligned_voxel_feats_cat)
         voxel_feats_fused = self.fuse(cat)
         return voxel_feats_fused
-   
+
+
+@MODELS.register_module()
+class FeatureConcatFusion(BaseModule):
+    def __init__(self, in_channels, out_channels, bev_mode=False, dilation=1, init_cfg=None):
+        super().__init__(init_cfg=init_cfg)
+        self.bev_mode = bev_mode
+        self.cat = Concat()
+        if bev_mode:
+            self.fuse = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=dilation,
+                          dilation=dilation),
+                nn.BatchNorm2d(out_channels)
+            )
+        else:
+            self.fuse = nn.Sequential(
+                nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1),
+                nn.BatchNorm3d(out_channels)
+            )
+
+    def forward(self, *aligned_voxel_feats_cat):
+        """Temporal fusion of voxel current and previous features.
+
+        Parameters
+        ----------
+        aligned_voxel_feats_cat : List[torch.Tensor]
+            concated nframes of voxel features
+
+        Returns
+        -------
+        voxel_feats_fused : torch.Tensor
+            updated voxel features
+        """
+        cat = self.cat(*aligned_voxel_feats_cat)
+        voxel_feats_fused = self.fuse(cat)
+        return voxel_feats_fused
+
 
 @MODELS.register_module()
 class VoVNetEncoder(BaseModule):

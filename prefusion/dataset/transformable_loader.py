@@ -103,6 +103,7 @@ class CameraImageSetLoader(CameraSetLoader):
         for cam_id in self.camera_mapping:
             cam_id_ori = self.camera_mapping[cam_id]
             if cam_id_ori in frame_info["camera_image"]:
+                # need to get the real
                 camera_images[cam_id] = CameraImage(
                     name=f"{name}:{cam_id}",
                     cam_id=cam_id,
@@ -114,6 +115,47 @@ class CameraImageSetLoader(CameraSetLoader):
                     tensor_smith=tensor_smith,
                 )
         return CameraImageSet(name, camera_images)
+
+
+@TRANSFORMABLE_LOADERS.register_module()
+class CameraTimeImageSetLoader(CameraSetLoader):
+    def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraImageSet:
+        scene_info = scene_data["scene_info"]
+        frame_info = scene_data["frame_info"][index_info.frame_id]
+        calib = scene_data["scene_info"]["calibration"]
+        camera_images = {}
+        if self.camera_mapping is None:
+            self.camera_mapping = {}
+            for cam_id in frame_info["camera_image"]:
+                self.camera_mapping[cam_id] = cam_id
+        for cam_id in self.camera_mapping:
+            cam_id_ori = self.camera_mapping[cam_id]
+            def Rt2T(R, t):
+                T = np.eye(4)
+                T[:3, :3] = R
+                T[:3, 3] = t
+                return T
+
+            def T2Rt(T):
+                return (T[:3, :3], T[:3, 3])
+
+            Tec = Rt2T(calib[cam_id_ori]["extrinsic"][0], calib[cam_id_ori]["extrinsic"][1])
+            Twe0 = Rt2T(frame_info['ego_pose']['rotation'], frame_info['ego_pose']['translation'])
+            if cam_id_ori in frame_info["camera_image"]:
+                Twe1 = frame_info["camera_image"][cam_id_ori]['Twe']
+                Te0c = np.linalg.inv(Twe0) @ Twe1 @ Tec
+                camera_images[cam_id] = CameraImage(
+                    name=f"{name}:{cam_id}",
+                    cam_id=cam_id,
+                    cam_type=calib[cam_id_ori]["camera_type"],
+                    img=mmcv.imread(self.data_root / frame_info["camera_image"][cam_id_ori]['path']),
+                    ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id_ori]),
+                    extrinsic=T2Rt(Te0c),
+                    intrinsic=calib[cam_id_ori]["intrinsic"],
+                    tensor_smith=tensor_smith,
+                )
+        return CameraImageSet(name, camera_images)
+
 
 
 @TRANSFORMABLE_LOADERS.register_module()
