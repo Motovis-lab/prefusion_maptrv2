@@ -489,7 +489,7 @@ class ClassBalancedGroupSampler(GroupSampler):
             loader_cfg = _t_cfg["loader"] if "loader" in _t_cfg else None
             loader = self._build_transformable_loader(loader_cfg, _t_cfg["type"])
             scene_data = info[index_info.scene_id]
-            rest_kwargs = {k: v for k, v in _t_cfg.items() if k not in ["type", "loader"]}
+            rest_kwargs = {k: v for k, v in _t_cfg.items() if k not in ["type", "loader", "tensor_smith"]}
             transformables[name] = loader.load(name, scene_data, index_info, **rest_kwargs)
         
         return transformables
