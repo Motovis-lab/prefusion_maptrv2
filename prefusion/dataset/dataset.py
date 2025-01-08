@@ -184,13 +184,14 @@ class GroupBatchDataset(Dataset):
     def load_all_transformables(self, index_info: "IndexInfo") -> dict:
         transformables = {}
         for name in self.transformables:
-            _t_cfg = copy.deepcopy(self.transformables[name])
-            transformable_type = _t_cfg.pop("type")
-            loader_cfg = _t_cfg.pop("loader", None)
-            loader = self._build_transformable_loader(loader_cfg, transformable_type)
-            tensor_smith = build_tensor_smith(_t_cfg.pop("tensor_smith")) if "tensor_smith" in _t_cfg else None
+            _t_cfg = self.transformables[name]
+            loader_cfg = _t_cfg["loader"] if "loader" in _t_cfg else None
+            tensor_smith_cfg = _t_cfg["tensor_smith"] if "tensor_smith" in _t_cfg else None
+            loader = self._build_transformable_loader(loader_cfg, _t_cfg["type"])
+            tensor_smith = build_tensor_smith(tensor_smith_cfg) if "tensor_smith" in _t_cfg else None
             scene_data = self.info[index_info.scene_id]
-            transformables[name] = self._build_transformable(name, scene_data, index_info, loader, tensor_smith=tensor_smith, **_t_cfg)
+            rest_kwargs = {k: v for k, v in _t_cfg.items() if k not in ["type", "loader", "tensor_smith"]}
+            transformables[name] = self._build_transformable(name, scene_data, index_info, loader, tensor_smith=tensor_smith, **rest_kwargs)
         
         return transformables
     

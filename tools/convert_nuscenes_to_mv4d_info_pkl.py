@@ -188,7 +188,7 @@ def build_camera_image(nusc: NuScenes, cur_sample, cam_name, lidar_ego_pose: Dic
         "calibration": {
             "camera_type": "PerspectiveCamera",
             "extrinsic": extr,
-            "intrinsic": np.array([intr[0, 2], intr[1, 2], intr[0, 0], intr[1, 1]]),
+            "intrinsic": tuple([intr[0, 2], intr[1, 2], intr[0, 0], intr[1, 1]]),
         },
     }
 

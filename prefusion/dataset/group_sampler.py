@@ -483,14 +483,14 @@ class ClassBalancedGroupSampler(GroupSampler):
     def load_all_transformables(self, info: Dict, index_info: "IndexInfo") -> dict:
         transformables = {}
         for name in self.transformable_cfg:
-            _t_cfg = copy.deepcopy(self.transformable_cfg[name])
-            transformable_type = _t_cfg.pop("type")
-            loader_cfg = _t_cfg.pop("loader", None)
-            if transformable_type not in self.SUPPORTED_LOADERS:
+            _t_cfg = self.transformable_cfg[name]
+            if _t_cfg["type"] not in self.SUPPORTED_LOADERS:
                 continue
-            loader = self._build_transformable_loader(loader_cfg, transformable_type)
+            loader_cfg = _t_cfg["loader"] if "loader" in _t_cfg else None
+            loader = self._build_transformable_loader(loader_cfg, _t_cfg["type"])
             scene_data = info[index_info.scene_id]
-            transformables[name] = loader.load(name, scene_data, index_info, **_t_cfg)
+            rest_kwargs = {k: v for k, v in _t_cfg.items() if k not in ["type", "loader"]}
+            transformables[name] = loader.load(name, scene_data, index_info, **rest_kwargs)
         
         return transformables
     

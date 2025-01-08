@@ -322,8 +322,8 @@ class CameraImage(CameraTransformable):
         self.cam_type = cam_type
         self.img = img
         self.ego_mask = ego_mask
-        self.extrinsic = list(deepcopy(p) for p in extrinsic)
-        self.intrinsic = np.array(intrinsic)
+        self.extrinsic = extrinsic
+        self.intrinsic = intrinsic
         self.tensor_smith = tensor_smith
 
 
@@ -517,10 +517,10 @@ class CameraSegMask(CameraTransformable):
         self.cam_type = cam_type
         self.img = img
         self.ego_mask = ego_mask
-        self.extrinsic = list(deepcopy(p) for p in extrinsic)
-        self.intrinsic = np.array(intrinsic)
+        self.extrinsic = extrinsic
+        self.intrinsic = intrinsic
         assert dictionary is not None
-        self.dictionary = deepcopy(dictionary)
+        self.dictionary = dictionary
         self.tensor_smith = tensor_smith
 
     def set_intrinsic_param(self, intrinsic: Sequence, **kwargs):
@@ -675,8 +675,8 @@ class CameraDepth(CameraTransformable):
         self.cam_type = cam_type
         self.img = img
         self.ego_mask = ego_mask
-        self.extrinsic = list(deepcopy(p) for p in extrinsic)
-        self.intrinsic = np.array(intrinsic)
+        self.extrinsic = extrinsic
+        self.intrinsic = intrinsic
         self.depth_mode = depth_mode
         self.tensor_smith = tensor_smith
 
@@ -813,8 +813,8 @@ class LidarPoints(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.positions = deepcopy(positions)
-        self.attributes = deepcopy(attributes)
+        self.positions = positions
+        self.attributes = attributes
         self.tensor_smith = tensor_smith
 
     def flip_3d(self, flip_mat, **kwargs):
@@ -868,14 +868,8 @@ class Bbox3D(SpatialTransformable):
         """
         super().__init__(name)
         assert dictionary is not None
-        self.elements = deepcopy(elements)
-        for ele in self.elements:
-            # ensure translation and velocity to be a column array
-            if 'translation' in ele:
-                ele['translation'] = ele['translation'].flatten()[:, None]
-            if 'velocity' in ele:
-                ele['velocity'] = ele['velocity'].flatten()[:, None]
-        self.dictionary = deepcopy(dictionary)
+        self.elements = elements
+        self.dictionary = dictionary
         self.remove_elements_not_recognized_by_dictionary()
         self.flip_aware_class_pairs = flip_aware_class_pairs
         self.tensor_smith = tensor_smith
@@ -979,8 +973,8 @@ class Polyline3D(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.elements = deepcopy(elements)
-        self.dictionary = deepcopy(dictionary)
+        self.elements = elements
+        self.dictionary = dictionary
         self.remove_elements_not_recognized_by_dictionary()
         self.flip_aware_class_pairs = flip_aware_class_pairs
         self.tensor_smith = tensor_smith
@@ -1046,8 +1040,8 @@ class ParkingSlot3D(SpatialTransformable):
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
-        self.elements = deepcopy(elements)
-        self.dictionary = deepcopy(dictionary)
+        self.elements = elements
+        self.dictionary = dictionary
         self.tensor_smith = tensor_smith
         self.remove_elements_not_recognized_by_dictionary()
     
@@ -1093,14 +1087,14 @@ class EgoPose(SpatialTransformable):
         rotation : np.ndarray
             rotation matrix, of shape (3, 3)
         translation : np.ndarray
-            translation vector, of shape (1, 3)
+            translation vector, of shape (1, 3), column vector
         tensor_smith : TensorSmith, optional
             a tensor smith object, providing ToTensor for the transformable, by default None
         """
         super().__init__(name)
         self.timestamp = timestamp
         self.rotation = rotation
-        self.translation = translation.flatten()[:, None] # unify it to column vector
+        self.translation = translation
         self.tensor_smith = tensor_smith
 
     def flip_3d(self, flip_mat, **kwargs):
@@ -1108,8 +1102,9 @@ class EgoPose(SpatialTransformable):
         
         # in the mirror world, assume that a object is left-right symmetrical
         # however, y-axis of object coordinate is left-right
-        flip_mat_self = np.eye(3)
-        flip_mat_self[1, 1] = -1  # apply了flip_map之后，坐标系变为了左手坐标系。用flip_mat_self将其重新转回右手坐标系
+        flip_mat_self = np.array([[1,  0, 0],
+                                  [0, -1, 0], # apply了flip_map之后，坐标系变为了左手坐标系。用flip_mat_self将其重新转回右手坐标系
+                                  [0,  0, 1]], dtype=np.float64)
         self.rotation = flip_mat @ self.rotation @ flip_mat_self.T
         self.translation = flip_mat @ self.translation  # self.translation is a column vector
 
