@@ -372,11 +372,18 @@ if __name__ == "__main__":
                 'occ_edge_height_map': f"{scene_name}/occ/occ_2d/occ_edge_height_map_-15_-15_15_15/{times_id}.png",
                 'occ_edge_lidar_mask': f"{scene_name}/occ/occ_2d/occ_edge_lidar_mask_-15_-15_15_15/{times_id}.png",
                 'occ_map_sdf': f"{scene_name}/occ/occ_2d/occ_map_sdf_-15_-15_15_15/{times_id}.png",
-                'occ_map_overlapped_lidar': f"{scene_name}/occ/occ_2d/occ_map_overlapped_lidar_-15_-15_15_15/{times_id}.png",
+                'occ_edge': f"{scene_name}/occ/occ_2d/occ_edge_-15_-15_15_15/{times_id}.png",
                 'occ_sdf_3d': None
             }
             R_t = np.eye(4)
             R_t[:3, :3] = R_nus
+            occ_ok = True
+            for key in sdf_about:
+                if not os.path.exists(sdf_about[key]):
+                    occ_ok = False
+                    break
+            if not occ_ok:
+                continue
             frame_info[times_id] = {
                 "camera_image": camera_image,
                 "3d_boxes": boxes_3d,
