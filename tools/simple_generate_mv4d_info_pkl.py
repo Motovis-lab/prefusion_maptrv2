@@ -91,12 +91,10 @@ def prepare_calibration(scene_root: Path) -> Dict:
         if "camera" in sensor_info.sensor_model.lower():
             if "fisheye" in sensor_info.sensor_model.lower():
                 calib[sensor_id]["camera_type"] = "FisheyeCamera"
-                calib[sensor_id]["intrinsic"] = np.array(
-                    sensor_info.pp + sensor_info.focal + sensor_info.inv_poly[:4], dtype=np.float32
-                )
+                calib[sensor_id]["intrinsic"] = tuple(sensor_info.pp + sensor_info.focal + sensor_info.inv_poly[:4])
             else:
                 calib[sensor_id]["camera_type"] = "PerspectiveCamera"
-                calib[sensor_id]["intrinsic"] = np.array(sensor_info.pp + sensor_info.focal, dtype=np.float32)
+                calib[sensor_id]["intrinsic"] = tuple(sensor_info.pp + sensor_info.focal)
     return calib
 
 
