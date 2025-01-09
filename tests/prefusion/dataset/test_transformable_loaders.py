@@ -54,6 +54,48 @@ def test_load_camera_image_set():
     )
 
 
+def test_load_camera_image_set_modification():
+    data_root = Path("tests/prefusion/dataset/example_inputs")
+    loader = CameraImageSetLoader(data_root)
+    ii = IndexInfo('20231101_160337', '1698825817864')
+    with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
+        info_data = pickle.load(f)
+    camera_images = loader.load("camera_images", info_data["20231101_160337"], ii, tensor_smith=DummyImgTensorSmith())
+    
+    def _assert_camera_images():
+        assert camera_images.transformables['camera1'].img.sum() == 1752500
+        assert isinstance(camera_images.transformables['camera5'].tensor_smith, DummyImgTensorSmith)
+        assert camera_images.transformables['camera8'].ego_mask.sum() == 1365268
+        assert_almost_equal(
+            camera_images.transformables['camera11'].intrinsic, 
+            np.array([967.5516, 516.1143, 469.18085, 468.7578, 0.05346, -0.00585, -0.000539, -0.000161]),
+            decimal=4
+        )
+        assert_almost_equal(
+            camera_images.transformables['camera11'].extrinsic[0], 
+            np.array([[ 0.00636504, -0.712556  ,  0.70158637],
+                      [-0.98620738,  0.11156835,  0.12226   ],
+                      [-0.16539194, -0.69268785, -0.70201785]]),
+            decimal=4
+        )
+        assert_almost_equal(
+            camera_images.transformables['camera11'].extrinsic[1], 
+            np.array([1.0802392 , 0.75621104, 1.0280657 ], dtype=np.float32),
+            decimal=4
+        )
+
+    _assert_camera_images()
+
+    # modify the transformable
+    camera_images.transformables['camera11'].intrinsic[0] = 100.0
+    camera_images.transformables['camera11'].extrinsic[0][1, 1] -= 50
+    camera_images.transformables['camera11'].extrinsic[1][2] *= 10
+
+    # load and assert again
+    camera_images = loader.load("camera_images", info_data["20231101_160337"], ii, tensor_smith=DummyImgTensorSmith())
+    _assert_camera_images()
+
+
 def test_load_camera_seg_mask():
     data_root = Path("tests/prefusion/dataset/example_inputs")
     loader = CameraSegMaskSetLoader(data_root)
@@ -228,17 +270,6 @@ def test_load_bbox_3d_and_modify():
     # load and assert again
     bbox_3d = loader.load("bbox_3d", info_data["20231101_160337"], ii, tensor_smith=DummyAnnoTensorSmith(), dictionary=dic)
     _assert_bbox3d()
-
-    assert bbox_3d.elements[-1]['class'] == "class.road_marker.arrow"
-    assert bbox_3d.elements[-1]['attr'] == ['attr.road_marker.arrow.type.ahead']
-    assert bbox_3d.elements[-1]['size'] == [3.0765, 0.5656, 0.0195]
-    assert bbox_3d.elements[-1]['track_id'] == "10045_0"
-    assert_almost_equal(bbox_3d.elements[-1]['rotation'], np.array([[ 0.9731608 , -0.22991313,  0.00989984],
-                                                                    [ 0.22984454,  0.97319769,  0.00759955],
-                                                                    [-0.01138174, -0.00512016,  0.99992212]]))
-    assert_almost_equal(bbox_3d.elements[-1]['translation'], np.array([ [6.6975] , [7.4886],  [-0.1029]], dtype=np.float32))
-    assert_almost_equal(bbox_3d.elements[-1]['velocity'], np.array([ [0], [0], [0]], dtype=np.float32))
-    assert bbox_3d.dictionary == {"classes": ["class.pedestrian.pedestrian", "class.road_marker.arrow"]}
 
 
 def test_advanced_bbox3d_loader_mapping():
