@@ -9,7 +9,7 @@ from prefusion import SegIouLoss, DualFocalLoss
 
 from .modules import *
 from .model_utils import *
-
+import torch.nn.functional as F
 
 @MODELS.register_module()
 class ParkingFastRayPlanarMultiFrameModel(BaseModel):
@@ -203,7 +203,6 @@ class ParkingFastRayPlanarMultiFrameModel(BaseModel):
         return losses
     
 
-
 @MODELS.register_module()
 class ParkingFastRayPlanarSingleFrameModelAPA(BaseModel):
     
@@ -387,8 +386,6 @@ class ParkingFastRayPlanarSingleFrameModelAPA(BaseModel):
             20 * losses['occ_sdf_loss'] + 20 * losses['occ_height_loss'])
         
         return losses
- 
-
 
 
 @MODELS.register_module()
@@ -769,7 +766,7 @@ class ParkingFastRayPlanarMultiFrameModelAPALidar(BaseModel):
             }
         """
         lidar_data = batched_input_dict['lidar_points']
-        import torch.nn.functional as F
+
         batch_size = len(lidar_data['res_voxels'])
         coors = []
         voxel_features = []

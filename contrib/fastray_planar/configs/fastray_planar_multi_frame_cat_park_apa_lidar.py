@@ -21,7 +21,10 @@ camera_feature_configs = dict(
 voxel_shape = (8, 160, 120)  # Z, X, Y in ego system
 voxel_range = ([-1, 3], [12, -12],
                [9, -9])  # tensor dimension corresponed physical range, ([Z_min, Z_max], [X_min, X_max], [Y_min, Y_max])
-
+lidar_voxel_size = [(voxel_range[1][0] - voxel_range[1][1]) / voxel_shape[1],
+                    (voxel_range[2][0] - voxel_range[2][1]) / voxel_shape[2],
+                    0.2]
+lidar_voxel_shape = [41, voxel_shape[1] * 8, voxel_shape[2] * 8]
 voxel_feature_config = dict(
     voxel_shape=voxel_shape,
     voxel_range=voxel_range,
@@ -170,7 +173,7 @@ virtual_camera_settings = dict(
 
 virtual_camera_transform = dict(type='RenderVirtualCamera', camera_settings=virtual_camera_settings)
 
-debug_mode = True
+debug_mode = False
 
 if debug_mode:
     batch_size = 1
@@ -188,8 +191,8 @@ if debug_mode:
     # ]
     possible_group_sizes = 2
 else:
-    batch_size = 2
-    num_workers = 2
+    batch_size = 8
+    num_workers = 4
     transforms = [
         # dict(type='RandomRenderExtrinsic'),
         virtual_camera_transform,
@@ -204,7 +207,9 @@ else:
 ## GroupBatchDataset configs
 
 # voxel_size = [0.075, 0.075, 0.2]
-voxel_size = [0.15, 0.15, 0.2]
+
+# voxel_shape = (8, 160, 120)  # Z, X, Y in ego system
+# voxel_range = ([-1, 3], [12, -12], [9, -9])
 # transformables
 transformables = dict(
     camera_images=dict(
@@ -215,10 +220,11 @@ transformables = dict(
     lidar_sweeps=dict(
         type="LidarPoints",
         loader=dict(type="LidarSweepsLoader"),
-        tensor_smith=dict(type="PointsToVoxelsTensor", voxel_size=voxel_size,
+        tensor_smith=dict(type="PointsToVoxelsTensor", voxel_size=lidar_voxel_size,
                           max_point_per_voxel=10, max_voxels=120000,
                           max_input_points=1200000,
-                          point_cloud_range=[-12,  -9,-1,12, 9, 3]
+                          point_cloud_range=[voxel_range[1][1], voxel_range[2][1], voxel_range[0][0], voxel_range[1][0],
+                                             voxel_range[2][0], voxel_range[0][1]]
                           ),
     ),
     ego_poses=dict(type='EgoPoseSet'),
@@ -381,7 +387,7 @@ voxel_fusion = dict(
     dilation=3)
 lidar_voxel_fusion = dict(
     type='FeatureConcatFusion',
-    in_channels=128+512,
+    in_channels=128 + 512,
     out_channels=128,
     bev_mode=True,
     dilation=3)
@@ -634,7 +640,7 @@ model = dict(
     pts_middle_encoder=dict(
         type='mmdet3d.SparseEncoder',
         in_channels=5,
-        sparse_shape=[41, 160*8, 120*8],
+        sparse_shape=lidar_voxel_shape,
         output_channels=128,
         order=('conv', 'norm', 'act'),
         encoder_channels=((16, 16, 32), (32, 32, 64), (64, 64, 128), (128, 128)),
@@ -697,7 +703,7 @@ env_cfg = dict(
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1227"
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1228"
 # work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1229"
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1230"
+work_dir = "./work_dirs/mtv_park_lidar_0109"
 # load_from = "./work_dirs/collected_models/apa_bev_occ_epoch_14.pth"
 # load_from = "./work_dirs/collected_models/apa_bev_occ_epoch_33.pth"
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
@@ -706,6 +712,10 @@ work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1230"
 # load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1228/epoch_100.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1220/epoch_100.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1229/epoch_100.pth"
-load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1230/epoch_100.pth"
-
+# load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_1230/epoch_100.pth"
+load_from = "ckpts/pretrain_vov_small.pth"
 # resume = True
+
+
+
+

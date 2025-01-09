@@ -274,7 +274,7 @@ class FastRayLidarPlanarModelFeeder(BaseModelFeeder):
                         processed_frame_batch['lidar_points']['res_voxels'].append(transformable.tensor['res_voxels'])
                         processed_frame_batch['lidar_points']['res_coors'].append(transformable.tensor['res_coors'])
                         processed_frame_batch['lidar_points']['res_num_points'].append(transformable.tensor['res_num_points'])
-                        processed_frame_batch['lidar_points']['points'].append(transformable.tensor['points'])
+                        # processed_frame_batch['lidar_points']['points'].append(transformable.tensor['points'])
                     case EgoPoseSet():
                         cur_pose = transformable.transformables['0']
                         if '-1' not in transformable.transformables:
