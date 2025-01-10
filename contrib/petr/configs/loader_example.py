@@ -145,7 +145,7 @@ train_dataloader = dict(
                     ),
                     attr_mapping=dict(
                         unlocked=["class.parking.parking_lock::attr.parking.parking_lock.state.unlocked"],
-                        unlocked=["class.parking.parking_lock::attr.parking.parking_lock.state.locked"],
+                        locked=["class.parking.parking_lock::attr.parking.parking_lock.state.locked"],
                         text_icon_number=["class.parking.text_icon::attr.parking.text_icon.type.number"],
                         text_icon_time=["class.parking.text_icon::attr.parking.text_icon.type.time"],
                         text_icon_accessible=["class.parking.text_icon::attr.parking.text_icon.type.accessible"],
@@ -342,8 +342,8 @@ model = dict(
     ),
 )
 
-val_evaluator = dict(type="Accuracy")
-test_evaluator = dict(type="Accuracy")
+val_evaluator = dict(type="AccuracyPetr")
+test_evaluator = dict(type="AccuracyPetr")
 
 
 env_cfg = dict(

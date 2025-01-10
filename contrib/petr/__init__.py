@@ -1,6 +1,6 @@
 from .model import *
 from .losses import *
-from .sampler import PseudoSampler
+from .sampler import PseudoSamplerPetr
 from .metrics import *
 from .tensor_smith import *
 from .cp_fpn import CPFPN
