@@ -3,6 +3,7 @@ from typing import Any
 import functools
 import pickle
 
+import open3d as o3d
 import cv2
 import pytest
 import numpy as np
@@ -28,7 +29,19 @@ from prefusion.dataset.transformable_loader import (
     Polyline3DLoader,
     ParkingSlot3DLoader, CameraTimeImageSetLoader,
 )
-from tools.dataset_converters.gene_info_4d_v2 import ori_pcd_lidar_point
+
+def ori_pcd_lidar_point(save_path, lidar_points):
+    device = o3d.core.Device("CPU:0")
+    dtype = o3d.core.float32
+    points_intensities = lidar_points[:, 3][:, None]
+    points_positions = lidar_points[:,:3]
+    lidar_map = o3d.t.geometry.PointCloud(device)
+    
+    lidar_map.point.positions = o3d.core.Tensor(points_positions , dtype, device)
+    lidar_map.point.intensity = o3d.core.Tensor(points_intensities , dtype, device)
+    
+    o3d.t.io.write_point_cloud(str(save_path), lidar_map)
+
 
 _approx = functools.partial(pytest.approx, rel=1e-4)
 
