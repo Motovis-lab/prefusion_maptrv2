@@ -5,7 +5,7 @@ from prefusion.registry import DATA_SAMPLERS
 
 
 @DATA_SAMPLERS.register_module()
-class PseudoSampler(BaseSampler):
+class PseudoSamplerPetr(BaseSampler):
     """A pseudo sampler that does not do sampling actually."""
 
     def __init__(self, **kwargs):

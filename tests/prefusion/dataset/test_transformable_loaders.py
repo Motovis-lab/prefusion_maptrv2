@@ -3,17 +3,21 @@ from typing import Any
 import functools
 import pickle
 
+import cv2
 import pytest
 import numpy as np
 from numpy.testing import assert_almost_equal
 
 from copious.io.fs import mktmpdir
+from scipy.spatial.transform import Rotation
+
+from contrib.cmt import LidarSweepsLoader
 from prefusion.dataset.index_info import IndexInfo
 from prefusion.dataset.transformable_loader import (
-    CameraImageSetLoader, 
-    CameraDepthSetLoader, 
-    CameraSegMaskSetLoader, 
-    EgoPoseSetLoader, 
+    CameraImageSetLoader,
+    CameraDepthSetLoader,
+    CameraSegMaskSetLoader,
+    EgoPoseSetLoader,
     Bbox3DLoader,
     AdvancedBbox3DLoader,
     ClassMapping,
@@ -21,8 +25,9 @@ from prefusion.dataset.transformable_loader import (
     VariableLoader,
     Polygon3DLoader,
     Polyline3DLoader,
-    ParkingSlot3DLoader,
+    ParkingSlot3DLoader, CameraTimeImageSetLoader,
 )
+from tools.dataset_converters.gene_info_4d_v2 import ori_pcd_lidar_point
 
 _approx = functools.partial(pytest.approx, rel=1e-4)
 
@@ -644,3 +649,72 @@ def test_parkingslot3d_loader_and_modify():
     # load and assert again
     parkingslots = loader.load("parkingslot3d", info_data["20231101_160337"], ii, dictionary={"classes": ["class.parking.parking_slot"]})
     _assert_parkingslots()
+
+
+def test_camera_time_loader_modification():
+    data_root = Path("tests/prefusion/dataset/example_inputs_lidar")
+    ii = IndexInfo('20231027_185823', '1698404306764')
+    with open("tests/prefusion/dataset/mv4d-infos-for-test-002.pkl", "rb") as f:
+        info_data = pickle.load(f)
+    loader = CameraTimeImageSetLoader(data_root)
+
+    cam_paths = [data_root/v['path'] for k, v in info_data["20231027_185823"]['frame_info']['1698404306764']['camera_image'].items()]
+    cam_paths += [data_root/v for k, v in info_data["20231027_185823"]['scene_info']['camera_mask'].items()]
+    for p in cam_paths:
+        a = np.zeros([1920, 1080, 3]).astype('uint8')
+        Path(p).parent.mkdir(exist_ok=True, parents=True)
+        cv2.imwrite(str(p), a)
+    camera_images = loader.load("camera_image", info_data["20231027_185823"], ii)
+
+    def _assert_camera_images(camera_images):
+        assert_almost_equal(
+            camera_images.transformables['camera1'].extrinsic[0],
+            np.array([[0.99950327, -0.02756118, -0.0152839],
+                      [0.00135672, -0.44688797, 0.8945889],
+                      [-0.03148612, -0.89416526, -0.4466286]]
+                     )
+        )
+        assert_almost_equal(
+            camera_images.transformables['camera1'].intrinsic,
+            np.array([965.4158113475025, 520.1966103766614, 469.48876980550966, 469.83770842397064, 0.057245580966242486, -0.01232397789444156,
+                      0.0025930032838253525, -0.0007072882057509018]
+            )
+        )
+    _assert_camera_images(camera_images)
+
+    # modify camera_images
+    camera_images.transformables['camera1'].intrinsic[1] = 100
+    camera_images.transformables['camera1'].extrinsic[0][0, 1] = 100
+    camera_images = loader.load("camera_image", info_data["20231027_185823"], ii)
+    _assert_camera_images(camera_images)
+
+
+def test_lidar_sweeps_loader():
+    data_root = Path("tests/prefusion/dataset/example_inputs_lidar")
+    ii = IndexInfo('20231027_185823', '1698404306764')
+    with open("tests/prefusion/dataset/mv4d-infos-for-test-002.pkl", "rb") as f:
+        info_data = pickle.load(f)
+    loader = LidarSweepsLoader(data_root)
+    paths = [p['path'] for p in
+             info_data['20231027_185823']["frame_info"]['1698404306764']['lidar_points']['lidar1_sweeps']]
+    paths += [info_data['20231027_185823']["frame_info"]['1698404306764']['lidar_points']['lidar1']]
+    for p in paths:
+        points = np.array([
+            [1, 2, 3, 4],
+            [4, 5, 6, 4],
+            [7, 8, 9, 4]
+        ])
+        dst_path = data_root / p
+        Path(dst_path).parent.mkdir(exist_ok=True, parents=True)
+        ori_pcd_lidar_point(str(dst_path), points)
+    lidar_points = loader.load("lidar_points", info_data["20231027_185823"], ii)
+
+    def _assert_lidar_points(lidar_points):
+        assert_almost_equal(
+            lidar_points.positions[-3:],
+            np.array([[0.93962195, 1.99750722, 2.99984908],
+                      [3.93330234, 5.00326133, 6.00040235],
+                      [6.92698273, 8.00901544, 9.00095562]])
+        )
+
+    _assert_lidar_points(lidar_points)
