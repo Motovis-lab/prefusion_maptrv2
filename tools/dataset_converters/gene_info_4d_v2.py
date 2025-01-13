@@ -100,7 +100,9 @@ def generate_labels_scene_from_4dMapjson(scene_root, Twes):
     return output_json_frame_dlist
 
 def convert_virtual_camera(src_camear_root, save_img_root, save_mask_root, real_cam_model, v_cam_paramter, calib, W=1280, H=960):
+    # 做其他数据修复，不需要重新生成图像，这里设置为None
     src_image = mmcv.imread(src_camear_root, channel_order="bgr")
+    # src_image = None
     R = Rotation.from_euler('xyz', angles=v_cam_paramter, degrees=True).as_matrix()
     # R = Quaternion(v_cam_paramter).rotation_matrix
     t = [0,0,0]
@@ -273,7 +275,26 @@ if __name__ == "__main__":
             times_id = str(int(timestamp))
             if times_id[-2:] == "74":
                 continue
-            frame_info[times_id] = {}
+            sdf_about = {
+                'occ_map': f"{scene_name}/occ/occ_2d/occ_map_-15_-15_15_15/{times_id}.png",
+                'ground_height_map': f"{scene_name}/ground/ground_height_map_-15_-15_15_15/{times_id}.tif",
+                'sdf_2d': f"{scene_name}/sdf/sdf_2d_-15_-15_15_15/{times_id}.tif",  # 暂时不用，可以不要
+                'bev_height_map': f"{scene_name}/occ/occ_2d/bev_height_map_-15_-15_15_15/{times_id}.png",
+                'bev_lidar_mask': f"{scene_name}/occ/occ_2d/bev_lidar_mask_-15_-15_15_15/{times_id}.png",
+                'occ_edge_height_map': f"{scene_name}/occ/occ_2d/occ_edge_height_map_-15_-15_15_15/{times_id}.png",
+                'occ_edge_lidar_mask': f"{scene_name}/occ/occ_2d/occ_edge_lidar_mask_-15_-15_15_15/{times_id}.png",
+                'occ_map_sdf': f"{scene_name}/occ/occ_2d/occ_map_sdf_-15_-15_15_15/{times_id}.png",
+                'occ_edge': f"{scene_name}/occ/occ_2d/occ_edge_-15_-15_15_15/{times_id}.png",
+                'occ_sdf_3d': None
+            }
+            occ_ok = True
+            for key in sdf_about:
+                if key != "sdf_2d" and key != "occ_sdf_3d":
+                    if not os.path.exists(P(dump_root) / P(sdf_about[key])):
+                        occ_ok = False
+                        break
+            if not occ_ok:
+                continue
             # convert real_cam to v_cam
             camera_image = {}
             boxes_3d = []
@@ -283,7 +304,7 @@ if __name__ == "__main__":
             dst_lidar_path = f"{scene_root}/lidar/undistort_static_merged_lidar1_model/{times_id}.pcd"
             P(f"{scene_root}/lidar/undistort_static_merged_lidar1_model/").mkdir(parents=True, exist_ok=True)
             # process lidar
-            single_lidar_process(src_lidar_path, dst_lidar_path)
+            # single_lidar_process(src_lidar_path, dst_lidar_path)
             scene_info["scene_info"]['calibration'].update({'lidar1':(lidar1_cali_r, lidar1_cali_t)})
             lidar_point['lidar1'] = f"{scene_name}/lidar/undistort_static_merged_lidar1_model/{times_id}.pcd"
             if "lidar1" in timestamp_window:
@@ -310,7 +331,7 @@ if __name__ == "__main__":
                     v_camera_root = f"{scene_root}/camera/{align_real_v[camera_name]}/{camera_filename}"
                     P(f"{scene_root}/camera/{align_real_v[camera_name]}").mkdir(parents=True, exist_ok=True)
                     camera_model = cameras_real[camera_name]
-                    camera_model.ego_mask = mmcv.imread(f"{dump_root}/ego_mask/{camera_name}.png")[..., 0]
+                    camera_model.ego_mask = mmcv.imread(f"{dump_root}ego_mask/{camera_name}.png")[..., 0]
                     # process camera to virtual camera 
                     v_camera_rmatrix, v_camera_t, v_camera_intrinsic, d_src_image, d_real_cam_model, d_vcamera \
                         = convert_virtual_camera(src_camera_root, v_camera_root, None, camera_model, parm_cameras_v[align_real_v[camera_name]], calib_center.rig[camera_name])
@@ -363,27 +384,9 @@ if __name__ == "__main__":
                         "points": (R_nus.T @ polyline_).transpose(1,0),
                     }
                     polyline_3d.append(polyline)
-            sdf_about = {
-                'occ_map': f"{scene_name}/occ/occ_2d/occ_map_-15_-15_15_15/{times_id}.png",
-                'ground_height_map': f"{scene_name}/ground/ground_height_map_-15_-15_15_15/{times_id}.tif",
-                'sdf_2d': f"{scene_name}/sdf/sdf_2d_-15_-15_15_15/{times_id}.tif",  # 暂时不用，可以不要
-                'bev_height_map': f"{scene_name}/occ/occ_2d/bev_height_map_-15_-15_15_15/{times_id}.png",
-                'bev_lidar_mask': f"{scene_name}/occ/occ_2d/bev_lidar_mask_-15_-15_15_15/{times_id}.png",
-                'occ_edge_height_map': f"{scene_name}/occ/occ_2d/occ_edge_height_map_-15_-15_15_15/{times_id}.png",
-                'occ_edge_lidar_mask': f"{scene_name}/occ/occ_2d/occ_edge_lidar_mask_-15_-15_15_15/{times_id}.png",
-                'occ_map_sdf': f"{scene_name}/occ/occ_2d/occ_map_sdf_-15_-15_15_15/{times_id}.png",
-                'occ_edge': f"{scene_name}/occ/occ_2d/occ_edge_-15_-15_15_15/{times_id}.png",
-                'occ_sdf_3d': None
-            }
+            
             R_t = np.eye(4)
             R_t[:3, :3] = R_nus
-            occ_ok = True
-            for key in sdf_about:
-                if not os.path.exists(sdf_about[key]):
-                    occ_ok = False
-                    break
-            if not occ_ok:
-                continue
             frame_info[times_id] = {
                 "camera_image": camera_image,
                 "3d_boxes": boxes_3d,
@@ -399,4 +402,4 @@ if __name__ == "__main__":
             }
         scene_info.update({'frame_info': frame_info})
     scene_infos[scene_name] = scene_info
-    mmengine.dump(scene_infos, f"{dump_root}/mv_4d_infos_{scene_names[0]}.pkl")
+    mmengine.dump(scene_infos, f"{dump_root}mv_4d_infos_{scene_names[0]}.pkl")
