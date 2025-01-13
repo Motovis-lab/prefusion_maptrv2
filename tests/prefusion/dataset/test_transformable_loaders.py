@@ -651,7 +651,7 @@ def test_parkingslot3d_loader_and_modify():
     _assert_parkingslots()
 
 
-def test_advanced_camera_time_loader_modification():
+def test_camera_time_loader_modification():
     data_root = Path("tests/prefusion/dataset/example_inputs_lidar")
     ii = IndexInfo('20231027_185823', '1698404306764')
     with open("tests/prefusion/dataset/mv4d-infos-for-test-002.pkl", "rb") as f:
@@ -689,7 +689,7 @@ def test_advanced_camera_time_loader_modification():
     _assert_camera_images(camera_images)
 
 
-def test_advanced_lidar_loader_modification():
+def test_lidar_sweeps_loader():
     data_root = Path("tests/prefusion/dataset/example_inputs_lidar")
     ii = IndexInfo('20231027_185823', '1698404306764')
     with open("tests/prefusion/dataset/mv4d-infos-for-test-002.pkl", "rb") as f:
@@ -709,7 +709,7 @@ def test_advanced_lidar_loader_modification():
         ori_pcd_lidar_point(str(dst_path), points)
     lidar_points = loader.load("lidar_points", info_data["20231027_185823"], ii)
 
-    def _assert_lidar_points(lidar_points, info_data):
+    def _assert_lidar_points(lidar_points):
         assert_almost_equal(
             lidar_points.positions[-3:],
             np.array([[0.93962195, 1.99750722, 2.99984908],
@@ -717,15 +717,4 @@ def test_advanced_lidar_loader_modification():
                       [6.92698273, 8.00901544, 9.00095562]])
         )
 
-    # modify camera_images
-    T = np.eye(4)
-    T[:3, :3] = Rotation.from_euler('XYZ', [1, 2, 3]).as_matrix()
-    T[:3, 3] = [1, 2, 3]
-    lidar_points.name = 'xyz'
-    info_data['20231027_185823']['frame_info']['1698404306764']['lidar_points']['lidar1_sweeps'][0]['Twe'] = \
-    info_data['20231027_185823']['frame_info']['1698404306764']['lidar_points']['lidar1_sweeps'][0]['Twe'] @ T
-
-    lidar_points = loader.load("camera_image", info_data["20231027_185823"], ii)
-    with open("tests/prefusion/dataset/mv4d-infos-for-test-002.pkl", "rb") as f:
-        info_data_reload = pickle.load(f)
-    _assert_lidar_points(lidar_points, info_data_reload)
+    _assert_lidar_points(lidar_points)
