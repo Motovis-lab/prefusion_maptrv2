@@ -680,13 +680,12 @@ def test_advanced_camera_time_loader_modification():
                       0.0025930032838253525, -0.0007072882057509018]
             )
         )
+    _assert_camera_images(camera_images)
 
     # modify camera_images
     camera_images.transformables['camera1'].intrinsic[1] = 100
     camera_images.transformables['camera1'].extrinsic[0][0, 1] = 100
     camera_images = loader.load("camera_image", info_data["20231027_185823"], ii)
-    # with open("tests/prefusion/dataset/mv4d-infos-for-test-002.pkl", "rb") as f:
-    #     info_data_reload = pickle.load(f)
     _assert_camera_images(camera_images)
 
 

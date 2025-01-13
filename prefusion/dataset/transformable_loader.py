@@ -173,7 +173,7 @@ class NuscenesCameraImageSetLoader(TransformableLoader):
                 ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id]),
                 extrinsic=list(np.array(p) for p in frame_info["camera_image"][cam_id]["calibration"]["extrinsic"]),
                 intrinsic=np.array(frame_info["camera_image"][cam_id]["calibration"]["intrinsic"]),
-                tensor_smith=tensor_smith,
+                tensor_smith=tensor_smith
             )
             for cam_id in frame_info["camera_image"]
         }
