@@ -153,11 +153,10 @@ class CameraTimeImageSetLoader(CameraSetLoader):
                     img=mmcv.imread(self.data_root / frame_info["camera_image"][cam_id_ori]['path']),
                     ego_mask=read_ego_mask(self.data_root / scene_info["camera_mask"][cam_id_ori]),
                     extrinsic=self.T2Rt(Te0c),
-                    intrinsic=calib[cam_id_ori]["intrinsic"],
+                    intrinsic=copy.copy(calib[cam_id_ori]["intrinsic"]),
                     tensor_smith=tensor_smith,
                 )
         return CameraImageSet(name, camera_images)
-
 
 
 @TRANSFORMABLE_LOADERS.register_module()
