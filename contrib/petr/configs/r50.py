@@ -225,8 +225,8 @@ model = dict(
     ),
 )
 
-val_evaluator = dict(type="Accuracy")
-test_evaluator = dict(type="Accuracy")
+val_evaluator = dict(type="AccuracyPetr")
+test_evaluator = dict(type="AccuracyPetr")
 
 
 env_cfg = dict(

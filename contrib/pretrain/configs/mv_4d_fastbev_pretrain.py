@@ -62,7 +62,7 @@ train_dataloader = dict(
     # batch_sampler=dict(type="SameSourceBatchSampler", drop_last=True),
     # dataset=dict(
     #     type=dataset_type_wrapper,
-    #     datasets=[dataset_avp]
+    #     datasets=[dataset_avp, dataset_4d]
     # )
     dataset=dataset_avp
 )

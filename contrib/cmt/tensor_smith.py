@@ -79,5 +79,5 @@ class PointsToVoxelsTensor(TensorSmith):
             "res_voxels": points_mean,
             "res_coors": coors,
             "res_num_points": num_points,
-            "points": points
+            # "points": points
         }

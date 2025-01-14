@@ -94,17 +94,17 @@ if debug_mode:
              intrinsics=camera_intrinsic_configs)
     ]
 else:
-    batch_size = 8
-    num_workers = 2
-    persistent_workers = True
+    batch_size = 1
+    num_workers = 0
+    persistent_workers = False
     transforms = [
-        dict(type='RandomRenderExtrinsic'),
+        # dict(type='RandomRenderExtrinsic'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
-        dict(type='RandomRotateSpace'),
-        dict(type='RandomMirrorSpace'),
-        dict(type='RandomImageISP', prob=0.2),
-        dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
-        dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
+        dict(type='RandomRotateSpace', angles=[0, 0, 360], prob_inverse_cameras_rotation=0, prob=1),
+        # dict(type='RandomMirrorSpace'),
+        # dict(type='RandomImageISP', prob=0.2),
+        # dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
+        # dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
 
 ## Transformables

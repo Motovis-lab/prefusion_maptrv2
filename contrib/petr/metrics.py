@@ -1,10 +1,10 @@
 from prefusion.registry import METRICS
 from mmengine.evaluator import BaseMetric
 
-__all__ = ["Accuracy"]
+__all__ = ["AccuracyPetr"]
 
 @METRICS.register_module()
-class Accuracy(BaseMetric):
+class AccuracyPetr(BaseMetric):
     def __init__(self):
         super().__init__()
 

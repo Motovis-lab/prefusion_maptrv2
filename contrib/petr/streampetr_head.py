@@ -155,7 +155,7 @@ class StreamPETRHead(AnchorFreeHead):
 
             self.assigner = build_assigner(assigner)
             # DETR sampling=False, so use PseudoSampler
-            sampler_cfg = dict(type='PseudoSampler')
+            sampler_cfg = dict(type='PseudoSamplerPetr')
             self.sampler = DATA_SAMPLERS.build(sampler_cfg)
 
         self.num_query = num_query

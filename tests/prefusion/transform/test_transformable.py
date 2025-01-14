@@ -632,7 +632,7 @@ def test_occ_sdf_bev_flip_y(occ_sdf_bev):
 
 @pytest.fixture()
 def pose0():
-    return EgoPose("ego_pose", 1, np.eye(3), np.array([[1, -1, -1.9]]))
+    return EgoPose("ego_pose", 1, np.eye(3), np.array([[1], [-1], [-1.9]]))
 
 
 @pytest.fixture()
@@ -642,7 +642,7 @@ def pose1():
          [     -0.5, 0.8660254, 0], 
          [        0,         0, 1]]), 
         
-        np.array([[3, -2, 2.1]])
+        np.array([[3], [-2], [2.1]])
     )
 
 def test_pose_flip_3d_flip_x(pose0, pose1):
