@@ -117,8 +117,8 @@ scene_names="
         20231028_145730
         "
 fish_camera_ids="camera1 camera11 camera12 camera15 camera2 camera3 camera4 camera5 camera6 camera7 camera8"
-num_cores=10
-SOURCE_DIR="/mnt/ssd1/wuhan/prefusion/data/MV4D_12V3L"
+num_cores=32
+SOURCE_DIR="/home/wuhan/prefusion/data/MV4D_12V3L"
 
 process_folder() {
     local scene_name_=$1
@@ -142,11 +142,11 @@ process_folder() {
     # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/multimodel_data_baidu/$scene_name_/occ_map/occ_edge_height_map_-15_-15_15_15/* ./data/MV4D_12V3L/$scene_name_/occ/occ_2d/occ_edge_height_map_-15_-15_15_15
     # s5cmd --credentials-file ~/.aws/credentials --endpoint-url http://192.168.23.242:8009 --numworkers 16 --retry-count 100 sync s3://mv-4d-annotation/data/multimodel_data_baidu/$scene_name_/occ_map/occ_edge_lidar_mask_-15_-15_15_15/* ./data/MV4D_12V3L/$scene_name_/occ/occ_2d/occ_edge_lidar_mask_-15_-15_15_15
     # rm -rf ./data/MV4D_12V3L/$scene_name_/lidar/undistort_static_merged_lidar1_model
-    # python tools/dataset_converters/gene_info_4d_v2.py $scene_name_
+    python tools/dataset_converters/gene_info_4d_v2.py $scene_name_
     # rm -rf ./data/MV4D_12V3L/$scene_name_/lidar/undistort_static_merged_lidar1
     
     # 只用于同步更新的小文件，不用于整个增量scene的传输
-    rsync -avzLP "$SOURCE_DIR/$scene_name" wuhan@192.168.3.148:/share/home/wuhan/MV4D_12V3L/
+    # rsync -avzLP "$SOURCE_DIR/$scene_name" wuhan@192.168.3.148:/share/home/wuhan/MV4D_12V3L/
     # rsync -avzLP "$SOURCE_DIR/$scene_name" wuhan@192.168.23.248:/ssd1/MV4D_12V3L/
     echo "processed $scene_name"
 }
