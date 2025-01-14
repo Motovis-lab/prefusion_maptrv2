@@ -276,7 +276,7 @@ class ParkingFastRayPlanarSingleFrameModelAPA(BaseModel):
             N, C, Z, X, Y = bev_feats.shape
             bev_feats = bev_feats.reshape(N, C*Z, X, Y)
         ## voxel encoder
-            bev_feats = self.voxel_encoder(bev_feats)
+        bev_feats = self.voxel_encoder(bev_feats)
         ## heads & outputs
         out_bbox_3d = self.head_bbox_3d(bev_feats)
         out_polyline_3d = self.head_polyline_3d(bev_feats)
@@ -330,7 +330,24 @@ class ParkingFastRayPlanarSingleFrameModelAPA(BaseModel):
             gt_occ_sdf_bev = gt_dict['occ_sdf_bev']
         
         if self.debug_mode:
-            save_outputs(pred_dict, batched_input_dict)
+            import matplotlib.pyplot as plt
+
+            plt.imshow(gt_occ_sdf_bev['seg'][0][0].detach().cpu().numpy()); plt.show()
+            freespace = pred_occ_sdf_bev['seg'][0][0].sigmoid().detach().cpu().numpy() > 0.5
+            plt.imshow(freespace); plt.show()
+
+            plt.imshow(gt_occ_sdf_bev['seg'][0][1].detach().cpu().numpy()); plt.show()
+            plt.imshow(pred_occ_sdf_bev['seg'][0][1].sigmoid().detach().cpu().numpy() > 0.5); plt.show()
+
+            plt.imshow(gt_occ_sdf_bev['sdf'][0][0].detach().cpu().numpy()); plt.show()
+            plt.imshow(pred_occ_sdf_bev['sdf'][0][0].detach().cpu().numpy()); plt.show()
+            plt.imshow(pred_occ_sdf_bev['sdf'][0][0].detach().cpu().numpy() > 0); plt.show()
+
+            plt.imshow(gt_occ_sdf_bev['height'][0][0].detach().cpu().numpy()); plt.show()
+            plt.imshow(pred_occ_sdf_bev['height'][0][0].detach().cpu().numpy()); plt.show()
+
+            # draw_outputs(pred_dict, batched_input_dict)
+            # save_outputs(pred_dict, batched_input_dict)
             # TODO: save occ_sdf_bev
 
         if mode == 'tensor':
