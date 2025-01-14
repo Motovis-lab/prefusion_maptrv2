@@ -901,7 +901,7 @@ class ParkingFastRayPlanarMultiFrameModelAPALidar(BaseModel):
             # TODO: save occ_sdf_bev
 
         if mode == 'tensor':
-            pred_dict['occ_sdf_bev'] = pred_occ_sdf_bev
+            # pred_dict['occ_sdf_bev'] = pred_occ_sdf_bev
             return pred_dict
         if mode == 'loss':
             losses = {}
@@ -912,7 +912,7 @@ class ParkingFastRayPlanarMultiFrameModelAPALidar(BaseModel):
         if mode == 'predict':
             losses = {}
             losses.update(self.compute_planar_losses(pred_dict, gt_dict))
-            losses.update(self.compute_occ_sdf_losses(pred_occ_sdf_bev, gt_occ_sdf_bev))
+            # losses.update(self.compute_occ_sdf_losses(pred_occ_sdf_bev, gt_occ_sdf_bev))
             losses['loss'] += losses['occ_sdf_bev_loss']
             return (
                 *[{branch: {t: v.cpu() for t, v in _pred.items()}} for branch, _pred in pred_dict.items()],
