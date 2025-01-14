@@ -275,7 +275,7 @@ class ParkingFastRayPlanarSingleFrameModelAPA(BaseModel):
             N, C, Z, X, Y = bev_feats.shape
             bev_feats = bev_feats.reshape(N, C*Z, X, Y)
         ## voxel encoder
-            bev_feats = self.voxel_encoder(bev_feats)
+        bev_feats = self.voxel_encoder(bev_feats)
         ## heads & outputs
         out_bbox_3d = self.head_bbox_3d(bev_feats)
         out_polyline_3d = self.head_polyline_3d(bev_feats)
@@ -329,7 +329,24 @@ class ParkingFastRayPlanarSingleFrameModelAPA(BaseModel):
             gt_occ_sdf_bev = gt_dict['occ_sdf_bev']
         
         if self.debug_mode:
-            save_outputs(pred_dict, batched_input_dict)
+            import matplotlib.pyplot as plt
+
+            plt.imshow(gt_occ_sdf_bev['seg'][0][0].detach().cpu().numpy()); plt.show()
+            freespace = pred_occ_sdf_bev['seg'][0][0].sigmoid().detach().cpu().numpy() > 0.5
+            plt.imshow(freespace); plt.show()
+
+            plt.imshow(gt_occ_sdf_bev['seg'][0][1].detach().cpu().numpy()); plt.show()
+            plt.imshow(pred_occ_sdf_bev['seg'][0][1].sigmoid().detach().cpu().numpy() > 0.5); plt.show()
+
+            plt.imshow(gt_occ_sdf_bev['sdf'][0][0].detach().cpu().numpy()); plt.show()
+            plt.imshow(pred_occ_sdf_bev['sdf'][0][0].detach().cpu().numpy()); plt.show()
+            plt.imshow(pred_occ_sdf_bev['sdf'][0][0].detach().cpu().numpy() > 0); plt.show()
+
+            plt.imshow(gt_occ_sdf_bev['height'][0][0].detach().cpu().numpy()); plt.show()
+            plt.imshow(pred_occ_sdf_bev['height'][0][0].detach().cpu().numpy()); plt.show()
+
+            # draw_outputs(pred_dict, batched_input_dict)
+            # save_outputs(pred_dict, batched_input_dict)
             # TODO: save occ_sdf_bev
 
         if mode == 'tensor':
@@ -884,7 +901,7 @@ class ParkingFastRayPlanarMultiFrameModelAPALidar(BaseModel):
             # TODO: save occ_sdf_bev
 
         if mode == 'tensor':
-            pred_dict['occ_sdf_bev'] = pred_occ_sdf_bev
+            # pred_dict['occ_sdf_bev'] = pred_occ_sdf_bev
             return pred_dict
         if mode == 'loss':
             losses = {}
@@ -895,7 +912,7 @@ class ParkingFastRayPlanarMultiFrameModelAPALidar(BaseModel):
         if mode == 'predict':
             losses = {}
             losses.update(self.compute_planar_losses(pred_dict, gt_dict))
-            losses.update(self.compute_occ_sdf_losses(pred_occ_sdf_bev, gt_occ_sdf_bev))
+            # losses.update(self.compute_occ_sdf_losses(pred_occ_sdf_bev, gt_occ_sdf_bev))
             losses['loss'] += losses['occ_sdf_bev_loss']
             return (
                 *[{branch: {t: v.cpu() for t, v in _pred.items()}} for branch, _pred in pred_dict.items()],

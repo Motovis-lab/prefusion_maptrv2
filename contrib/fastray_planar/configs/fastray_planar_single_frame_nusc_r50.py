@@ -212,6 +212,28 @@ val_dataset = dict(
     batch_size=batch_size,
 )
 
+test_dataset = dict(
+    type='GroupBatchDataset',
+    name="demo_parking",
+    data_root='/data/datasets/nuScenes',
+    info_path='/data/datasets/nuScenes/nusc_val_info.pkl',
+    model_feeder=dict(
+        type="NuscenesFastRayPlanarModelFeeder",
+        voxel_feature_config=voxel_feature_config,
+        camera_feature_configs=camera_feature_configs,
+        debug_mode=debug_mode,
+    ),
+    transformables=dict(**transformables, sample_token=dict(type='Variable', loader=dict(type="VariableLoader", variable_key="sample_token"))),
+    transforms=[
+        dict(type='RenderIntrinsic',
+             resolutions=camera_resolution_configs,
+             intrinsics=camera_intrinsic_configs)
+    ],
+    group_sampler=dict(type="SequentialSceneFrameGroupSampler",
+                       phase="test_scene_by_scene"),
+    batch_size=1,
+)
+
 ## dataloader configs
 train_dataloader = dict(
     num_workers=num_workers,
@@ -231,6 +253,15 @@ val_dataloader = dict(
     pin_memory=True,
 )
 
+test_dataloader = dict(
+    num_workers=num_workers,
+    sampler=dict(type="DefaultSampler", shuffle=False),
+    collate_fn=dict(type="collate_dict"),
+    dataset=test_dataset,
+    persistent_workers=persistent_workers,
+    pin_memory=True,
+)
+
 
 ## model configs
 bev_mode = True
@@ -246,7 +277,7 @@ backbones = dict(
         norm_cfg=dict(type='SyncBN', requires_grad=True),
         norm_eval=True,
         style='pytorch',
-        init_cfg=dict(type='Pretrained', checkpoint='./ckpts/resnet50.pth'),
+        # init_cfg=dict(type='Pretrained', checkpoint='./ckpts/resnet50.pth'),
         fpn_lateral_channel=128,
         fpn_in_channels=[256, 512, 1024, 2048],
         out_stride=feature_downscale,
@@ -407,9 +438,20 @@ model = dict(
 log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
+custom_hooks = [
+    dict(type="DumpDetectionAsNuscenesJsonHook",
+         det_anno_transformable_keys=["bbox_3d", "bbox_3d_rect_cuboid", "bbox_3d_cylinder", "bbox_3d_oriented_cylinder"],
+         voxel_shape=voxel_shape,
+         voxel_range=voxel_range,
+         pre_conf_thresh=0.3,
+         nms_ratio=1.0,
+         area_score_thresh=0.5),
+]
+
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=30, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=30, val_interval=1)
 val_cfg = dict(type="GroupBatchValLoop")
+test_cfg = dict(type="GroupBatchInferLoop")
 
 ## evaluator and metrics
 val_evaluator = [
@@ -422,6 +464,8 @@ val_evaluator = [
     #     max_conf_as_pred_class=True,
     # )
 ]
+
+test_evaluator = [dict(type="PlanarSegIou")]
 
 ## optimizer configs
 optim_wrapper = dict(
@@ -452,7 +496,7 @@ today = datetime.datetime.now().strftime("%m%d")
 
 # load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
 # load_from = "./ckpts/single_frame_nusc_1118_epoch_200.pth"
-# load_from = "./ckpts/single_frame_nusc_1121_epoch_1.pth"
+load_from = "./ckpts/single_frame_nusc_r50_0111_epoch_30.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
 # work_dir = './work_dirs/fastray_planar_single_frame_1105_infer'

@@ -3,7 +3,7 @@ stages:
 
 pytest:
   stage: test
-  image: brianlan/prefusion:v5
+  image: brianlan/prefusion:v10
   script:
     - echo $(pwd)
     - python -m pytest tests --junitxml=report.xml --cov=./ --cov-report=xml

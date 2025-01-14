@@ -668,11 +668,12 @@ def draw_outputs(pred_dict, batched_input_dict):
     
     
     plt.tight_layout()
-    save_path = Path('work_dirs/result_pngs') / f'{scene_frame_id}.png'
+    # save_path = Path('work_dirs/result_pngs') / f'{scene_frame_id}.png'
+    save_path = Path('work_dirs/result_pngs_new') / f'{scene_frame_id}.png'
     save_path.parent.mkdir(parents=True, exist_ok=True)
-    # plt.savefig(save_path)
-    # plt.close()
-    plt.show()
+    # plt.show()
+    plt.savefig(save_path)
+    plt.close()
                 
 
 def save_outputs(pred_dict, batched_input_dict):

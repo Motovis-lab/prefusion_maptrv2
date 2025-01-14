@@ -3,9 +3,11 @@ from typing import Any
 import functools
 import pickle
 
+import open3d as o3d
 import cv2
 import pytest
 import numpy as np
+from numba.core.ir_utils import mk_alloc
 from numpy.testing import assert_almost_equal
 
 from copious.io.fs import mktmpdir
@@ -27,7 +29,19 @@ from prefusion.dataset.transformable_loader import (
     Polyline3DLoader,
     ParkingSlot3DLoader, CameraTimeImageSetLoader,
 )
-from tools.dataset_converters.gene_info_4d_v2 import ori_pcd_lidar_point
+
+def ori_pcd_lidar_point(save_path, lidar_points):
+    device = o3d.core.Device("CPU:0")
+    dtype = o3d.core.float32
+    points_intensities = lidar_points[:, 3][:, None]
+    points_positions = lidar_points[:,:3]
+    lidar_map = o3d.t.geometry.PointCloud(device)
+    
+    lidar_map.point.positions = o3d.core.Tensor(points_positions , dtype, device)
+    lidar_map.point.intensity = o3d.core.Tensor(points_intensities , dtype, device)
+    
+    o3d.t.io.write_point_cloud(str(save_path), lidar_map)
+
 
 _approx = functools.partial(pytest.approx, rel=1e-4)
 
@@ -652,7 +666,7 @@ def test_parkingslot3d_loader_and_modify():
 
 
 def test_camera_time_loader_modification():
-    data_root = Path("tests/prefusion/dataset/example_inputs_lidar")
+    data_root = mktmpdir()
     ii = IndexInfo('20231027_185823', '1698404306764')
     with open("tests/prefusion/dataset/mv4d-infos-for-test-002.pkl", "rb") as f:
         info_data = pickle.load(f)
@@ -676,7 +690,8 @@ def test_camera_time_loader_modification():
         )
         assert_almost_equal(
             camera_images.transformables['camera1'].intrinsic,
-            np.array([965.4158113475025, 520.1966103766614, 469.48876980550966, 469.83770842397064, 0.057245580966242486, -0.01232397789444156,
+            np.array([965.4158113475025, 520.1966103766614, 469.48876980550966, 469.83770842397064,
+                      0.057245580966242486, -0.01232397789444156,
                       0.0025930032838253525, -0.0007072882057509018]
             )
         )
@@ -690,7 +705,7 @@ def test_camera_time_loader_modification():
 
 
 def test_lidar_sweeps_loader():
-    data_root = Path("tests/prefusion/dataset/example_inputs_lidar")
+    data_root = mktmpdir()
     ii = IndexInfo('20231027_185823', '1698404306764')
     with open("tests/prefusion/dataset/mv4d-infos-for-test-002.pkl", "rb") as f:
         info_data = pickle.load(f)

@@ -164,7 +164,7 @@ virtual_camera_settings = dict(
 virtual_camera_transform = dict(type='RenderVirtualCamera', camera_settings=virtual_camera_settings)
 
 
-debug_mode = False
+debug_mode = True
 
 if debug_mode:
     batch_size = 1
@@ -282,7 +282,7 @@ val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/MV4D_12V3L',
-    info_path='/data/datasets/MV4D_12V3L/mv_4d_infos_20231029_195612.pkl',
+    info_path='/data/datasets/MV4D_12V3L/demo.pkl',
     # info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
@@ -308,7 +308,7 @@ train_dataloader = dict(
 )
 
 val_dataloader = dict(
-    sampler=dict(type='DefaultSampler'),
+    sampler=dict(type='DefaultSampler', shuffle=False),
     num_workers=num_workers,
     collate_fn=dict(type="collate_dict"),
     dataset=val_dataset,
@@ -618,8 +618,8 @@ env_cfg = dict(
 )
 
 
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_0107"
+work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_0113"
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
-load_from = "./work_dirs/collected_models/apa_bev_occ_epoch_50_final.pth"
+load_from = "./work_dirs/collected_models/single_frame_epoch_14.pth"
 
 resume = False
