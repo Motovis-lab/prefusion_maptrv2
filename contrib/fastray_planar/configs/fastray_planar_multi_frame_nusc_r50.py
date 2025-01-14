@@ -476,9 +476,9 @@ custom_hooks = [
 ]
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=24, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=24, val_interval=1)
 val_cfg = dict(type="GroupBatchValLoop")
-# test_cfg = dict(type="GroupBatchInferLoop")
+test_cfg = dict(type="GroupBatchInferLoop")
 
 ## evaluator and metrics
 val_evaluator = [
@@ -531,7 +531,7 @@ today = datetime.datetime.now().strftime("%m%d")
 # work_dir = "./work_dirs/fastray_planar_multi_frame_1112"
 work_dir = f'./work_dirs/{experiment_name}_{today}'
 # load_from = "./work_dirs/fastray_planar_multi_frame_nusc_r50_1212/multi_frame_nusc_r50_1212_epoch_1.pth"
-# load_from = "./ckpts/fastray_planar_single_frame_nusc_4planar_types_1113_epoch_1.pth"
+load_from = "./ckpts/single_frame_nusc_r50_0111_epoch_30.pth"
 # load_from = "./ckpts/multi_frame_nusc_r50_1203_epoch_48.pth"
 # load_from = "./work_dirs/fastray_planar_multi_frame_nusc_r50_1125/multi_frame_nusc_r50_epoch_1.pth"
 
