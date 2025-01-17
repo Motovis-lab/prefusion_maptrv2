@@ -11,8 +11,8 @@ warnings.filterwarnings("ignore")
 import sys
 import pdb
 sys.path.append(".")
-sys.path.append("/mnt/ssd1/wuhan/mtv4d/scripts/")
-sys.path.append("/mnt/ssd1/wuhan/mtv4d/")
+sys.path.append("/home/wuhan/mtv4d/scripts/")
+sys.path.append("/home/wuhan/mtv4d/")
 import open3d as o3d
 import mmcv
 import mmengine
