@@ -424,7 +424,7 @@ class PlanarBbox3D(PlanarTensorSmith):
             # get area score
             mean_count = seg_classes[0, group].sum()
             mean_area = mean_size[0] * mean_size[1] * fx * fy * min(self.reverse_nms_ratio ** 2, 1)
-            area_score = min(1, mean_count / mean_area)
+            area_score = min(1.0, mean_count / mean_area)
             # get center
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
@@ -736,7 +736,7 @@ class PlanarRectangularCuboid(PlanarBbox3D):
             # get area score
             mean_count = seg_classes[0, group].sum()
             mean_area = mean_size[0] * mean_size[1] * fx * fy * min(self.reverse_nms_ratio ** 2, 1)
-            area_score = min(1, mean_count / mean_area)
+            area_score = min(1.0, mean_count / mean_area)
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * unit_zvec * mean_size[2]
@@ -1069,7 +1069,7 @@ class PlanarSquarePillar(PlanarTensorSmith):
             # get area score
             mean_count = seg_classes[0, group].sum()
             mean_area = mean_size[0] * mean_size[1] * fx * fy * min(self.reverse_nms_ratio ** 2, 1)
-            area_score = min(1, mean_count / mean_area)
+            area_score = min(1.0, mean_count / mean_area)
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[2]
@@ -1309,7 +1309,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
             # get area score
             mean_count = seg_classes[0, group].sum()
             mean_area = mean_size[0] * mean_size[0] * fx * fy * min(self.reverse_nms_ratio ** 2, 1) * np.pi
-            area_score = min(1, mean_count / mean_area)
+            area_score = min(1.0, mean_count / mean_area)
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[1]
@@ -1317,8 +1317,8 @@ class PlanarCylinder3D(PlanarTensorSmith):
                 'confs': mean_classes,
                 'area_score': area_score,
                 'score': mean_classes[0] * area_score,
-                'radius': mean_size[0],
-                'height': mean_size[1],
+                'radius': float(mean_size[0]),
+                'height': float(mean_size[1]),
                 'zvec': mean_unit_zvec,
                 'translation': mean_center
             }
@@ -1613,7 +1613,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             # get area score
             mean_count = seg_classes[0, group].sum()
             mean_area = mean_size[0] * mean_size[0] * fx * fy * min(self.reverse_nms_ratio ** 2, 1) * np.pi
-            area_score = min(1, mean_count / mean_area)
+            area_score = min(1.0, mean_count / mean_area)
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[1]

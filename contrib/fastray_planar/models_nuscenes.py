@@ -3,9 +3,9 @@ import torch
 from torch import Tensor
 from typing import Union, List, Dict, Optional
 
-from mmengine.model import BaseModel, BaseModule
 from mmengine.structures import BaseDataElement
 
+from prefusion import BaseModel
 from prefusion.registry import MODELS
 
 from .model_utils import *
@@ -41,9 +41,6 @@ class NuscenesFastRayPlanarSingleFrameModel(BaseModel):
         for branch in loss_cfg:
             self.losses_dict[branch] = MODELS.build(loss_cfg[branch])
 
-    def test_step(self, data: Union[dict, tuple, list]) -> list:
-        data = self.data_preprocessor(data, False)
-        return self._run_forward(data, mode='tensor')  # type: ignore
 
     def forward(self, mode='tensor', **batched_input_dict):
         """
@@ -183,9 +180,6 @@ class NuscenesFastRayPlanarMultiFrameModel(BaseModel):
         for branch in loss_cfg:
             self.losses_dict[branch] = MODELS.build(loss_cfg[branch])
 
-    def test_step(self, data: Union[dict, tuple, list]) -> list:
-        data = self.data_preprocessor(data, False)
-        return self._run_forward(data, mode='tensor')  # type: ignore
 
     def forward(self, mode='tensor', **batched_input_dict):
         """
