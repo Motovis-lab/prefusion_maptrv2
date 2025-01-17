@@ -143,7 +143,7 @@ class GroupBatchTestLoop(TestLoop):
 class GroupBatchInferLoop(ValLoop):
 
     def run(self):
-        """Launch validation."""
+        """Launch test."""
         self.runner.call_hook('before_test')
         self.runner.call_hook('before_test_epoch')
         self.runner.model.eval()
