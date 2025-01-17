@@ -11,6 +11,7 @@ from scipy.spatial.transform import Rotation as R
 from copious.data_structure.dict import defaultdict2dict
 
 from prefusion.registry import HOOKS
+from .model_utils import save_pred_outputs
 
 if TYPE_CHECKING:
     from prefusion.dataset.transform import EgoPose
@@ -305,3 +306,32 @@ def get_bbox_3d_oriented_cylinder(
         }
         for bx in reversed_pbox
     ]
+
+
+@HOOKS.register_module()
+class DumpPlanarPredResultsHookAPA(Hook):
+    def __init__(
+        self,
+        tensor_smith_dict,
+        dictionary_dict,
+        save_dir=None
+    ):
+        super().__init__()
+        self.tensor_smith_dict = tensor_smith_dict
+        self.dictionary_dict = dictionary_dict
+        self.save_dir = save_dir
+
+    def after_test_iter(
+        self,
+        runner,
+        batch_idx: int,
+        data_batch: DATA_BATCH = None,
+        outputs: Optional[Union[dict, Sequence]] = None,
+        mode: str = "test",
+    ) -> None:
+        # print(data_batch.keys())
+        # print(outputs.keys())
+        rtn = save_pred_outputs(data_batch, outputs, self.tensor_smith_dict, self.dictionary_dict, self.save_dir)
+        return rtn
+        
+

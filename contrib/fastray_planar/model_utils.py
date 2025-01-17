@@ -5,7 +5,10 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 
+from scipy.io import savemat
+
 from prefusion.dataset.tensor_smith import *
+from prefusion.registry import TENSOR_SMITHS
 
 
 
@@ -755,9 +758,109 @@ def save_outputs(pred_dict, batched_input_dict):
                     result_dict['pred']['polylines'].append(polyline[:, :3].reshape(-1).tolist())
             case PlanarPolygon3D():
                 pass
+            case PlanarOccSdfBev():
+                pass
     
     save_path = save_dir / 'gts_and_preds_new' / f'{scene_frame_id}.json'
     save_path.parent.mkdir(parents=True, exist_ok=True)
     with open(save_path, 'w') as fw:
         json.dump(result_dict, fw, indent=4)
                 
+
+
+def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictionary_dict, save_dir):
+    scene_frame_id = batched_input_dict['index_infos'][0].scene_frame_id
+    camera_tensors_dict = batched_input_dict['camera_tensors']
+
+    save_dir = Path('work_dirs/infered_results') / save_dir
+
+    # save vitual camera images
+    for cam_id in camera_tensors_dict:
+        img = camera_tensors_dict[cam_id].detach().cpu().numpy()[0].transpose(1, 2, 0)[..., ::-1] * 255 + 128
+        img = img.astype(np.uint8)
+        save_jpg = save_dir / 'cameras' / cam_id / f'{scene_frame_id}.jpg'
+        save_jpg.parent.mkdir(parents=True, exist_ok=True)
+        plt.imsave(save_jpg, img)
+
+    # get preds
+    result_dict = {
+        'pred': dict(bboxes=[], cylinders=[], slots=[]), 
+    }
+    for branch in pred_dict:
+        pred_dict_branch = pred_dict[branch]
+        # extract batch_0
+        pred_dict_branch_0 = {**pred_dict_branch}
+        for key in pred_dict_branch_0:
+            if key in ['cen', 'seg']:
+                pred_dict_branch_0[key] = pred_dict_branch[key][0].sigmoid().detach().cpu().float()
+            else:
+                pred_dict_branch_0[key] = pred_dict_branch[key][0].detach().cpu().float()
+        tensor_smith = TENSOR_SMITHS.build(tensor_smith_dict[branch])
+        match tensor_smith:
+            case PlanarBbox3D() | PlanarRectangularCuboid() | PlanarSquarePillar() | PlanarOrientedCylinder3D():
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                class_name_list = dictionary_dict[branch]['classes']
+                num_class_channels = len(class_name_list)
+                for element in results:
+                    if element['score'] < 0.7:
+                        continue
+                    element['class'] = class_name_list[np.argmax(element['confs'][1:num_class_channels + 1])]
+                    for key in element:
+                        if type(element[key]) == np.ndarray:
+                            element[key] = element[key].reshape(-1).tolist()
+                        if type(element[key]) in (np.float32, np.float64):
+                            element[key] = float(element[key])
+                    element.pop('confs')
+                    result_dict['pred']['bboxes'].append(element)
+            case PlanarCylinder3D():
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                class_name_list = dictionary_dict[branch]['classes']
+                num_class_channels = len(class_name_list)
+                for element in results:
+                    if element['score'] < 0.7:
+                        continue
+                    element['class'] = class_name_list[np.argmax(element['confs'][1:num_class_channels + 1])]
+                    for key in element:
+                        if type(element[key]) == np.ndarray:
+                            element[key] = element[key].reshape(-1).tolist()
+                        if type(element[key]) in (np.float32, np.float64):
+                            element[key] = float(element[key])
+                    element.pop('confs')
+                    result_dict['pred']['cylinders'].append(element)
+            case PlanarParkingSlot3D():
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                for slot in results:
+                    result_dict['pred']['slots'].append(slot.reshape(-1).tolist())
+            case PlanarOccSdfBev():
+                freespace = pred_dict_branch_0['seg'][0].sigmoid().detach().cpu().numpy()
+                save_png = save_dir / 'freespace' / f'{scene_frame_id}.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, freespace)
+
+                occ_edge = pred_dict_branch_0['seg'][1].sigmoid().detach().cpu().numpy()
+                save_png = save_dir / 'occ_edge' / f'{scene_frame_id}.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, occ_edge)
+
+                sdf = pred_dict_branch_0['sdf'][0].detach().cpu().numpy()
+                save_png = save_dir / 'sdf' / f'{scene_frame_id}.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, sdf)
+
+                height = pred_dict_branch_0['height'][0].detach().cpu().numpy()
+                save_png = save_dir / 'height' / f'{scene_frame_id}.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, height)
+
+                savemat(save_dir / 'mat' / f'{scene_frame_id}.mat', 
+                        {'freespace': freespace,
+                         'occ_edge': occ_edge,
+                         'sdf': sdf,
+                         'height': height})
+    
+    save_path = save_dir / 'dets' / f'{scene_frame_id}.json'
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(save_path, 'w') as fw:
+        json.dump(result_dict, fw, indent=4)
+    
+    return True                
