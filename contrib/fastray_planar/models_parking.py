@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
 
-from mmengine.model import BaseModel
 from mmengine.structures import BaseDataElement
 
-from prefusion.registry import MODELS
+from prefusion import BaseModel
 from prefusion import SegIouLoss, DualFocalLoss
+from prefusion.registry import MODELS
 
 from .modules import *
 from .model_utils import *
@@ -230,8 +230,9 @@ class ParkingFastRayPlanarSingleFrameModelAPA(BaseModel):
         self.head_occ_sdf_bev = MODELS.build(heads['occ_sdf_bev'])
         # init losses
         self.planar_losses_dict = {}
-        for branch in loss_cfg:
-            self.planar_losses_dict[branch] = MODELS.build(loss_cfg[branch])
+        if loss_cfg is not None:
+            for branch in loss_cfg:
+                self.planar_losses_dict[branch] = MODELS.build(loss_cfg[branch])
         self.occ_seg_iou_loss = SegIouLoss(method='linear')
         self.occ_seg_dfl_loss = DualFocalLoss()
         self.occ_sdf_l1_loss = nn.L1Loss(reduction='none')
@@ -324,7 +325,7 @@ class ParkingFastRayPlanarSingleFrameModelAPA(BaseModel):
             height=out_occ_sdf_bev[1][0:, 1:2],
         )
         
-        if 'annotations' in batched_input_dict:
+        if batched_input_dict['annotations']:
             gt_dict = batched_input_dict['annotations']
             gt_occ_sdf_bev = gt_dict['occ_sdf_bev']
         
@@ -580,7 +581,7 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
             sdf=out_occ_sdf_bev[1][:, 0:1],
             height=out_occ_sdf_bev[1][0:, 1:2],
         )
-        if 'annotations' in batched_input_dict:
+        if batched_input_dict['annotations']:
             gt_dict = batched_input_dict['annotations']
             gt_occ_sdf_bev = gt_dict['occ_sdf_bev']
 
@@ -601,9 +602,11 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
             plt.imshow(gt_occ_sdf_bev['height'][0][0].detach().cpu().numpy()); plt.show()
             plt.imshow(pred_occ_sdf_bev['height'][0][0].detach().cpu().numpy()); plt.show()
 
-            draw_outputs(pred_dict, batched_input_dict)
-            # save_outputs(pred_dict, batched_input_dict)
-            # TODO: save occ_sdf_bev
+            # draw_outputs(pred_dict, batched_input_dict)
+            save_outputs(pred_dict, batched_input_dict)
+            # save_pred_outputs(pred_dict)
+            # save occ_sdf_bev
+            # save_occ_sdf_bev(pred_occ_sdf_bev)
         
         if mode == 'tensor':
             pred_dict['occ_sdf_bev'] = pred_occ_sdf_bev
@@ -620,7 +623,7 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
             losses.update(self.compute_occ_sdf_losses(pred_occ_sdf_bev, gt_occ_sdf_bev))
             losses['loss'] += losses['occ_sdf_bev_loss']
             return (
-                *[{branch: {t: v.cpu() for t, v in _pred.items()}} for branch, _pred in pred_dict.items()],
+                *[{branch: {k: v.cpu() for k, v in _pred.items()}} for branch, _pred in pred_dict.items()],
                 BaseDataElement(loss=losses),
             )
 
