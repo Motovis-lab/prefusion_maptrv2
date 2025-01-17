@@ -852,11 +852,12 @@ def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictiona
                 save_png.parent.mkdir(parents=True, exist_ok=True)
                 plt.imsave(save_png, height)
 
-                savemat(save_dir / 'mat' / f'{scene_frame_id}.mat', 
-                        {'freespace': freespace,
-                         'occ_edge': occ_edge,
-                         'sdf': sdf,
-                         'height': height})
+                mat_path = save_dir / 'mat' / f'{scene_frame_id}.mat'
+                mat_path.parent.mkdir(parents=True, exist_ok=True)
+                savemat(mat_path, {'freespace': freespace,
+                                   'occ_edge': occ_edge,
+                                   'sdf': sdf,
+                                   'height': height})
     
     save_path = save_dir / 'dets' / f'{scene_frame_id}.json'
     save_path.parent.mkdir(parents=True, exist_ok=True)
