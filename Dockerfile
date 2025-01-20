@@ -66,6 +66,8 @@ RUN apt-get update \
 RUN pip install --no-cache-dir copious==0.1.24
 RUN pip install --no-cache-dir redis==5.2.0
 RUN pip install --no-cache-dir spconv-cu121==2.3.7
+RUN pip install --no-cache-dir onnx==1.17.0
+RUN pip install --no-cache-dir onnxruntime==1.20.1
 
 WORKDIR /workspace
 
