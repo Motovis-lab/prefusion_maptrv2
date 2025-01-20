@@ -80,20 +80,20 @@ def main():
         cfg.work_dir = osp.join('./work_dirs',
                                 osp.splitext(osp.basename(args.config))[0])
 
-    # enable automatic-mixed-precision training
-    if args.amp is True:
-        optim_wrapper = cfg.optim_wrapper.type
-        if optim_wrapper == 'AmpOptimWrapper':
-            print_log(
-                'AMP training is already enabled in your config.',
-                logger='current',
-                level=logging.WARNING)
-        else:
-            assert optim_wrapper == 'OptimWrapper', (
-                '`--amp` is only supported when the optimizer wrapper type is '
-                f'`OptimWrapper` but got {optim_wrapper}.')
-            cfg.optim_wrapper.type = 'AmpOptimWrapper'
-            cfg.optim_wrapper.loss_scale = 'dynamic'
+    # # enable automatic-mixed-precision training
+    # if args.amp is True:
+    #     optim_wrapper = cfg.optim_wrapper.type
+    #     if optim_wrapper == 'AmpOptimWrapper':
+    #         print_log(
+    #             'AMP training is already enabled in your config.',
+    #             logger='current',
+    #             level=logging.WARNING)
+    #     else:
+    #         assert optim_wrapper == 'OptimWrapper', (
+    #             '`--amp` is only supported when the optimizer wrapper type is '
+    #             f'`OptimWrapper` but got {optim_wrapper}.')
+    #         cfg.optim_wrapper.type = 'AmpOptimWrapper'
+    #         cfg.optim_wrapper.loss_scale = 'dynamic'
 
     # convert BatchNorm layers
     if args.sync_bn != 'none':
@@ -128,7 +128,7 @@ def main():
         # if 'runner_type' is set in the cfg
         runner = RUNNERS.build(cfg)
 
-    # start validation
+    # start inference
     runner.logger.name = "prefusion"
     runner.test()
 
