@@ -140,7 +140,7 @@ class GroupBatchTestLoop(TestLoop):
         
 
 @LOOPS.register_module()
-class GroupBatchInferLoop(ValLoop):
+class GroupBatchInferLoop(TestLoop):
 
     def run(self):
         """Launch test."""
