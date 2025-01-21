@@ -407,6 +407,21 @@ class ParkingFastRayPlanarSingleFrameModelAPA(BaseModel):
 
 
 @MODELS.register_module()
+class ParkingFastRayPlanarSingleFrameModelAPA_DP(ParkingFastRayPlanarSingleFrameModelAPA):
+
+    def forward(self, bev_feats):
+        ## voxel encoder
+        bev_feats = self.voxel_encoder(bev_feats)
+        ## heads & outputs
+        out_bbox_3d = self.head_bbox_3d(bev_feats)
+        out_polyline_3d = self.head_polyline_3d(bev_feats)
+        out_parkingslot_3d = self.head_parkingslot_3d(bev_feats)
+        out_occ_sdf_bev = self.head_occ_sdf_bev(bev_feats)
+
+        return out_bbox_3d, out_polyline_3d, out_parkingslot_3d, out_occ_sdf_bev
+
+
+@MODELS.register_module()
 class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
     
     def __init__(self,

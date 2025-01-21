@@ -20,22 +20,7 @@ RUN rm conda_installer.sh
 ENV PATH=/opt/conda/bin:$PATH
 ENV CUDA_HOME=/usr/local/cuda
 
-# install requirements
-RUN pip config set global.index-url https://mirrors.bfsu.edu.cn/pypi/web/simple
-COPY requirements.txt /requirements.txt
-COPY mim-requirements.txt /mim-requirements.txt
-RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir -r /requirements.txt
-# If not use docker build, we need to temporarily put cuda (of correct version) to /usr/loca/cuda or conda install cuda-toolkit cuda-cudart cuda-cccl libcublas libcusparse libcusolver
-RUN pip install --no-cache-dir flash-attn==2.6.3
-# Install mmcv
-RUN pip install --no-cache-dir openmim
-COPY mim-requirements.txt /mim-requirements.txt
-RUN mim install --no-cache-dir -r /mim-requirements.txt
-
-# RUN mv /etc/apt/sources.list.bak /etc/apt/sources.list
-
-# install libgllib2.0 and set timezone
+# install libgllib2.0 and set TimeZone
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Shanghai
 RUN apt-get update \
@@ -46,21 +31,49 @@ RUN apt-get update \
    && apt-get clean \
    && rm -rf /var/lib/apt/lists/*
 
-# install pytorch3d
-RUN pip install --no-cache-dir --extra-index-url https://miropsota.github.io/torch_packages_builder pytorch3d==0.7.8+pt2.4.1cu121
-# COPY ./pytorch3d-0.7.8+pt2.4.1cu121-cp310-cp310-linux_x86_64.whl /pytorch3d-0.7.8+pt2.4.1cu121-cp310-cp310-linux_x86_64.whl
-# RUN pip install --no-cache-dir /pytorch3d-0.7.8+pt2.4.1cu121-cp310-cp310-linux_x86_64.whl
-# RUN rm -rf /pytorch3d-0.7.8+pt2.4.1cu121-cp310-cp310-linux_x86_64.whl
+# pip install other libraries
+RUN pip config set global.index-url https://mirrors.bfsu.edu.cn/pypi/web/simple
+RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir \
+        numba==0.60.0 \
+        numpy==1.26.4 \
+        scipy==1.14.1 \
+        torch==2.4.1 \
+        torchvision==0.19.1 \
+        torchaudio==2.4.1 \
+        spconv-cu121==2.3.7 \
+        copious==0.1.24 \
+        easydict==1.13 \
+        opencv-python-headless \
+        virtual-camera==0.0.4.3 \
+        pypcd-imp==0.1.5 \
+        open3d==0.18.0 \
+        cachetools==5.5.0 \
+        mmengine==0.10.5 \
+        mmdet==3.2.0 \
+        mmdet3d==1.4.0 \
+        pytest==8.3.3 \
+        pytest-cov \
+        loguru \
+        tqdm
 
-# install extra system utils
-RUN apt-get update \
-   && apt-get install -y vim htop iputils-ping  \
-   && apt-get clean \
-   && rm -rf /var/lib/apt/lists/*
-# install extra python packages
-RUN pip install --no-cache-dir copious==0.1.24
-RUN pip install --no-cache-dir redis==5.2.0
-RUN pip install --no-cache-dir spconv-cu121==2.3.7
+# Install pytorch3d
+# RUN pip install --no-cache-dir --extra-index-url https://miropsota.github.io/torch_packages_builder pytorch3d==0.7.8+pt2.4.1cu121
+COPY ./pytorch3d-0.7.8+pt2.4.1cu121-cp310-cp310-linux_x86_64.whl /pytorch3d-0.7.8+pt2.4.1cu121-cp310-cp310-linux_x86_64.whl
+RUN pip install --no-cache-dir /pytorch3d-0.7.8+pt2.4.1cu121-cp310-cp310-linux_x86_64.whl
+RUN rm -rf /pytorch3d-0.7.8+pt2.4.1cu121-cp310-cp310-linux_x86_64.whl
+
+# Install mmcv
+RUN pip install --no-cache-dir openmim
+COPY mim-requirements.txt /mim-requirements.txt
+RUN mim install --no-cache-dir -r /mim-requirements.txt
+
+# Install flash attention
+RUN pip install --no-cache-dir flash-attn==2.6.3
+
+# RUN pip install --no-cache-dir \
+        # nuscenes-devkit \
+        # redis==5.2.0
 
 WORKDIR /workspace
 
