@@ -772,7 +772,7 @@ def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictiona
     scene_frame_id = batched_input_dict['index_infos'][0].scene_frame_id
     camera_tensors_dict = batched_input_dict['camera_tensors']
 
-    save_dir = Path('work_dirs/infered_results') / save_dir
+    save_dir = Path(save_dir)
 
     # save vitual camera images
     for cam_id in camera_tensors_dict:

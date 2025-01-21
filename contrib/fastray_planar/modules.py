@@ -308,12 +308,14 @@ class FastRaySpatialTransform(BaseModule):
                  reduce_channels=False,
                  in_channels=None,
                  out_channels=None,
+                 dump_voxel_feats=False,
                  init_cfg=None):
         super().__init__(init_cfg=init_cfg)
         self.voxel_shape = voxel_shape
         assert fusion_mode in ['weighted', 'sampled', 'bilinear_weighted']
         self.fusion_mode = fusion_mode
         self.bev_mode = bev_mode
+        self.dump_voxel_feats = dump_voxel_feats
         self.reduce_channels = reduce_channels and bev_mode
         if self.reduce_channels:
             self.channel_reduction = nn.Conv2d(in_channels, out_channels, kernel_size=1)
@@ -383,10 +385,13 @@ class FastRaySpatialTransform(BaseModule):
                     
         # reshape voxel_feats
         if self.bev_mode:
-            bev_feats = voxel_feats.reshape(N, C*Z, X, Y)
+            voxel_feats = voxel_feats.reshape(N, C*Z, X, Y)
             if self.reduce_channels:
-                bev_feats = self.channel_reduction(bev_feats)
-            return bev_feats
+                bev_feats = self.channel_reduction(voxel_feats)
+                if self.dump_voxel_feats:
+                    return bev_feats, voxel_feats
+                return bev_feats
+            return voxel_feats
         else:
             return voxel_feats.reshape(N, C, Z, X, Y)
         
