@@ -388,9 +388,10 @@ class FastRaySpatialTransform(BaseModule):
             voxel_feats = voxel_feats.reshape(N, C*Z, X, Y)
             if self.reduce_channels:
                 bev_feats = self.channel_reduction(voxel_feats)
-            if self.dump_voxel_feats:
-                return bev_feats, voxel_feats
-            return bev_feats
+                if self.dump_voxel_feats:
+                    return bev_feats, voxel_feats
+                return bev_feats
+            return voxel_feats
         else:
             return voxel_feats.reshape(N, C, Z, X, Y)
         
