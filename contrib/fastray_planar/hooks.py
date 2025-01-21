@@ -2,11 +2,14 @@ import json
 from pathlib import Path
 from typing import Optional, Sequence, Union, List, Dict, TYPE_CHECKING
 from functools import partial
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 import numpy as np
+import torch
+from torch import nn
 from mmengine.hooks.hook import Hook
 from mmengine.logging import print_log
+from scipy.io import savemat
 from scipy.spatial.transform import Rotation as R
 from copious.data_structure.dict import defaultdict2dict
 
@@ -335,3 +338,103 @@ class DumpPlanarPredResultsHookAPA(Hook):
         return rtn
         
 
+@HOOKS.register_module()
+class DeployAndBebugHookAPA(Hook):
+    def __init__(
+        self,
+        tensor_smith_dict,
+        dictionary_dict,
+        save_dir=None
+    ):
+        super().__init__()
+        self.tensor_smith_dict = tensor_smith_dict
+        self.dictionary_dict = dictionary_dict
+        if save_dir is None:
+            self.save_dir = Path("work_dirs/deploy_and_debug")
+        else:
+            self.save_dir = Path('work_dirs') / save_dir
+        self.save_dir.mkdir(exist_ok=True, parents=True)
+
+    def after_test_iter(
+        self,
+        runner,
+        batch_idx: int,
+        data_batch: DATA_BATCH = None,
+        outputs: Optional[Union[dict, Sequence]] = None,
+        mode: str = "test",
+    ) -> None:
+        save_pred_outputs(data_batch, outputs, self.tensor_smith_dict, self.dictionary_dict, self.save_dir)
+        
+        batch_input_dict = runner.model.data_preprocessor(data_batch)
+
+        ori_model = runner.model.cuda()
+        ori_model.eval()
+
+        ## dump backbone model and io data
+        model_backbone = ori_model.backbone
+        camera_tensors_dict = batch_input_dict['camera_tensors']
+        camera_lookups = batch_input_dict['camera_lookups']
+        camera_feats_dict = {}
+        camera_feats_dict_cpu = {}
+        for cam_id in camera_tensors_dict:
+            camera_feats_dict[cam_id] = model_backbone(camera_tensors_dict[cam_id])
+            camera_feats_dict_cpu[cam_id] = camera_feats_dict[cam_id].cpu().detach().numpy()
+        torch.onnx.export(model_backbone, camera_tensors_dict[cam_id], str(self.save_dir / "phase_backbone_v9.onnx"), verbose=True,
+                          input_names=['camera_img'], output_names=['camera_feats'],
+                          opset_version=9)
+        savemat(str(self.save_dir / 'camera_tensors.mat'), data_batch['camera_tensors'])
+        savemat(str(self.save_dir / 'camera_lookups.mat'), data_batch['camera_lookups'][0])
+        savemat(str(self.save_dir / 'camera_feats.mat'), camera_feats_dict_cpu)
+
+        ## dump spatial_transform io data
+        spatial_transform = ori_model.spatial_transform
+        spatial_transform.dump_voxel_feats = True
+        _, voxel_feats = spatial_transform(camera_feats_dict, camera_lookups)
+        savemat(str(self.save_dir / 'voxel_feats.mat'), {'voxel_feats': voxel_feats.cpu().detach().numpy()})
+
+        ## dump bev model and io data
+        model_bev = DumpBevModel(
+            channel_reduction=spatial_transform.channel_reduction,
+            voxel_encoder=ori_model.voxel_encoder,
+            head_bbox_3d=ori_model.head_bbox_3d,
+            head_parkingslot_3d=ori_model.head_parkingslot_3d,
+            head_occ_sdf_bev=ori_model.head_occ_sdf_bev
+        )
+        out_bbox_3d_seg, out_bbox_3d_reg, out_parkingslot_3d_seg, out_parkingslot_3d_reg, out_occ_sdf_bev_seg, out_occ_sdf_bev_reg = model_bev(voxel_feats)
+        torch.onnx.export(model_bev, voxel_feats, str(self.save_dir / "phase_bev_v9.onnx"), verbose=True,
+                          input_names=['voxel_feats'], output_names=[
+                            'out_bbox_3d_seg', 'out_bbox_3d_reg', 'out_parkingslot_3d_seg', 'out_parkingslot_3d_reg', 'out_occ_sdf_bev_seg', 'out_occ_sdf_bev_reg'],
+                            opset_version=9)
+        savemat(str(self.save_dir / 'bev_outputs.mat'), {
+            'out_bbox_3d_seg': out_bbox_3d_seg.cpu().detach().numpy(),
+            'out_bbox_3d_reg': out_bbox_3d_reg.cpu().detach().numpy(),
+            'out_parkingslot_3d_seg': out_parkingslot_3d_seg.cpu().detach().numpy(),
+            'out_parkingslot_3d_reg': out_parkingslot_3d_reg.cpu().detach().numpy(),
+            'out_occ_sdf_bev_seg': out_occ_sdf_bev_seg.cpu().detach().numpy(),
+            'out_occ_sdf_bev_reg': out_occ_sdf_bev_reg.cpu().detach().numpy()
+        })
+        assert False
+        # return rtn
+
+
+class DumpBevModel(nn.Module):
+    def __init__(self, 
+                 channel_reduction,
+                 voxel_encoder,
+                 head_bbox_3d,
+                 head_parkingslot_3d,
+                 head_occ_sdf_bev):
+        super().__init__()
+        self.channel_reduction = channel_reduction
+        self.voxel_encoder = voxel_encoder
+        self.head_bbox_3d = head_bbox_3d
+        self.head_parkingslot_3d = head_parkingslot_3d
+        self.head_occ_sdf_bev = head_occ_sdf_bev
+
+    def forward(self, voxel_feats):
+        bev_feats = self.channel_reduction(voxel_feats)
+        bev_feats = self.voxel_encoder(bev_feats)
+        out_bbox_3d_seg, out_bbox_3d_reg = self.head_bbox_3d(bev_feats)
+        out_parkingslot_3d_seg, out_parkingslot_3d_reg = self.head_parkingslot_3d(bev_feats)
+        out_occ_sdf_bev_seg, out_occ_sdf_bev_reg = self.head_occ_sdf_bev(bev_feats)
+        return out_bbox_3d_seg, out_bbox_3d_reg, out_parkingslot_3d_seg, out_parkingslot_3d_reg, out_occ_sdf_bev_seg, out_occ_sdf_bev_reg
