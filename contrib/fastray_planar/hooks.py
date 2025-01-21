@@ -339,7 +339,7 @@ class DumpPlanarPredResultsHookAPA(Hook):
         
 
 @HOOKS.register_module()
-class DeployAndBebugHookAPA(Hook):
+class DeployAndDebugHookAPA(Hook):
     def __init__(
         self,
         tensor_smith_dict,
@@ -364,7 +364,7 @@ class DeployAndBebugHookAPA(Hook):
         mode: str = "test",
     ) -> None:
         save_pred_outputs(data_batch, outputs, self.tensor_smith_dict, self.dictionary_dict, self.save_dir)
-        
+
         batch_input_dict = runner.model.data_preprocessor(data_batch)
 
         ori_model = runner.model.cuda()

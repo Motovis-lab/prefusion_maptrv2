@@ -308,7 +308,7 @@ model = dict(
 log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 custom_hooks = [
-    dict(type="DeployAndBebugHookAPA", 
+    dict(type="DeployAndDebugHookAPA", 
          tensor_smith_dict=tensor_smith_dict, 
          dictionary_dict=dictionary_dict,
          save_dir='deploy_and_debug_single_frame_park_apa_0120'),
