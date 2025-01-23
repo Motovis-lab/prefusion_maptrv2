@@ -1,0 +1,13 @@
+{
+    "exclude": [
+        "**/build/**",
+        "**/ckpts/**",
+        "**/work_dirs/**",
+        "**/workdirs/**",
+        "**/data/**",
+        "**/vis/**",
+        "**/.ipynb_checkpoints/**",
+        "**/.pytest_cache/**",
+        "**/log/**"
+    ]
+}
