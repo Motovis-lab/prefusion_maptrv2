@@ -88,6 +88,7 @@ if debug_mode:
     num_workers = 0
     persistent_workers = False
     transforms = [
+        dict(type='BGR2RGB'),
         dict(type='RenderIntrinsic',
              resolutions=camera_resolution_configs,
              intrinsics=camera_intrinsic_configs)
@@ -99,6 +100,7 @@ else:
     persistent_workers = True
     transforms = [
         # dict(type='RandomRenderExtrinsic'),
+        dict(type='BGR2RGB'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
         dict(type='RandomRotateSpace', angles=[0, 0, 360], prob_inverse_cameras_rotation=0),
         dict(type='RandomMirrorSpace'),
@@ -113,7 +115,7 @@ transformables = dict(
     camera_images=dict(
         type='CameraImageSet',
         loader=dict(type="NuscenesCameraImageSetLoader"),
-        tensor_smith=dict(type='CameraImageTensor'),
+        tensor_smith=dict(type='CameraImageTensor', means=[123.675, 116.28, 103.53], stds=[58.395, 57.12, 57.375]),  # ImageNet mean and std
     ),
     ego_poses=dict(type='EgoPoseSet'),
     bbox_3d=dict(
