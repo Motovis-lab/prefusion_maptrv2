@@ -311,7 +311,7 @@ custom_hooks = [
     dict(type="DumpPlanarPredResultsHookAPA", 
          tensor_smith_dict=tensor_smith_dict, 
          dictionary_dict=dictionary_dict,
-         save_dir='apa_demo_dumps_20250117'),
+         save_dir='apa_demo_dumps_20250123'),
 ]
 
 
@@ -328,7 +328,7 @@ env_cfg = dict(
 )
 
 
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_0113"
+work_dir = "./work_dirs/fastray_planar_single_frame_park_apa_0123_2"
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
 load_from = "./work_dirs/collected_models/single_frame_epoch_14.pth"
 
