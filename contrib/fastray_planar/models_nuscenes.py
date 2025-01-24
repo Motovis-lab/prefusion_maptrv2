@@ -73,6 +73,139 @@ class FastBEVModel(BaseModel):
         """
         camera_tensors_dict = batched_input_dict['camera_tensors']
         camera_lookups = batched_input_dict['camera_lookups']
+
+# # FIXME:
+#         import matplotlib.pyplot as plt
+#         import numpy as np
+#         from pathlib import Path
+#         from scipy.spatial.transform import Rotation
+#         from copious.cv.geometry import Box3d as CopiousBox3d, points3d_to_homo
+#         from prefusion.dataset.utils import T4x4
+#         gt_bbox3d_planar = {task: tensor[0] for task, tensor in batched_input_dict['annotations']['bbox_3d'].items()}
+#         tensor_smith = batched_input_dict['transformables'][0]['bbox_3d'].tensor_smith
+#         gt_boxes = batched_input_dict['transformables'][0]['bbox_3d']
+#         gt_boxes_reversed = tensor_smith.reverse(gt_bbox3d_planar)
+#         save_dir = Path("./vis/box_project_onto_image") / batched_input_dict['index_infos'][0].scene_id
+#         save_dir.mkdir(parents=True, exist_ok=True)
+#         nrows, ncols = 3, 2
+#         fig, ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=(20, 24))
+
+#         def _bbox_to_corners(bx):
+#             copious_box3d = CopiousBox3d(
+#                 position=bx['translation'].flatten(), 
+#                 scale=np.array(bx['size']), 
+#                 rotation=Rotation.from_matrix(bx['rotation'])
+#             )
+#             return copious_box3d.corners
+
+#         def im_pts_within_image(pts, im_size):
+#             w, h = im_size
+#             return (pts[:, 0] >= 0) & (pts[:, 0] < w) & (pts[:, 1] >= 0) & (pts[:, 1] < h)
+
+#         def K3x3(cx, cy, fx, fy):
+#             return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
+
+#         def check_camera_coords_visibility_on_image(cam_coords, conservative=True):
+#             if conservative:
+#                 if (cam_coords[:, 2] < 0).any():
+#                     raise ValueError
+#             else:
+#                 if (cam_coords[:, 2] < 0).all():
+#                     raise ValueError
+#                 cam_coords = cam_coords[cam_coords[:, 2] >= 0]
+#             return cam_coords
+
+
+#         def check_im_coords_visibility_on_image(im_coords, im_size, conservative=True):
+#             if conservative:
+#                 if not im_pts_within_image(im_coords, im_size).all():
+#                     raise ValueError
+#             else:
+#                 if not im_pts_within_image(im_coords, im_size).any():
+#                     raise ValueError
+#                 im_coords = im_coords[im_pts_within_image(im_coords, im_size)]
+#             return im_coords
+
+#         def _3d_pts_to_uv(pts, extr, intr, im_size):
+#             points_homo = points3d_to_homo(pts)
+#             cam_extr, cam_intr = T4x4(*extr), K3x3(*intr[:4])
+#             T_cam_ego = np.linalg.inv(cam_extr)
+#             cam_coords = (T_cam_ego @ points_homo.T).T[:, :3]
+#             cam_coords = check_camera_coords_visibility_on_image(cam_coords, True)
+#             normalized_cam_coords = cam_coords[:, :2] / cam_coords[:, 2:3]
+#             im_coords = (cam_intr[:2, :2] @ normalized_cam_coords.T).T + cam_intr[:2, 2]
+#             im_coords = check_im_coords_visibility_on_image(im_coords, im_size, True)
+#             return im_coords
+
+#         def _within_image(uv, im_size):
+#             w, h = im_size
+#             return uv[0] < w and uv[0] > 0 and uv[1] < h and uv[1] > 0
+
+#         def _plot_bbox(ax, corners_uv, color='red'):
+#             edges = [
+#                 (0, 1),
+#                 (1, 2),
+#                 (2, 3),
+#                 (3, 0),
+#                 (4, 5),
+#                 (5, 6),
+#                 (6, 7),
+#                 (7, 4),
+#                 (0, 4),
+#                 (1, 5),
+#                 (2, 6),
+#                 (3, 7),
+#             ]
+
+#             for i, edge in enumerate(edges):
+#                 # first 4 edges are the front face of the box, draw them with border lines
+#                 # the rest 8 edges should be draw with thiner lines
+#                 if i < 4:
+#                     ax.plot(
+#                         (int(corners_uv[edge[0], 0]), int(corners_uv[edge[1], 0])),
+#                         (int(corners_uv[edge[0], 1]), int(corners_uv[edge[1], 1])),
+#                         color=color,
+#                         linewidth=2,
+#                         alpha=0.5,
+#                     )
+#                 else:
+#                     ax.plot(
+#                         (int(corners_uv[edge[0], 0]), int(corners_uv[edge[1], 0])),
+#                         (int(corners_uv[edge[0], 1]), int(corners_uv[edge[1], 1])),
+#                         color=color,
+#                         linewidth=1,
+#                         alpha=0.5
+#                     )
+
+#         for i, (cam_id, im_tensor) in enumerate(camera_tensors_dict.items()):
+#             _im = (im_tensor[0].cpu().numpy().transpose(1, 2, 0) * np.array([58.395, 57.12, 57.375])[None, None, :] + np.array([123.675, 116.28, 103.53])[None, None]).astype(np.uint8)
+#             _ax = ax[i // ncols][i % ncols]
+#             _ax.imshow(_im)
+#             _ax.set_title(cam_id)
+#             extr = batched_input_dict['transformables'][0]['camera_images'].transformables[cam_id].extrinsic
+#             intr = batched_input_dict['transformables'][0]['camera_images'].transformables[cam_id].intrinsic
+#             # for bx in gt_boxes_reversed:
+#             #     corners_3d = _bbox_to_corners(bx)
+
+#             #     try:
+#             #         corners_uv = _3d_pts_to_uv(corners_3d, extr, intr, (704, 256))
+#             #     except ValueError:
+#             #         continue
+#             #     _plot_bbox(_ax, corners_uv, color='red')
+
+#             for bx in gt_boxes.elements:
+#                 corners_3d = _bbox_to_corners(bx)
+
+#                 try:
+#                     corners_uv = _3d_pts_to_uv(corners_3d, extr, intr, (704, 256))
+#                 except ValueError:
+#                     continue
+#                 _plot_bbox(_ax, corners_uv, color='red')
+
+
+#         plt.savefig(save_dir / f"{batched_input_dict['index_infos'][0].frame_id}.jpg")
+#         # FIXME:
+
         # backbone
         camera_feats_dict = {}
         for cam_id in camera_tensors_dict:

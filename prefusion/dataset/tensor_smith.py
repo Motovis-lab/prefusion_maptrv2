@@ -51,9 +51,9 @@ class CameraImageTensor(TensorSmith):
             stds: Union[list[float, float, float], tuple[float, float, float], float] = 255
         ):
         if isinstance(means, Iterable):
-            means = np.array(means)[..., None, None]
+            means = np.array(means, dtype=np.float32)[..., None, None]
         if isinstance(stds, Iterable):
-            stds = np.array(stds)[..., None, None]
+            stds = np.array(stds, dtype=np.float32)[..., None, None]
         self.means = means
         self.stds = stds
 
