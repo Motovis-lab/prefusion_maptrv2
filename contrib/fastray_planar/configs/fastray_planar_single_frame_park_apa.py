@@ -356,12 +356,84 @@ all_bbox_3d_reg_channels = sum([
     8,   # bbox_3d_cylinder
     13   # bbox_3d_oriented_cylinder
 ])
+
+bbox_3d_heading_reg_scales = [
+    0.25, 0.25,  # center_xy
+    0.05,   # center_z
+    0.1, 0.1, 0.1,  # size
+    0.01, 0.01, 0.01,   # unit_xvec
+    0.01, 0.01, 0.01, 0.01, 0.01,   # abs_xvec
+    0.01, 0.01, 0.01,   # abs_roll_angle
+    0.1, 0.1, 0.1,  # velo
+]
+
+bbox_3d_plane_heading_reg_scales = [
+    0.25, 0.25,  # center_xy
+    0.05,   # center_z
+    0.1, 0.1, 0.1,  # size
+    0.01, 0.01, 0.01,   # unit_xvec
+    0.01, 0.01, 0.01, 0.01, 0.01,   # abs_xvec
+    0.01, 0.01, 0.01,   # abs_roll_angle
+    0.1, 0.1, 0.1,  # velo
+]
+
+bbox_3d_no_heading_reg_scales = [
+    0.25, 0.25,  # center_xy
+    0.05,   # center_z
+    0.1, 0.1, 0.1,  # size
+    0.01, 0.01, 0.01, 0.01, 0.01,   # abs_xvec
+    0.01, 0.01, 0.01,   # abs_roll_angle
+]
+
+bbox_3d_square_reg_scales = [
+    0.25, 0.25,  # center_xy
+    0.05,   # center_z
+    0.1, 0.1, 0.1,  # size
+    0.01, 0.01, 0.01,   # unit_zvec
+    0.01, 0.01,   # yaw_angle
+]
+
+bbox_3d_cylinder_reg_scales = [
+    0.25, 0.25,  # center_xy
+    0.05,   # center_z
+    0.1, 0.1,  # size
+    0.01, 0.01, 0.01,   # unit_zvec
+]
+
+bbox_3d_oriented_cylinder_reg_scales = [
+    0.25, 0.25,  # center_xy
+    0.05,   # center_z
+    0.1, 0.1,  # size
+    0.01, 0.01, 0.01,   # unit_zvec
+    0.01, 0.01,   # yaw_angle
+    0.1, 0.1, 0.1,  # velo
+]
+
+bbox_3d_reg_scales = bbox_3d_heading_reg_scales + \
+                     bbox_3d_plane_heading_reg_scales + \
+                     bbox_3d_no_heading_reg_scales + \
+                     bbox_3d_square_reg_scales + \
+                     bbox_3d_cylinder_reg_scales + \
+                     bbox_3d_oriented_cylinder_reg_scales
+
+assert len(bbox_3d_reg_scales) == all_bbox_3d_reg_channels, f"len(bbox_3d_reg_scales)={len(bbox_3d_reg_scales)} != all_bbox_3d_reg_channels={all_bbox_3d_reg_channels}"
+
+parkingslot_3d_reg_scales = [
+    0.5, 0.5, 0.5, 0.5,  # dist
+    0.01, 0.01, 0.01, 0.01, 0.01, 0.01,  # dir
+    0.01, 0.01, 0.01, 0.01,  # vec
+    0.05,  # height
+]
+
+
+
 heads = dict(
     bbox_3d=dict(type='PlanarHeadSimple',
                  in_channels=128,
                  mid_channels=128,
                  cen_seg_channels=all_bbox_3d_cen_seg_channels,
-                 reg_channels=all_bbox_3d_reg_channels),
+                 reg_channels=all_bbox_3d_reg_channels,
+                 reg_scales=bbox_3d_reg_scales),
     polyline_3d=dict(type='PlanarHeadSimple',
                      in_channels=128,
                      mid_channels=64,
@@ -371,7 +443,8 @@ heads = dict(
                         in_channels=128,
                         mid_channels=64,
                         cen_seg_channels=5,
-                        reg_channels=15),
+                        reg_channels=15,
+                        reg_scales=parkingslot_3d_reg_scales),
     occ_sdf_bev=dict(type='PlanarHeadSimple',
                      in_channels=128,
                      mid_channels=64,
@@ -618,7 +691,7 @@ env_cfg = dict(
 )
 
 
-work_dir = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_0113"
+work_dir = "./work_dirs/fastray_planar_single_frame_park_apa_0124"
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
 load_from = "./work_dirs/collected_models/single_frame_epoch_14.pth"
 
