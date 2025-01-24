@@ -322,7 +322,7 @@ class DumpPlanarPredResultsHookAPA(Hook):
         super().__init__()
         self.tensor_smith_dict = tensor_smith_dict
         self.dictionary_dict = dictionary_dict
-        self.save_dir = save_dir
+        self.save_dir = Path('work_dirs') / save_dir
 
     def after_test_iter(
         self,
@@ -365,32 +365,38 @@ class DeployAndDebugHookAPA(Hook):
     ) -> None:
         save_pred_outputs(data_batch, outputs, self.tensor_smith_dict, self.dictionary_dict, self.save_dir)
 
-        batch_input_dict = runner.model.data_preprocessor(data_batch)
+        batched_input_dict = runner.model.data_preprocessor(data_batch)
+        scene_frame_id = batched_input_dict['index_infos'][0].scene_frame_id
+
+        (Path(self.save_dir) / f'{scene_frame_id}').parent.mkdir(exist_ok=True, parents=True)
 
         ori_model = runner.model.cuda()
         ori_model.eval()
 
         ## dump backbone model and io data
         model_backbone = ori_model.backbone
-        camera_tensors_dict = batch_input_dict['camera_tensors']
-        camera_lookups = batch_input_dict['camera_lookups']
+        camera_tensors_dict = batched_input_dict['camera_tensors']
+        camera_lookups = batched_input_dict['camera_lookups']
         camera_feats_dict = {}
         camera_feats_dict_cpu = {}
         for cam_id in camera_tensors_dict:
             camera_feats_dict[cam_id] = model_backbone(camera_tensors_dict[cam_id])
             camera_feats_dict_cpu[cam_id] = camera_feats_dict[cam_id].cpu().detach().numpy()
-        torch.onnx.export(model_backbone, camera_tensors_dict[cam_id], str(self.save_dir / "phase_backbone_v9.onnx"), verbose=True,
-                          input_names=['camera_img'], output_names=['camera_feats'],
-                          opset_version=9)
-        savemat(str(self.save_dir / 'camera_tensors.mat'), data_batch['camera_tensors'])
-        savemat(str(self.save_dir / 'camera_lookups.mat'), data_batch['camera_lookups'][0])
-        savemat(str(self.save_dir / 'camera_feats.mat'), camera_feats_dict_cpu)
+        if not Path(self.save_dir / "phase_backbone_v9.onnx").exists():
+            torch.onnx.export(model_backbone, camera_tensors_dict[cam_id], str(self.save_dir / "phase_backbone_v9.onnx"), verbose=True,
+                              input_names=['camera_img'], output_names=['camera_feats'],
+                              opset_version=9)
+        
+        savemat(str(self.save_dir / f'{scene_frame_id}_camera_tensors.mat'), data_batch['camera_tensors'])
+        savemat(str(self.save_dir / f'{scene_frame_id}_camera_lookups.mat'), data_batch['camera_lookups'][0])
+        savemat(str(self.save_dir / f'{scene_frame_id}_camera_feats.mat'), camera_feats_dict_cpu)
 
         ## dump spatial_transform io data
         spatial_transform = ori_model.spatial_transform
         spatial_transform.dump_voxel_feats = True
         _, voxel_feats = spatial_transform(camera_feats_dict, camera_lookups)
-        savemat(str(self.save_dir / 'voxel_feats.mat'), {'voxel_feats': voxel_feats.cpu().detach().numpy()})
+        savemat(str(self.save_dir / f'{scene_frame_id}_voxel_feats.mat'), {'voxel_feats': voxel_feats.cpu().detach().numpy()})
+        spatial_transform.dump_voxel_feats = False
 
         ## dump bev model and io data
         model_bev = DumpBevModel(
@@ -401,11 +407,12 @@ class DeployAndDebugHookAPA(Hook):
             head_occ_sdf_bev=ori_model.head_occ_sdf_bev
         )
         out_bbox_3d_seg, out_bbox_3d_reg, out_parkingslot_3d_seg, out_parkingslot_3d_reg, out_occ_sdf_bev_seg, out_occ_sdf_bev_reg = model_bev(voxel_feats)
-        torch.onnx.export(model_bev, voxel_feats, str(self.save_dir / "phase_bev_v9.onnx"), verbose=True,
-                          input_names=['voxel_feats'], output_names=[
-                            'out_bbox_3d_seg', 'out_bbox_3d_reg', 'out_parkingslot_3d_seg', 'out_parkingslot_3d_reg', 'out_occ_sdf_bev_seg', 'out_occ_sdf_bev_reg'],
-                            opset_version=9)
-        savemat(str(self.save_dir / 'bev_outputs.mat'), {
+        if not Path(self.save_dir / "phase_bev_v9.onnx").exists():
+            torch.onnx.export(model_bev, voxel_feats, str(self.save_dir / "phase_bev_v9.onnx"), verbose=True,
+                              input_names=['voxel_feats'], output_names=[
+                                'out_bbox_3d_seg', 'out_bbox_3d_reg', 'out_parkingslot_3d_seg', 'out_parkingslot_3d_reg', 'out_occ_sdf_bev_seg', 'out_occ_sdf_bev_reg'],
+                              opset_version=9)
+        savemat(str(self.save_dir / f'{scene_frame_id}_bev_outputs.mat'), {
             'out_bbox_3d_seg': out_bbox_3d_seg.cpu().detach().numpy(),
             'out_bbox_3d_reg': out_bbox_3d_reg.cpu().detach().numpy(),
             'out_parkingslot_3d_seg': out_parkingslot_3d_seg.cpu().detach().numpy(),
@@ -413,7 +420,7 @@ class DeployAndDebugHookAPA(Hook):
             'out_occ_sdf_bev_seg': out_occ_sdf_bev_seg.cpu().detach().numpy(),
             'out_occ_sdf_bev_reg': out_occ_sdf_bev_reg.cpu().detach().numpy()
         })
-        assert False
+        # assert False
         # return rtn
 
 
