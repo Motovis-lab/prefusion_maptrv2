@@ -1623,6 +1623,21 @@ class RandomImageOmit(Transform):
     pass
 
 
+class BGR2RGB(Transform):
+    def __init__(self, scope="transformable"):
+        super().__init__(scope=scope)
+        self.order_rgb = [2, 1, 0]
+
+    def __call__(self, *transformables, **kwargs):
+        for transformable in transformables:
+            if isinstance(transformable, CameraImageSet):
+                for t in transformable.transformables.values():
+                    t.channel_shuffle(order=self.order_rgb)
+            elif isinstance(transformable, CameraImage):
+                transformable.channel_shuffle(order=self.order_rgb)
+        return transformables
+
+
 class RenderIntrinsic(Transform):
     
     def __init__(self, resolutions, intrinsics='default', scope="frame"):
@@ -1939,6 +1954,7 @@ available_transforms = [
     RandomSolarize,
     RandomImEqualize,
     RandomImageISP, 
+    BGR2RGB,
     RenderIntrinsic, 
     RenderExtrinsic, 
     RenderVirtualCamera, 

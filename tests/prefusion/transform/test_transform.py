@@ -12,7 +12,7 @@ from prefusion.dataset.transform import (
     RandomSetIntrinsicParam, RandomSetExtrinsicParam,
     RenderIntrinsic, RenderExtrinsic, RenderVirtualCamera, RandomRenderExtrinsic,
     RandomChooseKTransform, RandomBrightness, RandomSharpness, RandomImEqualize,
-    RandomRotateSpace, RandomMirrorSpace
+    RandomRotateSpace, RandomMirrorSpace, BGR2RGB
 )
 
 class MockTextTransformable:
@@ -495,3 +495,18 @@ def test_random_rotate_space(camera_imageset):
     rotate_space = RandomRotateSpace(prob=1, prob_inverse_cameras_rotation=1)
     transformed_camera_imageset = rotate_space(camera_imageset, seeds={'frame': 42, 'batch': 142, 'group': 1142})[0]
     assert len(transformed_camera_imageset.transformables) == 2
+
+
+def test_camimageset_bgr2rgb(camera_imageset):
+    front_fish_img = np.array(camera_imageset.transformables['front_fish'].img)
+    front_img = np.array(camera_imageset.transformables['front'].img)
+    rgb_camimgset = BGR2RGB()(camera_imageset)[0]
+    np.testing.assert_almost_equal(rgb_camimgset.transformables['front_fish'].img, front_fish_img[..., ::-1])
+    np.testing.assert_almost_equal(rgb_camimgset.transformables['front'].img, front_img[..., ::-1])
+
+
+def test_camimage_bgr2rgb(camera_imageset):
+    front_fish = camera_imageset.transformables['front_fish']
+    front_fish_img = np.array(front_fish.img)
+    front_fish_rgb = BGR2RGB()(front_fish)[0]
+    np.testing.assert_almost_equal(front_fish_rgb.img, front_fish_img[..., ::-1])
