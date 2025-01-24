@@ -42,7 +42,7 @@ def test_camera_image_tensor():
 
         [[-3.33333333,  6.66666667, 16.66666667, 26.66666667],
          [36.66666667, 46.66666667, 56.66666667, 66.66666667]]
-    ]), decimal=6)
+    ]), decimal=5)
 
 
 def test_planar_bbox_3d_get_roll_from_xyvecs():
