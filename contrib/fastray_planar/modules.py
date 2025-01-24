@@ -926,6 +926,7 @@ class PlanarHead(BaseModule):
                  mid_channels, 
                  cen_seg_channels,
                  reg_channels,
+                 reg_scales=None,
                  repeat=3,
                  init_cfg=None):
         super().__init__(init_cfg=init_cfg)
@@ -945,12 +946,18 @@ class PlanarHead(BaseModule):
         self.reg = nn.Conv2d(mid_channels * repeat, 
                              reg_channels, 
                              kernel_size=1)
+        self.has_reg_scale = reg_scales is not None
+        if self.has_reg_scale:
+            assert len(reg_scales) == reg_channels
+            self.reg_scales = torch.tensor(reg_scales, dtype=torch.float32)[None, :, None, None]
     
     def forward(self, x):
         seg_feat = self.seg_tower(x)
         cen_seg = self.cen_seg(seg_feat)
         reg_feat = self.reg_tower(x)
         reg = self.reg(reg_feat)
+        if self.has_reg_scale:
+            reg = reg * self.reg_scales.to(reg.device)
         return cen_seg, reg
 
 
@@ -961,6 +968,7 @@ class PlanarHeadSimple(BaseModule):
                  mid_channels, 
                  cen_seg_channels,
                  reg_channels,
+                 reg_scales=None,
                  repeat=1,
                  init_cfg=None):
         super().__init__(init_cfg=init_cfg)
@@ -974,11 +982,17 @@ class PlanarHeadSimple(BaseModule):
         )
         self.cen_seg = nn.Conv2d(mid_channels, cen_seg_channels, kernel_size=1)
         self.reg = nn.Conv2d(mid_channels, reg_channels, kernel_size=1)
+        self.has_reg_scale = reg_scales is not None
+        if self.has_reg_scale:
+            assert len(reg_scales) == reg_channels
+            self.reg_scales = torch.tensor(reg_scales, dtype=torch.float32)[None, :, None, None]
     
     def forward(self, x):
         seg_feat = self.seg_tower(x)
         cen_seg = self.cen_seg(seg_feat)
         reg_feat = self.reg_tower(x)
         reg = self.reg(reg_feat)
+        if self.has_reg_scale:
+            reg = reg * self.reg_scales.to(reg.device)
         return cen_seg, reg
         

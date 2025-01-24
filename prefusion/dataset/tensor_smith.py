@@ -1702,7 +1702,7 @@ class PlanarOccSdfBev(PlanarTensorSmith):
     def __init__(self, 
                  voxel_shape: tuple, 
                  voxel_range: Tuple[list, list, list],
-                 sdf_range: tuple = (-0.5, 0.5)):
+                 sdf_range: tuple = (-1, 5)):
         """
         Parameters
         ----------
@@ -2417,6 +2417,8 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
         bool
             _description_
         """
+        if len(slot_points_3d) != 4:
+            return False
         vec_01 = slot_points_3d[1] - slot_points_3d[0]
         vec_12 = slot_points_3d[2] - slot_points_3d[1]
         vec_23 = slot_points_3d[3] - slot_points_3d[2]
@@ -2447,12 +2449,12 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
 
         for element in transformable.elements:
             slot_points_3d = (np.float32(element['points']) * [[fx, fy, 1]] + [[cx, cy, 0]])
+            if not self._valid_slot(slot_points_3d):
+                continue
             entrance_length = np.linalg.norm(element['points'][1] - element['points'][0])
             side_length = np.linalg.norm(element['points'][3] - element['points'][0])
             if entrance_length > side_length:
                 slot_points_3d = slot_points_3d[[1, 2, 3, 0]]
-            if not self._valid_slot(slot_points_3d):
-                continue
             slot_points_bev = slot_points_3d[..., [1, 0]]
             slot_points_bev_int = np.round(slot_points_bev).astype(int)
 
