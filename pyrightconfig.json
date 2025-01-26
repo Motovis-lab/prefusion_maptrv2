@@ -1,4 +1,5 @@
 {
+    "typeCheckingMode": "standard", // "off", "basic", "standard", "strict"
     "exclude": [
         "**/build/**",
         "**/ckpts/**",

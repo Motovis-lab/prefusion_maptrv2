@@ -23,8 +23,8 @@ camera_feature_configs = dict(
     CAM_FRONT_LEFT=default_camera_feature_config
 )
 
-voxel_shape = (8, 256, 256)  # Z, X, Y in ego system
-voxel_range = ([-3, 5], [50, -50], [50, -50])
+voxel_shape = (4, 256, 256)  # Z, X, Y in ego system
+voxel_range = ([-5, 3], [50, -50], [50, -50])
 # voxel_range = ([-0.5, 2.5], [30, -12], [12, -12])
 
 voxel_feature_config = dict(
@@ -96,7 +96,7 @@ if debug_mode:
     possible_group_sizes = 20
 else:
     batch_size = 8
-    num_workers = 2
+    num_workers = 4
     persistent_workers = True
     transforms = [
         # dict(type='RandomRenderExtrinsic'),
@@ -293,12 +293,12 @@ neck_fuse=dict(in_channels=256, out_channels=64)
 
 neck_3d=dict(
     type='M2BevNeck',
-    in_channels=64,
-    out_channels=64,
+    in_channels=64*voxel_shape[0],
+    out_channels=192, # ought to be: 64*voxel_shape[0]//2,
     num_layers=2,
     stride=1,
     is_transpose=False,
-    fuse=dict(in_channels=64*voxel_shape[0], out_channels=64),
+    fuse=dict(in_channels=64*voxel_shape[0], out_channels=64*voxel_shape[0]),
     norm_cfg=dict(type='SyncBN', requires_grad=True)
 )
 
@@ -312,8 +312,8 @@ spatial_transform = dict(
 # heads
 heads = dict(
     bbox_3d=dict(type='PlanarHead',
-                 in_channels=64,
-                 mid_channels=64,
+                 in_channels=192,  # ought to be: 64*voxel_shape[0]//2,
+                 mid_channels=192,  # ought to be: 64*voxel_shape[0]//2,
                  cen_seg_channels=sum([
                     # cen: 0
                     1,
@@ -455,7 +455,7 @@ model = dict(
 log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(
     timer=dict(type='GroupIterTimerHook'),
-    checkpoint=dict(type='CheckpointHook', interval=5),
+    checkpoint=dict(type='CheckpointHook', interval=1),
 )
 
 custom_hooks = [
