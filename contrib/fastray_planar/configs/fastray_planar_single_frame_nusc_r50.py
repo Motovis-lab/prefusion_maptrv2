@@ -72,7 +72,7 @@ camera_resolution_configs=dict(
 #     cy_if_no_crop = cy * scale
 #     new_cy = cy_if_no_crop - top_to_crop
 #     print((f"{cam_name}=" + "{:.3f}, " * 4).format(new_cx, new_cy, new_fx, new_fy))
-camera_intrinsic_configs = dict(
+camera_intrinsic_configs_top_crop = dict(
     CAM_FRONT=[454.623, 83.492, 689.047, 689.047],
     CAM_FRONT_RIGHT=[449.784, 73.575, 691.212, 691.212],
     CAM_BACK_RIGHT=[453.957, 79.401, 687.480, 687.480],
@@ -80,6 +80,18 @@ camera_intrinsic_configs = dict(
     CAM_BACK_LEFT=[456.267, 81.942, 690.242, 690.242],
     CAM_FRONT_LEFT=[454.983, 73.004, 691.824, 691.824],
 )
+
+# new_cy = cy_if_no_crop - to_crop / 2
+camera_intrinsic_configs_center_crop = dict(
+    CAM_FRONT=[454.623, 170.992, 689.047, 689.047],
+    CAM_FRONT_RIGHT=[449.784, 161.075, 691.212, 691.212],
+    CAM_BACK_RIGHT=[453.957, 166.901, 687.480, 687.480],
+    CAM_BACK=[471.778, 174.787, 438.290, 438.290],
+    CAM_BACK_LEFT=[456.267, 169.442, 690.242, 690.242],
+    CAM_FRONT_LEFT=[454.983, 160.504, 691.824, 691.824],
+)
+
+camera_intrinsic_configs = camera_intrinsic_configs_center_crop
 
 debug_mode = False
 
