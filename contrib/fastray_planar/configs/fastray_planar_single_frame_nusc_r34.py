@@ -207,7 +207,10 @@ val_dataset = dict(
         debug_mode=debug_mode,
     ),
     transformables=transformables,
-    transforms=[dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs)],
+    transforms=[
+        dict(type='BGR2RGB'),
+        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs)
+    ],
     group_sampler=dict(type="IndexGroupSampler",
                        phase="val",
                        possible_group_sizes=possible_group_sizes,
@@ -228,6 +231,7 @@ test_dataset = dict(
     ),
     transformables=dict(**transformables, sample_token=dict(type='Variable', loader=dict(type="VariableLoader", variable_key="sample_token"))),
     transforms=[
+        dict(type='BGR2RGB'),
         dict(type='RenderIntrinsic',
              resolutions=camera_resolution_configs,
              intrinsics=camera_intrinsic_configs)
@@ -491,7 +495,7 @@ optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(
         type='AdamW',
-        lr=0.0004,
+        lr=0.0005,
         # momentum=0.9,
         weight_decay=0.01),
     paramwise_cfg=dict(
@@ -519,7 +523,7 @@ import datetime
 today = datetime.datetime.now().strftime("%m%d")
 
 # load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
-# load_from = "./ckpts/single_frame_nusc_1118_epoch_200.pth"
+# load_from = "./ckpts/single_frame_nusc_r18_0124_20250124_144038_epoch_48.pth"
 load_from = "./ckpts/cascade_mask_rcnn_r34_fpn_coco-mstrain_3x_20e_nuim_bbox_mAP_0.5190_segm_mAP_0.4140.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'

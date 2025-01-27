@@ -207,7 +207,12 @@ val_dataset = dict(
         debug_mode=debug_mode,
     ),
     transformables=transformables,
-    transforms=[dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs)],
+    transforms=[
+        dict(type='BGR2RGB'),
+        dict(type='RenderIntrinsic',
+             resolutions=camera_resolution_configs,
+             intrinsics=camera_intrinsic_configs)
+    ],
     group_sampler=dict(type="IndexGroupSampler",
                        phase="val",
                        possible_group_sizes=possible_group_sizes,
@@ -228,6 +233,7 @@ test_dataset = dict(
     ),
     transformables=dict(**transformables, sample_token=dict(type='Variable', loader=dict(type="VariableLoader", variable_key="sample_token"))),
     transforms=[
+        dict(type='BGR2RGB'),
         dict(type='RenderIntrinsic',
              resolutions=camera_resolution_configs,
              intrinsics=camera_intrinsic_configs)
@@ -476,13 +482,13 @@ test_cfg = dict(type="GroupBatchInferLoop")
 ## evaluator and metrics
 val_evaluator = [
     dict(type="PlanarSegIou"),
-    # dict(
-    #     type="PlanarBbox3DAveragePrecision",
-    #     transformable_name="bbox_3d" ,
-    #     tensor_smith_cfg=val_dataset['transformables']['bbox_3d']['tensor_smith'],
-    #     dictionary={"classes": ['truck' ,'motorcycle' ,'car' ,'construction' ,'bicycle']},
-    #     max_conf_as_pred_class=True,
-    # )
+    dict(
+        type="PlanarBbox3DAveragePrecision",
+        transformable_name="bbox_3d" ,
+        tensor_smith_cfg=val_dataset['transformables']['bbox_3d']['tensor_smith'],
+        dictionary={"classes": ['truck' ,'motorcycle' ,'car' ,'construction' ,'bicycle']},
+        max_conf_as_pred_class=True,
+    )
 ]
 
 test_evaluator = [dict(type="PlanarSegIou")]
@@ -520,8 +526,8 @@ import datetime
 today = datetime.datetime.now().strftime("%m%d")
 
 # load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
-# load_from = "./ckpts/single_frame_nusc_1118_epoch_200.pth"
-load_from = "./ckpts/cascade_mask_rcnn_r18_fpn_coco-mstrain_3x_20e_nuim_bbox_mAP_0.5110_segm_mAP_0.4070.pth"
+load_from = "./ckpts/single_frame_nusc_r18_0124_20250124_144038_epoch_48.pth"
+# load_from = "./ckpts/cascade_mask_rcnn_r18_fpn_coco-mstrain_3x_20e_nuim_bbox_mAP_0.5110_segm_mAP_0.4070.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
 # work_dir = './work_dirs/fastray_planar_single_frame_1105_infer'

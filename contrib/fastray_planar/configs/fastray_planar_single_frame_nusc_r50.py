@@ -207,7 +207,10 @@ val_dataset = dict(
         debug_mode=debug_mode,
     ),
     transformables=transformables,
-    transforms=[dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs)],
+    transforms=[
+        dict(type='BGR2RGB'),
+        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs)
+    ],
     group_sampler=dict(type="IndexGroupSampler",
                        phase="val",
                        possible_group_sizes=possible_group_sizes,
@@ -228,6 +231,7 @@ test_dataset = dict(
     ),
     transformables=dict(**transformables, sample_token=dict(type='Variable', loader=dict(type="VariableLoader", variable_key="sample_token"))),
     transforms=[
+        dict(type='BGR2RGB'),
         dict(type='RenderIntrinsic',
              resolutions=camera_resolution_configs,
              intrinsics=camera_intrinsic_configs)
