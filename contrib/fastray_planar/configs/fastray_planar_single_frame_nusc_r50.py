@@ -23,8 +23,8 @@ camera_feature_configs = dict(
     CAM_FRONT_LEFT=default_camera_feature_config
 )
 
-voxel_shape = (8, 256, 256)  # Z, X, Y in ego system
-voxel_range = ([-3, 5], [50, -50], [50, -50])
+voxel_shape = (6, 256, 256)  # Z, X, Y in ego system
+voxel_range = ([-5, 3], [50, -50], [50, -50])
 # voxel_range = ([-0.5, 2.5], [30, -12], [12, -12])
 
 voxel_feature_config = dict(
@@ -38,18 +38,17 @@ voxel_feature_config = dict(
 
 ## camera configs for model inputs
 
-camera_groups = dict(
-    pv_sides=[
-        'CAM_FRONT',
-        'CAM_FRONT_RIGHT',
-        'CAM_BACK_RIGHT',
-        'CAM_BACK',
-        'CAM_BACK_LEFT',
-        'CAM_FRONT_LEFT',
-    ])
+camera_groups = [
+    'CAM_FRONT',
+    'CAM_FRONT_RIGHT',
+    'CAM_BACK_RIGHT',
+    'CAM_BACK',
+    'CAM_BACK_LEFT',
+    'CAM_FRONT_LEFT',
+]
 
 # 1600 x 900, 1408 x 512, 1056 x 384, 704 x 256
-resolution_pv = (704, 256)
+resolution_pv = (880, 320)
 
 camera_resolution_configs=dict(
     CAM_FRONT=resolution_pv,
@@ -61,7 +60,7 @@ camera_resolution_configs=dict(
 
 # camera_intrinsic_configs is calculated by the following code snippet
 # H, W = 900, 1600
-# new_H, new_W = 256, 704
+# new_H, new_W = 320, 880
 # for cam_name in NUSC_CAM_NAMES:
 #     intr = nusc.get("calibrated_sensor", nusc.get("sample_data", first_sample['data'][cam_name])['calibrated_sensor_token'])['camera_intrinsic']
 #     fx, fy, cx, cy = intr[0][0], intr[1][1], intr[0][2], intr[1][2]
@@ -74,12 +73,12 @@ camera_resolution_configs=dict(
 #     new_cy = cy_if_no_crop - top_to_crop
 #     print((f"{cam_name}=" + "{:.3f}, " * 4).format(new_cx, new_cy, new_fx, new_fy))
 camera_intrinsic_configs = dict(
-    CAM_FRONT=[359.157, 76.263, 557.224, 557.224],
-    CAM_FRONT_RIGHT=[355.506, 77.947, 554.773, 554.773],
-    CAM_BACK_RIGHT=[355.191, 80.526, 554.186, 554.186],
-    CAM_BACK=[364.857, 71.983, 356.057, 356.057],
-    CAM_BACK_LEFT=[348.530, 76.821, 552.966, 552.966],
-    CAM_FRONT_LEFT=[363.711, 71.091, 559.943, 559.943],
+    CAM_FRONT=[454.623, 83.492, 689.047, 689.047],
+    CAM_FRONT_RIGHT=[449.784, 73.575, 691.212, 691.212],
+    CAM_BACK_RIGHT=[453.957, 79.401, 687.480, 687.480],
+    CAM_BACK=[471.778, 87.287, 438.290, 438.290],
+    CAM_BACK_LEFT=[456.267, 81.942, 690.242, 690.242],
+    CAM_FRONT_LEFT=[454.983, 73.004, 691.824, 691.824],
 )
 
 debug_mode = False
@@ -89,17 +88,19 @@ if debug_mode:
     num_workers = 0
     persistent_workers = False
     transforms = [
+        dict(type='BGR2RGB'),
         dict(type='RenderIntrinsic',
              resolutions=camera_resolution_configs,
              intrinsics=camera_intrinsic_configs)
     ]
     possible_group_sizes = 20
 else:
-    batch_size = 8
-    num_workers = 2
+    batch_size = 6
+    num_workers = 3
     persistent_workers = True
     transforms = [
         # dict(type='RandomRenderExtrinsic'),
+        dict(type='BGR2RGB'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
         dict(type='RandomRotateSpace', angles=[0, 0, 360], prob_inverse_cameras_rotation=0),
         dict(type='RandomMirrorSpace'),
@@ -114,7 +115,7 @@ transformables = dict(
     camera_images=dict(
         type='CameraImageSet',
         loader=dict(type="NuscenesCameraImageSetLoader"),
-        tensor_smith=dict(type='CameraImageTensor'),
+        tensor_smith=dict(type='CameraImageTensor', means=[123.675, 116.28, 103.53], stds=[58.395, 57.12, 57.375]),  # ImageNet mean and std
     ),
     ego_poses=dict(type='EgoPoseSet'),
     bbox_3d=dict(
@@ -171,6 +172,7 @@ train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/nuScenes',
+    # info_path='/data/datasets/nuScenes/nusc_scene0103_train_info.pkl',
     info_path='/data/datasets/nuScenes/nusc_train_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
@@ -196,6 +198,7 @@ val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/nuScenes',
+    # info_path='/data/datasets/nuScenes/nusc_scene0103_val_info.pkl',
     info_path='/data/datasets/nuScenes/nusc_val_info.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
@@ -264,42 +267,53 @@ test_dataloader = dict(
 
 
 ## model configs
-bev_mode = True
 # backbones
-camera_feat_channels = 128
 backbones = dict(
-    pv_sides=dict(
-        type='ResNetFPN',
-        depth=50,
-        num_stages=4,
-        out_indices=(0, 1, 2, 3),
-        frozen_stages=1,
-        norm_cfg=dict(type='SyncBN', requires_grad=True),
-        norm_eval=True,
-        style='pytorch',
-        # init_cfg=dict(type='Pretrained', checkpoint='./ckpts/resnet50.pth'),
-        fpn_lateral_channel=128,
-        fpn_in_channels=[256, 512, 1024, 2048],
-        out_stride=feature_downscale,
-        out_channels=camera_feat_channels,
-    )
+    type='mmdet.ResNet',
+    depth=50,
+    num_stages=4,
+    out_indices=(0, 1, 2, 3),
+    frozen_stages=1,
+    norm_cfg=dict(type='SyncBN', requires_grad=True),
+    norm_eval=True,
+    style='pytorch',
+    # init_cfg=dict(type='Pretrained', checkpoint='torchvision://resnet50'),
 )
+
+neck=dict(
+    type='mmdet.FPN',
+    norm_cfg=dict(type='SyncBN', requires_grad=True),
+    # in_channels=[64, 128, 256, 512],
+    in_channels=[256, 512, 1024, 2048],
+    out_channels=64,
+    num_outs=4
+)
+
+neck_fuse=dict(in_channels=256, out_channels=64)
+
+neck_3d=dict(
+    type='M2BevNeck',
+    in_channels=64*voxel_shape[0],
+    out_channels=256, # ought to be: 64*voxel_shape[0]//2,
+    num_layers=6,
+    stride=1,
+    is_transpose=False,
+    fuse=dict(in_channels=64*voxel_shape[0], out_channels=64*voxel_shape[0]),
+    norm_cfg=dict(type='SyncBN', requires_grad=True)
+)
+
 # spatial_transform
 spatial_transform = dict(
     type='FastRaySpatialTransform',
     voxel_shape=voxel_shape,
     fusion_mode='bilinear_weighted',
-    bev_mode=bev_mode)
+    reduce_channels=False,
+    bev_mode=False)
 # heads
 heads = dict(
-    voxel_encoder=dict(type='M2BevEncoder',
-                       in_channels=camera_feat_channels * voxel_shape[0],
-                       shrink_channels=384,
-                       out_channels=256,
-                       repeat=2),
     bbox_3d=dict(type='PlanarHead',
-                 in_channels=256,
-                 mid_channels=256,
+                 in_channels=256,  # ought to be: 64*voxel_shape[0]//2,
+                 mid_channels=256,  # ought to be: 64*voxel_shape[0]//2,
                  cen_seg_channels=sum([
                     # cen: 0
                     1,
@@ -425,9 +439,12 @@ loss_cfg = dict(
 
 # integrated model config
 model = dict(
-    type='NuscenesFastRayPlanarSingleFrameModel',
+    type='FastBEVModel',
     camera_groups=camera_groups,
     backbones=backbones,
+    neck=neck,
+    neck_fuse=neck_fuse,
+    neck_3d=neck_3d,
     spatial_transform=spatial_transform,
     heads=heads,
     loss_cfg=loss_cfg,
@@ -436,7 +453,10 @@ model = dict(
 
 ## log_processor
 log_processor = dict(type='GroupAwareLogProcessor')
-default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
+default_hooks = dict(
+    timer=dict(type='GroupIterTimerHook'),
+    checkpoint=dict(type='CheckpointHook', interval=1),
+)
 
 custom_hooks = [
     dict(type="DumpDetectionAsNuscenesJsonHook",
@@ -449,7 +469,7 @@ custom_hooks = [
 ]
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=30, val_interval=1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=5)
 val_cfg = dict(type="GroupBatchValLoop")
 test_cfg = dict(type="GroupBatchInferLoop")
 
@@ -470,17 +490,22 @@ test_evaluator = [dict(type="PlanarSegIou")]
 ## optimizer configs
 optim_wrapper = dict(
     type='OptimWrapper',
-    optimizer=dict(type='AdamW',
-                lr=0.0003,
-                # momentum=0.9,
-                weight_decay=0.0001),
-    clip_grad=dict(max_norm=5),
+    optimizer=dict(
+        type='AdamW',
+        lr=0.0002,
+        # momentum=0.9,
+        weight_decay=0.01),
+    paramwise_cfg=dict(
+        custom_keys={'backbone': dict(lr_mult=0.1, decay_mult=1.0)}
+    ),
+    clip_grad=dict(max_norm=35.0, norm_type=2),
 )
 
 ## scheduler configs
 param_scheduler = [
     dict(type='LinearLR', start_factor=0.1, end_factor=1, by_epoch=False, begin=0, end=1000), # warmup
     dict(type='PolyLR', by_epoch=False, begin=1000, eta_min=0, power=1.0)     # main LR Scheduler
+    # dict(type='PolyLR', by_epoch=False, begin=0, eta_min=0, power=1.0)     # main LR Scheduler
 ]
 
 env_cfg = dict(
@@ -496,7 +521,7 @@ today = datetime.datetime.now().strftime("%m%d")
 
 # load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
 # load_from = "./ckpts/single_frame_nusc_1118_epoch_200.pth"
-load_from = "./ckpts/single_frame_nusc_r50_0111_epoch_30.pth"
+load_from = "./ckpts/cascade_mask_rcnn_r50_fpn_coco-mstrain_3x_20e_nuim_bbox_mAP_0.5400_segm_mAP_0.4300.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
 # work_dir = './work_dirs/fastray_planar_single_frame_1105_infer'
