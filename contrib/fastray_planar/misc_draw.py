@@ -128,8 +128,9 @@ def draw_points_with_label(points, boxes, save_path=None):
     save_path = f'/tmp/1234/kuang0.ply' if save_path is None else save_path
     draw_points(pp, save_path)
 
-def draw_results_planar_lidar(pred_dict, batched_input_dict):
-    if False:  # dbg
+
+def draw_results_planar_lidar(pred_dict, batched_input_dict, save_im=True):
+    if False:  # dbg,draw labels
         lidar_points = batched_input_dict['transformables'][0]['lidar_sweeps'].positions
         gt = batched_input_dict['transformables'][0]['bbox_3d_heading'].tensor
 
@@ -168,7 +169,7 @@ def draw_results_planar_lidar(pred_dict, batched_input_dict):
             pred_dict_branch_0[key] = pred_dict_branch[key][0].sigmoid().detach().cpu().float()
         else:
             pred_dict_branch_0[key] = pred_dict_branch[key][0].detach().cpu().float()
-    # ----------
+    # ----------l
     # gt
     transformables = batched_input_dict['transformables'][0]
     tensor_smith = transformables[branch].tensor_smith
@@ -186,9 +187,79 @@ def draw_results_planar_lidar(pred_dict, batched_input_dict):
                 draw_boxes(img, corners_2d)
             except Exception:
                 pass
-    from time import time
-    cv2.imwrite(f'/tmp/1234/1/result_{cam}_{time()}.jpg', img)
+    # from time import time
+    if save_im:
+        frame_id = batched_input_dict['index_infos'][0].frame_id
+        cv2.imwrite(f'/tmp/1234/1/result_{cam}_{frame_id}.jpg', img)
+    return img
 
 
+
+
+def draw_results_ps_lidar(pred_dict, batched_input_dict, save_im=True):
+    if False:  # dbg,draw labels
+        lidar_points = batched_input_dict['transformables'][0]['lidar_sweeps'].positions
+        gt = batched_input_dict['transformables'][0]['bbox_3d_heading'].tensor
+
+        branch = 'bbox_3d_heading'
+        transformables = batched_input_dict['transformables'][0]
+        tensor_smith = transformables[branch].tensor_smith
+
+        pred_dict_branch = pred_dict[branch]
+        pred_dict_branch_0 = {**pred_dict_branch}
+        for key in pred_dict_branch_0:
+            if key in ['cen', 'seg']:
+                pred_dict_branch_0[key] = pred_dict_branch[key][0].sigmoid().detach().cpu().float()
+            else:
+                pred_dict_branch_0[key] = pred_dict_branch[key][0].detach().cpu().float()
+        results = tensor_smith.reverse(pred_dict_branch_0)
+        corners_ego = np.array(
+            [pred_planar_box_to_3d_corners(box['size'], box['rotation'], box['translation']) for box in results])
+        draw_points_with_label(lidar_points, corners_ego)
+
+    # get the result image here
+    result_dict = {}
+    gt = batched_input_dict['transformables'][0]['parkingslot_3d'].tensor
+    for cam, v in batched_input_dict['transformables'][0]['camera_images'].transformables.items():
+        img0 = v.tensor['img']
+        img = img0.detach().cpu().numpy().transpose(1, 2, 0)[..., ::-1] * 255 + 128
+        camera_model = get_fisheye_camera_model(v, cam)
+        Tce = np.linalg.inv(Rt2T(v.extrinsic[0], v.extrinsic[1]))
+        result_dict[cam] = (img, camera_model, Tce)
+
+    branch = 'parkingslot_3d'
+    # pred
+    pred_dict_branch = pred_dict[branch]
+    pred_dict_branch_0 = {**pred_dict_branch}
+    for key in pred_dict_branch_0:
+        if key in ['cen', 'seg']:
+            pred_dict_branch_0[key] = pred_dict_branch[key][0].sigmoid().detach().cpu().float()
+        else:
+            pred_dict_branch_0[key] = pred_dict_branch[key][0].detach().cpu().float()
+    # ----------l
+    # gt
+    transformables = batched_input_dict['transformables'][0]
+    tensor_smith = transformables[branch].tensor_smith
+    voxel_range = tensor_smith.voxel_range
+    # gt = batched_input_dict['transformables'][0]['bbox_3d_heading'].tensor
+    # results = tensor_smith.reverse(gt)
+    results = tensor_smith.reverse(pred_dict_branch_0)
+    for poly in results:
+        corners_ego = poly
+        # corners_ego = pred_planar_box_to_3d_corners(box['size'], box['rotation'], box['translation'])
+        for k, v in result_dict.items():
+            img, camera_model, Tce = result_dict[k]
+            corners_2d = draw_camera_points_to_image_points(camera_model,
+                                                            transform_pts_with_T(corners_ego, Tce))
+            try:
+                # draw_boxes(img, corners_2d)
+                pass
+            except Exception:
+                pass
+    # from time import time
+    if save_im:
+        frame_id = batched_input_dict['index_infos'][0].frame_id
+        cv2.imwrite(f'/tmp/1234/1/result_{cam}_{frame_id}.jpg', img)
+    return img
 
 
