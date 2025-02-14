@@ -42,8 +42,9 @@ class FastBEVModel(BaseModel):
         # self.head_occ_sdf = MODELS.build(heads['occ_sdf'])
         # init losses
         self.losses_dict = {}
-        for branch in loss_cfg:
-            self.losses_dict[branch] = MODELS.build(loss_cfg[branch])
+        if loss_cfg is not None:
+            for branch in loss_cfg:
+                self.losses_dict[branch] = MODELS.build(loss_cfg[branch])
 
     def forward(self, mode='tensor', **batched_input_dict):
         """
@@ -221,7 +222,7 @@ class FastBEVModel(BaseModel):
         #     draw_aligned_voxel_feats([voxel_feats])
 
         # voxel encoder
-        voxel_feats = voxel_feats.permute(0, 1, 3, 4, 2)
+        voxel_feats = voxel_feats.permute(0, 1, 3, 4, 2) # (N, C, Z, X, Y) -> (N, C, X, Y, Z)
         bev_feats = self.neck_3d(voxel_feats)[0]
         # heads
         out_bbox_3d = self.head_bbox_3d(bev_feats)
