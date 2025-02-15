@@ -317,12 +317,18 @@ class DumpPlanarPredResultsHookAPA(Hook):
         self,
         tensor_smith_dict,
         dictionary_dict,
+        save_polyline=False,
         save_dir=None
     ):
         super().__init__()
         self.tensor_smith_dict = tensor_smith_dict
         self.dictionary_dict = dictionary_dict
-        self.save_dir = Path('work_dirs') / save_dir
+        self.save_polyline = save_polyline
+        if save_dir is None:
+            self.save_dir = Path("work_dirs/pred_dumps")
+        else:
+            self.save_dir = Path(save_dir) / "pred_dumps"
+        self.save_dir.mkdir(exist_ok=True, parents=True)
 
     def after_test_iter(
         self,
@@ -334,8 +340,7 @@ class DumpPlanarPredResultsHookAPA(Hook):
     ) -> None:
         # print(data_batch.keys())
         # print(outputs.keys())
-        rtn = save_pred_outputs(data_batch, outputs, self.tensor_smith_dict, self.dictionary_dict, self.save_dir)
-        return rtn
+        save_pred_outputs(data_batch, outputs, self.tensor_smith_dict, self.dictionary_dict, self.save_dir, self.save_polyline)
         
 
 @HOOKS.register_module()
@@ -344,15 +349,17 @@ class DeployAndDebugHookAPA(Hook):
         self,
         tensor_smith_dict,
         dictionary_dict,
+        save_polyline=False,
         save_dir=None
     ):
         super().__init__()
         self.tensor_smith_dict = tensor_smith_dict
         self.dictionary_dict = dictionary_dict
+        self.save_polyline = save_polyline
         if save_dir is None:
             self.save_dir = Path("work_dirs/deploy_and_debug")
         else:
-            self.save_dir = Path('work_dirs') / save_dir
+            self.save_dir = Path(save_dir) / "deploy_and_debug"
         self.save_dir.mkdir(exist_ok=True, parents=True)
 
     def after_test_iter(
@@ -363,12 +370,14 @@ class DeployAndDebugHookAPA(Hook):
         outputs: Optional[Union[dict, Sequence]] = None,
         mode: str = "test",
     ) -> None:
-        save_pred_outputs(data_batch, outputs, self.tensor_smith_dict, self.dictionary_dict, self.save_dir)
+        save_pred_outputs(data_batch, outputs, self.tensor_smith_dict, self.dictionary_dict, self.save_dir, self.save_polyline)
 
         batched_input_dict = runner.model.data_preprocessor(data_batch)
         scene_frame_id = batched_input_dict['index_infos'][0].scene_frame_id
 
-        (Path(self.save_dir) / f'{scene_frame_id}').parent.mkdir(exist_ok=True, parents=True)
+        feature_mat_dir = Path(self.save_dir) / 'feat_mat'
+
+        (Path(feature_mat_dir) / f'{scene_frame_id}').parent.mkdir(exist_ok=True, parents=True)
 
         ori_model = runner.model.cuda()
         ori_model.eval()
@@ -387,15 +396,15 @@ class DeployAndDebugHookAPA(Hook):
                               input_names=['camera_img'], output_names=['camera_feats'],
                               opset_version=9)
         
-        savemat(str(self.save_dir / f'{scene_frame_id}_camera_tensors.mat'), data_batch['camera_tensors'])
-        savemat(str(self.save_dir / f'{scene_frame_id}_camera_lookups.mat'), data_batch['camera_lookups'][0])
-        savemat(str(self.save_dir / f'{scene_frame_id}_camera_feats.mat'), camera_feats_dict_cpu)
+        savemat(str(feature_mat_dir / f'{scene_frame_id}_camera_tensors.mat'), data_batch['camera_tensors'])
+        savemat(str(feature_mat_dir / f'{scene_frame_id}_camera_lookups.mat'), data_batch['camera_lookups'][0])
+        savemat(str(feature_mat_dir / f'{scene_frame_id}_camera_feats.mat'), camera_feats_dict_cpu)
 
         ## dump spatial_transform io data
         spatial_transform = ori_model.spatial_transform
         spatial_transform.dump_voxel_feats = True
         _, voxel_feats = spatial_transform(camera_feats_dict, camera_lookups)
-        savemat(str(self.save_dir / f'{scene_frame_id}_voxel_feats.mat'), {'voxel_feats': voxel_feats.cpu().detach().numpy()})
+        savemat(str(feature_mat_dir / f'{scene_frame_id}_voxel_feats.mat'), {'voxel_feats': voxel_feats.cpu().detach().numpy()})
         spatial_transform.dump_voxel_feats = False
 
         ## dump bev model and io data
@@ -407,12 +416,14 @@ class DeployAndDebugHookAPA(Hook):
             head_occ_sdf_bev=ori_model.head_occ_sdf_bev
         )
         out_bbox_3d_seg, out_bbox_3d_reg, out_parkingslot_3d_seg, out_parkingslot_3d_reg, out_occ_sdf_bev_seg, out_occ_sdf_bev_reg = model_bev(voxel_feats)
+
         if not Path(self.save_dir / "phase_bev_v9.onnx").exists():
             torch.onnx.export(model_bev, voxel_feats, str(self.save_dir / "phase_bev_v9.onnx"), verbose=True,
                               input_names=['voxel_feats'], output_names=[
                                 'out_bbox_3d_seg', 'out_bbox_3d_reg', 'out_parkingslot_3d_seg', 'out_parkingslot_3d_reg', 'out_occ_sdf_bev_seg', 'out_occ_sdf_bev_reg'],
                               opset_version=9)
-        savemat(str(self.save_dir / f'{scene_frame_id}_bev_outputs.mat'), {
+        model_bev.enable_scale()
+        savemat(str(feature_mat_dir / f'{scene_frame_id}_bev_outputs.mat'), {
             'out_bbox_3d_seg': out_bbox_3d_seg.cpu().detach().numpy(),
             'out_bbox_3d_reg': out_bbox_3d_reg.cpu().detach().numpy(),
             'out_parkingslot_3d_seg': out_parkingslot_3d_seg.cpu().detach().numpy(),
@@ -434,9 +445,24 @@ class DumpBevModel(nn.Module):
         super().__init__()
         self.channel_reduction = channel_reduction
         self.voxel_encoder = voxel_encoder
+        self.scale_exists = False
+        self.scale_disabled = False
+        if head_bbox_3d.has_reg_scale == True:
+            self.scale_exists = True
+            head_bbox_3d.has_reg_scale = False
+            head_parkingslot_3d.has_reg_scale = False
+            # head_occ_sdf_bev.has_reg_scale = False
+            self.scale_disabled = True
         self.head_bbox_3d = head_bbox_3d
         self.head_parkingslot_3d = head_parkingslot_3d
         self.head_occ_sdf_bev = head_occ_sdf_bev
+    
+    def enable_scale(self):
+        if self.scale_exists == True:
+            self.head_bbox_3d.has_reg_scale = True
+            self.head_parkingslot_3d.has_reg_scale = True
+            # self.head_occ_sdf_bev.has_reg_scale = True
+            self.scale_disabled = False
 
     def forward(self, voxel_feats):
         bev_feats = self.channel_reduction(voxel_feats)
