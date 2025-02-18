@@ -768,7 +768,7 @@ def save_outputs(pred_dict, batched_input_dict):
                 
 
 
-def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictionary_dict, save_dir):
+def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictionary_dict, save_dir, save_polyline=False):
     scene_frame_id = batched_input_dict['index_infos'][0].scene_frame_id
     camera_tensors_dict = batched_input_dict['camera_tensors']
 
@@ -786,6 +786,8 @@ def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictiona
     result_dict = {
         'pred': dict(bboxes=[], cylinders=[], slots=[]), 
     }
+    if save_polyline:
+        result_dict['pred']['polylines'] = []
     for branch in pred_dict:
         pred_dict_branch = pred_dict[branch]
         # extract batch_0
@@ -858,6 +860,11 @@ def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictiona
                                    'occ_edge': occ_edge,
                                    'sdf': sdf,
                                    'height': height})
+            case PlanarPolyline3D():
+                if save_polyline:
+                    results = tensor_smith.reverse(pred_dict_branch_0)
+                    for polyline in results:
+                        result_dict['pred']['polylines'].append(polyline[:, :3].reshape(-1).tolist())
     
     save_path = save_dir / 'dets' / f'{scene_frame_id}.json'
     save_path.parent.mkdir(parents=True, exist_ok=True)

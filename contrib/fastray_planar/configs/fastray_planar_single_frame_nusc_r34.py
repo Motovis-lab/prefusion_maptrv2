@@ -1,5 +1,5 @@
 default_scope = "prefusion"
-experiment_name = "fastray_planar_single_frame_nusc_r50"
+experiment_name = "fastray_planar_single_frame_nusc_r34"
 
 custom_imports = dict(
     imports=["prefusion", "contrib.fastray_planar"],
@@ -23,7 +23,7 @@ camera_feature_configs = dict(
     CAM_FRONT_LEFT=default_camera_feature_config
 )
 
-voxel_shape = (6, 256, 256)  # Z, X, Y in ego system
+voxel_shape = (4, 256, 256)  # Z, X, Y in ego system
 voxel_range = ([-5, 3], [50, -50], [50, -50])
 # voxel_range = ([-0.5, 2.5], [30, -12], [12, -12])
 
@@ -48,7 +48,7 @@ camera_groups = [
 ]
 
 # 1600 x 900, 1408 x 512, 1056 x 384, 704 x 256
-resolution_pv = (880, 320)
+resolution_pv = (704, 256)
 
 camera_resolution_configs=dict(
     CAM_FRONT=resolution_pv,
@@ -60,7 +60,7 @@ camera_resolution_configs=dict(
 
 # camera_intrinsic_configs is calculated by the following code snippet
 # H, W = 900, 1600
-# new_H, new_W = 320, 880
+# new_H, new_W = 256, 704
 # for cam_name in NUSC_CAM_NAMES:
 #     intr = nusc.get("calibrated_sensor", nusc.get("sample_data", first_sample['data'][cam_name])['calibrated_sensor_token'])['camera_intrinsic']
 #     fx, fy, cx, cy = intr[0][0], intr[1][1], intr[0][2], intr[1][2]
@@ -72,26 +72,14 @@ camera_resolution_configs=dict(
 #     cy_if_no_crop = cy * scale
 #     new_cy = cy_if_no_crop - top_to_crop
 #     print((f"{cam_name}=" + "{:.3f}, " * 4).format(new_cx, new_cy, new_fx, new_fy))
-camera_intrinsic_configs_top_crop = dict(
-    CAM_FRONT=[454.623, 83.492, 689.047, 689.047],
-    CAM_FRONT_RIGHT=[449.784, 73.575, 691.212, 691.212],
-    CAM_BACK_RIGHT=[453.957, 79.401, 687.480, 687.480],
-    CAM_BACK=[471.778, 87.287, 438.290, 438.290],
-    CAM_BACK_LEFT=[456.267, 81.942, 690.242, 690.242],
-    CAM_FRONT_LEFT=[454.983, 73.004, 691.824, 691.824],
+camera_intrinsic_configs = dict(
+    CAM_FRONT=[359.157, 76.263, 557.224, 557.224],
+    CAM_FRONT_RIGHT=[355.506, 77.947, 554.773, 554.773],
+    CAM_BACK_RIGHT=[355.191, 80.526, 554.186, 554.186],
+    CAM_BACK=[364.857, 71.983, 356.057, 356.057],
+    CAM_BACK_LEFT=[348.530, 76.821, 552.966, 552.966],
+    CAM_FRONT_LEFT=[363.711, 71.091, 559.943, 559.943],
 )
-
-# new_cy = cy_if_no_crop - to_crop / 2
-camera_intrinsic_configs_center_crop = dict(
-    CAM_FRONT=[454.623, 170.992, 689.047, 689.047],
-    CAM_FRONT_RIGHT=[449.784, 161.075, 691.212, 691.212],
-    CAM_BACK_RIGHT=[453.957, 166.901, 687.480, 687.480],
-    CAM_BACK=[471.778, 174.787, 438.290, 438.290],
-    CAM_BACK_LEFT=[456.267, 169.442, 690.242, 690.242],
-    CAM_FRONT_LEFT=[454.983, 160.504, 691.824, 691.824],
-)
-
-camera_intrinsic_configs = camera_intrinsic_configs_center_crop
 
 debug_mode = False
 
@@ -107,7 +95,7 @@ if debug_mode:
     ]
     possible_group_sizes = 20
 else:
-    batch_size = 6
+    batch_size = 8
     num_workers = 3
     persistent_workers = True
     transforms = [
@@ -286,21 +274,20 @@ test_dataloader = dict(
 # backbones
 backbones = dict(
     type='mmdet.ResNet',
-    depth=50,
+    depth=34,
     num_stages=4,
     out_indices=(0, 1, 2, 3),
     frozen_stages=1,
     norm_cfg=dict(type='SyncBN', requires_grad=True),
     norm_eval=True,
     style='pytorch',
-    # init_cfg=dict(type='Pretrained', checkpoint='torchvision://resnet50'),
+    # init_cfg=dict(type='Pretrained', checkpoint='torchvision://resnet34'),
 )
 
 neck=dict(
     type='mmdet.FPN',
     norm_cfg=dict(type='SyncBN', requires_grad=True),
-    # in_channels=[64, 128, 256, 512],
-    in_channels=[256, 512, 1024, 2048],
+    in_channels=[64, 128, 256, 512],
     out_channels=64,
     num_outs=4
 )
@@ -310,8 +297,8 @@ neck_fuse=dict(in_channels=256, out_channels=64)
 neck_3d=dict(
     type='M2BevNeck',
     in_channels=64*voxel_shape[0],
-    out_channels=256, # ought to be: 64*voxel_shape[0]//2,
-    num_layers=6,
+    out_channels=224, # ought to be: 64*voxel_shape[0]//2,
+    num_layers=4,
     stride=1,
     is_transpose=False,
     fuse=dict(in_channels=64*voxel_shape[0], out_channels=64*voxel_shape[0]),
@@ -328,8 +315,8 @@ spatial_transform = dict(
 # heads
 heads = dict(
     bbox_3d=dict(type='PlanarHead',
-                 in_channels=256,  # ought to be: 64*voxel_shape[0]//2,
-                 mid_channels=256,  # ought to be: 64*voxel_shape[0]//2,
+                 in_channels=224,  # ought to be: 64*voxel_shape[0]//2,
+                 mid_channels=224,  # ought to be: 64*voxel_shape[0]//2,
                  cen_seg_channels=sum([
                     # cen: 0
                     1,
@@ -508,7 +495,7 @@ optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(
         type='AdamW',
-        lr=0.0002,
+        lr=0.0005,
         # momentum=0.9,
         weight_decay=0.01),
     paramwise_cfg=dict(
@@ -536,8 +523,8 @@ import datetime
 today = datetime.datetime.now().strftime("%m%d")
 
 # load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
-# load_from = "./ckpts/single_frame_nusc_1118_epoch_200.pth"
-load_from = "./ckpts/cascade_mask_rcnn_r50_fpn_coco-mstrain_3x_20e_nuim_bbox_mAP_0.5400_segm_mAP_0.4300.pth"
+# load_from = "./ckpts/single_frame_nusc_r18_0124_20250124_144038_epoch_48.pth"
+load_from = "./ckpts/cascade_mask_rcnn_r34_fpn_coco-mstrain_3x_20e_nuim_bbox_mAP_0.5190_segm_mAP_0.4140.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
 # work_dir = './work_dirs/fastray_planar_single_frame_1105_infer'

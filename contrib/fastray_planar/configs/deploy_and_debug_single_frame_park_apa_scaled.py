@@ -205,8 +205,10 @@ transformables=dict(
 test_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='/data/datasets/MV4D_12V3L',
-    info_path='/data/datasets/MV4D_12V3L/mv_4d_infos_20231029_195612.pkl',
+    # data_root='/data/datasets/MV4D_12V3L',
+    # info_path='/data/datasets/MV4D_12V3L/mv_4d_infos_20231029_195612.pkl',
+    data_root='../MV4D-PARKING',
+    info_path='../MV4D-PARKING/mv_4d_infos_20231031_135230.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -222,7 +224,8 @@ test_dataset = dict(
 ## dataloader configs
 
 test_dataloader = dict(
-    sampler=dict(type='DefaultSampler', shuffle=False),
+    # sampler=dict(type='DefaultSampler', shuffle=False),
+    sampler=dict(type='DefaultSampler', shuffle=True),
     num_workers=0,
     collate_fn=dict(type="collate_dict"),
     dataset=test_dataset,
@@ -270,12 +273,75 @@ all_bbox_3d_reg_channels = sum([
     8,   # bbox_3d_cylinder
     13   # bbox_3d_oriented_cylinder
 ])
+
+bbox_3d_heading_reg_scales = [
+    0.25, 0.25,  # center_xy
+    0.05,   # center_z
+    0.1, 0.1, 0.1,  # size
+    0.01, 0.01, 0.01,   # unit_xvec
+    0.01, 0.01, 0.01, 0.01, 0.01,   # abs_xvec
+    0.01, 0.01, 0.01,   # abs_roll_angle
+    0.1, 0.1, 0.1,  # velo
+]
+bbox_3d_plane_heading_reg_scales = [
+    0.25, 0.25,  # center_xy
+    0.05,   # center_z
+    0.1, 0.1, 0.1,  # size
+    0.01, 0.01, 0.01,   # unit_xvec
+    0.01, 0.01, 0.01, 0.01, 0.01,   # abs_xvec
+    0.01, 0.01, 0.01,   # abs_roll_angle
+    0.1, 0.1, 0.1,  # velo
+]
+bbox_3d_no_heading_reg_scales = [
+    0.25, 0.25,  # center_xy
+    0.05,   # center_z
+    0.1, 0.1, 0.1,  # size
+    0.01, 0.01, 0.01, 0.01, 0.01,   # abs_xvec
+    0.01, 0.01, 0.01,   # abs_roll_angle
+]
+bbox_3d_square_reg_scales = [
+    0.25, 0.25,  # center_xy
+    0.05,   # center_z
+    0.1, 0.1, 0.1,  # size
+    0.01, 0.01, 0.01,   # unit_zvec
+    0.01, 0.01,   # yaw_angle
+]
+bbox_3d_cylinder_reg_scales = [
+    0.25, 0.25,  # center_xy
+    0.05,   # center_z
+    0.1, 0.1,  # size
+    0.01, 0.01, 0.01,   # unit_zvec
+]
+bbox_3d_oriented_cylinder_reg_scales = [
+    0.25, 0.25,  # center_xy
+    0.05,   # center_z
+    0.1, 0.1,  # size
+    0.01, 0.01, 0.01,   # unit_zvec
+    0.01, 0.01,   # yaw_angle
+    0.1, 0.1, 0.1,  # velo
+]
+bbox_3d_reg_scales = bbox_3d_heading_reg_scales + \
+                     bbox_3d_plane_heading_reg_scales + \
+                     bbox_3d_no_heading_reg_scales + \
+                     bbox_3d_square_reg_scales + \
+                     bbox_3d_cylinder_reg_scales + \
+                     bbox_3d_oriented_cylinder_reg_scales
+assert len(bbox_3d_reg_scales) == all_bbox_3d_reg_channels, f"len(bbox_3d_reg_scales)={len(bbox_3d_reg_scales)} != all_bbox_3d_reg_channels={all_bbox_3d_reg_channels}"
+
+parkingslot_3d_reg_scales = [
+    0.5, 0.5, 0.5, 0.5,  # dist
+    0.01, 0.01, 0.01, 0.01, 0.01, 0.01,  # dir
+    0.5, 0.5, 0.5, 0.5,  # vec
+    0.05,  # height
+]
+
 heads = dict(
     bbox_3d=dict(type='PlanarHeadSimple',
                  in_channels=128,
                  mid_channels=128,
                  cen_seg_channels=all_bbox_3d_cen_seg_channels,
-                 reg_channels=all_bbox_3d_reg_channels),
+                 reg_channels=all_bbox_3d_reg_channels,
+                 reg_scales=bbox_3d_reg_scales),
     polyline_3d=dict(type='PlanarHeadSimple',
                      in_channels=128,
                      mid_channels=64,
@@ -285,7 +351,8 @@ heads = dict(
                         in_channels=128,
                         mid_channels=64,
                         cen_seg_channels=5,
-                        reg_channels=15),
+                        reg_channels=15,
+                        reg_scales=parkingslot_3d_reg_scales),
     occ_sdf_bev=dict(type='PlanarHeadSimple',
                      in_channels=128,
                      mid_channels=64,
@@ -304,14 +371,16 @@ model = dict(
     debug_mode=False
 )
 
+# work_dir = "./work_dirs/deploy_and_debug_single_frame_park_apa_scaled_0211"
+work_dir = "./work_dirs/deploy_and_quantize_single_frame_park_apa_scaled_0211"
 ## log_processor
 log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 custom_hooks = [
-    dict(type="DumpPlanarPredResultsHookAPA", 
+    dict(type="DeployAndDebugHookAPA", 
          tensor_smith_dict=tensor_smith_dict, 
          dictionary_dict=dictionary_dict,
-         save_dir='apa_demo_dumps_20250123'),
+         save_dir=work_dir),
 ]
 
 
@@ -327,9 +396,7 @@ env_cfg = dict(
     dist_cfg=dict(backend='nccl'),
 )
 
-
-work_dir = "./work_dirs/fastray_planar_single_frame_park_apa_0123_2"
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
-load_from = "./work_dirs/collected_models/single_frame_epoch_14.pth"
+load_from = "./work_dirs/collected_models/single_frame_apa_scale_epoch_100.pth"
 
 # resume = False
