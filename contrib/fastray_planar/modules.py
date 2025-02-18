@@ -33,7 +33,8 @@ class ConvBN(nn.Module):
                  stride=1,
                  padding=1,
                  dilation=1,
-                 has_relu=True):
+                 has_relu=True,
+                 relu6=False):
         super(ConvBN, self).__init__()
         self.conv = nn.Conv2d(
             in_channels,
@@ -47,7 +48,10 @@ class ConvBN(nn.Module):
         self.bn = nn.BatchNorm2d(out_channels, momentum=0.001)
         self.has_relu = has_relu
         if self.has_relu:
-            self.relu = nn.ReLU(inplace=True)
+            if relu6:
+                self.relu = nn.ReLU6(inplace=True)
+            else:
+                self.relu = nn.ReLU(inplace=True)
         self.init_params()
     
     def init_params(self):
@@ -102,29 +106,30 @@ class OSABlock(nn.Module):
                  repeat=5,
                  final_dilation=1,
                  with_reduce=True,
-                 has_bn=True):
+                 has_bn=True,
+                 relu6=False):
         super(OSABlock, self).__init__()
         assert stride in [1, 2]
         assert repeat >= 2
         self.repeat = repeat
         self.with_reduce = with_reduce
 
-        self.conv1 = ConvBN(in_channels, mid_channels, stride=stride, padding=dilation, dilation=dilation)
+        self.conv1 = ConvBN(in_channels, mid_channels, stride=stride, padding=dilation, dilation=dilation, relu6=relu6)
 
         for i in range(repeat - 2):
             self._modules['conv{}'.format(i + 2)] = ConvBN(
-                mid_channels, mid_channels, padding=dilation, dilation=dilation
+                mid_channels, mid_channels, padding=dilation, dilation=dilation, relu6=relu6
             )
 
         self._modules['conv{}'.format(repeat)] = ConvBN(
-            mid_channels, mid_channels, padding=final_dilation, dilation=final_dilation
+            mid_channels, mid_channels, padding=final_dilation, dilation=final_dilation, relu6=relu6
         )
 
         self.concat = Concat()
         if with_reduce:
             assert out_channels is not None
             if has_bn:
-                self.reduce = ConvBN(mid_channels * repeat, out_channels, kernel_size=1, padding=0)
+                self.reduce = ConvBN(mid_channels * repeat, out_channels, kernel_size=1, padding=0, relu6=relu6)
             else:
                 self.reduce = nn.Conv2d(mid_channels * repeat, out_channels, kernel_size=1, padding=0)
         self.init_params()
@@ -147,29 +152,29 @@ class OSABlock(nn.Module):
 
 @MODELS.register_module()
 class VoVNetFPN(BaseModule):
-    def __init__(self, out_stride=8, out_channels=128, init_cfg=None):
+    def __init__(self, out_stride=8, out_channels=128, init_cfg=None, relu6=False, last_bn=False):
         super().__init__(init_cfg=init_cfg)
         self.strides = [4, 8, 16, 32]
         assert out_stride in self.strides
         self.out_stride = out_stride
 
         # BACKBONE
-        self.stem1 = ConvBN(3, 64, stride=2)
-        self.osa2 = OSABlock(64, 64, 96, stride=2, repeat=3)
-        self.osa3 = OSABlock(96, 96, 128, stride=2, repeat=4, final_dilation=2)
-        self.osa4 = OSABlock(128, 128, 192, stride=2, repeat=5, final_dilation=2)
-        self.osa5 = OSABlock(192, 192, 192, stride=2, repeat=4, final_dilation=2)
+        self.stem1 = ConvBN(3, 64, stride=2, relu6=relu6)
+        self.osa2 = OSABlock(64, 64, 96, stride=2, repeat=3, relu6=relu6)
+        self.osa3 = OSABlock(96, 96, 128, stride=2, repeat=4, final_dilation=2, relu6=relu6)
+        self.osa4 = OSABlock(128, 128, 192, stride=2, repeat=5, final_dilation=2, relu6=relu6)
+        self.osa5 = OSABlock(192, 192, 192, stride=2, repeat=4, final_dilation=2, relu6=relu6)
 
         # NECK
         if self.out_stride <= 16:
             self.p4_up = nn.ConvTranspose2d(192, 192, kernel_size=2, stride=2, padding=0, bias=False)
             self.p4_fusion = Concat()
         if self.out_stride <= 8:
-            self.p3_linear = ConvBN(384, 128, kernel_size=1, padding=0)
+            self.p3_linear = ConvBN(384, 128, kernel_size=1, padding=0, relu6=relu6)
             self.p3_up = nn.ConvTranspose2d(128, 128, kernel_size=2, stride=2, padding=0, bias=False)
             self.p3_fusion = Concat()
         if self.out_stride <= 4:
-            self.p2_linear = ConvBN(256, 96, kernel_size=1, padding=0)
+            self.p2_linear = ConvBN(256, 96, kernel_size=1, padding=0, relu6=relu6)
             self.p2_up = nn.ConvTranspose2d(96, 96, kernel_size=2, stride=2, padding=0, bias=False)
             self.p2_fusion = Concat()
         
@@ -177,7 +182,7 @@ class VoVNetFPN(BaseModule):
         mid_channels = {4: 96, 8: 96, 16: 128, 32: 192}
         self.out = OSABlock(
             in_channels[self.out_stride], mid_channels[self.out_stride], out_channels,
-            stride=1, repeat=3, has_bn=False
+            stride=1, repeat=3, has_bn=last_bn, relu6=relu6
         )
         
         
@@ -202,28 +207,34 @@ class VoVNetFPN(BaseModule):
         return out
 
 
+
+
 @MODELS.register_module()
 class VoVNetSlimFPN(BaseModule):
-    def __init__(self, out_channels=80, init_cfg=None):
+    def __init__(self, out_channels=80, init_cfg=None, relu6=False):
         super().__init__(init_cfg=init_cfg)
 
         # BACKBONE
-        self.stem1 = ConvBN(3, 64, stride=2)
-        self.osa2 = OSABlock(64, 64, 96, stride=2, repeat=3)
-        self.osa3 = OSABlock(96, 96, 128, stride=2, repeat=4, final_dilation=2)
-        self.osa4 = OSABlock(128, 128, 192, stride=2, repeat=5, final_dilation=2)
-        self.osa5 = OSABlock(192, 192, 192, stride=2, repeat=4, final_dilation=2)
+        self.stem1 = ConvBN(3, 64, stride=2, relu6=relu6)
+        self.osa2 = OSABlock(64, 64, 96, stride=2, repeat=3, relu6=relu6)
+        self.osa3 = OSABlock(96, 96, 128, stride=2, repeat=4, final_dilation=2, relu6=relu6)
+        self.osa4 = OSABlock(128, 128, 192, stride=2, repeat=5, final_dilation=2, relu6=relu6)
+        self.osa5 = OSABlock(192, 192, 192, stride=2, repeat=4, final_dilation=2, relu6=relu6)
 
         # NECK
         self.p4_up = nn.ConvTranspose2d(192, 192, kernel_size=2, stride=2, padding=0, bias=False)
         self.p4_fusion = Concat()
-        self.p3_linear = ConvBN(384, 128, kernel_size=1, padding=0)
+        self.p3_linear = ConvBN(384, 128, kernel_size=1, padding=0, relu6=relu6)
         self.p3_up = nn.ConvTranspose2d(128, 128, kernel_size=2, stride=2, padding=0, bias=False)
         self.p3_fusion = Concat()
         self.out = OSABlock(256, 96, stride=1, repeat=3, has_bn=False, with_reduce=False)
-        self.up_linear = ConvBN(288, out_channels, kernel_size=1, padding=0)
+        self.up_linear = ConvBN(288, out_channels, kernel_size=1, padding=0, relu6=relu6)
         self.up = nn.ConvTranspose2d(out_channels, out_channels, kernel_size=2, stride=2, padding=0, bias=True)
         
+        self.relu6 = relu6
+        if self.relu6:
+            self.out_bn = nn.BatchNorm2d(out_channels)
+            self.out_relu = nn.ReLU6(inplace=True)
     def forward(self, x):  # x: (N, 3, H, W)
         stem1 = self.stem1(x)
         osa2 = self.osa2(stem1)
@@ -235,6 +246,9 @@ class VoVNetSlimFPN(BaseModule):
         p3 = self.p3_fusion(self.p3_up(self.p3_linear(p4)), osa3)
         
         out = self.up(self.up_linear(self.out(p3)))
+
+        if self.relu6:
+            out = self.out_relu(self.out_bn(out))
         return out
 
 
@@ -888,25 +902,26 @@ class VoxelEncoderFPN(BaseModule):
                  mid_channels_list, 
                  out_channels,
                  repeats=3,
-                 init_cfg=None):
+                 init_cfg=None,
+                 relu6=False):
         super().__init__(init_cfg=init_cfg)
         assert len(mid_channels_list) == 3
         if type(repeats) is int:
             repeats = (repeats, repeats, repeats)
         else:
             assert len(repeats) == 3
-        self.osa0 = OSABlock(in_channels, mid_channels_list[0], mid_channels_list[0], stride=1, repeat=repeats[0], final_dilation=2)
-        self.osa1 = OSABlock(mid_channels_list[0], mid_channels_list[1], mid_channels_list[1], stride=2, repeat=repeats[1], final_dilation=2)
-        self.osa2 = OSABlock(mid_channels_list[1], mid_channels_list[2], mid_channels_list[2], stride=2, repeat=repeats[2], final_dilation=2)
+        self.osa0 = OSABlock(in_channels, mid_channels_list[0], mid_channels_list[0], stride=1, repeat=repeats[0], final_dilation=2, relu6=relu6)
+        self.osa1 = OSABlock(mid_channels_list[0], mid_channels_list[1], mid_channels_list[1], stride=2, repeat=repeats[1], final_dilation=2, relu6=relu6)
+        self.osa2 = OSABlock(mid_channels_list[1], mid_channels_list[2], mid_channels_list[2], stride=2, repeat=repeats[2], final_dilation=2, relu6=relu6)
 
-        self.p1_linear = ConvBN(mid_channels_list[2], mid_channels_list[1], kernel_size=1, padding=0)
+        self.p1_linear = ConvBN(mid_channels_list[2], mid_channels_list[1], kernel_size=1, padding=0, relu6=relu6)
         self.p1_up = nn.ConvTranspose2d(mid_channels_list[1], mid_channels_list[1], kernel_size=2, stride=2, padding=0, bias=False)
         self.p1_fusion = Concat()
-        self.p0_linear = ConvBN(mid_channels_list[1] * 2, mid_channels_list[0], kernel_size=1, padding=0)
+        self.p0_linear = ConvBN(mid_channels_list[1] * 2, mid_channels_list[0], kernel_size=1, padding=0, relu6=relu6)
         self.p0_up = nn.ConvTranspose2d(mid_channels_list[0], mid_channels_list[0], kernel_size=2, stride=2, padding=0, bias=False)
         self.p0_fusion = Concat()
 
-        self.out = ConvBN(mid_channels_list[0] * 2, out_channels)
+        self.out = ConvBN(mid_channels_list[0] * 2, out_channels, relu6=relu6)
     
     def forward(self, x):
         osa0 = self.osa0(x)
@@ -926,6 +941,7 @@ class PlanarHead(BaseModule):
                  mid_channels, 
                  cen_seg_channels,
                  reg_channels,
+                 reg_scales=None,
                  repeat=3,
                  init_cfg=None):
         super().__init__(init_cfg=init_cfg)
@@ -945,12 +961,18 @@ class PlanarHead(BaseModule):
         self.reg = nn.Conv2d(mid_channels * repeat, 
                              reg_channels, 
                              kernel_size=1)
+        self.has_reg_scale = reg_scales is not None
+        if self.has_reg_scale:
+            assert len(reg_scales) == reg_channels
+            self.reg_scales = torch.tensor(reg_scales, dtype=torch.float32)[None, :, None, None]
     
     def forward(self, x):
         seg_feat = self.seg_tower(x)
         cen_seg = self.cen_seg(seg_feat)
         reg_feat = self.reg_tower(x)
         reg = self.reg(reg_feat)
+        if self.has_reg_scale:
+            reg = reg * self.reg_scales.to(reg.device)
         return cen_seg, reg
 
 
@@ -961,24 +983,32 @@ class PlanarHeadSimple(BaseModule):
                  mid_channels, 
                  cen_seg_channels,
                  reg_channels,
+                 reg_scales=None,
                  repeat=1,
-                 init_cfg=None):
+                 init_cfg=None,
+                 relu6=False):
         super().__init__(init_cfg=init_cfg)
         self.seg_tower = nn.Sequential(
-            ConvBN(in_channels, mid_channels),
-            * ([ConvBN(mid_channels, mid_channels)] * repeat),
+            ConvBN(in_channels, mid_channels, relu6=relu6),
+            * ([ConvBN(mid_channels, mid_channels, relu6=relu6)] * repeat),
         )
         self.reg_tower = nn.Sequential(
-            ConvBN(in_channels, mid_channels),
-            * ([ConvBN(mid_channels, mid_channels)] * repeat),
+            ConvBN(in_channels, mid_channels, relu6=relu6),
+            * ([ConvBN(mid_channels, mid_channels, relu6=relu6)] * repeat),
         )
         self.cen_seg = nn.Conv2d(mid_channels, cen_seg_channels, kernel_size=1)
         self.reg = nn.Conv2d(mid_channels, reg_channels, kernel_size=1)
+        self.has_reg_scale = reg_scales is not None
+        if self.has_reg_scale:
+            assert len(reg_scales) == reg_channels
+            self.reg_scales = torch.tensor(reg_scales, dtype=torch.float32)[None, :, None, None]
     
     def forward(self, x):
         seg_feat = self.seg_tower(x)
         cen_seg = self.cen_seg(seg_feat)
         reg_feat = self.reg_tower(x)
         reg = self.reg(reg_feat)
+        if self.has_reg_scale:
+            reg = reg * self.reg_scales.to(reg.device)
         return cen_seg, reg
         
