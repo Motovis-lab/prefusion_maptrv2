@@ -172,14 +172,14 @@ virtual_camera_settings = dict(
 virtual_camera_transform = dict(type='RenderVirtualCamera', camera_settings=virtual_camera_settings)
 
 
-debug_mode = True
+debug_mode = False
 
 if debug_mode:
     batch_size = 1
     num_workers = 0
     transforms = [virtual_camera_transform]
 else:
-    batch_size = 6
+    batch_size = 16
     num_workers = 8
     transforms = [
         dict(type='RandomRenderExtrinsic'),
@@ -280,7 +280,7 @@ train_dataset = dict(
     name="demo_parking",
     data_root='/ssd1/MV4D_12V3L',
     # info_path='/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_20230823_110018.pkl',
-    info_path='/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_train.pkl',
+    info_path='/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_train_fix_label_error.pkl',
     # data_root='../MV4D-PARKING',
     # info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
     # info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
@@ -313,7 +313,8 @@ val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/ssd1/MV4D_12V3L',
-    info_path='/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_20230823_110018.pkl',
+    # info_path='/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_20230823_110018.pkl',
+    info_path='/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_20230823_110018_debug.pkl',
     # info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
     model_feeder=dict(
         type="FastRayLidarPlanarModelFeeder",
@@ -735,7 +736,7 @@ optim_wrapper = dict(
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[50, 75, 90])
+param_scheduler = dict(type='MultiStepLR', milestones=[25, 40, 50, 75, 90])
 
 
 env_cfg = dict(
@@ -744,7 +745,7 @@ env_cfg = dict(
 )
 
 
-work_dir = "./work_dirs/planar_lidar_0123"
+work_dir = "./work_dirs/planar_lidar_0214"
 load_from = "/home/yuanshiwei/3/prefusion/work_dirs/planar_camera_0122/epoch_1.pth"
 # load_from = "./ckpts/single_frame_epoch_14.pth"
 

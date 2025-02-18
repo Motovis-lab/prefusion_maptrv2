@@ -195,7 +195,9 @@ def draw_results_planar_lidar(pred_dict, batched_input_dict, save_im=True):
 
 
 
-
+def draw_polys(img, points):
+    cv2.polylines(img, [points.astype('int')],1, (0, 0, 255), 2)
+    cv2.polylines(img, [points.astype('int')[:2]],0, (128, 255, 0), 3)
 def draw_results_ps_lidar(pred_dict, batched_input_dict, save_im=True):
     if False:  # dbg,draw labels
         lidar_points = batched_input_dict['transformables'][0]['lidar_sweeps'].positions
@@ -246,16 +248,18 @@ def draw_results_ps_lidar(pred_dict, batched_input_dict, save_im=True):
     results = tensor_smith.reverse(pred_dict_branch_0)
     for poly in results:
         corners_ego = poly
-        # corners_ego = pred_planar_box_to_3d_corners(box['size'], box['rotation'], box['translation'])
-        for k, v in result_dict.items():
-            img, camera_model, Tce = result_dict[k]
-            corners_2d = draw_camera_points_to_image_points(camera_model,
-                                                            transform_pts_with_T(corners_ego, Tce))
-            try:
-                # draw_boxes(img, corners_2d)
-                pass
-            except Exception:
-                pass
+        if poly[:2, 3].mean() > 0.1:
+            # corners_ego = pred_planar_box_to_3d_corners(box['size'], box['rotation'], box['translation'])
+            for k, v in result_dict.items():
+
+                img, camera_model, Tce = result_dict[k]
+                corners_2d = draw_camera_points_to_image_points(camera_model,
+                                                                transform_pts_with_T(corners_ego[:, :3], Tce))
+                try:
+                    # draw_boxes(img, corners_2d)
+                    draw_polys(img, corners_2d)
+                except Exception:
+                    pass
     # from time import time
     if save_im:
         frame_id = batched_input_dict['index_infos'][0].frame_id
