@@ -15,6 +15,10 @@ if TYPE_CHECKING:
 
 @TRANSFORMABLE_LOADERS.register_module()
 class LidarSweepsLoader(TransformableLoader):
+    def __init__(self, data_root: Path, sweep_info_length=None) -> None:
+        self.data_root = data_root
+        self.sweep_info_length = sweep_info_length
+
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> LidarPoints:
         frame = scene_data["frame_info"][index_info.frame_id]
         sweep_infos = frame['lidar_points']['lidar1_sweeps']
@@ -47,6 +51,8 @@ class LidarSweepsLoader(TransformableLoader):
                          np.concatenate([ points, np.zeros_like(points[:, :1])], axis=1)
                          
                          ]
+        if self.sweep_info_length is not None:
+            sweep_infos = sweep_infos[-self.sweep_info_length:]
         for sweep in sweep_infos:
             path = sweep['path']  # input points in ego coord
             Twei = sweep['Twe']
