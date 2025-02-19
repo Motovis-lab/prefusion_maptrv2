@@ -463,15 +463,14 @@ class ParkingSlot3DLoader(TransformableLoader):
     def load(self, name: str, scene_data: Dict, index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> ParkingSlot3D:
         elements = []
         for slot in scene_data["frame_info"][index_info.frame_id]["3d_polylines"]:
-            if len(slot["points"]) == 4:
-                ele = {
-                    "class": slot["class"],
-                    "attr": list(slot["attr"].values()) if isinstance(slot["attr"], dict) else copy.copy(slot["attr"]),
-                    "points": np.array(slot["points"]),
-                }
-                if "track_id" in slot:
-                    ele["track_id"] = slot["track_id"]
-                elements.append(ele)
+            ele = {
+                "class": slot["class"],
+                "attr": list(slot["attr"].values()) if isinstance(slot["attr"], dict) else copy.copy(slot["attr"]),
+                "points": np.array(slot["points"]),
+            }
+            if "track_id" in slot:
+                ele["track_id"] = slot["track_id"]
+            elements.append(ele)
         return ParkingSlot3D(name, elements, copy.deepcopy(dictionary), tensor_smith=tensor_smith)
 
 
