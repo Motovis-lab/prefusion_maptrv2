@@ -1053,10 +1053,12 @@ class ParkingSlot3D(SpatialTransformable):
                 del self.elements[i]
         for i in range(len(self.elements) - 1, -1, -1):
             if len(self.elements[i]['points']) != 4:
-                warnings.warn(
-                    f"Element {i} of {self.name} has {len(self.elements[i]['points'])} points instead of 4. Removing it.",
-                    UserWarning
-                )
+                warning_str = ''.join([
+                    f"Element {i} of {self.name} has {len(self.elements[i]['points'])} points instead of 4. Removing it.\n",
+                    f"points: {self.elements[i]['points']}",
+                    f"\ntrack_id: {self.elements[i]['track_id']}\n" if 'track_id' in self.elements[i] else '',
+                ])
+                warnings.warn(warning_str, UserWarning)
                 del self.elements[i]
     
 
