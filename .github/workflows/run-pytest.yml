@@ -15,7 +15,7 @@ jobs:
 
       # Pull your pre-built Docker image
       - name: Pull Docker image
-        run: docker pull brianlan/prefusion:ci-v10
+        run: docker pull brianlan/prefusion:ci-v11
 
       # Run pytest inside the Docker container
       - name: Run pytest
