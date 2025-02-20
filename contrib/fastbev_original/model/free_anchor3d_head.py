@@ -251,7 +251,8 @@ class FreeAnchor3DHead(Anchor3DHead):
 
             # negative_loss:
             # \sum_{j}{ FL((1 - P{a_{j} \in A_{+}}) * (1 - P_{j}^{bg})) } / n||B||
-            negative_loss = self.negative_bag_loss(cls_prob, box_prob).sum() / max(
+            non_empty_idx = [b.size(0) > 0 for b in gt_bboxes]
+            negative_loss = self.negative_bag_loss(cls_prob[non_empty_idx], box_prob).sum() / max(
                 1, num_pos * self.pre_anchor_topk)
 
         # print(f'rank {get_dist_info()[0]} pos: {positive_loss}, neg: {negative_loss}')
