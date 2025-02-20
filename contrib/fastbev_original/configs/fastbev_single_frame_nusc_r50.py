@@ -567,8 +567,8 @@ today = datetime.datetime.now().strftime("%m%d")
 
 # load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
 # load_from = "./ckpts/single_frame_nusc_1118_epoch_200.pth"
-# load_from = "./ckpts/cascade_mask_rcnn_r50_fpn_coco-mstrain_3x_20e_nuim_bbox_mAP_0.5400_segm_mAP_0.4300.pth"
-load_from = "./work_dirs/fastbev_single_frame_nusc_r50_0219/fastbev_single_frame_nusc_r50_0219_epoch_1000.pth"
+load_from = "./ckpts/cascade_mask_rcnn_r50_fpn_coco-mstrain_3x_20e_nuim_bbox_mAP_0.5400_segm_mAP_0.4300.pth"
+# load_from = "./work_dirs/fastbev_single_frame_nusc_r50_0219/fastbev_single_frame_nusc_r50_0219_epoch_1000.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
 # work_dir = './work_dirs/fastray_planar_single_frame_1105_infer'
