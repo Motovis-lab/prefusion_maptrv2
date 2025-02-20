@@ -13,7 +13,7 @@ from .model_utils import *
 
 
 @MODELS.register_module()
-class FastBEVModel(BaseModel):
+class FastBEVPlanarModel(BaseModel):
     def __init__(self,
                  camera_groups: List,
                  backbones,

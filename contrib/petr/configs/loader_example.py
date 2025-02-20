@@ -78,7 +78,7 @@ train_dataloader = dict(
                         is_with_rider=["attr.cycle.is_with_rider.true"],
                     ),
                 ),
-                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
+                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes, voxel_range=point_cloud_range)),
             bbox_3d_directional_ground=dict(
                 type="Bbox3D", 
                 loader=dict(
@@ -94,7 +94,7 @@ train_dataloader = dict(
                         arrow_left_right=["class.road_marker.arrow::attr.road_marker.arrow.type.left_right"],
                     ),
                 ),
-                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
+                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes, voxel_range=point_cloud_range)),
             bbox_3d_directional_cylinder=dict(
                 type="Bbox3D", 
                 loader=dict(
@@ -103,7 +103,7 @@ train_dataloader = dict(
                         pedestrian=["class.pedestrian.pedestrian"],
                     ),
                 ),
-                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
+                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes, voxel_range=point_cloud_range)),
             bbox_3d_cylinder=dict(
                 type="Bbox3D", 
                 loader=dict(
@@ -119,7 +119,7 @@ train_dataloader = dict(
                         undefined_pillar=["class.parking.indoor_column::attr.parking.indoor_column.shape.undefined"],
                     ),
                 ),
-                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
+                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes, voxel_range=point_cloud_range)),
             bbox_3d_rect_cuboid=dict(
                 type="Bbox3D", 
                 loader=dict(
@@ -153,7 +153,7 @@ train_dataloader = dict(
                         is_wheel_stopper_separated=["class.parking.wheel_stopper::attr.parking.wheel_stopper.is_separated.true"],
                     ),
                 ),
-                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
+                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes, voxel_range=point_cloud_range)),
             bbox_3d_square_pillar=dict(
                 type="Bbox3D", 
                 loader=dict(
@@ -163,7 +163,7 @@ train_dataloader = dict(
                         regtangular_pillar=["class.parking.indoor_column::attr.parking.indoor_column.shape.regtangular"],
                     ),
                 ),
-                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
+                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes, voxel_range=point_cloud_range)),
             polyline_3d=dict(
                 type="Polyline3D",
                 loader=dict(
