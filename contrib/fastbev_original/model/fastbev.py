@@ -111,19 +111,24 @@ class FastBEVModel(BaseModel):
         # from copious.cv.geometry import Box3d as CopiousBox3d, points3d_to_homo
         # from prefusion.dataset.utils import T4x4
         # num_imgs = len(pred_dict['pred_bbox'])
-        # pred_bbox_decoded = self.head_bbox_3d.get_bboxes(
+        # pred_bbox_decoded, pred_bbox_score, pred_bbox_class = self.head_bbox_3d.get_bboxes(
         #     pred_dict['pred_cls_score'], 
         #     pred_dict['pred_bbox'],
         #     pred_dict['pred_dir_cls'],
         #     num_imgs,
         #     valid=None,
-        # )
-        # # featmap_sizes = [featmap.size()[-2:] for featmap in pred_dict['pred_cls_score']]
-        # # batch_size = pred_dict["pred_bbox"][0].size(0)
-        # # anchor_list = self.head_bbox_3d.get_anchors(featmap_sizes, len(pred_dict['pred_bbox']))
-        # # anchors = [torch.cat(anchor) for anchor in anchor_list]
-        # # pred_cls_score = pred_dict["pred_cls_score"][0].permute(0, 2, 3, 1).reshape(batch_size, -1, self.head_bbox_3d.num_classes)
-        # # pred_bbox_decoded = self.head_bbox_3d.bbox_coder.decode(anchors[0], pred_dict["pred_bbox"][0].permute(0, 2, 3, 1).reshape(batch_size, -1, self.head_bbox_3d.box_code_size))
+        # )[0]
+        # credible_idx = pred_bbox_score > 0.7
+        # credible_pred_bbox_elements = []
+        # for bx in pred_bbox_decoded[credible_idx]:
+        #     credible_pred_bbox_elements.append(
+        #         {
+        #             "translation": bx[:3].cpu().numpy(),
+        #             "size": bx[3:6].cpu().numpy(),
+        #             "rotation": Rotation.from_euler("XYZ", [0, 0, bx[6].item()], degrees=False).as_matrix()
+        #         }
+        #     )
+
         # gt_bbox3d_planar = {task: tensor[0] for task, tensor in batched_input_dict['annotations']['bbox_3d'].items()}
         # tensor_smith = batched_input_dict['transformables'][0]['bbox_3d'].tensor_smith
         # gt_boxes = batched_input_dict['transformables'][0]['bbox_3d']
@@ -220,6 +225,7 @@ class FastBEVModel(BaseModel):
         #                 alpha=0.5
         #             )
 
+
         # for i, (cam_id, im_tensor) in enumerate(camera_tensors_dict.items()):
         #     _im = (im_tensor[0].cpu().numpy().transpose(1, 2, 0) * np.array([58.395, 57.12, 57.375])[None, None, :] + np.array([123.675, 116.28, 103.53])[None, None]).astype(np.uint8)
         #     _ax = ax[i // ncols][i % ncols]
@@ -236,10 +242,7 @@ class FastBEVModel(BaseModel):
         #     #         continue
         #     #     _plot_bbox(_ax, corners_uv, color='red')
 
-        #     for j, bx in enumerate(gt_boxes.elements):
-        #         if j not in [6, 7, 15]:
-        #             continue
-        #         print(j, bx['velocity'][:2, 0])
+        #     for j, bx in enumerate(credible_pred_bbox_elements):
         #         corners_3d = _bbox_to_corners(bx)
 
         #         try:
@@ -294,7 +297,7 @@ class FastBEVModel(BaseModel):
         # aligned_bboxes.round(1)
         gt_bboxes_3d = gt_dict['bbox_3d_basic']['xyz_lwh_yaw_vx_vy']
         gt_labels_3d = gt_dict['bbox_3d_basic']['classes']
-        num_imgs = len(pred_dict['pred_bbox'])
+        num_imgs = len(pred_dict['pred_bbox'][0]) # 0 means the only level of the multi-level features
         bbox_losses = self.head_bbox_3d.loss(
             pred_dict['pred_cls_score'], 
             pred_dict['pred_bbox'],

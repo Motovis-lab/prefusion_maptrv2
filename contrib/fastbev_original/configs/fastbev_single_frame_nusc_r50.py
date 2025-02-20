@@ -107,9 +107,9 @@ if debug_mode:
     ]
     possible_group_sizes = 20
 else:
-    batch_size = 1
-    num_workers = 0
-    persistent_workers = False
+    batch_size = 6
+    num_workers = 3
+    persistent_workers = True
     transforms = [
         # dict(type='RandomRenderExtrinsic'),
         dict(type='BGR2RGB'),
@@ -144,14 +144,14 @@ transformables = dict(
         tensor_smith=dict(type='CameraImageTensor', means=[123.675, 116.28, 103.53], stds=[58.395, 57.12, 57.375]),  # ImageNet mean and std
     ),
     ego_poses=dict(type='EgoPoseSet'),
-    # bbox_3d=dict(
-    #     type='Bbox3D',
-    #     loader=dict(
-    #         type="AdvancedBbox3DLoader",
-    #         class_mapping=class_mapping,
-    #     ),
-    #     tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
-    # ),
+    bbox_3d=dict(
+        type='Bbox3D',
+        loader=dict(
+            type="AdvancedBbox3DLoader",
+            class_mapping=class_mapping,
+        ),
+        tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+    ),
     bbox_3d_basic=dict(
         type='Bbox3D',
         loader=dict(
@@ -501,7 +501,7 @@ model = dict(
 log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(
     timer=dict(type='GroupIterTimerHook'),
-    checkpoint=dict(type='CheckpointHook', interval=50),
+    checkpoint=dict(type='CheckpointHook', interval=1),
 )
 
 custom_hooks = [
@@ -538,7 +538,7 @@ optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(
         type='AdamW',
-        lr=0.0002,
+        lr=0.0004,
         # momentum=0.9,
         weight_decay=0.01),
     paramwise_cfg=dict(
@@ -568,7 +568,7 @@ today = datetime.datetime.now().strftime("%m%d")
 # load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
 # load_from = "./ckpts/single_frame_nusc_1118_epoch_200.pth"
 load_from = "./ckpts/cascade_mask_rcnn_r50_fpn_coco-mstrain_3x_20e_nuim_bbox_mAP_0.5400_segm_mAP_0.4300.pth"
-# load_from = "./work_dirs/fastbev_single_frame_nusc_r50_0219/fastbev_single_frame_nusc_r50_0219_epoch_1000.pth"
+# load_from = "./ckpts/fastbev_single_frame_nusc_r50_0219_epoch_1000.pth"
 # load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
 # work_dir = './work_dirs/fastray_planar_single_frame_1105_infer'

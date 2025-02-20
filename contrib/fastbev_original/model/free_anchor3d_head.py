@@ -233,7 +233,14 @@ class FreeAnchor3DHead(Anchor3DHead):
             num_pos += len(gt_bboxes_)
             positive_losses.append(self.positive_bag_loss(matched_cls_prob, matched_box_prob))
 
-        positive_loss = torch.cat(positive_losses).sum() / max(1, num_pos)
+        try:
+            positive_loss = torch.cat(positive_losses).sum() / max(1, num_pos)
+        except RuntimeError:
+            print(f"gt_bboxes: {gt_bboxes}")
+            print(f"gt_labels: {gt_labels}")
+            print(f"cls_prob: {cls_prob}")
+            print(f"bbox_preds: {bbox_preds}")
+            print(f"dir_cls_preds: {dir_cls_preds}")
 
         if len(box_prob) == 0:
             negative_loss = 0.0 * bbox_preds.sum()

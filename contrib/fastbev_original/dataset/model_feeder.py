@@ -150,15 +150,15 @@ class FastBEVModelFeeder(BaseModelFeeder):
                 processed_frame_batch['camera_tensors'][cam_id])
         if processed_frame_batch['delta_poses']:
             processed_frame_batch['delta_poses'] = torch.stack(processed_frame_batch['delta_poses'])
-        for transformable_name, data_batch in anno_batch_dict.items():
+        # for transformable_name, data_batch in anno_batch_dict.items():
             # stack known one-sub-layer tensor_dict
-            if isinstance(data_batch, dict):
-                for task_name, task_data_batch in data_batch.items():
-                    if all(isinstance(data, torch.Tensor) for data in task_data_batch):
-                        anno_batch_dict[transformable_name][task_name] = torch.stack(task_data_batch)
-            # stack tensor batches
-            elif all(isinstance(data, torch.Tensor) for data in data_batch):
-                anno_batch_dict[transformable_name] = torch.stack(data_batch)
+            # if isinstance(data_batch, dict):
+            #     for task_name, task_data_batch in data_batch.items():
+            #         if all(isinstance(data, torch.Tensor) for data in task_data_batch):
+            #             anno_batch_dict[transformable_name][task_name] = torch.stack(task_data_batch)
+            # # stack tensor batches
+            # elif all(isinstance(data, torch.Tensor) for data in data_batch):
+            #     anno_batch_dict[transformable_name] = torch.stack(data_batch)
 
         # Dedicated data handling for Nuscenes data
         processed_frame_batch.update(sample_token=[], dictionaries=[], ego_poses=[])
