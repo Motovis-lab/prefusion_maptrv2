@@ -172,7 +172,7 @@ virtual_camera_settings = dict(
 virtual_camera_transform = dict(type='RenderVirtualCamera', camera_settings=virtual_camera_settings)
 
 
-debug_mode = False
+debug_mode = True
 
 if debug_mode:
     batch_size = 1
@@ -190,10 +190,22 @@ else:
         dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
         dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
-    possible_group_sizes = 1
+    possible_group_sizes = 2
 
 
 ## GroupBatchDataset configs
+picked_category = [
+    # 'bbox_3d_heading',
+    # 'bbox_3d_plane_heading',
+    # 'bbox_3d_no_heading',
+    # 'bbox_3d_square',
+    # 'bbox_3d_cylinder',
+    # 'bbox_3d_oriented_cylinder',
+    # 'polyline_3d',
+    # 'polygon_3d',
+    'parkingslot_3d',
+    # 'occ_sdf_bev'
+]
 
 # transformables
 transformables=dict(
@@ -211,12 +223,12 @@ transformables=dict(
         type='CameraImageSet',
         loader=dict(type='CameraImageSetLoader', camera_mapping=fisheye_camera_mapping),
         tensor_smith=dict(type='CameraImageTensor')),
-    bbox_3d_heading=dict(
-        type='Bbox3D',
-        loader=dict(type='AdvancedBbox3DLoader',
-                    class_mapping=mapping_heading_objects['class_mapping'],
-                    attr_mapping=mapping_heading_objects['attr_mapping']),
-        tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+    # bbox_3d_heading=dict(
+    #     type='Bbox3D',
+    #     loader=dict(type='AdvancedBbox3DLoader',
+    #                 class_mapping=mapping_heading_objects['class_mapping'],
+    #                 attr_mapping=mapping_heading_objects['attr_mapping']),
+    #     tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
     # bbox_3d_plane_heading=dict(
     #     type='Bbox3D',
     #     loader=dict(type='AdvancedBbox3DLoader',
@@ -253,9 +265,9 @@ transformables=dict(
     # polygon_3d=dict(
     #     type='Polygon3D', dictionary=dictionary_polygons,
     #     tensor_smith=dict(type='PlanarPolygon3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
-    # parkingslot_3d=dict(
-    #     type='ParkingSlot3D', dictionary=dict(classes=['class.parking.parking_slot']),
-    #     tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+    parkingslot_3d=dict(
+        type='ParkingSlot3D', dictionary=dict(classes=['class.parking.parking_slot']),
+        tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
     # occ_sdf_bev=dict(
     #     type='OccSdfBev',
     #     loader=dict(type='OccSdfBevLoader', src_voxel_range=([-1, 3], [-15, 15], [15, -15])),
@@ -268,7 +280,7 @@ train_dataset = dict(
     name="demo_parking",
     data_root='/ssd1/MV4D_12V3L',
     # info_path='/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_20230823_110018.pkl',
-    info_path='/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_train.pkl',
+    info_path='/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_train_fix_label_error.pkl',
     # data_root='../MV4D-PARKING',
     # info_path='../MV4D-PARKING/mv_4d_infos_train.pkl',
     # info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
@@ -279,15 +291,15 @@ train_dataset = dict(
         debug_mode=debug_mode),
     transformables=transformables,
     transforms=transforms,
-    # group_sampler=dict(type="IndexGroupSampler",
-    #                    phase="train",
-    #                    possible_group_sizes=1),
-    group_sampler=dict(type="ClassBalancedGroupSampler",
+    group_sampler=dict(type="IndexGroupSampler",
                        phase="train",
-                       possible_group_sizes=possible_group_sizes,
-                       possible_frame_intervals=10,
-                       transformable_cfg=transformables,
-                       cbgs_cfg=dict(desired_ratio=0.2, counter_type='group')),
+                       possible_group_sizes=1),
+    # group_sampler=dict(type="ClassBalancedGroupSampler",
+    #                    phase="train",
+    #                    possible_group_sizes=possible_group_sizes,
+    #                    possible_frame_intervals=10,
+    #                    transformable_cfg=transformables,
+    #                    cbgs_cfg=dict(desired_ratio=0.2, counter_type='group')),
     batch_size=batch_size,
     # subepoch_manager=dict(type="SubEpochManager",
     #                       num_group_batches_per_subepoch=128,
@@ -301,10 +313,11 @@ val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/ssd1/MV4D_12V3L',
-    info_path='/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_20230823_110018.pkl',
+    # info_path='/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_20230823_110018.pkl',
+    info_path='/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_20230823_110018_debug.pkl',
     # info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
     model_feeder=dict(
-        type="FastRayPlanarModelFeeder",
+        type="FastRayLidarPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
         camera_feature_configs=camera_feature_configs,
         debug_mode=debug_mode
@@ -359,44 +372,84 @@ voxel_encoder = dict(
     repeats=[3, 3, 3])
 
 # heads
-all_bbox_3d_cen_seg_channels = sum([
-    2 + 14,  # bbox_3d_heading
-    2 + 10,  # bbox_3d_plane_heading
-    2 + 6,   # bbox_3d_no_heading
-    2 + 4,   # bbox_3d_square
-    2 + 9,   # bbox_3d_cylinder
-    2 + 1    # bbox_3d_oriented_cylinder
-])
-all_bbox_3d_reg_channels = sum([
-    20,  # bbox_3d_heading
-    20,  # bbox_3d_plane_heading
-    14,  # bbox_3d_no_heading
-    11,  # bbox_3d_square
-    8,   # bbox_3d_cylinder
-    13   # bbox_3d_oriented_cylinder
-])
+all_bbox_3d_cen_seg_channels = {
+    "bbox_3d_heading": 2 + 14,  # bbox_3d_heading
+    "bbox_3d_plane_heading": 2 + 10,  # bbox_3d_plane_heading
+    "bbox_3d_no_heading": 2 + 6,   # bbox_3d_no_heading
+    "bbox_3d_square": 2 + 4,   # bbox_3d_square
+    "bbox_3d_cylinder": 2 + 9,   # bbox_3d_cylinder
+    "bbox_3d_oriented_cylinder": 2 + 1    # bbox_3d_oriented_cylinder
+}
+all_bbox_3d_reg_channels = {
+    "bbox_3d_heading": 20,  # bbox_3d_heading
+    "bbox_3d_plane_heading": 20,  # bbox_3d_plane_heading
+    "bbox_3d_no_heading": 14,  # bbox_3d_no_heading
+    "bbox_3d_square": 11,  # bbox_3d_square
+    "bbox_3d_cylinder": 8,   # bbox_3d_cylinder
+    "bbox_3d_oriented_cylinder": 13   # bbox_3d_oriented_cylinder
+}
+all_poly_cen_channels = {
+    "polyline_3d": 1+8,
+    "polygon_3d": 2+4
+}
+all_poly_reg_channels = {
+    "polyline_3d": 7,
+    "polygon_3d": 7
+}
+# --
+all_slot_seg_channels = {
+    "parkingslot_3d": 5,
+}
+all_slot_reg_channels = {
+    "parkingslot_3d": 15,
+}
+all_occ_seg_channels = {
+    "occ_sdf_bev": 2,
+}
+all_occ_reg_channels = {
+    "occ_sdf_bev": 2,
+}
+
+
+picked_heads = ['bbox_3d', 'polyline_3d', 'parkingslot_3d', 'occ_sdf_bev']
+# picked_category = [
+#     'bbox_3d_heading',
+#     # 'bbox_3d_plane_heading',
+#     # 'bbox_3d_no_heading',
+#     # 'bbox_3d_square',
+#     # 'bbox_3d_cylinder',
+#     # 'bbox_3d_oriented_cylinder',
+#     # 'polyline_3d',
+#     # 'polygon_3d',
+#     # 'parkingslot_3d',
+#     # 'occ_sdf_bev'
+# ]
 heads = dict(
     bbox_3d=dict(type='PlanarHeadSimple',
                  in_channels=128,
                  mid_channels=128,
+                 # cen_seg_channels=sum([v for k, v in all_bbox_3d_cen_seg_channels.keys() if v in picked_category]),
                  cen_seg_channels=all_bbox_3d_cen_seg_channels,
+                 # reg_channels=sum([v for k, v in all_bbox_3d_reg_channels.keys() if v in picked_category])),
                  reg_channels=all_bbox_3d_reg_channels),
-    # polyline_3d=dict(type='PlanarHeadSimple',
-    #                  in_channels=128,
-    #                  mid_channels=64,
-    #                  cen_seg_channels=1 + 8 + 2 + 4,
-    #                  reg_channels=7 + 7),
-    # parkingslot_3d=dict(type='PlanarHeadSimple',
-    #                     in_channels=128,
-    #                     mid_channels=64,
-    #                     cen_seg_channels=5,
-    #                     reg_channels=15),
-    # occ_sdf_bev=dict(type='PlanarHeadSimple',
-    #                  in_channels=128,
-    #                  mid_channels=64,
-    #                  cen_seg_channels=2,
-    #                  reg_channels=2)
+    polyline_3d=dict(type='PlanarHeadSimple',
+                     in_channels=128,
+                     mid_channels=64,
+                     cen_seg_channels=all_poly_cen_channels,  # 9+6 polyline & polygon
+                     reg_channels=all_poly_reg_channels),
+    parkingslot_3d=dict(type='PlanarHeadSimple',
+                        in_channels=128,
+                        mid_channels=64,
+                        cen_seg_channels=all_slot_seg_channels,  # slot is fixed
+                        reg_channels=all_slot_reg_channels),
+    occ_sdf_bev=dict(type='PlanarHeadSimple',
+                     in_channels=128,
+                     mid_channels=64,
+                     cen_seg_channels=all_occ_seg_channels,
+                     reg_channels=all_occ_reg_channels)
 )
+
+
 
 # loss configs
 bbox_3d_heading_weight_scheme = dict(
@@ -470,6 +523,8 @@ bbox_3d_square_weight_scheme = dict(
                 "yaw_angle": {"weight": 5, "slice": (9, 11)},
             })
 )
+
+
 
 bbox_3d_cylinder_weight_scheme = dict(
     cen=dict(loss_weight=5,
@@ -554,46 +609,46 @@ loss_cfg = dict(
         seg_iou_method='linear',
         loss_name_prefix='bbox_3d_heading',
         weight_scheme=bbox_3d_heading_weight_scheme),
-    # bbox_3d_plane_heading=dict(
-    #     type='PlanarLoss',
-    #     seg_iou_method='linear',
-    #     loss_name_prefix='bbox_3d_plane_heading',
-    #     weight_scheme=bbox_3d_plane_heading_weight_scheme),
-    # bbox_3d_no_heading=dict(
-    #     type='PlanarLoss',
-    #     seg_iou_method='linear',
-    #     loss_name_prefix='bbox_3d_no_heading',
-    #     weight_scheme=bbox_3d_no_heading_weight_scheme),
-    # bbox_3d_square=dict(
-    #     type='PlanarLoss',
-    #     seg_iou_method='linear',
-    #     loss_name_prefix='bbox_3d_square',
-    #     weight_scheme=bbox_3d_square_weight_scheme),
-    # bbox_3d_cylinder=dict(
-    #     type='PlanarLoss',
-    #     seg_iou_method='linear',
-    #     loss_name_prefix='bbox_3d_cylinder',
-    #     weight_scheme=bbox_3d_cylinder_weight_scheme),
-    # bbox_3d_oriented_cylinder=dict(
-    #     type='PlanarLoss',
-    #     seg_iou_method='linear',
-    #     loss_name_prefix='bbox_3d_oriented_cylinder',
-    #     weight_scheme=bbox_3d_oriented_cylinder_weight_scheme),
-    # polyline_3d=dict(
-    #     type='PlanarLoss',
-    #     seg_iou_method='linear',
-    #     loss_name_prefix='polyline_3d',
-    #     weight_scheme=polyline_3d_weight_scheme),
-    # polygon_3d=dict(
-    #     type='PlanarLoss',
-    #     seg_iou_method='linear',
-    #     loss_name_prefix='polygon_3d',
-    #     weight_scheme=polygon_3d_weight_scheme),
-    # parkingslot_3d=dict(
-    #     type='PlanarLoss',
-    #     seg_iou_method='linear',
-    #     loss_name_prefix='parkingslot_3d',
-    #     weight_scheme=parkingslot_3d_weight_scheme),
+    bbox_3d_plane_heading=dict(
+        type='PlanarLoss',
+        seg_iou_method='linear',
+        loss_name_prefix='bbox_3d_plane_heading',
+        weight_scheme=bbox_3d_plane_heading_weight_scheme),
+    bbox_3d_no_heading=dict(
+        type='PlanarLoss',
+        seg_iou_method='linear',
+        loss_name_prefix='bbox_3d_no_heading',
+        weight_scheme=bbox_3d_no_heading_weight_scheme),
+    bbox_3d_square=dict(
+        type='PlanarLoss',
+        seg_iou_method='linear',
+        loss_name_prefix='bbox_3d_square',
+        weight_scheme=bbox_3d_square_weight_scheme),
+    bbox_3d_cylinder=dict(
+        type='PlanarLoss',
+        seg_iou_method='linear',
+        loss_name_prefix='bbox_3d_cylinder',
+        weight_scheme=bbox_3d_cylinder_weight_scheme),
+    bbox_3d_oriented_cylinder=dict(
+        type='PlanarLoss',
+        seg_iou_method='linear',
+        loss_name_prefix='bbox_3d_oriented_cylinder',
+        weight_scheme=bbox_3d_oriented_cylinder_weight_scheme),
+    polyline_3d=dict(
+        type='PlanarLoss',
+        seg_iou_method='linear',
+        loss_name_prefix='polyline_3d',
+        weight_scheme=polyline_3d_weight_scheme),
+    polygon_3d=dict(
+        type='PlanarLoss',
+        seg_iou_method='linear',
+        loss_name_prefix='polygon_3d',
+        weight_scheme=polygon_3d_weight_scheme),
+    parkingslot_3d=dict(
+        type='PlanarLoss',
+        seg_iou_method='linear',
+        loss_name_prefix='parkingslot_3d',
+        weight_scheme=parkingslot_3d_weight_scheme),
 )
 lidar_voxel_fusion = dict(
     type='FeatureConcatFusion',
@@ -602,9 +657,25 @@ lidar_voxel_fusion = dict(
     bev_mode=True,
     dilation=3)
 
+
+category2head_mapping={
+    'bbox_3d_heading': "bbox_3d",
+    'bbox_3d_plane_heading': "bbox_3d",
+    'bbox_3d_no_heading': "bbox_3d",
+    'bbox_3d_square': "bbox_3d",
+    'bbox_3d_cylinder': "bbox_3d",
+    'bbox_3d_oriented_cylinder': "bbox_3d",
+    'polyline_3d': "polyline_3d",
+    'polygon_3d': "polyline_3d",
+    'parkingslot_3d': "parkingslot_3d",
+    'occ_sdf_bev': "occ_sdf_bev",
+
+}
 # integrated model config
 model = dict(
-    type='ParkingFastRayPlanarSingleFrameModelAPALidar',
+    type='ParkingFastRayPlanarSingleFrameModelAPALidarBigModel',
+    picked_category=picked_category,
+    category2head_mapping =category2head_mapping,
     lidar_voxel_fusion=lidar_voxel_fusion,
     pts_middle_encoder=dict(
         type='mmdet3d.SparseEncoder',
@@ -635,6 +706,10 @@ model = dict(
     backbone=backbone,
     spatial_transform=spatial_transform,
     voxel_encoder=voxel_encoder,
+    picked_heads=[
+
+
+    ],  # this attr entangle with both heads & loss_cfg
     heads=heads,
     loss_cfg=loss_cfg,
     debug_mode=debug_mode
@@ -642,9 +717,7 @@ model = dict(
 
 ## log_processor
 log_processor = dict(type='GroupAwareLogProcessor')
-default_hooks = dict(timer=dict(type='GroupIterTimerHook'),
-                    checkpoint=dict(type='CheckpointHook', interval=1000, by_epoch=False)
-)
+default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 ## runner loop configs
 train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=100, val_interval=-1)
@@ -663,8 +736,7 @@ optim_wrapper = dict(
 )
 
 ## scheduler configs
-# param_scheduler = dict(type='MultiStepLR', milestones=[50, 75, 90])
-param_scheduler = dict(type='MultiStepLR', milestones=[5,8,10, 75, 90])
+param_scheduler = dict(type='MultiStepLR', milestones=[25, 40, 50, 75, 90])
 
 
 env_cfg = dict(
@@ -673,10 +745,16 @@ env_cfg = dict(
 )
 
 
-work_dir = "./work_dirs/planar_lidar_0224"
+work_dir = "./work_dirs/planar_lidar_0214"
 # load_from = "/home/yuanshiwei/3/prefusion/work_dirs/planar_camera_0122/epoch_1.pth"
-# load_from = "work_dirs/planar_lidar_0123/epoch_90.pth"
-load_from = "work_dirs/planar_lidar_0224/iter_1000.pth"
 # load_from = "./ckpts/single_frame_epoch_14.pth"
 
-resume = False
+resume = True
+
+
+
+
+
+
+
+

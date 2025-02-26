@@ -6,6 +6,7 @@ from mmengine.structures import BaseDataElement
 from prefusion import BaseModel
 from prefusion import SegIouLoss, DualFocalLoss
 from prefusion.registry import MODELS
+from .misc_draw import draw_results_planar_lidar
 
 from .modules import *
 from .model_utils import *
@@ -1009,18 +1010,18 @@ class ParkingFastRayPlanarSingleFrameModelAPALidar(BaseModel):
         self.voxel_encoder = MODELS.build(voxel_encoder)
         # voxel heads
         self.head_bbox_3d = MODELS.build(heads['bbox_3d'])
-        self.head_polyline_3d = MODELS.build(heads['polyline_3d'])
-        self.head_parkingslot_3d = MODELS.build(heads['parkingslot_3d'])
-        self.head_occ_sdf_bev = MODELS.build(heads['occ_sdf_bev'])
+        # self.head_polyline_3d = MODELS.build(heads['polyline_3d'])
+        # self.head_parkingslot_3d = MODELS.build(heads['parkingslot_3d'])
+        # self.head_occ_sdf_bev = MODELS.build(heads['occ_sdf_bev'])
         # init losses
         self.planar_losses_dict = {}
         if loss_cfg is not None:
             for branch in loss_cfg:
                 self.planar_losses_dict[branch] = MODELS.build(loss_cfg[branch])
-        self.occ_seg_iou_loss = SegIouLoss(method='linear')
-        self.occ_seg_dfl_loss = DualFocalLoss()
-        self.occ_sdf_l1_loss = nn.L1Loss(reduction='none')
-        self.occ_height_l1_loss = nn.L1Loss(reduction='none')
+        # self.occ_seg_iou_loss = SegIouLoss(method='linear')
+        # self.occ_seg_dfl_loss = DualFocalLoss()
+        # self.occ_sdf_l1_loss = nn.L1Loss(reduction='none')
+        # self.occ_height_l1_loss = nn.L1Loss(reduction='none')
 
     def forward(self, mode='tensor', **batched_input_dict):
         """
@@ -1082,67 +1083,70 @@ class ParkingFastRayPlanarSingleFrameModelAPALidar(BaseModel):
 
         ## heads & outputs
         out_bbox_3d = self.head_bbox_3d(bev_feats)
-        out_polyline_3d = self.head_polyline_3d(bev_feats)
-        out_parkingslot_3d = self.head_parkingslot_3d(bev_feats)
-        out_occ_sdf_bev = self.head_occ_sdf_bev(bev_feats)
+        # out_polyline_3d = self.head_polyline_3d(bev_feats)
+        # out_parkingslot_3d = self.head_parkingslot_3d(bev_feats)
+        # out_occ_sdf_bev = self.head_occ_sdf_bev(bev_feats)
 
         pred_dict = dict(
             bbox_3d_heading=dict(
                 cen=out_bbox_3d[0][:, 0:1],
-                seg=out_bbox_3d[0][:, 1:14],
+                seg=out_bbox_3d[0][:, 1:16],
                 reg=out_bbox_3d[1][:, 0:20]),
-            bbox_3d_plane_heading=dict(
-                cen=out_bbox_3d[0][:, 14:15],
-                seg=out_bbox_3d[0][:, 15:26],
-                reg=out_bbox_3d[1][:, 20:40]),
-            bbox_3d_no_heading=dict(
-                cen=out_bbox_3d[0][:, 26:27],
-                seg=out_bbox_3d[0][:, 27:34],
-                reg=out_bbox_3d[1][:, 40:54]),
-            bbox_3d_square=dict(
-                cen=out_bbox_3d[0][:, 34:35],
-                seg=out_bbox_3d[0][:, 35:40],
-                reg=out_bbox_3d[1][:, 54:65]),
-            bbox_3d_cylinder=dict(
-                cen=out_bbox_3d[0][:, 40:41],
-                seg=out_bbox_3d[0][:, 41:51],
-                reg=out_bbox_3d[1][:, 65:73]),
-            bbox_3d_oriented_cylinder=dict(
-                cen=out_bbox_3d[0][:, 51:52],
-                seg=out_bbox_3d[0][:, 52:54],
-                reg=out_bbox_3d[1][:, 73:86]),
-            polyline_3d=dict(
-                seg=out_polyline_3d[0][:, 0:9],
-                reg=out_polyline_3d[1][:, 0:7]),
-            polygon_3d=dict(
-                seg=out_polyline_3d[0][:, 9:15],
-                reg=out_polyline_3d[1][:, 7:14]),
-            parkingslot_3d=dict(
-                cen=out_parkingslot_3d[0][:, :1],
-                seg=out_parkingslot_3d[0][:, 1:],
-                reg=out_parkingslot_3d[1]),
+            # bbox_3d_plane_heading=dict(
+            #     cen=out_bbox_3d[0][:, 14:15],
+            #     seg=out_bbox_3d[0][:, 15:26],
+            #     reg=out_bbox_3d[1][:, 20:40]),
+            # bbox_3d_no_heading=dict(
+            #     cen=out_bbox_3d[0][:, 26:27],
+            #     seg=out_bbox_3d[0][:, 27:34],
+            #     reg=out_bbox_3d[1][:, 40:54]),
+            # bbox_3d_square=dict(
+            #     cen=out_bbox_3d[0][:, 34:35],
+            #     seg=out_bbox_3d[0][:, 35:40],
+            #     reg=out_bbox_3d[1][:, 54:65]),
+            # bbox_3d_cylinder=dict(
+            #     cen=out_bbox_3d[0][:, 40:41],
+            #     seg=out_bbox_3d[0][:, 41:51],
+            #     reg=out_bbox_3d[1][:, 65:73]),
+            # bbox_3d_oriented_cylinder=dict(
+            #     cen=out_bbox_3d[0][:, 51:52],
+            #     seg=out_bbox_3d[0][:, 52:54],
+            #     reg=out_bbox_3d[1][:, 73:86]),
+            # polyline_3d=dict(
+            #     seg=out_polyline_3d[0][:, 0:9],
+            #     reg=out_polyline_3d[1][:, 0:7]),
+            # polygon_3d=dict(
+            #     seg=out_polyline_3d[0][:, 9:15],
+            #     reg=out_polyline_3d[1][:, 7:14]),
+            # parkingslot_3d=dict(
+            #     cen=out_parkingslot_3d[0][:, :1],
+            #     seg=out_parkingslot_3d[0][:, 1:],
+            #     reg=out_parkingslot_3d[1]),
         )
-        pred_occ_sdf_bev = dict(
-            seg=out_occ_sdf_bev[0],
-            sdf=out_occ_sdf_bev[1][:, 0:1],
-            height=out_occ_sdf_bev[1][0:, 1:2],
-        )
+        # pred_occ_sdf_bev = dict(
+        #     seg=out_occ_sdf_bev[0],
+        #     sdf=out_occ_sdf_bev[1][:, 0:1],
+        #     height=out_occ_sdf_bev[1][0:, 1:2],
+        # )
 
         if batched_input_dict['annotations']:
             gt_dict = batched_input_dict['annotations']
-            gt_occ_sdf_bev = gt_dict['occ_sdf_bev']
+            # gt_occ_sdf_bev = gt_dict['occ_sdf_bev']
 
         if self.debug_mode:
             import matplotlib.pyplot as plt
+        if mode == "infer":
+            img = draw_results_planar_lidar(pred_dict, batched_input_dict, False)
+            return img
 
         if mode == 'tensor':
-            pred_dict['occ_sdf_bev'] = pred_occ_sdf_bev
+            # pred_dict['occ_sdf_bev'] = pred_occ_sdf_bev
             return pred_dict
         if mode == 'loss':
             losses = {}
             losses.update(self.compute_planar_losses(pred_dict, gt_dict))
-            losses.update(self.compute_occ_sdf_losses(pred_occ_sdf_bev, gt_occ_sdf_bev))
-            losses['loss'] += losses['occ_sdf_bev_loss']
+            # losses.update(self.compute_occ_sdf_losses(pred_occ_sdf_bev, gt_occ_sdf_bev))
+            # losses['loss'] += losses['occ_sdf_bev_loss']
             return losses
         if mode == 'predict':
             losses = {}

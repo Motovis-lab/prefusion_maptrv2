@@ -179,7 +179,7 @@ if debug_mode:
     num_workers = 0
     transforms = [virtual_camera_transform]
 else:
-    batch_size = 16
+    batch_size = 8
     num_workers = 8
     transforms = [
         dict(type='RandomRenderExtrinsic'),
@@ -746,12 +746,10 @@ env_cfg = dict(
 
 
 work_dir = "./work_dirs/planar_lidar_0214"
-load_from = "/home/yuanshiwei/3/prefusion/work_dirs/planar_camera_0122/epoch_1.pth"
+# load_from = "/home/yuanshiwei/3/prefusion/work_dirs/planar_camera_0122/epoch_1.pth"
 # load_from = "./ckpts/single_frame_epoch_14.pth"
 
-resume = False
-
-# i should try to get a new planar box method now
+resume = True
 
 
 

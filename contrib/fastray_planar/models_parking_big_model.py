@@ -230,6 +230,7 @@ class ParkingFastRayPlanarSingleFrameModelAPALidarBigModel(BaseModel):
         if mode == 'infer':
             assert self.debug_mode
             # images = draw_results_planar_lidar(pred_dict, batched_input_dict, save_im=False)
+            # images = draw_results_ps_lidar(pred_dict, batched_input_dict, save_im=False)
             images = draw_results_ps_lidar(pred_dict, batched_input_dict, save_im=False)
             return images
         if mode == 'tensor':
