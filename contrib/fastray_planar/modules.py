@@ -211,7 +211,7 @@ class VoVNetFPN(BaseModule):
 
 @MODELS.register_module()
 class VoVNetSlimFPN(BaseModule):
-    def __init__(self, out_channels=80, init_cfg=None, relu6=False):
+    def __init__(self, out_channels=80, init_cfg=None, relu6=False, hwc_out=False):
         super().__init__(init_cfg=init_cfg)
 
         # BACKBONE
@@ -227,9 +227,12 @@ class VoVNetSlimFPN(BaseModule):
         self.p3_linear = ConvBN(384, 128, kernel_size=1, padding=0, relu6=relu6)
         self.p3_up = nn.ConvTranspose2d(128, 128, kernel_size=2, stride=2, padding=0, bias=False)
         self.p3_fusion = Concat()
-        self.out = OSABlock(256, 96, stride=1, repeat=3, has_bn=False, with_reduce=False)
+        
+        self.out = OSABlock(256, 96, stride=1, repeat=3, has_bn=False, with_reduce=False, relu6=relu6)
         self.up_linear = ConvBN(288, out_channels, kernel_size=1, padding=0, relu6=relu6)
         self.up = nn.ConvTranspose2d(out_channels, out_channels, kernel_size=2, stride=2, padding=0, bias=True)
+
+        self.hwc_out = hwc_out
         
         self.relu6 = relu6
         if self.relu6:
@@ -248,7 +251,10 @@ class VoVNetSlimFPN(BaseModule):
         out = self.up(self.up_linear(self.out(p3)))
 
         if self.relu6:
-            out = self.out_relu(self.out_bn(out))
+            out = self.out_bn(out)
+            if self.hwc_out:
+                out = out.permute(0, 2, 3, 1).contiguous()
+            out = self.out_relu(out)
         return out
 
 
