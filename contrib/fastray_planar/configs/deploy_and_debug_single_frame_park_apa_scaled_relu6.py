@@ -213,6 +213,7 @@ test_dataset = dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
         camera_feature_configs=camera_feature_configs,
+        bilinear_interpolation=False,
         debug_mode=False),
     transformables=transformables,
     transforms=transforms,
@@ -235,7 +236,7 @@ test_dataloader = dict(
 
 ## model configs
 bev_mode = True
-relu6 = False
+relu6 = True
 # backbones
 camera_feat_channels = 80
 backbone = dict(type='VoVNetSlimFPN', out_channels=camera_feat_channels, relu6=relu6)
@@ -243,8 +244,7 @@ backbone = dict(type='VoVNetSlimFPN', out_channels=camera_feat_channels, relu6=r
 spatial_transform = dict(
     type='FastRaySpatialTransform',
     voxel_shape=voxel_shape,
-    fusion_mode='bilinear_weighted',
-    # fusion_mode='weighted',
+    fusion_mode='weighted',
     bev_mode=bev_mode,
     reduce_channels=True,
     in_channels=camera_feat_channels * voxel_shape[0],
@@ -378,7 +378,7 @@ model = dict(
 )
 
 # work_dir = "./work_dirs/deploy_and_debug_single_frame_park_apa_scaled_0211"
-work_dir = "./work_dirs/deploy_and_quantize_single_frame_park_apa_scaled_0211_bmp"
+work_dir = "./work_dirs/0_deploy_and_quantize_single_frame_park_apa_scaled_relu6_0224_v11"
 ## log_processor
 log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
@@ -386,7 +386,8 @@ custom_hooks = [
     dict(type="DeployAndDebugHookAPA", 
          tensor_smith_dict=tensor_smith_dict, 
          dictionary_dict=dictionary_dict,
-         save_dir=work_dir),
+         save_dir=work_dir,
+         HWC=True),
 ]
 
 
@@ -403,6 +404,6 @@ env_cfg = dict(
 )
 
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
-load_from = "./work_dirs/collected_models/single_frame_apa_scale_epoch_100.pth"
+load_from = "./work_dirs/collected_models/apa_nearest_scaled_relu6_epoch_43.pth"
 
 # resume = False

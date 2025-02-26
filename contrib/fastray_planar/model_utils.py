@@ -781,6 +781,10 @@ def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictiona
         save_jpg = save_dir / 'cameras' / cam_id / f'{scene_frame_id}.jpg'
         save_jpg.parent.mkdir(parents=True, exist_ok=True)
         plt.imsave(save_jpg, img)
+        save_mat = save_dir / 'cameras' / cam_id / f'{scene_frame_id}.mat'
+        savemat(save_mat, {'img': img})
+        # save_bmp = save_dir / 'cameras' / cam_id / f'{scene_frame_id}.bmp'
+        # plt.imsave(save_bmp, img)
 
     # get preds
     result_dict = {
