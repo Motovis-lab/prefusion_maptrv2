@@ -179,7 +179,7 @@ if debug_mode:
     num_workers = 0
     transforms = [virtual_camera_transform]
 else:
-    batch_size = 6
+    batch_size = 8
     num_workers = 8
     transforms = [
         dict(type='RandomRenderExtrinsic'),
@@ -190,7 +190,7 @@ else:
         dict(type='RandomSetIntrinsicParam', prob=0.2, jitter_ratio=0.01),
         dict(type='RandomSetExtrinsicParam', prob=0.2, angle=1, translation=0.02)
     ]
-    possible_group_sizes = 2
+    possible_group_sizes = 1
 
 
 ## GroupBatchDataset configs
@@ -279,15 +279,15 @@ train_dataset = dict(
         debug_mode=debug_mode),
     transformables=transformables,
     transforms=transforms,
-    group_sampler=dict(type="IndexGroupSampler",
-                       phase="train",
-                       possible_group_sizes=1),
-    # group_sampler=dict(type="ClassBalancedGroupSampler",
+    # group_sampler=dict(type="IndexGroupSampler",
     #                    phase="train",
-    #                    possible_group_sizes=possible_group_sizes,
-    #                    possible_frame_intervals=10,
-    #                    transformable_cfg=transformables,
-    #                    cbgs_cfg=dict(desired_ratio=0.2, counter_type='group')),
+    #                    possible_group_sizes=1),
+    group_sampler=dict(type="ClassBalancedGroupSampler",
+                       phase="train",
+                       possible_group_sizes=possible_group_sizes,
+                       possible_frame_intervals=10,
+                       transformable_cfg=transformables,
+                       cbgs_cfg=dict(desired_ratio=0.2, counter_type='group')),
     batch_size=batch_size,
     # subepoch_manager=dict(type="SubEpochManager",
     #                       num_group_batches_per_subepoch=128,
@@ -642,7 +642,9 @@ model = dict(
 
 ## log_processor
 log_processor = dict(type='GroupAwareLogProcessor')
-default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
+default_hooks = dict(timer=dict(type='GroupIterTimerHook'),
+                    checkpoint=dict(type='CheckpointHook', interval=1000, by_epoch=False)
+)
 
 ## runner loop configs
 train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=100, val_interval=-1)
@@ -661,7 +663,8 @@ optim_wrapper = dict(
 )
 
 ## scheduler configs
-param_scheduler = dict(type='MultiStepLR', milestones=[50, 75, 90])
+# param_scheduler = dict(type='MultiStepLR', milestones=[50, 75, 90])
+param_scheduler = dict(type='MultiStepLR', milestones=[5,8,10, 75, 90])
 
 
 env_cfg = dict(
@@ -670,8 +673,9 @@ env_cfg = dict(
 )
 
 
-work_dir = "./work_dirs/planar_lidar_0123"
-load_from = "/home/yuanshiwei/3/prefusion/work_dirs/planar_camera_0122/epoch_1.pth"
+work_dir = "./work_dirs/planar_lidar_0224"
+# load_from = "/home/yuanshiwei/3/prefusion/work_dirs/planar_camera_0122/epoch_1.pth"
+load_from = "/home/yuanshiwei/4/prefusion/work_dirs/planar_lidar_0123/epoch_90.pth"
 # load_from = "./ckpts/single_frame_epoch_14.pth"
 
 resume = False
