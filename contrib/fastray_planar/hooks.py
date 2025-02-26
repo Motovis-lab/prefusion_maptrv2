@@ -350,12 +350,14 @@ class DeployAndDebugHookAPA(Hook):
         tensor_smith_dict,
         dictionary_dict,
         save_polyline=False,
-        save_dir=None
+        save_dir=None,
+        HWC=False,
     ):
         super().__init__()
         self.tensor_smith_dict = tensor_smith_dict
         self.dictionary_dict = dictionary_dict
         self.save_polyline = save_polyline
+        self.HWC = HWC
         if save_dir is None:
             self.save_dir = Path("work_dirs/deploy_and_debug")
         else:
@@ -393,18 +395,34 @@ class DeployAndDebugHookAPA(Hook):
             camera_feats_dict_cpu[cam_id] = camera_feats_dict[cam_id].cpu().detach().numpy()
         if not Path(self.save_dir / "phase_backbone_v9.onnx").exists():
             torch.onnx.export(model_backbone, camera_tensors_dict[cam_id], str(self.save_dir / "phase_backbone_v9.onnx"), verbose=True,
-                              input_names=['camera_img'], output_names=['camera_feats'],
-                              opset_version=9)
+                              input_names=['camera_img'], output_names=['camera_feats'], opset_version=9)
+            torch.onnx.export(model_backbone, camera_tensors_dict[cam_id], str(self.save_dir / "phase_backbone_v11.onnx"), verbose=True,
+                              input_names=['camera_img'], output_names=['camera_feats'], opset_version=11)
+            if self.HWC:
+                model_backbone.hwc = True
+                torch.onnx.export(model_backbone, camera_tensors_dict[cam_id], str(self.save_dir / "phase_backbone_hwc_out_v9.onnx"), verbose=True,
+                                  input_names=['camera_img'], output_names=['camera_feats'], opset_version=9)
+                torch.onnx.export(model_backbone, camera_tensors_dict[cam_id], str(self.save_dir / "phase_backbone_hwc_out_v11.onnx"), verbose=True,
+                                  input_names=['camera_img'], output_names=['camera_feats'], opset_version=11)
+                model_backbone.hwc = False
         
         savemat(str(feature_mat_dir / f'{scene_frame_id}_camera_tensors.mat'), data_batch['camera_tensors'])
         savemat(str(feature_mat_dir / f'{scene_frame_id}_camera_lookups.mat'), data_batch['camera_lookups'][0])
         savemat(str(feature_mat_dir / f'{scene_frame_id}_camera_feats.mat'), camera_feats_dict_cpu)
+        if self.HWC:
+            camera_feats_hwc = {}
+            for cam_id in camera_feats_dict:
+                camera_feats_hwc[cam_id] = camera_feats_dict[cam_id].cpu().detach().numpy().transpose((0, 2, 3, 1))
+            savemat(str(feature_mat_dir / f'{scene_frame_id}_camera_feats_hwc.mat'), camera_feats_hwc)
 
         ## dump spatial_transform io data
         spatial_transform = ori_model.spatial_transform
         spatial_transform.dump_voxel_feats = True
         _, voxel_feats = spatial_transform(camera_feats_dict, camera_lookups)
         savemat(str(feature_mat_dir / f'{scene_frame_id}_voxel_feats.mat'), {'voxel_feats': voxel_feats.cpu().detach().numpy()})
+        if self.HWC:
+            voxel_feats_hwc = voxel_feats.cpu().detach().numpy().transpose((0, 2, 3, 1))
+            savemat(str(feature_mat_dir / f'{scene_frame_id}_voxel_feats_hwc.mat'), {'voxel_feats_hwc': voxel_feats_hwc})
         spatial_transform.dump_voxel_feats = False
 
         ## dump bev model and io data
@@ -420,8 +438,30 @@ class DeployAndDebugHookAPA(Hook):
         if not Path(self.save_dir / "phase_bev_v9.onnx").exists():
             torch.onnx.export(model_bev, voxel_feats, str(self.save_dir / "phase_bev_v9.onnx"), verbose=True,
                               input_names=['voxel_feats'], output_names=[
-                                'out_bbox_3d_seg', 'out_bbox_3d_reg', 'out_parkingslot_3d_seg', 'out_parkingslot_3d_reg', 'out_occ_sdf_bev_seg', 'out_occ_sdf_bev_reg'],
+                                'out_bbox_3d_seg', 'out_bbox_3d_reg', 
+                                'out_parkingslot_3d_seg', 'out_parkingslot_3d_reg', 
+                                'out_occ_sdf_bev_seg', 'out_occ_sdf_bev_reg'],
                               opset_version=9)
+            torch.onnx.export(model_bev, voxel_feats, str(self.save_dir / "phase_bev_v11.onnx"), verbose=True,
+                              input_names=['voxel_feats'], output_names=[
+                                'out_bbox_3d_seg', 'out_bbox_3d_reg', 
+                                'out_parkingslot_3d_seg', 'out_parkingslot_3d_reg', 
+                                'out_occ_sdf_bev_seg', 'out_occ_sdf_bev_reg'],
+                              opset_version=11)
+            if self.HWC:
+                model_bev_hwc = nn.Sequential(HWC2CHW(), model_bev)
+                torch.onnx.export(model_bev_hwc, voxel_feats.permute(0, 2, 3, 1), str(self.save_dir / "phase_bev_hwc_in_v9.onnx"), verbose=True,
+                                input_names=['voxel_feats'], output_names=[
+                                    'out_bbox_3d_seg', 'out_bbox_3d_reg', 
+                                    'out_parkingslot_3d_seg', 'out_parkingslot_3d_reg', 
+                                    'out_occ_sdf_bev_seg', 'out_occ_sdf_bev_reg'],
+                                opset_version=9)
+                torch.onnx.export(model_bev_hwc, voxel_feats.permute(0, 2, 3, 1), str(self.save_dir / "phase_bev_hwc_in_v11.onnx"), verbose=True,
+                                input_names=['voxel_feats'], output_names=[
+                                    'out_bbox_3d_seg', 'out_bbox_3d_reg', 
+                                    'out_parkingslot_3d_seg', 'out_parkingslot_3d_reg', 
+                                    'out_occ_sdf_bev_seg', 'out_occ_sdf_bev_reg'],
+                                opset_version=11)
         model_bev.enable_scale()
         savemat(str(feature_mat_dir / f'{scene_frame_id}_bev_outputs.mat'), {
             'out_bbox_3d_seg': out_bbox_3d_seg.cpu().detach().numpy(),
@@ -431,8 +471,23 @@ class DeployAndDebugHookAPA(Hook):
             'out_occ_sdf_bev_seg': out_occ_sdf_bev_seg.cpu().detach().numpy(),
             'out_occ_sdf_bev_reg': out_occ_sdf_bev_reg.cpu().detach().numpy()
         })
-        # assert False
-        # return rtn
+
+
+
+class CHW2HWC(nn.Module):
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, x):
+        return x.permute(0, 2, 3, 1)
+
+
+class HWC2CHW(nn.Module):
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, x):
+        return x.permute(0, 3, 1, 2)
 
 
 class DumpBevModel(nn.Module):
