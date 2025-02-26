@@ -152,7 +152,7 @@ def draw_results_planar_lidar(pred_dict, batched_input_dict, save_im=True):
 
     # get the result image here
     result_dict = {}
-    gt = batched_input_dict['transformables'][0]['bbox_3d_heading'].tensor
+    # gt = batched_input_dict['transformables'][0]['bbox_3d_heading'].tensor
     for cam, v in batched_input_dict['transformables'][0]['camera_images'].transformables.items():
         img0 = v.tensor['img']
         img = img0.detach().cpu().numpy().transpose(1, 2, 0)[..., ::-1] * 255 + 128
@@ -176,6 +176,7 @@ def draw_results_planar_lidar(pred_dict, batched_input_dict, save_im=True):
     voxel_range = tensor_smith.voxel_range
     # gt = batched_input_dict['transformables'][0]['bbox_3d_heading'].tensor
     # results = tensor_smith.reverse(gt)
+    print(pred_dict_branch_0['seg'][5].numpy().max())
     results = tensor_smith.reverse(pred_dict_branch_0)
     for box in results:
         corners_ego = pred_planar_box_to_3d_corners(box['size'], box['rotation'], box['translation'])
@@ -187,6 +188,8 @@ def draw_results_planar_lidar(pred_dict, batched_input_dict, save_im=True):
                 draw_boxes(img, corners_2d)
             except Exception:
                 pass
+            if k == "VCAMERA_FISHEYE_FRONT":
+                return img
     # from time import time
     if save_im:
         frame_id = batched_input_dict['index_infos'][0].frame_id

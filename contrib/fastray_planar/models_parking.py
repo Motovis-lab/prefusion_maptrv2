@@ -6,6 +6,7 @@ from mmengine.structures import BaseDataElement
 from prefusion import BaseModel
 from prefusion import SegIouLoss, DualFocalLoss
 from prefusion.registry import MODELS
+from .misc_draw import draw_results_planar_lidar
 
 from .modules import *
 from .model_utils import *
@@ -1134,6 +1135,9 @@ class ParkingFastRayPlanarSingleFrameModelAPALidar(BaseModel):
 
         if self.debug_mode:
             import matplotlib.pyplot as plt
+        if mode == "infer":
+            img = draw_results_planar_lidar(pred_dict, batched_input_dict, False)
+            return img
 
         if mode == 'tensor':
             # pred_dict['occ_sdf_bev'] = pred_occ_sdf_bev
