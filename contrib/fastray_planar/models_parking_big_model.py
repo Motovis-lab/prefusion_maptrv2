@@ -87,7 +87,7 @@ class ParkingFastRayPlanarSingleFrameModelAPALidarBigModel(BaseModel):
                     self.heads_list.add('occ_sdf_bev')
                 else:
                     NotImplementedError
-                self.planar_losses_dict[branch] = MODELS.build(loss_cfg[i])
+                self.planar_losses_dict[i] = MODELS.build(loss_cfg[i])
         else:
             NotImplementedError
         self.debug_mode = debug_mode
