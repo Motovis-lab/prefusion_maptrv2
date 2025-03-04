@@ -456,7 +456,7 @@ class ParkingFastRayPlanarMultiFrameModelAPALidarBigModel(BaseModel):
                 bev_feats = self.voxel_fusion(bev_feats, bev_feats.clone().detach())  # stream line temporal
 
             if batched_input_dict['index_infos'][0].next is not None:  # cached feat is next frame exists
-                self.cached_voxel_feats = bev_feats.clone.detach()
+                self.cached_voxel_feats = bev_feats.clone().detach()
                 self.cached_delta_poses = batched_input_dict['delta_poses'].clone().detach()
 
         ## heads & outputs: from self.picked_category
