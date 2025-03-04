@@ -311,7 +311,7 @@ class SequentialSceneFrameGroupSampler(GroupSampler):
 
 
 @GROUP_SAMPLERS.register_module()
-class ClassBalancedGroupSampler(GroupSampler):
+class   ClassBalancedGroupSampler(GroupSampler):
     SUPPORTED_LOADERS = {
         Bbox3D.__name__: Bbox3DLoader,
         Polyline3D.__name__: Polyline3DLoader,
@@ -356,7 +356,15 @@ class ClassBalancedGroupSampler(GroupSampler):
 
     @staticmethod
     def _to_df(groups: List[Group], colname: str = "cnt", fill_value: float = 0.0) -> pd.DataFrame:
-        return pd.DataFrame([getattr(grp, colname) for grp in groups]).fillna(fill_value)
+        # def format_group_name(grp):
+        #     output = grp.data[0].scene_id
+        #     for i in grp.data:
+        #         output+= ("&" + i.frame_id)
+        #     return output
+        gpdf = pd.DataFrame([getattr(grp, colname) for grp in groups]).fillna(fill_value)
+        # gpdf.loc[:, 'gp_name'] = [format_group_name(grp) for grp in groups]
+        return gpdf
+
 
     def sample(self, data_root: Path, info: Dict, **kwargs) -> List[Group["IndexInfo"]]:
         self.default_data_root = data_root
@@ -464,12 +472,18 @@ class ClassBalancedGroupSampler(GroupSampler):
 
         return sampled_groups
 
+    def format_group_name(self, grp):
+        output = grp.data[0].scene_id
+        for i in grp.data:
+            output+= ("&" + i.frame_id)
+        return output
 
     def sample_minority_groups(self, groups: List[Group], minority_classes: List[str], target_class: str, target_ratio: float = 1.0) -> List[Group]:
         groups_df = self._to_df(groups)
         cnt_per_class = groups_df.sum(axis=0)
         gap_cnt = int(math.ceil(cnt_per_class[target_class] * target_ratio - max([cnt_per_class[c] for c in minority_classes])))
-        groups_df = groups_df.drop_duplicates() # oversamping in the following step should only select groups from the original pool (while calculating gap may based on updated groups)
+        groups_df.loc[:, 'gp_name'] = [self.format_group_name(grp) for grp in groups]
+        groups_df = groups_df.drop_duplicates()  # oversamping in the following step should only select groups from the original pool (while calculating gap may based on updated groups)
         sampled_groups = []
         for minor_cls in minority_classes:
             colname = f"{minor_cls}_{target_class}_ratio"
