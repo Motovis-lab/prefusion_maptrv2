@@ -444,7 +444,6 @@ class ParkingFastRayPlanarMultiFrameModelAPALidarBigModel(BaseModel):
                 lidar_features = torch.cat(lidar_features, dim=0)
             bev_feats = self.lidar_voxel_fusion(bev_feats, lidar_features)
 
-
         # after modal fusion feature cache
         if self.multi_frame_fusion:  # stream feature fusion
             # delta pose: Tpre-curr, like use F.grid sample to
