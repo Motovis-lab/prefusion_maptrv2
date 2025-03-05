@@ -356,15 +356,8 @@ class   ClassBalancedGroupSampler(GroupSampler):
 
     @staticmethod
     def _to_df(groups: List[Group], colname: str = "cnt", fill_value: float = 0.0) -> pd.DataFrame:
-        # def format_group_name(grp):
-        #     output = grp.data[0].scene_id
-        #     for i in grp.data:
-        #         output+= ("&" + i.frame_id)
-        #     return output
         gpdf = pd.DataFrame([getattr(grp, colname) for grp in groups]).fillna(fill_value)
-        # gpdf.loc[:, 'gp_name'] = [format_group_name(grp) for grp in groups]
         return gpdf
-
 
     def sample(self, data_root: Path, info: Dict, **kwargs) -> List[Group["IndexInfo"]]:
         self.default_data_root = data_root
