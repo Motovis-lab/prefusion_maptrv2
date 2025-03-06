@@ -437,7 +437,10 @@ class   ClassBalancedGroupSampler(GroupSampler):
         # Get minority classes
         class_stats_df = cnt_per_class.to_frame(name="cnt")
         class_stats_df.loc[:, "ratio"] = class_stats_df.cnt / class_stats_df.loc[max_class]['cnt']
-        minority_classes = class_stats_df[class_stats_df.ratio < self.cbgs_cfg["desired_ratio"]].sort_values("cnt").index.tolist() # NOTE: it's sorted by `cnt`
+        minority_classes = class_stats_df[class_stats_df.ratio < self.cbgs_cfg["desired_ratio"]]\
+            .reset_index(names=["cls"])\
+            .sort_values(["cnt", "cls"])\
+            .cls.tolist() # NOTE: it's sorted by `cnt`, then `cls`
 
         if not minority_classes:
             return []
