@@ -242,7 +242,7 @@ class IndexGroupSampler(GroupSampler):
         """
         # generate scene_frame_inds
         if self.indices_path is not None:
-            indices = [line.strip() for line in open(self.indices_path, "w")]
+            indices = [line.strip() for line in open(self.indices_path, "r")]
             scene_frame_inds = get_scene_frame_inds(info, indices=indices)
         else:
             scene_frame_inds = get_scene_frame_inds(info)
@@ -358,6 +358,7 @@ class   ClassBalancedGroupSampler(GroupSampler):
     def _to_df(groups: List[Group], colname: str = "cnt", fill_value: float = 0.0) -> pd.DataFrame:
         gpdf = pd.DataFrame([getattr(grp, colname) for grp in groups]).fillna(fill_value)
         return gpdf
+
 
     def sample(self, data_root: Path, info: Dict, **kwargs) -> List[Group["IndexInfo"]]:
         self.default_data_root = data_root
