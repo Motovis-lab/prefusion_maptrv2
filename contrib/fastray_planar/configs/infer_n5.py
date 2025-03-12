@@ -177,7 +177,8 @@ tensor_smith_dict = dict(
     bbox_3d_square=dict(type='PlanarSquarePillar', voxel_shape=voxel_shape, voxel_range=voxel_range),
     bbox_3d_cylinder=dict(type='PlanarCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range),
     bbox_3d_oriented_cylinder=dict(type='PlanarOrientedCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range),
-    polyline_3d=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range),
+    polyline_3d=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range,
+        reverse_group_dist_thresh=5, reverse_link_max_adist=15),
     polygon_3d=dict(type='PlanarPolygon3D', voxel_shape=voxel_shape, voxel_range=voxel_range),
     parkingslot_3d=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range),
     occ_sdf_bev=dict(type='PlanarOccSdfBev', voxel_shape=voxel_shape, voxel_range=voxel_range)
@@ -201,7 +202,9 @@ test_dataset = dict(
     data_root='../MV4D-PARKING/N5_data',
     # info_path='../MV4D-PARKING/N5_data/2025_02_18_18-00-36_B1.pkl',
     # info_path='../MV4D-PARKING/N5_data/2025_02_18_18-16-04_B1_B2.pkl',
-    info_path='../MV4D-PARKING/N5_data/2025_02_24_10-30-28.pkl',
+    # info_path='../MV4D-PARKING/N5_data/2025_02_24_10-30-28.pkl',
+    # info_path='../MV4D-PARKING/N5_data/3_yangguangtiandi.pkl',
+    info_path='../MV4D-PARKING/N5_data/2_hengshengwanpeng.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -227,7 +230,6 @@ test_dataloader = dict(
 
 
 ## model configs
-## model configs
 bev_mode = True
 relu6 = True
 # backbones
@@ -242,7 +244,7 @@ spatial_transform = dict(
     reduce_channels=True,
     in_channels=camera_feat_channels * voxel_shape[0],
     out_channels=128)
-## voxel encoder
+# voxel encoder
 voxel_encoder = dict(
     type='VoxelEncoderFPN', 
     in_channels=128, 
@@ -379,7 +381,10 @@ model = dict(
 )
 
 # work_dir = "./work_dirs/n5_dumps_20250220"
-work_dir = "./work_dirs/n5_dumps_20250225"
+# work_dir = "./work_dirs/n5_dumps_20250225"
+# work_dir = "./work_dirs/n5_dumps_20250226"
+# work_dir = "./work_dirs/n5_dumps_20250305"
+work_dir = "./work_dirs/n5_dumps_20250305_1"
 
 ## log_processor
 log_processor = dict(type='GroupAwareLogProcessor')
@@ -388,6 +393,7 @@ custom_hooks = [
     dict(type="DumpPlanarPredResultsHookAPA", 
          tensor_smith_dict=tensor_smith_dict, 
          dictionary_dict=dictionary_dict,
+         save_polyline=True,
          save_dir=work_dir),
 ]
 
@@ -405,6 +411,7 @@ env_cfg = dict(
 )
 
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
-load_from = "./work_dirs/collected_models/apa_nearest_scaled_relu6_epoch_43.pth"
+# load_from = "./work_dirs/collected_models/apa_nearest_scaled_relu6_epoch_43.pth"
+load_from = "./work_dirs/collected_models/apa_nearest_epoch_50.pth"
 
 # resume = False

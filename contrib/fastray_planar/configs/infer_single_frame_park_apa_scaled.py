@@ -149,19 +149,19 @@ dictionary_dict = dict(
 
 ## camera configs for model inputs
 
-# fisheye_camera_mapping = dict(
-#     VCAMERA_FISHEYE_FRONT='VCAMERA_FISHEYE_FRONT',
-#     VCAMERA_FISHEYE_LEFT='VCAMERA_FISHEYE_LEFT',
-#     VCAMERA_FISHEYE_BACK='VCAMERA_FISHEYE_BACK',
-#     VCAMERA_FISHEYE_RIGHT='VCAMERA_FISHEYE_RIGHT' 
-# )
-
 fisheye_camera_mapping = dict(
-    VCAMERA_FISHEYE_FRONT='camera8',
-    VCAMERA_FISHEYE_LEFT='camera5',
-    VCAMERA_FISHEYE_BACK='camera1',
-    VCAMERA_FISHEYE_RIGHT='camera11' 
+    VCAMERA_FISHEYE_FRONT='VCAMERA_FISHEYE_FRONT',
+    VCAMERA_FISHEYE_LEFT='VCAMERA_FISHEYE_LEFT',
+    VCAMERA_FISHEYE_BACK='VCAMERA_FISHEYE_BACK',
+    VCAMERA_FISHEYE_RIGHT='VCAMERA_FISHEYE_RIGHT' 
 )
+
+# fisheye_camera_mapping = dict(
+#     VCAMERA_FISHEYE_FRONT='camera8',
+#     VCAMERA_FISHEYE_LEFT='camera5',
+#     VCAMERA_FISHEYE_BACK='camera1',
+#     VCAMERA_FISHEYE_RIGHT='camera11' 
+# )
 
 fisheye_resolution = (640, 384)
 
@@ -207,8 +207,10 @@ test_dataset = dict(
     name="demo_parking",
     # data_root='/data/datasets/MV4D_12V3L',
     # info_path='/data/datasets/MV4D_12V3L/mv_4d_infos_20231029_195612.pkl',
+    # MV4D-PARKING/20230901_152553
     data_root='../MV4D-PARKING',
-    info_path='../MV4D-PARKING/mv_4d_infos_20231031_135230.pkl',
+    # info_path='../MV4D-PARKING/mv_4d_infos_20230901_152553.pkl',
+    info_path='../MV4D-PARKING/mv_4d_infos_20230901_152553_fix.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -234,9 +236,10 @@ test_dataloader = dict(
 
 ## model configs
 bev_mode = True
+relu6 = False
 # backbones
 camera_feat_channels = 80
-backbone = dict(type='VoVNetSlimFPN', out_channels=camera_feat_channels)
+backbone = dict(type='VoVNetSlimFPN', out_channels=camera_feat_channels, relu6=relu6)
 # spatial_transform
 spatial_transform = dict(
     type='FastRaySpatialTransform',
@@ -247,13 +250,14 @@ spatial_transform = dict(
     reduce_channels=True,
     in_channels=camera_feat_channels * voxel_shape[0],
     out_channels=128)
-## voxel encoder
+# voxel encoder
 voxel_encoder = dict(
     type='VoxelEncoderFPN', 
     in_channels=128, 
     mid_channels_list=[128, 128, 128],
     out_channels=128,
-    repeats=[3, 3, 3])
+    repeats=[3, 3, 3],
+    relu6=relu6)
 
 # heads
 all_bbox_3d_cen_seg_channels = sum([
@@ -349,23 +353,27 @@ heads = dict(
                  mid_channels=128,
                  cen_seg_channels=all_bbox_3d_cen_seg_channels,
                  reg_channels=all_bbox_3d_reg_channels,
-                 reg_scales=bbox_3d_reg_scales),
+                 reg_scales=bbox_3d_reg_scales,
+                 relu6=relu6),
     polyline_3d=dict(type='PlanarHeadSimple',
                      in_channels=128,
                      mid_channels=64,
                      cen_seg_channels=1 + 8 + 2 + 4,
-                     reg_channels=7 + 7),
+                     reg_channels=7 + 7,
+                     relu6=relu6),
     parkingslot_3d=dict(type='PlanarHeadSimple',
                         in_channels=128,
                         mid_channels=64,
                         cen_seg_channels=5,
                         reg_channels=15,
-                        reg_scales=parkingslot_3d_reg_scales),
+                        reg_scales=parkingslot_3d_reg_scales,
+                        relu6=relu6),
     occ_sdf_bev=dict(type='PlanarHeadSimple',
                      in_channels=128,
                      mid_channels=64,
                      cen_seg_channels=2,
-                     reg_channels=2)
+                     reg_channels=2, 
+                     relu6=relu6)
 )
 
 
@@ -379,7 +387,8 @@ model = dict(
     debug_mode=False
 )
 
-work_dir = "./work_dirs/apa_demo_dumps_20250211"
+# work_dir = "./work_dirs/borui_demo_dumps_20250228"
+work_dir = "./work_dirs/borui_demo_dumps_20250307"
 
 ## log_processor
 log_processor = dict(type='GroupAwareLogProcessor')
@@ -407,5 +416,5 @@ env_cfg = dict(
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
 # load_from = "./work_dirs/collected_models/single_frame_epoch_14.pth"
 load_from = "./work_dirs/collected_models/single_frame_apa_scale_epoch_100.pth"
-
+# load_from = "./work_dirs/collected_models/apa_nearest_scaled_relu6_epoch_43.pth"
 # resume = False

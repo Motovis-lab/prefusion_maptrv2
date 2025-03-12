@@ -52,16 +52,16 @@ def prepare_calibration(scene_root: Path):
     return calibration
 
 
-def prepare_camera_mask(scene_root: Path):
+def prepare_camera_mask(ego_mask_path: Path):
     cameras = ['front', 'left', 'right', 'rear']
     camera_mask_dict = {}
     for cam_id in cameras:
-        mask_json = json.load(open(scene_root / f'{cam_id}_ego_mask.json'))
+        mask_json = json.load(open(ego_mask_path / f'{cam_id}_ego_mask.json'))
         mask = np.ones((mask_json['imageHeight'], mask_json['imageWidth']))
         mask = cv2.fillPoly(mask, [np.round(mask_json['shapes'][0]['points']).astype(np.int32)], 0)
-        mask_path = scene_root / f'{cam_id}_ego_mask.png' 
+        mask_path = ego_mask_path / f'{cam_id}_ego_mask.png' 
         plt.imsave(mask_path, mask)
-        camera_mask_dict[cam_id] = str(mask_path.relative_to(scene_root.parent))
+        camera_mask_dict[cam_id] = str(mask_path.relative_to(ego_mask_path.parent))
     return camera_mask_dict
 
 
@@ -92,7 +92,7 @@ def prepare_scene(scene_root):
     return {scene_root.name: {
         "scene_info": {
             "calibration": prepare_calibration(scene_root),
-            "camera_mask": prepare_camera_mask(scene_root),
+            "camera_mask": prepare_camera_mask(scene_root.parent / 'ego_mask'),
         },
         "frame_info": prepare_frame_info(scene_root),
     }}
@@ -102,6 +102,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--scene-root", type=Path, required=True)
     args = parser.parse_args()
-    scene_root = Path(args['scene_root'])
+    scene_root = Path(args.scene_root)
     scene_info = prepare_scene(scene_root)
     write_pickle(scene_info, scene_root.parent / f"{scene_root.name}.pkl")

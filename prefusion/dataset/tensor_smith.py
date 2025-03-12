@@ -2432,6 +2432,12 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
             return False
         if np.abs(np.cross(vec_30, vec_01)[2]) < 1e-3:
             return False
+        # check z range
+        if np.any(slot_points_3d[:, 2] < self.voxel_range[0][0]):
+            return False
+        if np.any(slot_points_3d[:, 2] > self.voxel_range[0][1]):
+            return False
+
         return True
 
 
