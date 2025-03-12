@@ -1,0 +1,27 @@
+name: Run Pytest Tests
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Check out the repository
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Pull your pre-built Docker image
+      - name: Pull Docker image
+        run: docker pull brianlan/prefusion:ci-v11
+
+      # Run pytest inside the Docker container
+      - name: Run pytest
+        run: |
+          docker run --rm \
+            -v "$(pwd):/workspace" \
+            -w /workspace \
+            brianlan/prefusion:ci-v11 \
+            python -m pytest tests --junitxml=report.xml --cov=./ --cov-report=xml

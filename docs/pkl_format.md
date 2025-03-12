@@ -1,0 +1,127 @@
+### PKL格式说明:
+格式为字典:
+{
+    <scene_id>: scene_dict,
+    <scene_id>: scene_dict,
+    ...
+}
+
+对于每个`scene_dict`, 包含以下字段
+- scene_info: 
+  - calibration:
+    - VCAMERA_PERSPECTIVE_FRONT:
+      - extrinsic: (R, t)   # in forward-left-up
+      - intrinsic: (cx, cy, fx, fy)
+    - VCAMERA_PERSPECTIVE_FRONT_LEFT:
+      - extrinsic: (R, t)  
+      - intrinsic: (cx, cy, fx, fy)
+    - VCAMERA_PERSPECTIVE_FRONT_RIGHT:
+      - extrinsic: (R, t)  
+      - intrinsic: (cx, cy, fx, fy)
+    - VCAMERA_PERSPECTIVE_BACK:
+      - extrinsic: (R, t)  
+      - intrinsic: (cx, cy, fx, fy)
+    - VCAMERA_PERSPECTIVE_BACK_LEFT:
+      - extrinsic: (R, t)  
+      - intrinsic: (cx, cy, fx, fy)
+    - VCAMERA_PERSPECTIVE_BACK_RIGHT:
+      - extrinsic: (R, t)  
+      - intrinsic: (cx, cy, fx, fy)
+    - VCAMERA_FISHEYE_FRONT:
+      - extrinsic: (R, t)  
+      - intrinsic: (cx, cy, fx, fy, p0, p1, p2, p3)
+    - VCAMERA_FISHEYE_LEFT:
+      - extrinsic: (R, t)  
+      - intrinsic: (cx, cy, fx, fy, p0, p1, p2, p3)
+    - VCAMERA_FISHEYE_RIGHT:
+      - extrinsic: (R, t)  
+      - intrinsic: (cx, cy, fx, fy, p0, p1, p2, p3)
+    - VCAMERA_FISHEYE_BACK:
+      - extrinsic: (R, t)  
+      - intrinsic: (cx, cy, fx, fy, p0, p1, p2, p3)
+    - <other cameras>
+    - lidar1:
+      - extrinsic: (R, t)  
+    - lidar2:
+      - extrinsic: (R, t)  
+    - lidar3:
+      - extrinsic: (R, t)  
+  - camera_mask:  # ego mask and view mask for each camera
+    - VCAMERA_PERSPECTIVE_FRONT: <path>
+  - moving_objects_track_id_trajectory:   # available frames, in world system
+    - <track_id>:  
+      - class: vehicle.passenger_car
+      - timestamps: [t_0, t_1, t_2, ..., t_n]  # lidar timestamp
+      - poses: [(R, t), (R, t), (R, t), ..., (R, t)]  # length equals to timestamp list
+      - attr:
+        - vehicle.is_trunk_open:
+          - [false, false, false, ..., true]  # length equals to timestamp list
+        - vehicle.is_door_open:
+          - [false, false, false, ..., true]  # length equals to timestamp list
+    - <other tracks>
+- meta_info
+  - description: <tags/text>  主要是针对场景或者单帧工况的描述标签，用于给出均衡的样本，或者针对标签的测试指标等。需要定义一些标签，然后可以安排人工挑选，训练模型预标注
+  - space_range:
+    - map: [36, -12, -12, 12，10， -10]  # front back left right range from center
+    - det:  [36, -12, -12, 12, 10,  -10]  # front back left right range from center
+    - occ: [36, -12, -12, 12, 10, -10]  # front back left right range from center
+  - time_range: 2 # in seconds
+  - time_unit: 1e-3 # in seconds， float64
+  - ori_camera: 
+    - VCAMERA_FISHEYE_RIGHT: camera11
+    - ...
+- frame_info:
+  - <timestamp_lidar>:  # key frame dict,  lidar LIDAR_TOP的timestamp
+    - camera_image:
+      - VCAMERA_PERSPECTIVE_FRONT: <scene_id>/sensors/cameras/VCAMERA_PERSPECTIVE_FRONT/<timestamp_camera_specific>.jpg
+      - <other cameras>
+    - 3d_boxes: [<3d_box>, <3d_box>, ...]  # in ego system, current frame, box with r,t and track_id
+      - <3d_box>
+        - class: vehicle.passenger_car   # 参考数据标注设计字典
+        - attr:   # 参考数据标注设计字典
+          - vehicle.is_trunk_open:
+            - false
+          - vehicle.is_door_open:
+            - false
+        - size: (l, w, h)  # l, w, h corresponds to x-y-z, forward-left-up
+        - rotation:  R  # np.array
+        - translation: [x, y, z]  # center point position, in ego system
+        - track_id: <track_id>
+        - [TODO] frame_visibility: 1
+        - velocity: [vx, vy, vz]
+    - 3d_polylines: [<polyline>, <polyline>, ...]  # in ego system, current frame
+      - <polyline>
+        - class: road_marker.lane_line   # 参考数据标注设计字典
+        - attr:  # 参考数据标注设计字典, 有多少个属性，就安排多少个字典
+          - road_marker.lane_line.type:
+            - regular
+          - road_marker.lane_line.style:
+            - dashed
+          - common.color.single_color:
+            - yellow
+        - points: [[x, y, z], [x, y, z], [x, y, z], ...]  # in np.array
+    - timestamp_window:   # for indexing previous frames
+      - VCAMERA_PERSPECTIVE_FRONT:
+        - [<filename0>, <filename1>, ...]  # 已包含timestamp
+      - <other cameras>
+      - lidar1:
+        - [<filename0>, <filename1>, ...] # 已包含timestamp
+      - <other lidars>
+    - lidar_points:   # current frame
+      - LIDAR_TOP: <scene_id>/sensors/lidars/LIDAR_TOP/<timestamp>.pcd
+      - LIDAR_LEFT: <scene_id>/sensors/lidars/LIDAR_LEFT/<timestamp>.pcd
+      - LIDAR_RIGHT: <scene_id>/sensors/lidars/LIDAR_RIGHT/<timestamp>.pcd
+    - ego_pose:  # current frame, in world system, trajectory
+      - rotation:  R  # np.array
+      - translation: [x, y, z]  # ego origin point
+    - camera_image_seg:
+      - VCAMERA_PERSPECTIVE_FRONT: <scene_id>/annotations/segs/VCAMERA_PERSPECTIVE_FRONT/<timestamp_camera_specific>.png
+      - <other cameras>
+    - camera_image_depth:
+      - VCAMERA_PERSPECTIVE_FRONT: <scene_id>/annotations/depths/VCAMERA_PERSPECTIVE_FRONT/<timestamp_camera_specific>.png
+    - occ_sdf:  # in ego system, bev
+      - occ_bev: <path>
+      - sdf_bev: <path>
+      - height_bev: <path>
+      - occ_sdf_3d:<scene_id>/annotations/occ_sdfs/<timestamp>.pkl
+  - <other timestamps>:

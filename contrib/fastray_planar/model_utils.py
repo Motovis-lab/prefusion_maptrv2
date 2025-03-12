@@ -1,0 +1,963 @@
+import json
+from pathlib import Path
+
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+
+from scipy.io import savemat
+
+from prefusion.dataset.tensor_smith import *
+from prefusion.registry import TENSOR_SMITHS
+
+
+
+__all__ = [
+    'draw_out_feats',
+    'draw_aligned_voxel_feats',
+    'get_bbox_3d',
+    'get_parkingslot_3d',
+    'draw_outputs',
+    'save_outputs'
+]
+
+
+def draw_out_feats(
+        batched_input_dict, 
+        camera_tensors_dict,
+        pred_bbox_3d,
+        pred_polyline_3d=None,
+        pred_parkingslot_3d=None,
+        pred_bbox_3d_cylinder=None,
+        pred_bbox_3d_oriented_cylinder=None,
+        pred_bbox_3d_rect_cuboid=None,
+    ):
+
+    nrows, ncols = 4, 10
+    fig, _ = plt.subplots(nrows, ncols, figsize=(32, 18))
+    fig.suptitle(batched_input_dict['index_infos'][0].scene_frame_id)
+    subplot_idx = 1
+    for i, cam_id in enumerate(camera_tensors_dict):
+        img = camera_tensors_dict[cam_id].detach().cpu().numpy()[0].transpose(1, 2, 0)[..., ::-1] * 255 + 128
+        img = img.astype(np.uint8)
+        plt.subplot(nrows, ncols, i+1)
+        plt.title(cam_id.replace('VCAMERA_', '').lower())
+        plt.imshow(img)
+        subplot_idx += 1
+
+    gt_seg = batched_input_dict['annotations']['bbox_3d']['seg'][0][0].detach().cpu()
+    pred_seg = pred_bbox_3d['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
+    plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+    plt.imshow(gt_seg)
+    plt.title('bbox_3d gt_seg')
+    plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+    plt.imshow(pred_seg)
+    plt.title("bbox_3d pred_seg")
+    
+    gt_cen = batched_input_dict['annotations']['bbox_3d']['cen'][0][0].detach().cpu()
+    pred_cen = pred_bbox_3d['cen'][0][0].to(torch.float32).sigmoid().detach().cpu()
+    pred_cen *= (pred_seg > 0.5)
+    plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+    plt.imshow(gt_cen)
+    plt.title("bbox_3d gt_cen")
+    plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+    plt.imshow(pred_cen)
+    plt.title("bbox_3d pred_cen")
+    
+    gt_reg = batched_input_dict['annotations']['bbox_3d']['reg'][0][0].detach().cpu()
+    pred_reg = pred_bbox_3d['reg'][0][0].to(torch.float32).detach().cpu()
+    pred_reg *= (pred_seg > 0.5)
+    plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+    plt.imshow(gt_reg)
+    plt.title("bbox_3d gt_reg")
+    plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+    plt.imshow(pred_reg)
+    plt.title("bbox_3d pred_reg")
+
+    if pred_bbox_3d_rect_cuboid:
+        gt_seg = batched_input_dict['annotations']['bbox_3d_rect_cuboid']['seg'][0][0].detach().cpu()
+        pred_seg = pred_bbox_3d_rect_cuboid['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_seg)
+        plt.title('bbox_3d_rect_cuboid gt_seg')
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_seg)
+        plt.title("bbox_3d_rect_cuboid pred_seg")
+        
+        gt_cen = batched_input_dict['annotations']['bbox_3d_rect_cuboid']['cen'][0][0].detach().cpu()
+        pred_cen = pred_bbox_3d_rect_cuboid['cen'][0][0].to(torch.float32).sigmoid().detach().cpu()
+        pred_cen *= (pred_seg > 0.5)
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_cen)
+        plt.title("bbox_3d_rect_cuboid gt_cen")
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_cen)
+        plt.title("bbox_3d_rect_cuboid pred_cen")
+        
+        gt_reg = batched_input_dict['annotations']['bbox_3d_rect_cuboid']['reg'][0][0].detach().cpu()
+        pred_reg = pred_bbox_3d_rect_cuboid['reg'][0][0].to(torch.float32).detach().cpu()
+        pred_reg *= (pred_seg > 0.5)
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_reg)
+        plt.title("bbox_3d_rect_cuboid gt_reg")
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_reg)
+        plt.title("bbox_3d_rect_cuboid pred_reg")
+
+    if pred_bbox_3d_cylinder:
+        gt_seg = batched_input_dict['annotations']['bbox_3d_cylinder']['seg'][0][0].detach().cpu()
+        pred_seg = pred_bbox_3d_cylinder['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_seg)
+        plt.title('bbox_3d_cylinder gt_seg')
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_seg)
+        plt.title("bbox_3d_cylinder pred_seg")
+        
+        gt_cen = batched_input_dict['annotations']['bbox_3d_cylinder']['cen'][0][0].detach().cpu()
+        pred_cen = pred_bbox_3d_cylinder['cen'][0][0].to(torch.float32).sigmoid().detach().cpu()
+        pred_cen *= (pred_seg > 0.5)
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_cen)
+        plt.title("bbox_3d_cylinder gt_cen")
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_cen)
+        plt.title("bbox_3d_cylinder pred_cen")
+        
+        gt_reg = batched_input_dict['annotations']['bbox_3d_cylinder']['reg'][0][0].detach().cpu()
+        pred_reg = pred_bbox_3d_cylinder['reg'][0][0].to(torch.float32).detach().cpu()
+        pred_reg *= (pred_seg > 0.5)
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_reg)
+        plt.title("bbox_3d_cylinder gt_reg")
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_reg)
+        plt.title("bbox_3d_cylinder pred_reg")
+    
+    if pred_bbox_3d_oriented_cylinder:
+        gt_seg = batched_input_dict['annotations']['bbox_3d_oriented_cylinder']['seg'][0][0].detach().cpu()
+        pred_seg = pred_bbox_3d_oriented_cylinder['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_seg)
+        plt.title('bbox_3d_oriented_cylinder gt_seg')
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_seg)
+        plt.title("bbox_3d_oriented_cylinder pred_seg")
+        
+        gt_cen = batched_input_dict['annotations']['bbox_3d_oriented_cylinder']['cen'][0][0].detach().cpu()
+        pred_cen = pred_bbox_3d_oriented_cylinder['cen'][0][0].to(torch.float32).sigmoid().detach().cpu()
+        pred_cen *= (pred_seg > 0.5)
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_cen)
+        plt.title("bbox_3d_oriented_cylinder gt_cen")
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_cen)
+        plt.title("bbox_3d_oriented_cylinder pred_cen")
+        
+        gt_reg = batched_input_dict['annotations']['bbox_3d_oriented_cylinder']['reg'][0][0].detach().cpu()
+        pred_reg = pred_bbox_3d_oriented_cylinder['reg'][0][0].to(torch.float32).detach().cpu()
+        pred_reg *= (pred_seg > 0.5)
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_reg)
+        plt.title("bbox_3d_oriented_cylinder gt_reg")
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_reg)
+        plt.title("bbox_3d_oriented_cylinder pred_reg")
+
+    if pred_polyline_3d is not None:
+        gt_seg = batched_input_dict['annotations']['polyline_3d']['seg'][0][0].detach().cpu()
+        pred_seg = pred_polyline_3d['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_seg)
+        plt.title('polyline_3d gt_seg')
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_seg)
+        plt.title("polyline_3d pred_seg")
+        
+        gt_reg = batched_input_dict['annotations']['polyline_3d']['reg'][0][0].detach().cpu()
+        pred_reg = pred_polyline_3d['reg'][0][0].to(torch.float32).detach().cpu()
+        pred_reg *= (pred_seg > 0.5)
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_reg)
+        plt.title("polyline_3d gt_reg")
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_reg)
+        plt.title("polyline_3d pred_reg")
+    
+    if pred_parkingslot_3d is not None:
+        gt_seg = batched_input_dict['annotations']['parkingslot_3d']['seg'][0][1].detach().cpu()
+        pred_mask = pred_parkingslot_3d['seg'][0][0].to(torch.float32).sigmoid().detach().cpu()
+        pred_seg = pred_parkingslot_3d['seg'][0][1].to(torch.float32).sigmoid().detach().cpu()
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_seg)
+        plt.title('parkingslot_3d gt_seg')
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_seg)
+        plt.title("parkingslot_3d pred_seg")
+        
+        gt_cen = batched_input_dict['annotations']['parkingslot_3d']['cen'][0][0].detach().cpu()
+        pred_cen = pred_parkingslot_3d['cen'][0][0].to(torch.float32).sigmoid().detach().cpu()
+        pred_cen *= (pred_mask > 0.5)
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_cen)
+        plt.title("parkingslot_3d gt_cen")
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_cen)
+        plt.title("parkingslot_3d pred_cen")
+        
+        gt_reg = batched_input_dict['annotations']['parkingslot_3d']['reg'][0][2].detach().cpu()
+        pred_reg = pred_parkingslot_3d['reg'][0][2].to(torch.float32).detach().cpu()
+        pred_reg *= (pred_mask > 0.5)
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(gt_reg)
+        plt.title("parkingslot_3d gt_reg")
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.imshow(pred_reg)
+        plt.title("parkingslot_3d pred_reg")
+    
+
+    voxel_range=([-3, 5], [50, -50], [50, -50])
+
+    plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+    plt.xlim(voxel_range[2])
+    plt.ylim(voxel_range[1][::-1])
+    plt.gca().set_aspect('equal')
+    
+    gt_boxes_3d = batched_input_dict['transformables'][0]['bbox_3d']
+    
+    for element in gt_boxes_3d.elements:
+        center = element['translation'][:, 0]
+        xvec = element['size'][0] * element['rotation'][:, 0]
+        yvec = element['size'][1] * element['rotation'][:, 1]
+        corner_points = np.array([
+            center + 0.5 * xvec - 0.5 * yvec,
+            center + 0.5 * xvec + 0.5 * yvec,
+            center - 0.5 * xvec + 0.5 * yvec,
+            center - 0.5 * xvec - 0.5 * yvec
+        ], dtype=np.float32)
+        # print('gt: ', corner_points[:, :2])
+        plt.plot(corner_points[[0, 1, 2, 3, 0], 1], corner_points[[0, 1, 2, 3, 0], 0], 'g')
+    
+    # gt_boxes_3d = batched_input_dict['annotations']['bbox_3d']
+    plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+    plt.xlim(voxel_range[2])
+    plt.ylim(voxel_range[1][::-1])
+    plt.gca().set_aspect('equal')
+    pred_bbox_3d_0 = {
+        'cen': pred_bbox_3d['cen'][0].cpu().float().sigmoid(),
+        'seg': pred_bbox_3d['seg'][0].cpu().float().sigmoid(),
+        'reg': pred_bbox_3d['reg'][0].cpu().float()
+    }
+    pred_boxes_3d = get_bbox_3d(pred_bbox_3d_0)
+    
+    for element in pred_boxes_3d:
+        # if element['confs'][0] < 0.7:
+        #     continue
+        if element['area_score'] < 0.5:
+            continue
+        center = element['translation']
+        xvec = element['size'][0] * element['rotation'][:, 0]
+        yvec = element['size'][1] * element['rotation'][:, 1]
+        corner_points = np.array([
+            center + 0.5 * xvec - 0.5 * yvec,
+            center + 0.5 * xvec + 0.5 * yvec,
+            center - 0.5 * xvec + 0.5 * yvec,
+            center - 0.5 * xvec - 0.5 * yvec
+        ], dtype=np.float32)
+        # print('pred: ', corner_points[:, :2])
+        # plt.text(center[1], center[0], '{:.2f}'.format(element['area_score']), color='r',
+        #          ha='center', va='center')
+        plt.plot(corner_points[[0, 1, 2, 3, 0], 1], corner_points[[0, 1, 2, 3, 0], 0], 'r')
+
+    if pred_bbox_3d_rect_cuboid:
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.xlim(voxel_range[2])
+        plt.ylim(voxel_range[1][::-1])
+        plt.gca().set_aspect('equal')
+        
+        gt_boxes_3d = batched_input_dict['transformables'][0]['bbox_3d_rect_cuboid']
+        
+        for element in gt_boxes_3d.elements:
+            center = element['translation'][:, 0]
+            xvec = element['size'][0] * element['rotation'][:, 0]
+            yvec = element['size'][1] * element['rotation'][:, 1]
+            corner_points = np.array([
+                center + 0.5 * xvec - 0.5 * yvec,
+                center + 0.5 * xvec + 0.5 * yvec,
+                center - 0.5 * xvec + 0.5 * yvec,
+                center - 0.5 * xvec - 0.5 * yvec
+            ], dtype=np.float32)
+            # print('gt: ', corner_points[:, :2])
+            plt.plot(corner_points[[0, 1, 2, 3, 0], 1], corner_points[[0, 1, 2, 3, 0], 0], 'g')
+        
+        # gt_boxes_3d = batched_input_dict['annotations']['bbox_3d_rect_cuboid']
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.xlim(voxel_range[2])
+        plt.ylim(voxel_range[1][::-1])
+        plt.gca().set_aspect('equal')
+        pred_bbox_3d_rect_cuboid_0 = {
+            'cen': pred_bbox_3d_rect_cuboid['cen'][0].cpu().float().sigmoid(),
+            'seg': pred_bbox_3d_rect_cuboid['seg'][0].cpu().float().sigmoid(),
+            'reg': pred_bbox_3d_rect_cuboid['reg'][0].cpu().float()
+        }
+        pred_boxes_3d = get_bbox_3d_rect_cuboid(pred_bbox_3d_rect_cuboid_0)
+        
+        for element in pred_boxes_3d:
+            # if element['confs'][0] < 0.7:
+            #     continue
+            if element['area_score'] < 0.5:
+                continue
+            center = element['translation']
+            xvec = element['size'][0] * element['rotation'][:, 0]
+            yvec = element['size'][1] * element['rotation'][:, 1]
+            corner_points = np.array([
+                center + 0.5 * xvec - 0.5 * yvec,
+                center + 0.5 * xvec + 0.5 * yvec,
+                center - 0.5 * xvec + 0.5 * yvec,
+                center - 0.5 * xvec - 0.5 * yvec
+            ], dtype=np.float32)
+            # print('pred: ', corner_points[:, :2])
+            # plt.text(center[1], center[0], '{:.2f}'.format(element['area_score']), color='r',
+            #          ha='center', va='center')
+            plt.plot(corner_points[[0, 1, 2, 3, 0], 1], corner_points[[0, 1, 2, 3, 0], 0], 'r')
+
+    if pred_bbox_3d_cylinder:
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.xlim(voxel_range[2])
+        plt.ylim(voxel_range[1][::-1])
+        plt.gca().set_aspect('equal')
+        
+        gt_boxes_3d = batched_input_dict['transformables'][0]['bbox_3d_cylinder']
+        
+        for element in gt_boxes_3d.elements:
+            center = element['translation'][:, 0]
+            xvec = element['size'][0] * element['rotation'][:, 0]
+            yvec = element['size'][1] * element['rotation'][:, 1]
+            corner_points = np.array([
+                center + 0.5 * xvec - 0.5 * yvec,
+                center + 0.5 * xvec + 0.5 * yvec,
+                center - 0.5 * xvec + 0.5 * yvec,
+                center - 0.5 * xvec - 0.5 * yvec
+            ], dtype=np.float32)
+            plt.plot(corner_points[[0, 1, 2, 3, 0], 1], corner_points[[0, 1, 2, 3, 0], 0], 'g')
+        
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.xlim(voxel_range[2])
+        plt.ylim(voxel_range[1][::-1])
+        plt.gca().set_aspect('equal')
+        pred_bbox_3d_cylinder_0 = {
+            'cen': pred_bbox_3d_cylinder['cen'][0].cpu().float().sigmoid(),
+            'seg': pred_bbox_3d_cylinder['seg'][0].cpu().float().sigmoid(),
+            'reg': pred_bbox_3d_cylinder['reg'][0].cpu().float()
+        }
+        pred_boxes_3d = get_bbox_3d_cylinder(pred_bbox_3d_cylinder_0)
+        
+        for element in pred_boxes_3d:
+            # if element['confs'][0] < 0.7:
+            #     continue
+            if element['area_score'] < 0.5:
+                continue
+            center = element['translation']
+            plt.scatter(center[1], center[0], s=element['radius'] * 2, c="r")
+
+    if pred_bbox_3d_oriented_cylinder:
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.xlim(voxel_range[2])
+        plt.ylim(voxel_range[1][::-1])
+        plt.gca().set_aspect('equal')
+        
+        gt_boxes_3d = batched_input_dict['transformables'][0]['bbox_3d_oriented_cylinder']
+        
+        for element in gt_boxes_3d.elements:
+            center = element['translation'][:, 0]
+            xvec = element['size'][0] * element['rotation'][:, 0]
+            yvec = element['size'][1] * element['rotation'][:, 1]
+            corner_points = np.array([
+                center + 0.5 * xvec - 0.5 * yvec,
+                center + 0.5 * xvec + 0.5 * yvec,
+                center - 0.5 * xvec + 0.5 * yvec,
+                center - 0.5 * xvec - 0.5 * yvec
+            ], dtype=np.float32)
+            plt.plot(corner_points[[0, 1, 2, 3, 0], 1], corner_points[[0, 1, 2, 3, 0], 0], 'g')
+        
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.xlim(voxel_range[2])
+        plt.ylim(voxel_range[1][::-1])
+        plt.gca().set_aspect('equal')
+        pred_bbox_3d_oriented_cylinder_0 = {
+            'cen': pred_bbox_3d_oriented_cylinder['cen'][0].cpu().float().sigmoid(),
+            'seg': pred_bbox_3d_oriented_cylinder['seg'][0].cpu().float().sigmoid(),
+            'reg': pred_bbox_3d_oriented_cylinder['reg'][0].cpu().float()
+        }
+        pred_boxes_3d = get_bbox_3d_oriented_cylinder(pred_bbox_3d_oriented_cylinder_0)
+        
+        for element in pred_boxes_3d:
+            # if element['confs'][0] < 0.7:
+            #     continue
+            if element['area_score'] < 0.5:
+                continue
+            center = element['translation']
+            # plt.scatter(center[1], center[0], s=element['radius'] * 2, c="r")
+            xvec = element['size'][0] * element['rotation'][:, 0]
+            yvec = element['size'][1] * element['rotation'][:, 1]
+            corner_points = np.array([
+                center + 0.5 * xvec - 0.5 * yvec,
+                center + 0.5 * xvec + 0.5 * yvec,
+                center - 0.5 * xvec + 0.5 * yvec,
+                center - 0.5 * xvec - 0.5 * yvec
+            ], dtype=np.float32)
+            print('pred: ', corner_points[:, :2])
+            # plt.text(center[1], center[0], '{:.2f}'.format(element['area_score']), color='r', ha='center', va='center')
+            plt.plot(corner_points[[0, 1, 2, 3, 0], 1], corner_points[[0, 1, 2, 3, 0], 0], 'r')
+
+
+    if pred_parkingslot_3d:
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.xlim(voxel_range[2])
+        plt.ylim(voxel_range[1][::-1])
+        plt.gca().set_aspect('equal')
+        
+        gt_slots_3d = batched_input_dict['transformables'][0]['parkingslot_3d']
+        
+        for element in gt_slots_3d.elements:
+            points = element['points']
+            plt.plot(points[[1, 2, 3, 0], 1], points[[1, 2, 3, 0], 0], 'g')
+        
+        
+        plt.subplot(nrows, ncols, subplot_idx); subplot_idx += 1
+        plt.xlim(voxel_range[2])
+        plt.ylim(voxel_range[1][::-1])
+        plt.gca().set_aspect('equal')
+        
+        pred_parkingslot_3d_0 = {
+            'cen': pred_parkingslot_3d['cen'][0].cpu().float().sigmoid(),
+            'seg': pred_parkingslot_3d['seg'][0].cpu().float().sigmoid(),
+            'reg': pred_parkingslot_3d['reg'][0].cpu().float()
+        }
+        
+        pred_slots_3d = get_parkingslot_3d(pred_parkingslot_3d_0)
+        # print(pred_slots_3d)
+        for slot in pred_slots_3d:
+            # plt.text(points[0, 1], points[0, 0], '{:.2f}'.format(element['confs'][0]), color='r')
+            plt.plot(slot[[1, 2, 3, 0], 1], slot[[1, 2, 3, 0], 0], 'r')
+    
+    plt.show()
+    # plt.savefig(f"vis/model_out/{batched_input_dict['index_infos'][0].frame_id}.png")
+
+
+def draw_aligned_voxel_feats(aligned_voxel_feats):
+
+    n_frames = len(aligned_voxel_feats)
+    plt.subplots(1, n_frames)
+    for i, voxel_feats_frame in enumerate(aligned_voxel_feats):
+        plt.subplot(1, n_frames, i+1)
+        plt.imshow(voxel_feats_frame[0, 0].detach().cpu().to(torch.float32).numpy() > 0)
+        plt.title(f'frame t({0 - i})')
+    plt.show()
+
+
+def get_bbox_3d(tensor_dict):
+    from prefusion.dataset.tensor_smith import PlanarBbox3D
+    pbox = PlanarBbox3D(
+        voxel_shape=(6, 256, 256),
+        voxel_range=([-3, 5], [50, -50], [50, -50]),
+        reverse_pre_conf=0.3,
+        reverse_nms_ratio=1.0
+    )
+    return pbox.reverse(tensor_dict)
+
+
+def get_bbox_3d_rect_cuboid(tensor_dict):
+    from prefusion.dataset.tensor_smith import PlanarRectangularCuboid
+    pbox = PlanarRectangularCuboid(
+        voxel_shape=(6, 256, 256),
+        voxel_range=([-3, 5], [50, -50], [50, -50]),
+        reverse_pre_conf=0.3,
+        reverse_nms_ratio=1.0
+    )
+    return pbox.reverse(tensor_dict)
+
+
+def get_bbox_3d_cylinder(tensor_dict):
+    from prefusion.dataset.tensor_smith import PlanarCylinder3D
+    pbox = PlanarCylinder3D(
+        voxel_shape=(6, 256, 256),
+        voxel_range=([-3, 5], [50, -50], [50, -50]),
+        reverse_pre_conf=0.3,
+        reverse_nms_ratio=1.0
+    )
+    return pbox.reverse(tensor_dict)
+
+
+def get_bbox_3d_oriented_cylinder(tensor_dict):
+    from prefusion.dataset.tensor_smith import PlanarOrientedCylinder3D
+    pbox = PlanarOrientedCylinder3D(
+        voxel_shape=(6, 256, 256),
+        voxel_range=([-3, 5], [50, -50], [50, -50]),
+        reverse_pre_conf=0.3,
+        reverse_nms_ratio=1.0
+    )
+    return pbox.reverse(tensor_dict)
+    
+
+def get_parkingslot_3d(tensor_dict):
+    from prefusion.dataset.tensor_smith import PlanarParkingSlot3D
+    pslot = PlanarParkingSlot3D(
+        voxel_shape=(6, 320, 160),
+        voxel_range=([-0.5, 2.5], [36, -12], [12, -12]),
+        reverse_pre_conf=0.5
+    )
+    return pslot.reverse(tensor_dict)
+
+
+def draw_outputs(pred_dict, batched_input_dict):
+
+    camera_tensors_dict = batched_input_dict['camera_tensors']
+    gt_dict = batched_input_dict['annotations']
+    transformables = batched_input_dict['transformables'][0]
+    scene_frame_id = batched_input_dict['index_infos'][0].scene_frame_id
+
+    nrows_cam = (len(camera_tensors_dict) - 1) // 4 + 1
+    nrows = len(pred_dict) + nrows_cam
+
+    fig, axes = plt.subplots(nrows, 4, figsize=(4 * 2, nrows * 2))
+    fig.suptitle(f'scene_frame_id: {scene_frame_id}')
+
+    # plot camera images
+    for i, cam_id in enumerate(camera_tensors_dict):
+        img = camera_tensors_dict[cam_id].detach().cpu().numpy()[0].transpose(1, 2, 0)[..., ::-1] * 255 + 128
+        img = img.astype(np.uint8)
+        irow = i // 4
+        icol = i % 4
+        axes[irow, icol].imshow(img)
+        axes[irow, icol].set_title(cam_id.replace('VCAMERA_', '').lower())
+    for i in range(icol + 1, 4):
+        axes[irow, icol].axis('off')
+
+    # plot preds with labels
+    for i, branch in enumerate(pred_dict):
+        irow = i + nrows_cam
+        pred_dict_branch = pred_dict[branch]
+        gt_dict_branch = gt_dict[branch]
+        # extract batch_0
+        pred_dict_branch_0 = {**pred_dict_branch}
+        for key in pred_dict_branch_0:
+            if key in ['cen', 'seg']:
+                pred_dict_branch_0[key] = pred_dict_branch[key][0].sigmoid().detach().cpu().float()
+            else:
+                pred_dict_branch_0[key] = pred_dict_branch[key][0].detach().cpu().float()
+        tensor_smith = transformables[branch].tensor_smith
+        voxel_range = tensor_smith.voxel_range
+        axes[irow, 0].annotate(
+            branch, xy=(-0.5, 0.5), xycoords='axes fraction', ha='right', va='center', rotation=90
+        )
+        # gt_seg
+        axes[irow, 0].imshow(gt_dict_branch['seg'][0][0].detach().cpu().float())
+        axes[irow, 0].set_title(f'gt_seg_0')
+        # pred_seg
+        axes[irow, 1].imshow(pred_dict_branch_0['seg'][0])
+        axes[irow, 1].set_title(f'pred_seg_0')
+
+        match tensor_smith:
+            case PlanarBbox3D() | PlanarRectangularCuboid() | PlanarSquarePillar() | PlanarOrientedCylinder3D():
+                # plot gt bboxes
+                axes[irow, 2].set_aspect('equal')
+                axes[irow, 2].set_xlim(voxel_range[2])
+                axes[irow, 2].set_ylim(voxel_range[1][::-1])
+                axes[irow, 2].set_title(f'gt_bboxes')
+                for element in transformables[branch].elements:
+                    center = element['translation'][:, 0]
+                    xvec = element['size'][0] * element['rotation'][:, 0]
+                    yvec = element['size'][1] * element['rotation'][:, 1]
+                    corner_points = np.array([
+                        center + 0.5 * xvec - 0.5 * yvec,
+                        center + 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec - 0.5 * yvec
+                    ], dtype=np.float32)
+                    axes[irow, 2].plot(corner_points[[0, 1, 2, 3, 0], 1], 
+                                       corner_points[[0, 1, 2, 3, 0], 0], 'g')
+                # plot pred bboxes
+                axes[irow, 3].set_aspect('equal')
+                axes[irow, 3].set_xlim(voxel_range[2])
+                axes[irow, 3].set_ylim(voxel_range[1][::-1])
+                axes[irow, 3].set_title(f'pred_bboxes')
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                for element in results:
+                    if element['score'] < 0.7:
+                        continue
+                    center = element['translation']
+                    xvec = element['size'][0] * element['rotation'][:, 0]
+                    yvec = element['size'][1] * element['rotation'][:, 1]
+                    corner_points = np.array([
+                        center + 0.5 * xvec - 0.5 * yvec,
+                        center + 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec - 0.5 * yvec
+                    ], dtype=np.float32)
+                    # axes[irow, 3].text(center[1], center[0], 
+                    #                    '{:.2f}'.format(element['area_score'] * element['confs'][0]),
+                    #                    color='r', ha='center', va='center')
+                    axes[irow, 3].plot(corner_points[[0, 1, 2, 3, 0], 1], 
+                                       corner_points[[0, 1, 2, 3, 0], 0], 'r')
+                
+
+            case PlanarCylinder3D():
+                # plot gt bboxes
+                axes[irow, 2].set_aspect('equal')
+                axes[irow, 2].set_xlim(voxel_range[2])
+                axes[irow, 2].set_ylim(voxel_range[1][::-1])
+                axes[irow, 2].set_title(f'gt_bboxes')
+                for element in transformables[branch].elements:
+                    center = element['translation'][:, 0]
+                    xvec = element['size'][0] * element['rotation'][:, 0]
+                    yvec = element['size'][1] * element['rotation'][:, 1]
+                    corner_points = np.array([
+                        center + 0.5 * xvec - 0.5 * yvec,
+                        center + 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec - 0.5 * yvec
+                    ], dtype=np.float32)
+                    axes[irow, 2].plot(corner_points[[0, 1, 2, 3, 0], 1], 
+                                       corner_points[[0, 1, 2, 3, 0], 0], 'g')
+                # plot pred bboxes
+                axes[irow, 3].set_aspect('equal')
+                axes[irow, 3].set_xlim(voxel_range[2])
+                axes[irow, 3].set_ylim(voxel_range[1][::-1])
+                axes[irow, 3].set_title(f'pred_bboxes')
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                for element in results:
+                    if element['score'] < 0.7:
+                        continue
+                    center = element['translation']
+                    xvec = np.array([element['radius'] * 2, element['radius'] * 2, element['height']]) * np.array([1, 0, 0])
+                    yvec = np.array([element['radius'] * 2, element['radius'] * 2, element['height']]) * np.array([0, 1, 0])
+
+                    corner_points = np.array([
+                        center + 0.5 * xvec - 0.5 * yvec,
+                        center + 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec + 0.5 * yvec,
+                        center - 0.5 * xvec - 0.5 * yvec
+                    ], dtype=np.float32)
+                    # axes[irow, 3].text(center[1], center[0], 
+                    #                    '{:.2f}'.format(element['area_score'] * element['confs'][0]),
+                    #                    color='r', ha='center', va='center')
+                    axes[irow, 3].plot(corner_points[[0, 1, 2, 3, 0], 1], 
+                                       corner_points[[0, 1, 2, 3, 0], 0], 'r')
+                
+
+            case PlanarParkingSlot3D():
+                # plot gt slots
+                axes[irow, 2].set_aspect('equal')
+                axes[irow, 2].set_xlim(voxel_range[2])
+                axes[irow, 2].set_ylim(voxel_range[1][::-1])
+                axes[irow, 2].set_title(f'gt_slots')
+                for element in transformables[branch].elements:
+                    points = element['points']
+                    axes[irow, 2].plot(points[[1, 2, 3, 0], 1], points[[1, 2, 3, 0], 0], 'g')
+                # plot pred slots
+                axes[irow, 3].set_aspect('equal')
+                axes[irow, 3].set_xlim(voxel_range[2])
+                axes[irow, 3].set_ylim(voxel_range[1][::-1])
+                axes[irow, 3].set_title(f'pred_slots')
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                for points in results:
+                    axes[irow, 3].plot(points[[1, 2, 3, 0], 1], points[[1, 2, 3, 0], 0], 'r')
+                
+            
+            case _:
+                for icol in range(2, 4):
+                    axes[irow, icol].axis('off')
+    
+    
+    plt.tight_layout()
+    # save_path = Path('work_dirs/result_pngs') / f'{scene_frame_id}.png'
+    save_path = Path('work_dirs/result_pngs_new') / f'{scene_frame_id}.png'
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    # plt.show()
+    plt.savefig(save_path)
+    plt.close()
+                
+
+def save_outputs(pred_dict, batched_input_dict):
+
+    camera_tensors_dict = batched_input_dict['camera_tensors']
+    gt_dict = batched_input_dict['annotations']
+    transformables = batched_input_dict['transformables'][0]
+    scene_frame_id = batched_input_dict['index_infos'][0].scene_frame_id
+
+    save_dir = Path('work_dirs/infered_results')
+    # # save vitual camera images
+    # for cam_id in camera_tensors_dict:
+    #     img = camera_tensors_dict[cam_id].detach().cpu().numpy()[0].transpose(1, 2, 0)[..., ::-1] * 255 + 128
+    #     img = img.astype(np.uint8)
+    #     save_jpg = save_dir / cam_id / f'{scene_frame_id}.jpg'
+    #     save_jpg.parent.mkdir(parents=True, exist_ok=True)
+    #     plt.imsave(save_jpg, img)
+
+    # get preds and gts
+    result_dict = {
+        'gt': dict(bboxes=[], slots=[], polylines=[]), 
+        'pred': dict(bboxes=[], slots=[], polylines=[]), 
+    }
+    for branch in pred_dict:
+        gt_dict_branch = gt_dict[branch]
+        pred_dict_branch = pred_dict[branch]
+        # extract batch_0
+        gt_dict_branch_0 = {**gt_dict_branch}
+        pred_dict_branch_0 = {**pred_dict_branch}
+        for key in pred_dict_branch_0:
+            if key in ['cen', 'seg']:
+                gt_dict_branch_0[key] = gt_dict_branch[key][0].detach().cpu().float()
+                pred_dict_branch_0[key] = pred_dict_branch[key][0].sigmoid().detach().cpu().float()
+            else:
+                gt_dict_branch_0[key] = gt_dict_branch[key][0].detach().cpu().float()
+                pred_dict_branch_0[key] = pred_dict_branch[key][0].detach().cpu().float()
+        tensor_smith = transformables[branch].tensor_smith
+        voxel_range = tensor_smith.voxel_range
+        match tensor_smith:
+            case PlanarBbox3D() | PlanarRectangularCuboid() | PlanarSquarePillar():
+                # bboxes
+                for element in transformables[branch].elements:
+                    for key in element:
+                        if type(element[key]) == np.ndarray:
+                            element[key] = element[key].reshape(-1).tolist()
+                    zrange = voxel_range[0]
+                    xrange = voxel_range[1]
+                    yrange = voxel_range[2]
+                    in_x = element['translation'][0] < max(xrange) and element['translation'][0] > min(xrange)
+                    in_y = element['translation'][1] < max(yrange) and element['translation'][1] > min(yrange)
+                    in_z = element['translation'][2] < max(zrange) and element['translation'][2] > min(zrange)
+                    if in_x and in_y and in_z:
+                        result_dict['gt']['bboxes'].append(element)
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                class_name_list = transformables[branch].dictionary['classes']
+                num_class_channels = len(class_name_list)
+                for element in results:
+                    if (element['score'] * element['area_score']) < 0.7:
+                        continue
+                    element['class'] = class_name_list[np.argmax(element['confs'][1:num_class_channels + 1])]
+                    for key in element:
+                        if type(element[key]) == np.ndarray:
+                            element[key] = element[key].reshape(-1).tolist()
+                    element.pop('confs')
+                    result_dict['pred']['bboxes'].append(element)
+            case PlanarParkingSlot3D():
+                results = tensor_smith.reverse(gt_dict_branch_0)
+                for slot in results:
+                    result_dict['gt']['slots'].append(slot[:, :3].reshape(-1).tolist())
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                for slot in results:
+                    result_dict['pred']['slots'].append(slot[:, :3].reshape(-1).tolist())
+            case PlanarPolyline3D():
+                results = tensor_smith.reverse(gt_dict_branch_0)
+                for polyline in results:
+                    result_dict['gt']['polylines'].append(polyline[:, :3].reshape(-1).tolist())
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                for polyline in results:
+                    result_dict['pred']['polylines'].append(polyline[:, :3].reshape(-1).tolist())
+            case PlanarPolygon3D():
+                pass
+            case PlanarOccSdfBev():
+                pass
+    
+    save_path = save_dir / 'gts_and_preds_new' / f'{scene_frame_id}.json'
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(save_path, 'w') as fw:
+        json.dump(result_dict, fw, indent=4)
+                
+
+
+def save_gt_outputs(batched_input_dict, gt_dict, tensor_smith_dict, save_dir, 
+                      save_polyline=False):
+    scene_frame_id = batched_input_dict['index_infos'][0].scene_frame_id
+    gt_dict = batched_input_dict['annotations']
+    transformables = batched_input_dict['transformables'][0]
+    save_dir = Path(save_dir)
+
+    # get gts
+    result_dict = {
+        'gt': dict(bboxes=[], slots=[]), 
+    }
+    if save_polyline:
+        result_dict['gt']['polylines'] = []    
+    
+    for branch in gt_dict:
+        gt_dict_branch = gt_dict[branch]
+        # extract batch_0
+        gt_dict_branch_0 = {**gt_dict_branch}
+        for key in gt_dict_branch_0:
+            if key in ['cen', 'seg']:
+                gt_dict_branch_0[key] = gt_dict_branch[key][0].detach().cpu().float()
+            else:
+                gt_dict_branch_0[key] = gt_dict_branch[key][0].detach().cpu().float()
+        tensor_smith = TENSOR_SMITHS.build(tensor_smith_dict[branch])
+        voxel_range = tensor_smith.voxel_range
+        match tensor_smith:
+            case PlanarBbox3D() | PlanarRectangularCuboid() | PlanarSquarePillar() | PlanarOrientedCylinder3D() | PlanarCylinder3D():
+                # bboxes
+                for element in transformables[branch].elements:
+                    for key in element:
+                        if type(element[key]) == np.ndarray:
+                            element[key] = element[key].reshape(-1).tolist()
+                    zrange = voxel_range[0]
+                    xrange = voxel_range[1]
+                    yrange = voxel_range[2]
+                    in_x = element['translation'][0] < max(xrange) and element['translation'][0] > min(xrange)
+                    in_y = element['translation'][1] < max(yrange) and element['translation'][1] > min(yrange)
+                    in_z = element['translation'][2] < max(zrange) and element['translation'][2] > min(zrange)
+                    if in_x and in_y and in_z:
+                        result_dict['gt']['bboxes'].append(element)
+            case PlanarParkingSlot3D():
+                results = tensor_smith.reverse(gt_dict_branch_0)
+                for slot in results:
+                    result_dict['gt']['slots'].append(slot.reshape(-1).tolist())
+            case PlanarOccSdfBev():
+                freespace = gt_dict_branch_0['seg'][0].detach().cpu().numpy()
+                save_png = save_dir / 'freespace' / f'{scene_frame_id}_gt.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, freespace)
+
+                occ_edge = gt_dict_branch_0['seg'][1].detach().cpu().numpy()
+                save_png = save_dir / 'occ_edge' / f'{scene_frame_id}_gt.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, occ_edge)
+
+                sdf = gt_dict_branch_0['sdf'][0].detach().cpu().numpy()
+                save_png = save_dir / 'sdf' / f'{scene_frame_id}_gt.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, sdf)
+
+                height = gt_dict_branch_0['height'][0].detach().cpu().numpy()
+                save_png = save_dir / 'height' / f'{scene_frame_id}_gt.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, height)
+
+                mat_path = save_dir / 'mat' / f'{scene_frame_id}_gt.mat'
+                mat_path.parent.mkdir(parents=True, exist_ok=True)
+                savemat(mat_path, {'freespace': freespace,
+                                   'occ_edge': occ_edge,
+                                   'sdf': sdf,
+                                   'height': height})
+            case PlanarPolyline3D():
+                if save_polyline:
+                    results = tensor_smith.reverse(gt_dict_branch_0)
+                    for polyline in results:
+                        result_dict['gt']['polylines'].append(polyline[:, :3].reshape(-1).tolist())
+    
+    save_path = save_dir / 'dets' / f'{scene_frame_id}_gt.json'
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(save_path, 'w') as fw:
+        json.dump(result_dict, fw, indent=4)
+    
+    return True                
+
+
+def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictionary_dict, save_dir, 
+                      save_polyline=False, save_img_mat=False):
+    scene_frame_id = batched_input_dict['index_infos'][0].scene_frame_id
+    camera_tensors_dict = batched_input_dict['camera_tensors']
+
+    save_dir = Path(save_dir)
+
+    # save vitual camera images
+    for cam_id in camera_tensors_dict:
+        img = camera_tensors_dict[cam_id].detach().cpu().numpy()[0].transpose(1, 2, 0)[..., ::-1] * 255 + 128
+        img = img.astype(np.uint8)
+        save_jpg = save_dir / 'cameras' / cam_id / f'{scene_frame_id}.jpg'
+        save_jpg.parent.mkdir(parents=True, exist_ok=True)
+        plt.imsave(save_jpg, img)
+        if save_img_mat:
+            save_mat = save_dir / 'cameras' / cam_id / f'{scene_frame_id}.mat'
+            savemat(save_mat, {'img': img})
+
+    # get preds
+    result_dict = {
+        'pred': dict(bboxes=[], cylinders=[], slots=[]), 
+    }
+    if save_polyline:
+        result_dict['pred']['polylines'] = []
+    for branch in pred_dict:
+        pred_dict_branch = pred_dict[branch]
+        # extract batch_0
+        pred_dict_branch_0 = {**pred_dict_branch}
+        for key in pred_dict_branch_0:
+            if key in ['cen', 'seg']:
+                pred_dict_branch_0[key] = pred_dict_branch[key][0].sigmoid().detach().cpu().float()
+            else:
+                pred_dict_branch_0[key] = pred_dict_branch[key][0].detach().cpu().float()
+        tensor_smith = TENSOR_SMITHS.build(tensor_smith_dict[branch])
+        match tensor_smith:
+            case PlanarBbox3D() | PlanarRectangularCuboid() | PlanarSquarePillar() | PlanarOrientedCylinder3D():
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                class_name_list = dictionary_dict[branch]['classes']
+                num_class_channels = len(class_name_list)
+                for element in results:
+                    if element['score'] < 0.7:
+                        continue
+                    element['class'] = class_name_list[np.argmax(element['confs'][1:num_class_channels + 1])]
+                    for key in element:
+                        if type(element[key]) == np.ndarray:
+                            element[key] = element[key].reshape(-1).tolist()
+                        if type(element[key]) in (np.float32, np.float64):
+                            element[key] = float(element[key])
+                    element.pop('confs')
+                    result_dict['pred']['bboxes'].append(element)
+            case PlanarCylinder3D():
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                class_name_list = dictionary_dict[branch]['classes']
+                num_class_channels = len(class_name_list)
+                for element in results:
+                    if element['score'] < 0.7:
+                        continue
+                    element['class'] = class_name_list[np.argmax(element['confs'][1:num_class_channels + 1])]
+                    for key in element:
+                        if type(element[key]) == np.ndarray:
+                            element[key] = element[key].reshape(-1).tolist()
+                        if type(element[key]) in (np.float32, np.float64):
+                            element[key] = float(element[key])
+                    element.pop('confs')
+                    result_dict['pred']['cylinders'].append(element)
+            case PlanarParkingSlot3D():
+                results = tensor_smith.reverse(pred_dict_branch_0)
+                for slot in results:
+                    result_dict['pred']['slots'].append(slot.reshape(-1).tolist())
+            case PlanarOccSdfBev():
+                freespace = pred_dict_branch_0['seg'][0].detach().cpu().numpy()
+                save_png = save_dir / 'freespace' / f'{scene_frame_id}.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, freespace)
+
+                occ_edge = pred_dict_branch_0['seg'][1].detach().cpu().numpy()
+                save_png = save_dir / 'occ_edge' / f'{scene_frame_id}.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, occ_edge)
+
+                sdf = pred_dict_branch_0['sdf'][0].detach().cpu().numpy()
+                save_png = save_dir / 'sdf' / f'{scene_frame_id}.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, sdf)
+
+                height = pred_dict_branch_0['height'][0].detach().cpu().numpy()
+                save_png = save_dir / 'height' / f'{scene_frame_id}.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, height)
+
+                mat_path = save_dir / 'mat' / f'{scene_frame_id}.mat'
+                mat_path.parent.mkdir(parents=True, exist_ok=True)
+                savemat(mat_path, {'freespace': freespace,
+                                   'occ_edge': occ_edge,
+                                   'sdf': sdf,
+                                   'height': height})
+            case PlanarPolyline3D():
+                if save_polyline:
+                    results = tensor_smith.reverse(pred_dict_branch_0)
+                    for polyline in results:
+                        result_dict['pred']['polylines'].append(polyline[:, :3].reshape(-1).tolist())
+    
+    save_path = save_dir / 'dets' / f'{scene_frame_id}.json'
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(save_path, 'w') as fw:
+        json.dump(result_dict, fw, indent=4)
+    
+    return True                
