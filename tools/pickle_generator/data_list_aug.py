@@ -167,6 +167,8 @@ def main(args):
         save_sampled_groups_indice_to_txt(sampled_groups, frame_infos, args.save_txt_path)
 
 
+
+
 if __name__ == "__main__":
     args = parser.parse_args()
     # args.input_pkl_path = '/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_20230823_110018.pkl'
