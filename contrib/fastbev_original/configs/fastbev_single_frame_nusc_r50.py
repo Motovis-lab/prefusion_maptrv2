@@ -107,7 +107,7 @@ if debug_mode:
     ]
     possible_group_sizes = 20
 else:
-    batch_size = 6
+    batch_size = 8
     num_workers = 3
     persistent_workers = True
     transforms = [
@@ -197,7 +197,8 @@ val_dataset = dict(
     name="demo_parking",
     data_root='/data/datasets/nuScenes',
     # info_path='/data/datasets/nuScenes/nusc_scene0103_val_info.pkl',
-    info_path='/data/datasets/nuScenes/nusc_scene0103_87e772078a494d42bd34cd16172808bc_val_info.pkl',
+    info_path='/data/datasets/nuScenes/nusc_val_info.pkl',
+    # info_path='/data/datasets/nuScenes/nusc_scene0103_87e772078a494d42bd34cd16172808bc_val_info.pkl',
     model_feeder=dict(
         type="FastBEVModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -220,7 +221,8 @@ test_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
     data_root='/data/datasets/nuScenes',
-    info_path='/data/datasets/nuScenes/nusc_scene0103_87e772078a494d42bd34cd16172808bc_val_info.pkl',
+    # info_path='/data/datasets/nuScenes/nusc_scene0103_87e772078a494d42bd34cd16172808bc_val_info.pkl',
+    info_path='/data/datasets/nuScenes/nusc_val_info.pkl',
     model_feeder=dict(
         type="FastBEVModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -515,7 +517,7 @@ custom_hooks = [
 ]
 
 ## runner loop configs
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=20, val_interval=-1)
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=50, val_interval=-1)
 val_cfg = dict(type="GroupBatchValLoop")
 test_cfg = dict(type="GroupBatchInferLoop")
 
@@ -567,9 +569,9 @@ today = datetime.datetime.now().strftime("%m%d")
 
 # load_from = "./ckpts/3scenes_singleframe_epoch_50.pth"
 # load_from = "./ckpts/single_frame_nusc_1118_epoch_200.pth"
-load_from = "./ckpts/cascade_mask_rcnn_r50_fpn_coco-mstrain_3x_20e_nuim_bbox_mAP_0.5400_segm_mAP_0.4300.pth"
-# load_from = "./ckpts/fastbev_single_frame_nusc_r50_0219_epoch_1000.pth"
-# load_from = "./work_dirs/fastray_planar_single_frame_1104/epoch_50.pth"
+# load_from = "./ckpts/cascade_mask_rcnn_r50_fpn_coco-mstrain_3x_20e_nuim_bbox_mAP_0.5400_segm_mAP_0.4300.pth"
+load_from = "./ckpts/fastbev_single_frame_nusc_r50_0228_20250228_094338_epoch_50.pth"
+# load_from = "./work_dirs/fastbev_single_frame_nusc_r50_0227/epoch_28.pth"
 # work_dir = './work_dirs/fastray_planar_single_frame_1104'
 # work_dir = './work_dirs/fastray_planar_single_frame_1105_infer'
 # work_dir = './work_dirs/fastray_planar_single_frame_1106_sampled'

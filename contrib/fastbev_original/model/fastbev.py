@@ -6,6 +6,7 @@ from typing import Union, List, Dict, Optional
 import torch.nn as nn
 import torch.nn.functional as F
 from mmengine.structures import BaseDataElement
+from copious.cv.geometry import Box3d as CopiousBox3d
 
 from prefusion import BaseModel
 from prefusion.registry import MODELS
@@ -118,7 +119,7 @@ class FastBEVModel(BaseModel):
         #     num_imgs,
         #     valid=None,
         # )[0]
-        # credible_idx = pred_bbox_score > 0.7
+        # credible_idx = pred_bbox_score > 0.50
         # credible_pred_bbox_elements = []
         # for bx in pred_bbox_decoded[credible_idx]:
         #     credible_pred_bbox_elements.append(
@@ -129,10 +130,7 @@ class FastBEVModel(BaseModel):
         #         }
         #     )
 
-        # gt_bbox3d_planar = {task: tensor[0] for task, tensor in batched_input_dict['annotations']['bbox_3d'].items()}
-        # tensor_smith = batched_input_dict['transformables'][0]['bbox_3d'].tensor_smith
         # gt_boxes = batched_input_dict['transformables'][0]['bbox_3d']
-        # gt_boxes_reversed = tensor_smith.reverse(gt_bbox3d_planar)
         # save_dir = Path("./vis/box_project_onto_image") / batched_input_dict['index_infos'][0].scene_id
         # save_dir.mkdir(parents=True, exist_ok=True)
         # nrows, ncols = 3, 2
@@ -253,6 +251,47 @@ class FastBEVModel(BaseModel):
 
 
         # plt.savefig(save_dir / f"{batched_input_dict['index_infos'][0].frame_id}.jpg")
+        # plt.close()
+
+        # def get_box_bev_corners(_boxes):
+        #     corners = []
+        #     for _bx in _boxes:
+        #         copious_box3d = CopiousBox3d(
+        #             position=_bx['translation'].flatten(), 
+        #             scale=np.array(_bx['size']), 
+        #             rotation=Rotation.from_matrix(_bx['rotation'])
+        #         )
+        #         _corners = copious_box3d.corners[[0, 1, 5, 4], :2]
+        #         rot = np.array([
+        #             [np.cos(np.pi / 2), -np.sin(np.pi / 2)],
+        #             [np.sin(np.pi / 2), np.cos(np.pi / 2)],
+        #         ])
+        #         _corners = _corners @ rot.T
+        #         corners.append(_corners)
+        #     return corners
+
+        # def plot_bev_box(bev_corners, color='red', linewidth=1, alpha=0.3):
+        #     for corners in bev_corners:
+        #         for i in range(4):
+        #             plt.plot(
+        #                 [corners[i][0], corners[(i + 1) % 4][0]],
+        #                 [corners[i][1], corners[(i + 1) % 4][1]],
+        #                 color=color,
+        #                 linewidth=linewidth,
+        #             )
+
+        # gt_box_bev_corners = get_box_bev_corners(gt_boxes.elements)
+        # pred_box_bev_corners = get_box_bev_corners(credible_pred_bbox_elements)
+        # fig = plt.figure(figsize=(8, 8))
+        # plot_bev_box(gt_box_bev_corners, color='green')
+        # plot_bev_box(pred_box_bev_corners, color='red')
+        # plt.gca().set_xlim([-50, 50])
+        # plt.gca().set_ylim([-50, 50])
+        # plt.gca().set_aspect('equal', adjustable='box')
+        # plt.savefig(save_dir / f"{batched_input_dict['index_infos'][0].frame_id}_bev.jpg")
+        # plt.close()
+
+
         # FIXME:
 
         if mode == 'tensor':
