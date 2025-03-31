@@ -442,7 +442,7 @@ loss_cfg = dict(
 
 # integrated model config
 model = dict(
-    type='FastBEVModel',
+    type='FastBEVPlanarModel',
     camera_groups=camera_groups,
     backbones=backbones,
     neck=neck,
