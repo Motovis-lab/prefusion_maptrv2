@@ -23,31 +23,24 @@ cv2.setNumThreads(1)
 import warnings
 
 from mtv4d.utils.misc_base import mp_pool, torch_pool
-from scripts.generate_4d_json import cameras_all
 
 warnings.filterwarnings("ignore")
 import sys
-import pdb
 
 sys.path.append(".")
 sys.path.append("/home/wuhan/mtv4d/scripts/")
 sys.path.append("/home/wuhan/mtv4d/")
 import open3d as o3d
 import mmcv
-import mmengine
-from rich.progress import track
 import os.path as op
 from collections import defaultdict
 from copy import deepcopy
 import numpy as np
 from scipy.spatial.transform import Rotation
 from pathlib import Path as P
-from typing import List, Tuple, Union
 from mmengine import Config
 from contrib.fastbev_det.models.utils.virtual_camera import render_image, PerspectiveCamera, FisheyeCamera, \
-    create_virtual_perspective_camera, \
     pcd_lidar_point, read_pcd_lidar, load_point_cloud, render_image_with_src_camera_points
-from tqdm import tqdm
 
 from mtv4d.annos_4d.helper import (  # type: ignore
     check_whether_points_behind_camera,
