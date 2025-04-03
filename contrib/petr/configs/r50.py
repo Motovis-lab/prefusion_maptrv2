@@ -62,7 +62,7 @@ train_dataloader = dict(
                         is_trunk_open=["attr.vehicle.is_trunk_open.true"],
                     )
                 ),
-                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
+                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes, voxel_range=point_cloud_range)),
             bbox_rect_cuboid=dict(
                 type="Bbox3D", 
                 loader=dict(
@@ -74,14 +74,14 @@ train_dataloader = dict(
                     ),
                     axis_rearrange_method="longer_edge_as_y",
                 ),
-                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
+                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes, voxel_range=point_cloud_range)),
             bbox_cylinder_directional=dict(
                 type="Bbox3D", 
                 loader=dict(
                     type="AdvancedBbox3DLoader",
                     class_mapping=dict(pedestrian=['class.pedestrian.pedestrian']),
                 ),
-                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes)),
+                tensor_smith=dict(type="Bbox3DBasic", classes=det_classes, voxel_range=point_cloud_range)),
             ego_poses=dict(
                 type="EgoPoseSet",
                 loader=dict(type="EgoPoseSetLoader")

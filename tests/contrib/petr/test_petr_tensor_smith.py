@@ -31,7 +31,7 @@ def bbox3d():
 
 
 def test_bbox3d_xyz_lwh_yaw_vx_vy(bbox3d):
-    tensor_smith = Bbox3DBasic(classes=["class.road_marker.arrow", "class.vehicle.passenger_car", "class.traffic_facility.box"])
+    tensor_smith = Bbox3DBasic(classes=["class.road_marker.arrow", "class.vehicle.passenger_car", "class.traffic_facility.box"], voxel_range=[[-100, 100], [100, -100], [100, -100]])
     tensor_dict = tensor_smith(bbox3d)
     assert tensor_dict["classes"].flatten().tolist() == [1]
     np.testing.assert_almost_equal(
