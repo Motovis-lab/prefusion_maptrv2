@@ -204,7 +204,10 @@ test_dataset = dict(
     # info_path='../MV4D-PARKING/N5_data/2025_02_18_18-16-04_B1_B2.pkl',
     # info_path='../MV4D-PARKING/N5_data/2025_02_24_10-30-28.pkl',
     # info_path='../MV4D-PARKING/N5_data/3_yangguangtiandi.pkl',
-    info_path='../MV4D-PARKING/N5_data/2_hengshengwanpeng.pkl',
+    # info_path='../MV4D-PARKING/N5_data/2_hengshengwanpeng.pkl',
+    # info_path='../MV4D-PARKING/N5_data/0_changtai.pkl',
+    # info_path='../MV4D-PARKING/N5_data/test_n5.pkl',
+    info_path='../MV4D-PARKING/N5_data/PARKING-130.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -384,7 +387,11 @@ model = dict(
 # work_dir = "./work_dirs/n5_dumps_20250225"
 # work_dir = "./work_dirs/n5_dumps_20250226"
 # work_dir = "./work_dirs/n5_dumps_20250305"
-work_dir = "./work_dirs/n5_dumps_20250305_1"
+# work_dir = "./work_dirs/n5_dumps_20250305_1"
+# work_dir = "./work_dirs/n5_dumps_20250318"
+# work_dir = "./work_dirs/n5_dumps_yangguangtiandi_0318"
+# work_dir = "./work_dirs/n5_dumps_20250321"
+work_dir = "./work_dirs/n5_dumps_20250401_PARKING-130"
 
 ## log_processor
 log_processor = dict(type='GroupAwareLogProcessor')
@@ -412,6 +419,7 @@ env_cfg = dict(
 
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
 # load_from = "./work_dirs/collected_models/apa_nearest_scaled_relu6_epoch_43.pth"
-load_from = "./work_dirs/collected_models/apa_nearest_epoch_50.pth"
+# load_from = "./work_dirs/collected_models/apa_nearest_epoch_50.pth"
+load_from = "./work_dirs/collected_models/cbgs_ped_epoch_28.pth"
 
 # resume = False

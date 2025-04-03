@@ -52,15 +52,39 @@ def prepare_calibration(scene_root: Path):
     return calibration
 
 
+def prepare_virtual_calibration(scene_root: Path):
+    extr_motovis, _ = load_calpara(Path(scene_root) / 'calpara.txt')
+    calibration = {}
+    for cam_id in extr_motovis:
+        _, t_motovis = get_extrinsic_from_calpara(extr_motovis[cam_id])
+        if cam_id.lower() == 'front':
+            R_motovis_c = Rotation.from_euler('xyz', (-120, 0, 0), degrees=True).as_matrix()
+        if cam_id.lower() == 'left':
+            R_motovis_c = Rotation.from_euler('xyz', (-135, 0, 90), degrees=True).as_matrix()
+        if cam_id.lower() == 'right':
+            R_motovis_c = Rotation.from_euler('xyz', (-135, 0, -90), degrees=True).as_matrix()
+        if cam_id.lower() == 'rear':
+            R_motovis_c = Rotation.from_euler('xyz', (-120, 0, 180), degrees=True).as_matrix()
+        R_ego_c = R_ego_motovis @ R_motovis_c
+        t_ego = t_motovis @ R_ego_motovis.T
+        calibration[cam_id.lower()] = {
+            'extrinsic': (R_ego_c, t_ego),
+            'intrinsic': [319.5, 191.5, 160, 160, 0.1, 0, 0, 0],
+            'camera_type': 'FisheyeCamera'
+        }
+    return calibration
+
+
 def prepare_camera_mask(ego_mask_path: Path):
     cameras = ['front', 'left', 'right', 'rear']
     camera_mask_dict = {}
     for cam_id in cameras:
-        mask_json = json.load(open(ego_mask_path / f'{cam_id}_ego_mask.json'))
-        mask = np.ones((mask_json['imageHeight'], mask_json['imageWidth']))
-        mask = cv2.fillPoly(mask, [np.round(mask_json['shapes'][0]['points']).astype(np.int32)], 0)
         mask_path = ego_mask_path / f'{cam_id}_ego_mask.png' 
-        plt.imsave(mask_path, mask)
+        if not mask_path.exists():
+            mask_json = json.load(open(ego_mask_path / f'{cam_id}_ego_mask.json'))
+            mask = np.ones((mask_json['imageHeight'], mask_json['imageWidth']))
+            mask = cv2.fillPoly(mask, [np.round(mask_json['shapes'][0]['points']).astype(np.int32)], 0)
+            plt.imsave(mask_path, mask)
         camera_mask_dict[cam_id] = str(mask_path.relative_to(ego_mask_path.parent))
     return camera_mask_dict
 
@@ -88,20 +112,32 @@ def prepare_frame_info(scene_root: Path):
     return frame_info
 
 
-def prepare_scene(scene_root):
-    return {scene_root.name: {
-        "scene_info": {
-            "calibration": prepare_calibration(scene_root),
-            "camera_mask": prepare_camera_mask(scene_root.parent / 'ego_mask'),
-        },
-        "frame_info": prepare_frame_info(scene_root),
-    }}
+def prepare_scene(scene_root, virtual_camera=False):
+    if virtual_camera:
+        return {scene_root.name: {
+            "scene_info": {
+                "calibration": prepare_virtual_calibration(scene_root),
+                "camera_mask": prepare_camera_mask(scene_root.parent / 'vcamera_ego_mask'),
+            },
+            "frame_info": prepare_frame_info(scene_root),
+        }}
+        
+    else:
+        return {scene_root.name: {
+            "scene_info": {
+                "calibration": prepare_calibration(scene_root),
+                "camera_mask": prepare_camera_mask(scene_root.parent / 'ego_mask'),
+            },
+            "frame_info": prepare_frame_info(scene_root),
+        }}
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--scene-root", type=Path, required=True)
+    parser.add_argument("scene_root", type=Path)
+    parser.add_argument("virtual_camera", type=bool, default=False)
     args = parser.parse_args()
+    print(args)
     scene_root = Path(args.scene_root)
-    scene_info = prepare_scene(scene_root)
+    scene_info = prepare_scene(scene_root, args.virtual_camera)
     write_pickle(scene_info, scene_root.parent / f"{scene_root.name}.pkl")

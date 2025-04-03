@@ -311,7 +311,7 @@ class SequentialSceneFrameGroupSampler(GroupSampler):
 
 
 @GROUP_SAMPLERS.register_module()
-class   ClassBalancedGroupSampler(GroupSampler):
+class ClassBalancedGroupSampler(GroupSampler):
     SUPPORTED_LOADERS = {
         Bbox3D.__name__: Bbox3DLoader,
         Polyline3D.__name__: Polyline3DLoader,
