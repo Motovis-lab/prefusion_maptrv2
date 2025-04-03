@@ -56,8 +56,8 @@ from mtv4d.annos_4d.helper import (  # type: ignore
 )
 
 from mtv4d.annos_4d.misc import read_ego_paths  # type: ignore
-from scripts.generate_4d_frame_clean import generate_DS4d_from_4dMapJson, solve_ds_occlusion_sub_id, \
-    generate_4d_frame_json_data, read_ts_json  # type: ignore
+# from scripts.generate_4d_frame_clean import generate_DS4d_from_4dMapJson, solve_ds_occlusion_sub_id, \
+#     generate_4d_frame_json_data, read_ts_json  # type: ignore
 
 align_real_v = {"camera8": "VCAMERA_FISHEYE_FRONT",
                 "camera5": "VCAMERA_FISHEYE_LEFT",
@@ -72,41 +72,6 @@ parm_cameras_v = {
     "VCAMERA_FISHEYE_BACK": (-120, 0, 90)
 }
 
-
-def generate_labels_scene_from_4dMapjson(scene_root, Twes):
-    (
-        dn_boxes_vis_dict_ts2id,
-        dn_boxes_vis_dict_id2ts,
-        map_boxes_vis_dict_ts2id,
-        map_boxes_vis_dict_id2ts,
-        map_polylines_vis_dict_ts2id,
-        map_polylines_vis_dict_id2ts,
-    ) = generate_DS4d_from_4dMapJson(op.join(scene_root, "4d_anno_infos/annos.json"), Twes)  # load进来转成DS4D
-    print('generate finish')
-    (
-        dn_boxes_vis_dict_ts2id,
-        dn_boxes_vis_dict_id2ts,
-        map_boxes_vis_dict_ts2id,
-        map_boxes_vis_dict_id2ts,
-        map_polylines_vis_dict_ts2id,
-        map_polylines_vis_dict_id2ts,
-    ) = solve_ds_occlusion_sub_id(
-        dn_boxes_vis_dict_ts2id,
-        dn_boxes_vis_dict_id2ts,
-        map_boxes_vis_dict_ts2id,
-        map_boxes_vis_dict_id2ts,
-        map_polylines_vis_dict_ts2id,
-        map_polylines_vis_dict_id2ts,
-    )
-
-    # generate frame info txt
-    output_json_frame_dlist = generate_4d_frame_json_data(dn_boxes_vis_dict_ts2id, map_boxes_vis_dict_ts2id,
-                                                          map_polylines_vis_dict_ts2id)
-    # for ts, frames_labels in tqdm(output_json_frame_dlist.items(), desc='generating frame json'):
-    #     write_json_from_list(
-    #         frames_labels, op.join(scene_root, f"4d_anno_infos/4d_anno_infos_frame/frames_labels_all/{int(ts)}.json"), format_float=True, indent=4
-    #     )
-    return output_json_frame_dlist
 
 
 def convert_virtual_camera(src_camear_root, save_img_root, save_mask_root, real_cam_model, v_cam_paramter, calib,
