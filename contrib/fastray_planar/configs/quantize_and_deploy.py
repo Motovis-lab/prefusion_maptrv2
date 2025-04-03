@@ -149,13 +149,6 @@ dictionary_dict = dict(
 
 ## camera configs for model inputs
 
-# fisheye_camera_mapping = dict(
-#     VCAMERA_FISHEYE_FRONT='VCAMERA_FISHEYE_FRONT',
-#     VCAMERA_FISHEYE_LEFT='VCAMERA_FISHEYE_LEFT',
-#     VCAMERA_FISHEYE_BACK='VCAMERA_FISHEYE_BACK',
-#     VCAMERA_FISHEYE_RIGHT='VCAMERA_FISHEYE_RIGHT' 
-# )
-
 fisheye_camera_mapping = dict(
     VCAMERA_FISHEYE_FRONT='camera8',
     VCAMERA_FISHEYE_LEFT='camera5',
@@ -205,10 +198,8 @@ transformables=dict(
 test_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    # data_root='/data/datasets/MV4D_12V3L',
-    # info_path='/data/datasets/MV4D_12V3L/mv_4d_infos_20231029_195612.pkl',
-    data_root='../MV4D-PARKING',
-    info_path='../MV4D-PARKING/mv_4d_infos_20231031_135230.pkl',
+    data_root='../MV4D-PARKING/4d_val_data',
+    info_path='../MV4D-PARKING/4d_val_data/quant_calib.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -377,10 +368,7 @@ model = dict(
     debug_mode=False
 )
 
-# work_dir = "./work_dirs/deploy_and_debug_single_frame_park_apa_scaled_0211"
-# work_dir = "./work_dirs/0_deploy_and_quantize_single_frame_park_apa_scaled_relu6_0224_v11"
-# work_dir = "./work_dirs/0_deploy_and_quantize_single_frame_park_apa_scaled_relu6_0227_fixed"
-work_dir = "./work_dirs/0_deploy_and_quantize_0310"
+work_dir = "./work_dirs/0_quantize_and_deploy_0320"
 ## log_processor
 log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
@@ -406,7 +394,6 @@ env_cfg = dict(
 )
 
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
-# load_from = "./work_dirs/collected_models/apa_nearest_scaled_relu6_epoch_43.pth"
-load_from = "./work_dirs/collected_models/apa_nearest_scaled_relu6_epoch_12.pth"
+load_from = "./work_dirs/collected_models/cbgs_ped_epoch_28.pth"
 
 # resume = False

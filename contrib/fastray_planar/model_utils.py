@@ -768,7 +768,93 @@ def save_outputs(pred_dict, batched_input_dict):
                 
 
 
-def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictionary_dict, save_dir, save_polyline=False):
+def save_gt_outputs(batched_input_dict, gt_dict, tensor_smith_dict, save_dir, 
+                      save_polyline=False):
+    scene_frame_id = batched_input_dict['index_infos'][0].scene_frame_id
+    gt_dict = batched_input_dict['annotations']
+    transformables = batched_input_dict['transformables'][0]
+    save_dir = Path(save_dir)
+
+    # get gts
+    result_dict = {
+        'gt': dict(bboxes=[], slots=[]), 
+    }
+    if save_polyline:
+        result_dict['gt']['polylines'] = []    
+    
+    for branch in gt_dict:
+        gt_dict_branch = gt_dict[branch]
+        # extract batch_0
+        gt_dict_branch_0 = {**gt_dict_branch}
+        for key in gt_dict_branch_0:
+            if key in ['cen', 'seg']:
+                gt_dict_branch_0[key] = gt_dict_branch[key][0].detach().cpu().float()
+            else:
+                gt_dict_branch_0[key] = gt_dict_branch[key][0].detach().cpu().float()
+        tensor_smith = TENSOR_SMITHS.build(tensor_smith_dict[branch])
+        voxel_range = tensor_smith.voxel_range
+        match tensor_smith:
+            case PlanarBbox3D() | PlanarRectangularCuboid() | PlanarSquarePillar() | PlanarOrientedCylinder3D() | PlanarCylinder3D():
+                # bboxes
+                for element in transformables[branch].elements:
+                    for key in element:
+                        if type(element[key]) == np.ndarray:
+                            element[key] = element[key].reshape(-1).tolist()
+                    zrange = voxel_range[0]
+                    xrange = voxel_range[1]
+                    yrange = voxel_range[2]
+                    in_x = element['translation'][0] < max(xrange) and element['translation'][0] > min(xrange)
+                    in_y = element['translation'][1] < max(yrange) and element['translation'][1] > min(yrange)
+                    in_z = element['translation'][2] < max(zrange) and element['translation'][2] > min(zrange)
+                    if in_x and in_y and in_z:
+                        result_dict['gt']['bboxes'].append(element)
+            case PlanarParkingSlot3D():
+                results = tensor_smith.reverse(gt_dict_branch_0)
+                for slot in results:
+                    result_dict['gt']['slots'].append(slot.reshape(-1).tolist())
+            case PlanarOccSdfBev():
+                freespace = gt_dict_branch_0['seg'][0].detach().cpu().numpy()
+                save_png = save_dir / 'freespace' / f'{scene_frame_id}_gt.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, freespace)
+
+                occ_edge = gt_dict_branch_0['seg'][1].detach().cpu().numpy()
+                save_png = save_dir / 'occ_edge' / f'{scene_frame_id}_gt.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, occ_edge)
+
+                sdf = gt_dict_branch_0['sdf'][0].detach().cpu().numpy()
+                save_png = save_dir / 'sdf' / f'{scene_frame_id}_gt.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, sdf)
+
+                height = gt_dict_branch_0['height'][0].detach().cpu().numpy()
+                save_png = save_dir / 'height' / f'{scene_frame_id}_gt.png'
+                save_png.parent.mkdir(parents=True, exist_ok=True)
+                plt.imsave(save_png, height)
+
+                mat_path = save_dir / 'mat' / f'{scene_frame_id}_gt.mat'
+                mat_path.parent.mkdir(parents=True, exist_ok=True)
+                savemat(mat_path, {'freespace': freespace,
+                                   'occ_edge': occ_edge,
+                                   'sdf': sdf,
+                                   'height': height})
+            case PlanarPolyline3D():
+                if save_polyline:
+                    results = tensor_smith.reverse(gt_dict_branch_0)
+                    for polyline in results:
+                        result_dict['gt']['polylines'].append(polyline[:, :3].reshape(-1).tolist())
+    
+    save_path = save_dir / 'dets' / f'{scene_frame_id}_gt.json'
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(save_path, 'w') as fw:
+        json.dump(result_dict, fw, indent=4)
+    
+    return True                
+
+
+def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictionary_dict, save_dir, 
+                      save_polyline=False, save_img_mat=False):
     scene_frame_id = batched_input_dict['index_infos'][0].scene_frame_id
     camera_tensors_dict = batched_input_dict['camera_tensors']
 
@@ -781,10 +867,9 @@ def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictiona
         save_jpg = save_dir / 'cameras' / cam_id / f'{scene_frame_id}.jpg'
         save_jpg.parent.mkdir(parents=True, exist_ok=True)
         plt.imsave(save_jpg, img)
-        save_mat = save_dir / 'cameras' / cam_id / f'{scene_frame_id}.mat'
-        savemat(save_mat, {'img': img})
-        # save_bmp = save_dir / 'cameras' / cam_id / f'{scene_frame_id}.bmp'
-        # plt.imsave(save_bmp, img)
+        if save_img_mat:
+            save_mat = save_dir / 'cameras' / cam_id / f'{scene_frame_id}.mat'
+            savemat(save_mat, {'img': img})
 
     # get preds
     result_dict = {
@@ -805,10 +890,15 @@ def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictiona
         match tensor_smith:
             case PlanarBbox3D() | PlanarRectangularCuboid() | PlanarSquarePillar() | PlanarOrientedCylinder3D():
                 results = tensor_smith.reverse(pred_dict_branch_0)
+                # if branch in ['bbox_3d_oriented_cylinder']:
+                #     plt.imshow(pred_dict_branch_0['seg'][0])
+                #     plt.show()
+                #     plt.imshow(pred_dict_branch_0['cen'][0])
+                #     plt.show()
                 class_name_list = dictionary_dict[branch]['classes']
                 num_class_channels = len(class_name_list)
                 for element in results:
-                    if element['score'] < 0.7:
+                    if element['score'] < 0.3:
                         continue
                     element['class'] = class_name_list[np.argmax(element['confs'][1:num_class_channels + 1])]
                     for key in element:
@@ -823,7 +913,7 @@ def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictiona
                 class_name_list = dictionary_dict[branch]['classes']
                 num_class_channels = len(class_name_list)
                 for element in results:
-                    if element['score'] < 0.7:
+                    if element['score'] < 0.3:
                         continue
                     element['class'] = class_name_list[np.argmax(element['confs'][1:num_class_channels + 1])]
                     for key in element:
@@ -838,12 +928,12 @@ def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictiona
                 for slot in results:
                     result_dict['pred']['slots'].append(slot.reshape(-1).tolist())
             case PlanarOccSdfBev():
-                freespace = pred_dict_branch_0['seg'][0].sigmoid().detach().cpu().numpy()
+                freespace = pred_dict_branch_0['seg'][0].detach().cpu().numpy()
                 save_png = save_dir / 'freespace' / f'{scene_frame_id}.png'
                 save_png.parent.mkdir(parents=True, exist_ok=True)
                 plt.imsave(save_png, freespace)
 
-                occ_edge = pred_dict_branch_0['seg'][1].sigmoid().detach().cpu().numpy()
+                occ_edge = pred_dict_branch_0['seg'][1].detach().cpu().numpy()
                 save_png = save_dir / 'occ_edge' / f'{scene_frame_id}.png'
                 save_png.parent.mkdir(parents=True, exist_ok=True)
                 plt.imsave(save_png, occ_edge)

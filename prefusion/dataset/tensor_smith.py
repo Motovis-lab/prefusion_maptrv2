@@ -1316,7 +1316,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
             cylinder_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
-                'score': mean_classes[0] * area_score,
+                'score': mean_classes[0],
                 'radius': float(mean_size[0]),
                 'height': float(mean_size[1]),
                 'zvec': mean_unit_zvec,
@@ -1620,7 +1620,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
             cylinder_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
-                'score': mean_classes[0] * area_score,
+                'score': mean_classes[0],
                 'size': mean_size[[0, 0, 1]] * [2, 2, 1],
                 'rotation': mean_rmat,
                 'translation': mean_center
@@ -2432,6 +2432,12 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
             return False
         if np.abs(np.cross(vec_30, vec_01)[2]) < 1e-3:
             return False
+        # check z range
+        if np.any(slot_points_3d[:, 2] < self.voxel_range[0][0]):
+            return False
+        if np.any(slot_points_3d[:, 2] > self.voxel_range[0][1]):
+            return False
+
         return True
 
 

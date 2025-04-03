@@ -23,5 +23,5 @@ jobs:
           docker run --rm \
             -v "$(pwd):/workspace" \
             -w /workspace \
-            brianlan/prefusion:ci-v10 \
+            brianlan/prefusion:ci-v11 \
             python -m pytest tests --junitxml=report.xml --cov=./ --cov-report=xml

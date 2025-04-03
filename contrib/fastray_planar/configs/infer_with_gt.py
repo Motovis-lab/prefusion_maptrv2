@@ -184,7 +184,8 @@ tensor_smith_dict = dict(
     bbox_3d_square=dict(type='PlanarSquarePillar', voxel_shape=voxel_shape, voxel_range=voxel_range),
     bbox_3d_cylinder=dict(type='PlanarCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range),
     bbox_3d_oriented_cylinder=dict(type='PlanarOrientedCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range),
-    polyline_3d=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range),
+    polyline_3d=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range,
+        reverse_group_dist_thresh=5, reverse_link_max_adist=15),
     polygon_3d=dict(type='PlanarPolygon3D', voxel_shape=voxel_shape, voxel_range=voxel_range),
     parkingslot_3d=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range),
     occ_sdf_bev=dict(type='PlanarOccSdfBev', voxel_shape=voxel_shape, voxel_range=voxel_range)
@@ -198,23 +199,73 @@ transformables=dict(
     camera_images=dict(
         type='CameraImageSet', 
         loader=dict(type='CameraImageSetLoader', camera_mapping=fisheye_camera_mapping),
-        tensor_smith=tensor_smith_dict['camera_images'])
+        tensor_smith=dict(type='CameraImageTensor')),
+    bbox_3d_heading=dict(
+        type='Bbox3D', 
+        loader=dict(type='AdvancedBbox3DLoader', 
+                    class_mapping=mapping_heading_objects['class_mapping'],
+                    attr_mapping=mapping_heading_objects['attr_mapping']),
+        tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+    bbox_3d_plane_heading=dict(
+        type='Bbox3D', 
+        loader=dict(type='AdvancedBbox3DLoader', 
+                    class_mapping=mapping_plane_heading_objects['class_mapping'],
+                    attr_mapping=mapping_plane_heading_objects['attr_mapping']),
+        tensor_smith=dict(type='PlanarBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+    bbox_3d_no_heading=dict(
+        type='Bbox3D', 
+        loader=dict(type='AdvancedBbox3DLoader', 
+                    class_mapping=mapping_no_heading_objects['class_mapping'],
+                    axis_rearrange_method='longer_edge_as_x'),
+        tensor_smith=dict(type='PlanarRectangularCuboid', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+    bbox_3d_square=dict(
+        type='Bbox3D', 
+        loader=dict(type='AdvancedBbox3DLoader', 
+                    class_mapping=mapping_square_objects['class_mapping'],
+                    attr_mapping=mapping_square_objects['attr_mapping']),
+        tensor_smith=dict(type='PlanarSquarePillar', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+    bbox_3d_cylinder=dict(
+        type='Bbox3D', 
+        loader=dict(type='AdvancedBbox3DLoader', class_mapping=mapping_cylinder_objects['class_mapping']),
+        tensor_smith=dict(type='PlanarCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+    bbox_3d_oriented_cylinder=dict(
+        type='Bbox3D', 
+        loader=dict(type='AdvancedBbox3DLoader', class_mapping=mapping_oriented_cylinder_objects['class_mapping']),
+        tensor_smith=dict(type='PlanarOrientedCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+    polyline_3d=dict(
+        type='Polyline3D', dictionary=dictionary_polylines,
+        tensor_smith=dict(type='PlanarPolyline3D', 
+                          voxel_shape=voxel_shape, 
+                          voxel_range=voxel_range,
+                          reverse_group_dist_thresh=5,
+                          reverse_link_max_adist=15)),
+    polygon_3d=dict(
+        type='Polygon3D', dictionary=dictionary_polygons,
+        tensor_smith=dict(type='PlanarPolygon3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+    parkingslot_3d=dict(
+        type='ParkingSlot3D', dictionary=dict(classes=['class.parking.parking_slot']),
+        tensor_smith=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range)),
+    occ_sdf_bev=dict(
+        type='OccSdfBev',
+        loader=dict(type='OccSdfBevLoader', src_voxel_range=([-1, 3], [-15, 15], [15, -15])),
+        tensor_smith=dict(type='PlanarOccSdfBev', voxel_shape=voxel_shape, voxel_range=voxel_range)),
 )
+
 
 # datasets
 test_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    # data_root='/data/datasets/MV4D_12V3L',
-    # info_path='/data/datasets/MV4D_12V3L/mv_4d_infos_20231029_195612.pkl',
-    data_root='../MV4D-PARKING',
-    info_path='../MV4D-PARKING/mv_4d_infos_20231031_135230.pkl',
+    # data_root='../MV4D-PARKING',
+    # info_path='../MV4D-PARKING/mv_4d_infos_20230901_152553.pkl',
+    # info_path='../MV4D-PARKING/ped_debug.pkl',
+    data_root='../MV4D-PARKING/4d_val_data',
+    info_path='../MV4D-PARKING/4d_val_data/val_indice.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
         camera_feature_configs=camera_feature_configs,
-        bilinear_interpolation=False,
-        debug_mode=False),
+        debug_mode=True),
     transformables=transformables,
     transforms=transforms,
     group_sampler=dict(type="SequentialSceneFrameGroupSampler",
@@ -225,8 +276,7 @@ test_dataset = dict(
 ## dataloader configs
 
 test_dataloader = dict(
-    # sampler=dict(type='DefaultSampler', shuffle=False),
-    sampler=dict(type='DefaultSampler', shuffle=True),
+    sampler=dict(type='DefaultSampler', shuffle=False),
     num_workers=0,
     collate_fn=dict(type="collate_dict"),
     dataset=test_dataset,
@@ -244,12 +294,13 @@ backbone = dict(type='VoVNetSlimFPN', out_channels=camera_feat_channels, relu6=r
 spatial_transform = dict(
     type='FastRaySpatialTransform',
     voxel_shape=voxel_shape,
+    # fusion_mode='bilinear_weighted',
     fusion_mode='weighted',
     bev_mode=bev_mode,
     reduce_channels=True,
     in_channels=camera_feat_channels * voxel_shape[0],
     out_channels=128)
-## voxel encoder
+# voxel encoder
 voxel_encoder = dict(
     type='VoxelEncoderFPN', 
     in_channels=128, 
@@ -285,6 +336,7 @@ bbox_3d_heading_reg_scales = [
     0.01, 0.01, 0.01,   # abs_roll_angle
     0.1, 0.1, 0.1,  # velo
 ]
+
 bbox_3d_plane_heading_reg_scales = [
     0.25, 0.25,  # center_xy
     0.05,   # center_z
@@ -294,6 +346,7 @@ bbox_3d_plane_heading_reg_scales = [
     0.01, 0.01, 0.01,   # abs_roll_angle
     0.1, 0.1, 0.1,  # velo
 ]
+
 bbox_3d_no_heading_reg_scales = [
     0.25, 0.25,  # center_xy
     0.05,   # center_z
@@ -301,6 +354,7 @@ bbox_3d_no_heading_reg_scales = [
     0.01, 0.01, 0.01, 0.01, 0.01,   # abs_xvec
     0.01, 0.01, 0.01,   # abs_roll_angle
 ]
+
 bbox_3d_square_reg_scales = [
     0.25, 0.25,  # center_xy
     0.05,   # center_z
@@ -308,12 +362,14 @@ bbox_3d_square_reg_scales = [
     0.01, 0.01, 0.01,   # unit_zvec
     0.01, 0.01,   # yaw_angle
 ]
+
 bbox_3d_cylinder_reg_scales = [
     0.25, 0.25,  # center_xy
     0.05,   # center_z
     0.1, 0.1,  # size
     0.01, 0.01, 0.01,   # unit_zvec
 ]
+
 bbox_3d_oriented_cylinder_reg_scales = [
     0.25, 0.25,  # center_xy
     0.05,   # center_z
@@ -322,12 +378,14 @@ bbox_3d_oriented_cylinder_reg_scales = [
     0.01, 0.01,   # yaw_angle
     0.1, 0.1, 0.1,  # velo
 ]
+
 bbox_3d_reg_scales = bbox_3d_heading_reg_scales + \
                      bbox_3d_plane_heading_reg_scales + \
                      bbox_3d_no_heading_reg_scales + \
                      bbox_3d_square_reg_scales + \
                      bbox_3d_cylinder_reg_scales + \
                      bbox_3d_oriented_cylinder_reg_scales
+
 assert len(bbox_3d_reg_scales) == all_bbox_3d_reg_channels, f"len(bbox_3d_reg_scales)={len(bbox_3d_reg_scales)} != all_bbox_3d_reg_channels={all_bbox_3d_reg_channels}"
 
 parkingslot_3d_reg_scales = [
@@ -336,6 +394,8 @@ parkingslot_3d_reg_scales = [
     0.5, 0.5, 0.5, 0.5,  # vec
     0.05,  # height
 ]
+
+
 
 heads = dict(
     bbox_3d=dict(type='PlanarHeadSimple',
@@ -377,19 +437,18 @@ model = dict(
     debug_mode=False
 )
 
-# work_dir = "./work_dirs/deploy_and_debug_single_frame_park_apa_scaled_0211"
-# work_dir = "./work_dirs/0_deploy_and_quantize_single_frame_park_apa_scaled_relu6_0224_v11"
-# work_dir = "./work_dirs/0_deploy_and_quantize_single_frame_park_apa_scaled_relu6_0227_fixed"
-work_dir = "./work_dirs/0_deploy_and_quantize_0310"
+# work_dir = "./work_dirs/borui_cbgs_dumps_20250310"
+# work_dir = "./work_dirs/borui_cbgs_dumps_20250315_3"
+work_dir = "./work_dirs/borui_cbgs_val_dumps_20250320"
+
 ## log_processor
 log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 custom_hooks = [
-    dict(type="DeployAndDebugHookAPA", 
+    dict(type="DumpPlanarGtAndPredResultsHookAPA", 
          tensor_smith_dict=tensor_smith_dict, 
          dictionary_dict=dictionary_dict,
-         save_dir=work_dir,
-         HWC=True),
+         save_dir=work_dir),
 ]
 
 
@@ -406,7 +465,9 @@ env_cfg = dict(
 )
 
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
-# load_from = "./work_dirs/collected_models/apa_nearest_scaled_relu6_epoch_43.pth"
-load_from = "./work_dirs/collected_models/apa_nearest_scaled_relu6_epoch_12.pth"
-
+# load_from = "./work_dirs/collected_models/single_frame_epoch_14.pth"
+# load_from = "./work_dirs/collected_models/single_frame_apa_scale_epoch_100.pth"
+# load_from = "./work_dirs/collected_models/apa_nearest_scaled_relu6_epoch_43.pth
+# load_from = "./work_dirs/collected_models/cbgs_epoch_50.pth"
+load_from = "./work_dirs/collected_models/cbgs_ped_epoch_28.pth"
 # resume = False
