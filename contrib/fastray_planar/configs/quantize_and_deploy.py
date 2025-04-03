@@ -150,10 +150,10 @@ dictionary_dict = dict(
 ## camera configs for model inputs
 
 fisheye_camera_mapping = dict(
-    VCAMERA_FISHEYE_FRONT='front',
-    VCAMERA_FISHEYE_LEFT='left',
-    VCAMERA_FISHEYE_BACK='rear',
-    VCAMERA_FISHEYE_RIGHT='right' 
+    VCAMERA_FISHEYE_FRONT='camera8',
+    VCAMERA_FISHEYE_LEFT='camera5',
+    VCAMERA_FISHEYE_BACK='camera1',
+    VCAMERA_FISHEYE_RIGHT='camera11' 
 )
 
 fisheye_resolution = (640, 384)
@@ -177,8 +177,7 @@ tensor_smith_dict = dict(
     bbox_3d_square=dict(type='PlanarSquarePillar', voxel_shape=voxel_shape, voxel_range=voxel_range),
     bbox_3d_cylinder=dict(type='PlanarCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range),
     bbox_3d_oriented_cylinder=dict(type='PlanarOrientedCylinder3D', voxel_shape=voxel_shape, voxel_range=voxel_range),
-    polyline_3d=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range,
-        reverse_group_dist_thresh=5, reverse_link_max_adist=15),
+    polyline_3d=dict(type='PlanarPolyline3D', voxel_shape=voxel_shape, voxel_range=voxel_range),
     polygon_3d=dict(type='PlanarPolygon3D', voxel_shape=voxel_shape, voxel_range=voxel_range),
     parkingslot_3d=dict(type='PlanarParkingSlot3D', voxel_shape=voxel_shape, voxel_range=voxel_range),
     occ_sdf_bev=dict(type='PlanarOccSdfBev', voxel_shape=voxel_shape, voxel_range=voxel_range)
@@ -198,13 +197,9 @@ transformables=dict(
 # datasets
 test_dataset = dict(
     type='GroupBatchDataset',
-    name="n5_demo",
-    data_root='../MV4D-PARKING/N5_data',
-    # info_path='../MV4D-PARKING/N5_data/2025_02_18_18-00-36_B1.pkl',
-    # info_path='../MV4D-PARKING/N5_data/2025_02_18_18-16-04_B1_B2.pkl',
-    # info_path='../MV4D-PARKING/N5_data/2025_02_24_10-30-28.pkl',
-    info_path='../MV4D-PARKING/N5_data/n5_debug.pkl',
-    # info_path='../MV4D-PARKING/N5_data/2_hengshengwanpeng.pkl',
+    name="demo_parking",
+    data_root='../MV4D-PARKING/4d_val_data',
+    info_path='../MV4D-PARKING/4d_val_data/quant_calib.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -245,7 +240,7 @@ spatial_transform = dict(
     reduce_channels=True,
     in_channels=camera_feat_channels * voxel_shape[0],
     out_channels=128)
-# voxel encoder
+## voxel encoder
 voxel_encoder = dict(
     type='VoxelEncoderFPN', 
     in_channels=128, 
@@ -281,7 +276,6 @@ bbox_3d_heading_reg_scales = [
     0.01, 0.01, 0.01,   # abs_roll_angle
     0.1, 0.1, 0.1,  # velo
 ]
-
 bbox_3d_plane_heading_reg_scales = [
     0.25, 0.25,  # center_xy
     0.05,   # center_z
@@ -291,7 +285,6 @@ bbox_3d_plane_heading_reg_scales = [
     0.01, 0.01, 0.01,   # abs_roll_angle
     0.1, 0.1, 0.1,  # velo
 ]
-
 bbox_3d_no_heading_reg_scales = [
     0.25, 0.25,  # center_xy
     0.05,   # center_z
@@ -299,7 +292,6 @@ bbox_3d_no_heading_reg_scales = [
     0.01, 0.01, 0.01, 0.01, 0.01,   # abs_xvec
     0.01, 0.01, 0.01,   # abs_roll_angle
 ]
-
 bbox_3d_square_reg_scales = [
     0.25, 0.25,  # center_xy
     0.05,   # center_z
@@ -307,14 +299,12 @@ bbox_3d_square_reg_scales = [
     0.01, 0.01, 0.01,   # unit_zvec
     0.01, 0.01,   # yaw_angle
 ]
-
 bbox_3d_cylinder_reg_scales = [
     0.25, 0.25,  # center_xy
     0.05,   # center_z
     0.1, 0.1,  # size
     0.01, 0.01, 0.01,   # unit_zvec
 ]
-
 bbox_3d_oriented_cylinder_reg_scales = [
     0.25, 0.25,  # center_xy
     0.05,   # center_z
@@ -323,14 +313,12 @@ bbox_3d_oriented_cylinder_reg_scales = [
     0.01, 0.01,   # yaw_angle
     0.1, 0.1, 0.1,  # velo
 ]
-
 bbox_3d_reg_scales = bbox_3d_heading_reg_scales + \
                      bbox_3d_plane_heading_reg_scales + \
                      bbox_3d_no_heading_reg_scales + \
                      bbox_3d_square_reg_scales + \
                      bbox_3d_cylinder_reg_scales + \
                      bbox_3d_oriented_cylinder_reg_scales
-
 assert len(bbox_3d_reg_scales) == all_bbox_3d_reg_channels, f"len(bbox_3d_reg_scales)={len(bbox_3d_reg_scales)} != all_bbox_3d_reg_channels={all_bbox_3d_reg_channels}"
 
 parkingslot_3d_reg_scales = [
@@ -339,7 +327,6 @@ parkingslot_3d_reg_scales = [
     0.5, 0.5, 0.5, 0.5,  # vec
     0.05,  # height
 ]
-
 
 heads = dict(
     bbox_3d=dict(type='PlanarHeadSimple',
@@ -381,15 +368,7 @@ model = dict(
     debug_mode=False
 )
 
-# work_dir = "./work_dirs/n5_dumps_20250220"
-# work_dir = "./work_dirs/n5_dumps_20250225"
-# work_dir = "./work_dirs/n5_dumps_20250226"
-# work_dir = "./work_dirs/n5_dumps_20250305"
-# work_dir = "./work_dirs/n5_dumps_20250305_1"
-# work_dir = "./work_dirs/n5_deploy_debug_dumps_20250306"
-# work_dir = "./work_dirs/n5_deploy_debug_dumps_20250306_quantize_1"
-work_dir = "./work_dirs/n5_deploy_quant_dumps_20250311"
-
+work_dir = "./work_dirs/0_quantize_and_deploy_0320"
 ## log_processor
 log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
@@ -400,13 +379,6 @@ custom_hooks = [
          save_dir=work_dir,
          HWC=True),
 ]
-# custom_hooks = [
-#     dict(type="DumpPlanarPredResultsHookAPA", 
-#          tensor_smith_dict=tensor_smith_dict, 
-#          dictionary_dict=dictionary_dict,
-#          save_polyline=True,
-#          save_dir=work_dir),
-# ]
 
 
 ## runner loop configs
@@ -422,10 +394,6 @@ env_cfg = dict(
 )
 
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
-# load_from = "./work_dirs/collected_models/apa_nearest_scaled_relu6_epoch_43.pth"
-# load_from = "./work_dirs/collected_models/apa_nearest_epoch_50.pth"
-# load_from = "./work_dirs/collected_models/cbgs_epoch_13.pth"
-# load_from = "./work_dirs/collected_models/cbgs_epoch_50.pth"
 load_from = "./work_dirs/collected_models/cbgs_ped_epoch_28.pth"
 
 # resume = False

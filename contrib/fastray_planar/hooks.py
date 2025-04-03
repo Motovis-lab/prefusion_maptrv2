@@ -386,7 +386,7 @@ class DeployAndDebugHookAPA(Hook):
         save_polyline=False,
         save_dir=None,
         HWC=False,
-        sigmoid_out=True
+        sigmoid_out=False
     ):
         super().__init__()
         self.tensor_smith_dict = tensor_smith_dict
@@ -433,13 +433,13 @@ class DeployAndDebugHookAPA(Hook):
         backbone_path = Path(self.save_dir) / f'phase_backbone{hwc_str}_v9.onnx'
         if not backbone_path.exists():
             if self.HWC:
-                model_backbone.hwc = True
+                model_backbone.hwc_out = True
             torch.onnx.export(model_backbone, camera_tensors_dict[cam_id], str(backbone_path), verbose=True,
                               input_names=['camera_img'], output_names=['camera_feats'], opset_version=9)
             torch.onnx.export(model_backbone, camera_tensors_dict[cam_id], str(backbone_path).replace('v9', 'v11'), verbose=True,
                               input_names=['camera_img'], output_names=['camera_feats'], opset_version=11)
             if self.HWC:
-                model_backbone.hwc = False
+                model_backbone.hwc_out = False
         
         savemat(str(feature_mat_dir / f'{scene_frame_id}_camera_tensors.mat'), data_batch['camera_tensors'])
         savemat(str(feature_mat_dir / f'{scene_frame_id}_camera_lookups.mat'), data_batch['camera_lookups'][0])
@@ -533,7 +533,7 @@ class DumpBevModel(nn.Module):
                  head_bbox_3d,
                  head_parkingslot_3d,
                  head_occ_sdf_bev,
-                 sigmoid_out=True):
+                 sigmoid_out=False):
         super().__init__()
         self.channel_reduction = channel_reduction
         self.voxel_encoder = voxel_encoder

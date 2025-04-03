@@ -890,10 +890,15 @@ def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictiona
         match tensor_smith:
             case PlanarBbox3D() | PlanarRectangularCuboid() | PlanarSquarePillar() | PlanarOrientedCylinder3D():
                 results = tensor_smith.reverse(pred_dict_branch_0)
+                # if branch in ['bbox_3d_oriented_cylinder']:
+                #     plt.imshow(pred_dict_branch_0['seg'][0])
+                #     plt.show()
+                #     plt.imshow(pred_dict_branch_0['cen'][0])
+                #     plt.show()
                 class_name_list = dictionary_dict[branch]['classes']
                 num_class_channels = len(class_name_list)
                 for element in results:
-                    if element['score'] < 0.7:
+                    if element['score'] < 0.3:
                         continue
                     element['class'] = class_name_list[np.argmax(element['confs'][1:num_class_channels + 1])]
                     for key in element:
@@ -908,7 +913,7 @@ def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictiona
                 class_name_list = dictionary_dict[branch]['classes']
                 num_class_channels = len(class_name_list)
                 for element in results:
-                    if element['score'] < 0.7:
+                    if element['score'] < 0.3:
                         continue
                     element['class'] = class_name_list[np.argmax(element['confs'][1:num_class_channels + 1])]
                     for key in element:

@@ -149,19 +149,19 @@ dictionary_dict = dict(
 
 ## camera configs for model inputs
 
-fisheye_camera_mapping = dict(
-    VCAMERA_FISHEYE_FRONT='VCAMERA_FISHEYE_FRONT',
-    VCAMERA_FISHEYE_LEFT='VCAMERA_FISHEYE_LEFT',
-    VCAMERA_FISHEYE_BACK='VCAMERA_FISHEYE_BACK',
-    VCAMERA_FISHEYE_RIGHT='VCAMERA_FISHEYE_RIGHT' 
-)
-
 # fisheye_camera_mapping = dict(
-#     VCAMERA_FISHEYE_FRONT='camera8',
-#     VCAMERA_FISHEYE_LEFT='camera5',
-#     VCAMERA_FISHEYE_BACK='camera1',
-#     VCAMERA_FISHEYE_RIGHT='camera11' 
+#     VCAMERA_FISHEYE_FRONT='VCAMERA_FISHEYE_FRONT',
+#     VCAMERA_FISHEYE_LEFT='VCAMERA_FISHEYE_LEFT',
+#     VCAMERA_FISHEYE_BACK='VCAMERA_FISHEYE_BACK',
+#     VCAMERA_FISHEYE_RIGHT='VCAMERA_FISHEYE_RIGHT' 
 # )
+
+fisheye_camera_mapping = dict(
+    VCAMERA_FISHEYE_FRONT='camera8',
+    VCAMERA_FISHEYE_LEFT='camera5',
+    VCAMERA_FISHEYE_BACK='camera1',
+    VCAMERA_FISHEYE_RIGHT='camera11' 
+)
 
 fisheye_resolution = (640, 384)
 
@@ -256,8 +256,11 @@ transformables=dict(
 test_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='../MV4D-PARKING',
-    info_path='../MV4D-PARKING/mv_4d_infos_20230901_152553.pkl',
+    # data_root='../MV4D-PARKING',
+    # info_path='../MV4D-PARKING/mv_4d_infos_20230901_152553.pkl',
+    # info_path='../MV4D-PARKING/ped_debug.pkl',
+    data_root='../MV4D-PARKING/4d_val_data',
+    info_path='../MV4D-PARKING/4d_val_data/val_indice.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -434,7 +437,9 @@ model = dict(
     debug_mode=False
 )
 
-work_dir = "./work_dirs/borui_cbgs_dumps_20250310"
+# work_dir = "./work_dirs/borui_cbgs_dumps_20250310"
+# work_dir = "./work_dirs/borui_cbgs_dumps_20250315_3"
+work_dir = "./work_dirs/borui_cbgs_val_dumps_20250320"
 
 ## log_processor
 log_processor = dict(type='GroupAwareLogProcessor')
@@ -463,5 +468,6 @@ env_cfg = dict(
 # load_from = "./work_dirs/collected_models/single_frame_epoch_14.pth"
 # load_from = "./work_dirs/collected_models/single_frame_apa_scale_epoch_100.pth"
 # load_from = "./work_dirs/collected_models/apa_nearest_scaled_relu6_epoch_43.pth
-load_from = "./work_dirs/collected_models/cbgs_epoch_50.pth"
+# load_from = "./work_dirs/collected_models/cbgs_epoch_50.pth"
+load_from = "./work_dirs/collected_models/cbgs_ped_epoch_28.pth"
 # resume = False
