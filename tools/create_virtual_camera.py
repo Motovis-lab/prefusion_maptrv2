@@ -21,6 +21,8 @@ def _render_virtual_image(
     real_cam_model,
     real_camera_calib,
     virtual_camera_type,
+    virtual_camera_flip,
+    virtual_camera_image_crop_params,
     virtual_im_save_path,
     virtual_mask_save_path,
     rotation_euler_angle,
@@ -47,6 +49,15 @@ def _render_virtual_image(
         intrinsic = (cx, cy, fx, fy, 0.1, 0, 0, 0)
         vcamera = FisheyeCamera((W, H), (R, t), intrinsic, fov=fov)
     dst_image, dst_mask = render_image(src_image, real_cam_model, vcamera)
+    if virtual_camera_image_crop_params:
+        x, y, w, h = virtual_camera_image_crop_params
+        dst_image = dst_image[y : y + h, x : x + w]
+        dst_mask = dst_mask[y : y + h, x : x + w]
+    if virtual_camera_flip:
+        # logger.debug(f"dst_image.shape={dst_image.shape},dst_image.type={type(dst_image)}")
+        # logger.debug(f"dst_mask.shape={dst_mask.shape},dst_mask.type={type(dst_mask)}")
+        dst_image = np.fliplr(dst_image)
+        dst_mask = np.fliplr(dst_mask)
     mmcv.imwrite(dst_image, virtual_im_save_path)
     mmcv.imwrite(dst_mask, virtual_mask_save_path)
 
@@ -82,7 +93,7 @@ def render_virtual_iamge(data_args):
     #     rotation_euler_angles,
     #     *virtual_camera_size,
     # ) = data_args
-    
+
     # return _render_virtual_image(
     #     real_im_path,
     #     real_cam_model,
@@ -105,15 +116,17 @@ def main(args):
             real_cam_model,
             calib["rig"][args.real_camera_id],
             args.virtual_camera_type,
+            args.virtual_camera_flip,
+            args.virtual_camera_image_crop_params,
             args.virtual_camera_image_save_dir / p.name,
             args.virtual_camera_mask_save_path,
             args.rotation_euler_angles,
             *args.virtual_camera_size,
         )
-        for p in real_image_paths
+        for i, p in enumerate(real_image_paths) if i < args.num_frames_to_process
     ]
     res = maybe_multiprocessing(
-        render_virtual_iamge, data_args, args.num_workers, use_tqdm=True, tqdm_desc="Rendering virtual images..."
+        render_virtual_iamge, data_args, args.num_workers, use_tqdm=True, tqdm_desc=f"Rendering virtual images {args.virtual_camera_id}"
     )
 
     v_camera_rmatrix, v_camera_t, v_camera_intrinsic, d_src_image, d_real_cam_model, d_vcamera, vcamera_fov = res[-1]
@@ -152,5 +165,8 @@ if __name__ == "__main__":
     parser.add_argument("--virtual-camera-image-save-dir", type=ensured_path, required=True)
     parser.add_argument("--virtual-camera-mask-save-path", type=parent_ensured_path, required=True)
     parser.add_argument("--virtual-camera-calibration-save-path", type=parent_ensured_path, required=True)
+    parser.add_argument("--virtual-camera-flip", default=False, action="store_true")
+    parser.add_argument("--virtual-camera-image-crop-params", nargs="*", type=int, help="<x> <y> <w> <h>")
+    parser.add_argument("--num-frames-to-process", type=int, default=int(2e31))
     parser.add_argument("--num-workers", default=0, type=int)
     main(parser.parse_args())
