@@ -77,6 +77,13 @@ cameras = {
     'VCAMERA_FISHEYE_RIGHT': vc.create_virtual_fisheye_camera((640, 384), (-135, 0, 180), [0.47674098610878013, -1.0943230390548706, 1.080273985862732]),
 }
 
+def _get_xyvec_from_zvec(zvecs):
+    zvecs /= np.linalg.norm(zvecs, axis=0)
+    xvecs = np.array([zvecs[2], 0, -zvecs[0]])
+    xvecs /= np.linalg.norm(xvecs, axis=0)
+    yvecs = np.cross(zvecs, xvecs, axis=0)
+    return xvecs, yvecs
+
 def get_box_bev(element):
     class_name = element['class']
     rotation = np.float32(element['rotation']).reshape(3, 3)
@@ -96,6 +103,21 @@ def get_box_bev(element):
     ], dtype=np.float32)
     return class_name, corner_points, heading_points
     
+
+def get_cylinder_bev(element):
+    class_name = element['class']
+    zvec = np.float32(element['zvec'])
+    translation = np.float32(element['translation'])
+    radius = element['radius']
+    height = element['height']
+    round_angles = (np.arange(0, 360, 10) * np.pi / 180)[:, None]
+    xvec, yvec = _get_xyvec_from_zvec(zvec)
+    bottom_points = translation - 0.5 * height * zvec + \
+        radius * np.cos(round_angles) * xvec + \
+        radius * np.sin(round_angles) * yvec
+    
+    return class_name, bottom_points
+
 
 def get_box_camera(element, camera):
     class_name = element['class']
@@ -134,6 +156,38 @@ def get_box_camera(element, camera):
         line_segments_camera[4][::-1]
     ])
     return class_name, line_segments_camera, front_face
+
+
+def get_cylinder_camera(element, camera):
+    class_name = element['class']
+    zvec = np.float32(element['zvec'])
+    translation = np.float32(element['translation'])
+    radius = element['radius']
+    height = element['height']
+    xvec, yvec = _get_xyvec_from_zvec(zvec)
+    zvec = 0.5 * height * zvec
+    xvec = radius * xvec
+    yvec = radius * yvec
+    round_angles = (np.arange(0, 360, 10) * np.pi / 180)[:, None]
+    top_points = translation + zvec + np.cos(round_angles) * xvec + np.sin(round_angles) * yvec
+    camera_points = camera.extrinsic[0].T @ (top_points.T - np.float32(camera.extrinsic[1])[None].T)
+    uu, vv = camera.project_points_from_camera_to_image(camera_points)
+    valid = (uu >= 0) & (uu < 640) & (vv >= 0) & (vv < 320)
+    top_points_camera = np.float32([uu[valid], vv[valid]]).T
+
+    bottom_points = translation - zvec + np.cos(round_angles) * xvec + np.sin(round_angles) * yvec
+    camera_points = camera.extrinsic[0].T @ (bottom_points.T - np.float32(camera.extrinsic[1])[None].T)
+    uu, vv = camera.project_points_from_camera_to_image(camera_points)
+    valid = (uu >= 0) & (uu < 640) & (vv >= 0) & (vv < 320)
+    bottom_points_camera = np.float32([uu[valid], vv[valid]]).T
+
+    center_line = translation + zvec * np.arange(-1, 1.1, 0.1).reshape(-1, 1)
+    camera_points = camera.extrinsic[0].T @ (center_line.T - np.float32(camera.extrinsic[1])[None].T)
+    uu, vv = camera.project_points_from_camera_to_image(camera_points)
+    valid = (uu >= 0) & (uu < 640) & (vv >= 0) & (vv < 320)
+    center_line_camera = np.float32([uu[valid], vv[valid]]).T
+
+    return class_name, top_points_camera, bottom_points_camera, center_line_camera
 
 
 def get_polyline_camera(polyline, camera):
@@ -200,7 +254,7 @@ def get_cam_img(ind, info, cameras, results_root_path):
         
         for slot in info['slots']:
             slot = np.float32(slot).reshape(-1, 4)
-            if slot[:, 3][:2].mean() < 0.7:
+            if slot[:, 3][:2].mean() < 0.75:
                 continue
             slot_line_segments_camera = get_polyline_camera(slot[:, :3][[0, 1, 2, 3, 0]], camera)
             for i, line in enumerate(slot_line_segments_camera):
@@ -213,12 +267,21 @@ def get_cam_img(ind, info, cameras, results_root_path):
 
         for element in info['bboxes']:
             # class_name, corner_points, heading_points = get_box_bev(element)
+            if element['score'] < 0.7:
+                continue
             class_name, line_segments_camera, front_face = get_box_camera(element, camera)
             color = np.float32(NAME2COLOR[class_name]) / 255
             for line in line_segments_camera:
                 plt.plot(line[:, 0], line[:, 1], color=color)
             if class_name in heading_objs:
                 plt.fill(front_face[:, 0], front_face[:, 1], color=color, alpha=0.7)
+        
+        for element in info['cylinders']:
+            class_name, top_points_camera, bottom_points_camera, center_line_camera = get_cylinder_camera(element, camera)
+            color = np.float32(NAME2COLOR[class_name]) / 255
+            plt.fill(bottom_points_camera[:, 0], bottom_points_camera[:, 1], color=color, alpha=0.7)
+            plt.plot(center_line_camera[:, 0], center_line_camera[:, 1], color=color, linewidth=3)
+            plt.fill(top_points_camera[:, 0], top_points_camera[:, 1], color=color, alpha=0.7)
 
         if 'polylines' in info:
             for polyline in info['polylines']:
@@ -277,6 +340,11 @@ def get_bev_img(ind, info, results_root_path):
         for polyline in info['polylines']:
             polyline = np.float32(polyline).reshape(-1, 3)
             plt.plot(polyline[:, 1], polyline[:, 0], 'orange', linewidth=4)
+    
+    for cylinder in info['cylinders']:
+        class_name, bottom_points = get_cylinder_bev(cylinder)
+        color = np.float32(NAME2COLOR[class_name]) / 255
+        plt.fill(bottom_points[:, 1], bottom_points[:, 0], color=color, alpha=0.5)
 
     for element in info['bboxes']:
         class_name, corner_points, heading_points = get_box_bev(element)
@@ -307,7 +375,11 @@ if __name__ == '__main__':
     # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_20250225/pred_dumps/')
     # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_20250305/pred_dumps/')
     # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_20250305_1/pred_dumps/')
-    results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_deploys_debug_dumps_20250306/deploy_and_debug/')
+    # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_deploys_debug_dumps_20250306/deploy_and_debug/')
+    # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_20250318/pred_dumps/')
+    # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_yangguangtiandi_0318/pred_dumps/')
+    # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_20250321/pred_dumps/')
+    results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_20250401_PARKING-130/pred_dumps/')
     all_inds = sorted([str(p.relative_to(results_root_path / 'dets'))[:-5] for p in results_root_path.glob('dets/**/*.json')])
 
 
@@ -330,6 +402,12 @@ if __name__ == '__main__':
         # bev_img = cv2.resize(np.concatenate([bev_img_pred, bev_img_occ], axis=0), (240, 640))
         # img_final = np.concatenate([img_cat, bev_img], axis=1)
         img_final = np.concatenate([ori_img_cat, img_cat, bev_img_pred, bev_img_occ], axis=1)
+        
+        (text_width, text_height), baseline = cv2.getTextSize(ind, cv2.FONT_HERSHEY_SIMPLEX, 0.75, 1)
+        x = (img_final.shape[1] - text_width) - 10
+        y = text_height + 10
+        # cv2.putText(img_final, ind, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
+        cv2.putText(img_final, ind, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
 
         demo_video.write_frame(img_final)
     demo_video.close()
