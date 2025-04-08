@@ -1,6 +1,7 @@
 import json
 from collections import defaultdict
 from pathlib import Path as P
+from tkinter import NO
 import cv2
 import mmengine
 from mtv4d.utils.box_base import to_corners_9
@@ -19,6 +20,19 @@ from nuscenes.eval.detection.algo import calc_ap
 from tmp_scripts.fix_pkl import Rt_to_T
 from nuscenes.eval.common.utils import center_distance, velocity_l2, scale_iou, yaw_diff, attr_acc, cummean
 
+def precess_single_box(key, box, mode, mapping_label_to_pred_label={}):
+    output= EasyDict(
+        sample_token=key,
+        translation=box['translation'],
+        size=box['size'],
+        rotation=rotation_to_wxyz(box['rotation']),
+        velocity=box['velocity'][:2] if 'velocity' in box.keys() else None, 
+        num_pts=100,
+        detection_name=box['class'].split('.')[-1],
+        attribute_name=box['class'].split('.')[-1],
+    )
+    output['detection_score'] = box['score'] if mode == 'pred' else 1
+    return output
 
 def process_single_box_gt(ts, box, mapping_label_to_pred_label={}):
     return EasyDict(
@@ -55,8 +69,8 @@ def rotation_to_wxyz(rot):
     return Rotation.from_matrix(R).as_quat(scalar_first=True).tolist()  # wxyz, default False
 
 
-def process_pred_data_to_coco(ts, data):
-    return [precess_single_box_pred(ts, box) for box in data['pred']['bboxes']]
+def process_data_to_coco(ts, data, mode='pred'):
+    return [precess_single_box(ts, box, mode) for box in data[mode]['bboxes']]
 
 
 def process_gt_data_to_coco(ts, data):
@@ -107,15 +121,22 @@ def draw_json_not_used_but_can_draw(input_dir, output_json_path="/tmp/1234/pred.
     return output
 
 
-def load_jsons_from_single_hooks(input_dir, output_json_path="/tmp/1234/pred.json"):
+def load_jsons_from_single_hooks(input_dir, mode, output_json_path="/tmp/1234/pred.json"):
     # sensor, calib_path = "camera8", "/ssd1/MV4D_12V3L/20230823_110018/calibration_center.yml"
-    a = sorted(P(input_dir).glob('*.json'))
+    if mode =='pred':
+        a = [i for i in sorted(P(input_dir).rglob('*.json'))  if 'gt' not in str(i)]
+    elif mode == 'gt':
+        a = sorted(P(input_dir).rglob('*_gt.json')) 
+    else:
+        raise NotImplementedError
     output, output_list = {}, []
     for path in a:
-        ts = path.stem
+        sid = path.parent.name
+        ts = path.stem.strip('_gt')
+        key = f'{sid}/{ts}'
         data = read_json(str(path))
-        output[ts] = process_pred_data_to_coco(ts, data)
-        output_list += output[ts]
+        output[key] = process_data_to_coco(key, data, mode)  # TODO: 将timestamp的比较转换到key的比较上，也就是sid+timestamp
+        output_list += output[key]  
     return output, output_list
 
 
@@ -294,7 +315,8 @@ def my_match_rate(A, B, A_list, B_list, class_name, thres_dist=0.5):
         return None
     output_match = []
     error_list_dict = defaultdict(list)
-    for ts, A_frame in A.items():
+    for key, A_frame in A.items():
+        sid, ts = key.split('/')
         A_frame = [i for i in A_frame if i['detection_name']==class_name]
         if len(A_frame) == 0:
             continue
@@ -358,14 +380,66 @@ def main(input_pred_dir, pkl_path, cfg_path="tools/evaluator/config.json"):
     #     print(k, v)
     print("-------------------")
 
-
-
-
     # class_name = "passenger_car"
     # pr = generate_ap(gts, preds, gts_list, preds_list, class_name, center_distance, dist_th=0.5)
     # ap = calculate_ap(pr, class_name, eval_detection_configs)
     map_list = []
     for pred_cls in eval_detection_configs.class_range.keys():
+        pr = generate_ap(gts, preds, gts_list, preds_list, pred_cls, center_distance, dist_th=0.5)
+        if pr is None: continue
+        ap = calculate_ap(pr, pred_cls, eval_detection_configs)
+        print(pred_cls, ap)
+        map_list += [ap]
+    print('map', np.array(map_list).mean())
+    # output_ap = []
+    # for class_name in eval_detection_configs.class_names:
+    #     for dist_th in eval_detection_configs.dist_ths:
+    #         output_dist_th = generate_ap(gts, preds, gts_list, preds_list, class_name, dist_fcn, dist_th=dist_th)
+    #         ap = calculate_ap(output_dist_th, dist_th, class_name)
+    #         output_ap.append(ap)
+    # print(np.mean(output_ap))
+
+
+
+def main_map_from_json_dirs(pred_dir, gt_dir, cfg_path="tools/evaluator/config.json"):
+    eval_detection_configs = load_cfg(cfg_path=cfg_path)
+    preds, preds_list = load_jsons_from_single_hooks(pred_dir,'pred',  output_json_path="/tmp/1234/pred.json")
+    gts, gts_list = load_jsons_from_single_hooks(gt_dir, 'gt', output_json_path="/tmp/1234/gt.json")
+    if True:  # after this, reorganize the pred list
+        filter_box_according_to_range(preds, eval_detection_configs)
+        filter_box_according_to_range(gts, eval_detection_configs)
+    if True:
+        filter_box_according_to_confidence(preds, eval_detection_configs)
+    gts_list, preds_list = reconcate_boxes(gts), reconcate_boxes(preds)
+    if False:  # draw im
+        draw_json(input_dir, output_json_path="/tmp/1234/pred.json")  
+    ### calculate recall rate
+
+    recall_dict = {}
+    print('recall ===============')
+    for class_name in eval_detection_configs.class_range.keys():
+        recall = my_cal_recall(gts, preds, gts_list, preds_list, class_name, thres_dist=0.5)
+        if recall is not None:
+            recall_dict[class_name] = recall
+
+    # for k, v in recall_dict.items():
+    #     print(k, v)
+    ### calculate precision rate
+    precision_dict = {}
+    print('precision ===============')
+    for class_name in eval_detection_configs.class_range.keys():
+        precision = my_cal_precision(gts, preds, gts_list, preds_list, class_name, thres_dist=0.5)
+        if precision is not None:
+            precision_dict[class_name] = precision
+    # for k, v in precision_dict.items():
+    #     print(k, v)
+    print("-------------------")
+
+    # class_name = "passenger_car"
+    # pr = generate_ap(gts, preds, gts_list, preds_list, class_name, center_distance, dist_th=0.5)
+    # ap = calculate_ap(pr, class_name, eval_detection_configs)
+    map_list = []
+    for pred_cls in eval_detection_configs.class_range.keys():  # type: ignore
         pr = generate_ap(gts, preds, gts_list, preds_list, pred_cls, center_distance, dist_th=0.5)
         if pr is None: continue
         ap = calculate_ap(pr, pred_cls, eval_detection_configs)
@@ -398,9 +472,17 @@ if __name__ == "__main__":
     input_pred_dir = args.input_json_dir
     pkl_path = args.input_pkl_path
     cfg_path = args.cfg_path
+    if False:
+        input_pred_dir = "eval_results/apa_result_json_0224/pred_dumps/dets/20230823_110018"
+        pkl_path = "/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_20230823_110018_infer.pkl"
+        input_pred_dir = args.input_json_dir
+        pkl_path = args.input_pkl_path
+        main(input_pred_dir, pkl_path, cfg_path=cfg_path)
+    if True:
+        pred_dir = "/home/yuanshiwei/4/dets/"
+        gt_dir = "/home/yuanshiwei/4/dets/"
+        main_map_from_json_dirs(pred_dir, gt_dir, cfg_path=cfg_path)
 
-    input_pred_dir = "eval_results/apa_result_json_0224/pred_dumps/dets/20230823_110018"
-    pkl_path = "/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_20230823_110018_infer.pkl"
-    input_pred_dir = args.input_json_dir
-    pkl_path = args.input_pkl_path
-    main(input_pred_dir, pkl_path, cfg_path=cfg_path)
+
+
+
