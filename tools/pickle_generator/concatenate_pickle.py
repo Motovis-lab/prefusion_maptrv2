@@ -41,10 +41,8 @@ new_ids2025 = [
 
 
 def get_old_json():
-    pkl_paths = [f'/ssd1/MV4D_12V3L/mv_4d_infos_{i}.pkl'
-                 for i in old_pkl_ids] + \
-                [f'/ssd1/MV4D_12V3L/{i}/fb_{i}.pkl'
-                 for i in refactored_ids + new_ids25 + new_ids13 + new_ids2025]
+    # pkl_paths = [f'/ssd1/MV4D_12V3L/mv_4d_infos_{i}.pkl' for i in old_pkl_ids] + \
+    pkl_paths= [f'/ssd1/MV4D_12V3L/{i}/fb_{i}.pkl' for i in old_pkl_ids + refactored_ids + new_ids25 + new_ids13 + new_ids2025]
 
     output = {}
     for path in tqdm(pkl_paths):
@@ -52,21 +50,19 @@ def get_old_json():
         a = mmengine.load(str(path))
         for k, v in a.items():
             output[k] = v
-    mmengine.dump(output, '/ssd1/MV4D_12V3L/fb_train_104_old_version.pkl')
+    mmengine.dump(output, '/ssd1/MV4D_12V3L/fb_train_102_old_version.pkl')
 
 
 def get_lidar_json():
-    pkl_paths = [f'/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_{i}.pkl'
-                 for i in old_pkl_ids] + \
-                [f'/ssd1/MV4D_12V3L/{i}/fb_fix_{i}.pkl'
-                 for i in refactored_ids + new_ids25 + new_ids13 + new_ids2025]
+    # pkl_paths = [f'/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_{i}.pkl' for i in old_pkl_ids] + \
+    pkl_paths = [f'/ssd1/MV4D_12V3L/{i}/fb_fix_{i}.pkl' for i in old_pkl_ids + refactored_ids + new_ids25 + new_ids13 + new_ids2025]
     output = {}
     for path in tqdm(pkl_paths):
         print(path)
         a = mmengine.load(str(path))
         for k, v in a.items():
             output[k] = v
-    mmengine.dump(output, '/ssd1/MV4D_12V3L/fb_train_104.pkl')
+    mmengine.dump(output, '/ssd1/MV4D_12V3L/fb_train_102.pkl')
 
 
 if __name__ == "__main__":
