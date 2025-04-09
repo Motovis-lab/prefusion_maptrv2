@@ -61,7 +61,7 @@ def _render_virtual_image(
     mmcv.imwrite(dst_image, virtual_im_save_path)
     mmcv.imwrite(dst_mask, virtual_mask_save_path)
 
-    return v_cam_rmatrix, v_cam_t, intrinsic, src_image, real_cam_model, vcamera, fov
+    return v_cam_rmatrix, v_cam_t, intrinsic, real_cam_model, vcamera, fov
 
 
 def get_real_image_paths(real_camera_image_dir: Path, img_suffix: str) -> List[Path]:
@@ -129,7 +129,7 @@ def main(args):
         render_virtual_iamge, data_args, args.num_workers, use_tqdm=True, tqdm_desc=f"Rendering virtual images {args.virtual_camera_id}"
     )
 
-    v_camera_rmatrix, v_camera_t, v_camera_intrinsic, d_src_image, d_real_cam_model, d_vcamera, vcamera_fov = res[-1]
+    v_camera_rmatrix, v_camera_t, v_camera_intrinsic, d_real_cam_model, d_vcamera, vcamera_fov = res[-1]
     vcam_calib = {
         "extrinsic": v_camera_t.tolist() + Rotation.from_matrix(v_camera_rmatrix).as_quat().tolist(),
         "pp": list(v_camera_intrinsic[:2]),
