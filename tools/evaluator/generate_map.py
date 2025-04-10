@@ -124,7 +124,7 @@ def draw_json_not_used_but_can_draw(input_dir, output_json_path="/tmp/1234/pred.
 def load_jsons_from_single_hooks(input_dir, mode, output_json_path="/tmp/1234/pred.json"):
     # sensor, calib_path = "camera8", "/ssd1/MV4D_12V3L/20230823_110018/calibration_center.yml"
     if mode =='pred':
-        a = [i for i in sorted(P(input_dir).rglob('*.json'))  if 'gt' not in str(i)]
+        a = [i for i in sorted(P(input_dir).rglob('*.json'))  if '_gt.json' not in str(i)]
     elif mode == 'gt':
         a = sorted(P(input_dir).rglob('*_gt.json')) 
     else:
@@ -290,8 +290,9 @@ def filter_box_according_to_range(boxes, configs):
     conf = configs.class_range
     for k, v in boxes.items():
         boxes[k] = [box for box in v if
-                    box.detection_name in conf.keys() and max(abs(box.translation[0]), abs(box.translation[1])) <= conf[
-                        box.detection_name]]
+                    box.detection_name in conf.keys() and
+                    abs(box.translation[0])<= conf[box.detection_name][0] and abs(box.translation[1]) <= conf[box.detection_name][1]
+        ]
     return boxes
 
 
@@ -417,7 +418,7 @@ def main_map_from_json_dirs(pred_dir, gt_dir, cfg_path="tools/evaluator/config.j
 
     recall_dict = {}
     print('recall ===============')
-    for class_name in eval_detection_configs.class_range.keys():
+    for class_name in eval_detection_configs.class_range.keys():  # type: ignore
         recall = my_cal_recall(gts, preds, gts_list, preds_list, class_name, thres_dist=0.5)
         if recall is not None:
             recall_dict[class_name] = recall
@@ -427,7 +428,7 @@ def main_map_from_json_dirs(pred_dir, gt_dir, cfg_path="tools/evaluator/config.j
     ### calculate precision rate
     precision_dict = {}
     print('precision ===============')
-    for class_name in eval_detection_configs.class_range.keys():
+    for class_name in eval_detection_configs.class_range.keys():  # type: ignore
         precision = my_cal_precision(gts, preds, gts_list, preds_list, class_name, thres_dist=0.5)
         if precision is not None:
             precision_dict[class_name] = precision
@@ -479,8 +480,8 @@ if __name__ == "__main__":
         pkl_path = args.input_pkl_path
         main(input_pred_dir, pkl_path, cfg_path=cfg_path)
     if True:
-        pred_dir = "/home/yuanshiwei/4/dets/"
-        gt_dir = "/home/yuanshiwei/4/dets/"
+        pred_dir = "/home/yuanshiwei/4/prefusion/work_dirs/borui_dets_71/gt_pred_dumps/dets"
+        gt_dir = "/home/yuanshiwei/4/prefusion/work_dirs/borui_dets_71/gt_pred_dumps/dets"
         main_map_from_json_dirs(pred_dir, gt_dir, cfg_path=cfg_path)
 
 
