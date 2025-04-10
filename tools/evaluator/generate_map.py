@@ -304,9 +304,10 @@ def reconcate_boxes(boxes):
 
 
 def is_box_match(pred, gt, thres_dist, thres_direction=15/180*np.pi, thres_iou=0.5):
+    thres_dist = max(gt.size)
     if center_distance(pred, gt) > thres_dist: return False
-    if yaw_diff(pred, gt) > thres_direction: return False
-    if scale_iou(pred, gt) < thres_iou: return False
+    # if yaw_diff(pred, gt) > thres_direction: return False
+    # if scale_iou(pred, gt) < thres_iou: return False
     return True
 
 def my_match_rate(A, B, A_list, B_list, class_name, thres_dist=0.5):
