@@ -326,15 +326,15 @@ def filter_obj_according_to_range(objs, configs, obj_type):
         conf = configs.class_range_slot
         # -2, 3
         for k, v in objs.items():
-            if len(v) >0:
+            if len(v) > 0:
                 objs[k] = [slot for slot in v if
-                        (
-                                (np.abs(slot.points[:, 0]) < conf[slot.detection_name][0]) * (
-                                np.abs(slot.points[:, 1]) < conf[slot.detection_name][1]) *
-                                (slot.points[:, 2] > conf[slot.detection_name][2]) * (
-                                        slot.points[:, 2] < conf[slot.detection_name][3])
-                        ).sum() >= 2
-                        ]
+                           (
+                                   (np.abs(slot.points[:, 0]) < conf[slot.detection_name][0]) * (
+                                   np.abs(slot.points[:, 1]) < conf[slot.detection_name][1]) *
+                                   (slot.points[:, 2] > conf[slot.detection_name][2]) * (
+                                           slot.points[:, 2] < conf[slot.detection_name][3])
+                           ).sum() >= 2
+                           ]
     else:  # such as cylinders
         raise NotImplementedError
     return objs
@@ -348,7 +348,8 @@ def reconcate_boxes(boxes):
 
 
 def is_box_match(pred, gt, thres_dist, thres_direction=15 / 180 * np.pi, thres_iou=0.5):
-    thres_dist = max(gt.size) / 2
+    if thres_dist is None:
+        thres_dist = max(gt.size) / 2
     if center_distance(pred, gt) > thres_dist: return False
     # if yaw_diff(pred, gt) > thres_direction: return False
     # if scale_iou(pred, gt) < thres_iou: return False
@@ -365,7 +366,7 @@ def is_slot_match(pred, gt, thres_dist=0.5):
                ) / 4 < thres_dist
 
 
-def my_match_rate_box(A, B, A_list, B_list, class_name, thres_dist=0.5):
+def my_match_rate_box(A, B, A_list, B_list, class_name, thres_dist):
     A_cls = [i for i in A_list if i['detection_name'] == class_name]
     total_num = 0
     if len(A_cls) == 0:
@@ -457,7 +458,7 @@ def my_cal_recall(gts, preds, gts_list, preds_list, class_name, obj_type, thres_
         return my_match_rate_slot(gts, preds, gts_list, preds_list, class_name, thres_dist=thres_dist)
 
 
-def my_cal_precision(gts, preds, gts_list, preds_list, class_name, obj_type, thres_dist=0.5):
+def my_cal_precision(gts, preds, gts_list, preds_list, class_name, obj_type, thres_dist):
     if obj_type == 'bboxes':
         return my_match_rate_box(preds, gts, preds_list, gts_list, class_name, thres_dist=thres_dist)
     elif obj_type == 'slots':
@@ -501,16 +502,17 @@ def main_map_from_json_dirs_slot(pred_dir, gt_dir, cfg_path="tools/evaluator/con
 
 
 def main_map_from_json_dirs(pred_dir, gt_dir, cfg_path="tools/evaluator/config.json"):
+    obj_type = 'bboxes'
     eval_detection_configs = load_cfg(cfg_path=cfg_path)
-    preds, preds_list = load_jsons_from_single_hooks(pred_dir, 'pred', obj_type='bboxes',
+    preds, preds_list = load_jsons_from_single_hooks(pred_dir, 'pred', obj_type=obj_type,
                                                      output_json_path="/tmp/1234/pred.json")
-    gts, gts_list = load_jsons_from_single_hooks(gt_dir, 'gt', obj_type='bboxes',
+    gts, gts_list = load_jsons_from_single_hooks(gt_dir, 'gt', obj_type=obj_type,
                                                  output_json_path="/tmp/1234/gt.json")
     if True:  # after this, reorganize the pred list
-        filter_obj_according_to_range(preds, eval_detection_configs, obj_type='bboxes')
-        filter_obj_according_to_range(gts, eval_detection_configs, obj_type='bboxes')
+        filter_obj_according_to_range(preds, eval_detection_configs, obj_type=obj_type)
+        filter_obj_according_to_range(gts, eval_detection_configs, obj_type=obj_type)
     if True:
-        filter_obj_according_to_confidence(preds, eval_detection_configs)
+        filter_obj_according_to_confidence(preds,eval_detection_configs, obj_type=obj_type)
     gts_list, preds_list = reconcate_boxes(gts), reconcate_boxes(preds)
     if False:  # draw im
         draw_json(input_dir, output_json_path="/tmp/1234/pred.json")
@@ -519,7 +521,7 @@ def main_map_from_json_dirs(pred_dir, gt_dir, cfg_path="tools/evaluator/config.j
     recall_dict = {}
     print('recall ===============')
     for class_name in eval_detection_configs.class_range.keys():  # type: ignore
-        recall = my_cal_recall(gts, preds, gts_list, preds_list, class_name, thres_dist=0.5)
+        recall = my_cal_recall(gts, preds, gts_list, preds_list, class_name, obj_type=obj_type, thres_dist=None)
         if recall is not None:
             recall_dict[class_name] = recall
 
@@ -529,7 +531,7 @@ def main_map_from_json_dirs(pred_dir, gt_dir, cfg_path="tools/evaluator/config.j
     precision_dict = {}
     print('precision ===============')
     for class_name in eval_detection_configs.class_range.keys():  # type: ignore
-        precision = my_cal_precision(gts, preds, gts_list, preds_list, class_name, thres_dist=0.5)
+        precision = my_cal_precision(gts, preds, gts_list, preds_list, class_name,  obj_type=obj_type, thres_dist=None)
         if precision is not None:
             precision_dict[class_name] = precision
     # for k, v in precision_dict.items():
@@ -585,5 +587,5 @@ if __name__ == "__main__":
     if True:
         pred_dir = "/home/yuanshiwei/4/prefusion/work_dirs/borui_dets_71/gt_pred_dumps/dets"
         gt_dir = "/home/yuanshiwei/4/prefusion/work_dirs/borui_dets_71/gt_pred_dumps/dets"
-        # main_map_from_json_dirs(pred_dir, gt_dir, cfg_path=cfg_path)
-        main_map_from_json_dirs_slot(pred_dir, gt_dir, cfg_path=cfg_path)
+        main_map_from_json_dirs(pred_dir, gt_dir, cfg_path=cfg_path)
+        # main_map_from_json_dirs_slot(pred_dir, gt_dir, cfg_path=cfg_path)
