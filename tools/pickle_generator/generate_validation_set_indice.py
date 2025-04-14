@@ -184,7 +184,7 @@ if __name__ == "__main__":
     parser.add_argument('--input_txt', default='/ssd1/MV4D_12V3L/train_0402.txt')
     parser.add_argument('--config_file', default='contrib/fastray_planar/configs/lidar_template.py')
     parser.add_argument('--data_root', default='/ssd1/MV4D_12V3L')
-    parser.add_argument('--sample_number', type=int, default=200)  #
+    parser.add_argument('--sample_number', type=int, default=150)  #
     parser.add_argument('--save_txt_prefix', default='/ssd1/MV4D_12V3L/validation_indice')
 
     args = parser.parse_args()
@@ -197,5 +197,6 @@ if __name__ == "__main__":
     write_txt(sampled_groups, save_txt_path)
     if False:  # read pickle and write picked pickle
         pass  # TODO: read pickle and write picked pickle
+        # use get_pickle_from_indice.py
 
     # cp /tmp/1234/validation_indice.txt /ssd1/MV4D_12V3L/valset_indice.txt

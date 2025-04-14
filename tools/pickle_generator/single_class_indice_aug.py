@@ -6,7 +6,7 @@ from mtv4d.utils.misc_base import mp_pool
 from tqdm import tqdm
 
 old_pkl_ids = [
-    "20230820_105813", "20230820_131402", "20230822_110856", "20230822_154430", "20230823_110018", "20230823_110018",
+    "20230820_105813", "20230820_131402", "20230822_110856", "20230822_154430", "20230823_110018",
     "20230823_162939", "20230824_115840", "20230824_134824", "20230826_102054", "20230826_122208", "20230829_170053",
     "20230830_120142", "20230830_181107", "20230831_101527", "20230831_151057", "20230901_123031", "20230901_152553",
     "20230902_142849", "20230903_123057", "20231010_141702", "20231027_185823", "20231028_124504", "20231028_134141",
@@ -32,6 +32,14 @@ new_ids_0331 = [
     "20231029_194228", "20231031_144111", "20231101_150226", "20231102_151151", "20231104_115532", "20231107_163857",
     "20231108_164010"
 ]
+new_ids2025 = [
+    "20250315_153606", "20250315_154251", "20250315_154856", "20250315_162419", "20250315_153359",
+    "20250315_155248",
+    "20250315_155653_1742025413764_1742025533764",
+    "20250315_155653_1742025533764_1742025653764",
+    "20250315_155653_1742025653764_1742025691764",
+]
+
 
 def is_all_item_file_exist(sid, ts, data_root='/ssd1/MV4D_12V3L', lidar=True, cam=True, occ=True):
     times_id = ts
@@ -106,7 +114,7 @@ def single_class_aug(class_name, sid_list, data_root, to_sort=True, indice_list=
             data_list = [(file_name, class_name) for file_name in json_names]
             result = mp_pool(func, data_list)
             output_list += [key for key in result if key is not None]
-            print(sid, len(output_list))
+            # print(sid, len(output_list))
             # for data in [(file_name, class_name) for file_name in json_names]:
             #     a = func(data)
             #     if a is not None and a>0:
@@ -115,11 +123,22 @@ def single_class_aug(class_name, sid_list, data_root, to_sort=True, indice_list=
 
 
 if __name__ == "__main__":
-    scene_ids = old_pkl_ids + refactored_ids + new_ids + new_ids_0331
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--scene_root', default='/ssd1/MV4D_12V3L')
+    parser.add_argument('--indice_list', default='/ssd1/MV4D_12V3L/valid_indice_train_96_fix.txt')
+    parser.add_argument('--save_suffix', default='104')
+    args = parser.parse_args()
+    indice_list = args.indice_list
+    data_root = args.scene_root
+    save_suffix = args.save_suffix
+
     # scene_ids = ['20230823_110018']
-    data_root = '/ssd1/MV4D_12V3L/'
-    indice_list = '/ssd1/MV4D_12V3L/valid_indice_train_96_fix.txt'
+    scene_ids = old_pkl_ids + refactored_ids + new_ids + new_ids_0331 + new_ids2025
+
     a = single_class_aug('class.pedestrian.pedestrian', scene_ids, data_root, indice_list=indice_list)
-    write_txt(a, f'{data_root}/ped_aug_96.txt')
+    write_txt(a, f'{data_root}/ped_aug_{save_suffix}.txt')
     a = single_class_aug('class.traffic_facility.cone', scene_ids, data_root, indice_list=indice_list)
-    write_txt(a, f'{data_root}/cone_aug_96.txt')
+    write_txt(a, f'{data_root}/cone_aug_{save_suffix}.txt')
+    a = single_class_aug('class.cycle.tricycle', scene_ids, data_root, indice_list=indice_list)
+    write_txt(a, f'{data_root}/tricycle_aug_{save_suffix}.txt')

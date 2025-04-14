@@ -1,18 +1,18 @@
 {
   "class_range": {
-    "passenger_car": 9,
-    "bus":9,
-    "truck": 9,
-    "ambulance":9,
-    "env_protect": 9,
-    "fire_engine":9,
-    "motorcycle": 9,
-    "bicycle":9,
-    "tricycle": 9,
-    "cleaning_cart":9,
-    "shopping_cart": 9,
-    "stroller":9,
-    "scooter": 9
+    "passenger_car": [12, 9],
+    "bus":[12, 9],
+    "truck": [12, 9],
+    "ambulance":[12, 9],
+    "env_protect": [12, 9],
+    "fire_engine":[12, 9],
+    "motorcycle": [12, 9],
+    "bicycle":[12, 9],
+    "tricycle": [12, 9],
+    "cleaning_cart":[12, 9],
+    "shopping_cart": [12, 9],
+    "stroller":[12, 9],
+    "scooter": [12, 9]
   },
   "conf_thres": {
     "passenger_car": 0.1,

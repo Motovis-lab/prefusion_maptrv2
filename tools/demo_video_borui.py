@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import virtual_camera as vc
+from mtv4d.utils.misc_base import mp_pool
 
 from scipy.io import loadmat
 from pathlib import Path
@@ -376,51 +377,94 @@ def get_bev_img(ind, info, results_root_path):
 
     return bev_img
 
+from pathlib import Path as P
+def func(data):
+    ind, results_root_path, tmp_save_path = data
+    # json_path = results_root_path / (ind + '.json')
+    ind = ind.replace('_gt', '')
+    json_path = results_root_path / 'dets' / (ind + '.json')
+    info_all = json.load(open(json_path))
+    img_cat, ori_img_cat = get_cam_img(ind, info_all['pred'], cameras, results_root_path)
+    bev_img_pred = get_bev_img(ind, info_all['pred'], results_root_path)
+
+    mat_path = Path(results_root_path / 'mat') / (ind + '.mat')
+    mat = loadmat(mat_path)
+    occ_edge = np.array(128 * (cv2.resize(mat['occ_edge'], (480, 640)) > 0.5), dtype=np.uint8)
+    freespace = np.array(40 * np.clip(cv2.resize(mat['sdf'], (480, 640)), 0.05, 4.5) + 64, dtype=np.uint8)
+    freespace[freespace <= 66] = 0
+    bev_img_occ = np.stack([occ_edge, freespace, np.zeros_like(occ_edge) + 64], axis=2)
+    # bev_img = cv2.resize(np.concatenate([bev_img_pred, bev_img_occ], axis=0), (240, 640))
+    # img_final = np.concatenate([img_cat, bev_img], axis=1)
+    img_final = np.concatenate([ori_img_cat, img_cat, bev_img_pred, bev_img_occ], axis=1)
+
+    (text_width, text_height), baseline = cv2.getTextSize(ind, cv2.FONT_HERSHEY_SIMPLEX, 0.75, 1)
+
+    # 计算文字位置（水平居中，顶部）
+    x = (img_final.shape[1] - text_width) - 10  # 水平居中
+    y = text_height + 10  # 顶部留10像素边距（可根据需要调整）
+
+    # cv2.putText(img_final, ind, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
+    cv2.putText(img_final, ind, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
+    # tmp_save_path = f'{tmp_save_path}/{ind}.jpg'
+    P(tmp_save_path).parent.mkdir(exist_ok=True, parents=True)
+    cv2.imwrite(tmp_save_path, img_final)
+    # plt.imshow(img_final)
+    # plt.show()
+    # break
 
 if __name__ == '__main__':
     # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/borui_demo_dumps_20250228/pred_dumps/')
     # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/borui_cbgs_dumps_20250315_3/gt_pred_dumps')
     # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/borui_cbgs_val_dumps_20250320/gt_pred_dumps')
-    # all_inds = sorted([str(p.relative_to(results_root_path / 'dets'))[:-5] for p in results_root_path.glob('dets/**/*_gt.json')])
 
-    results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/0_quantize_and_deploy_0320/deploy_and_debug')
-    all_inds = sorted([str(p.relative_to(results_root_path / 'dets'))[:-5] for p in results_root_path.glob('dets/**/*.json')])
+    # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/0_quantize_and_deploy_0320/deploy_and_debug')
+    results_root_path = Path('/home/yuanshiwei/4/prefusion/work_dirs/borui_dets_74/gt_pred_dumps')
+    all_inds = sorted([str(p.relative_to(results_root_path / 'dets'))[:-5] for p in results_root_path.glob('dets/**/*_gt.json')])
+    # all_inds = sorted([str(p.relative_to(results_root_path / 'dets'))[:-5] for p in results_root_path.glob('dets/**/*.json')])
 
     # demo_video = FFMPEG_VideoWriter('prefusion_apa_n5_demo.mp4', size=(1280, 640), fps=10)
     # demo_video = FFMPEG_VideoWriter('work_dirs/prefusion_apa_borui_demo.mp4', size=(640 + 960, 640), fps=10)
     # demo_video = FFMPEG_VideoWriter('work_dirs/prefusion_apa_borui_demo_20250315.mp4', size=(640 + 960, 640), fps=10)
     # demo_video = FFMPEG_VideoWriter('work_dirs/prefusion_apa_borui_demo_20250315_3.mp4', size=(640 + 960, 640), fps=10)
     # demo_video = FFMPEG_VideoWriter('work_dirs/prefusion_apa_borui_demo_20250320.mp4', size=(640 + 960, 640), fps=5)
-    demo_video = FFMPEG_VideoWriter('work_dirs/prefusion_apa_borui_quantize_deploy.mp4', size=(640 + 960, 640), fps=1)
+    demo_video = FFMPEG_VideoWriter('work_dirs/borui_dets_74/video.mp4', size=(640 + 960, 640), fps=10)
+    tmp_save_path = "/tmp/1234/draw_video_tmp_save_dir/1"
+    mp_pool(func, [(ind, results_root_path, f'{tmp_save_path}/{ind}.jpg') for ind in all_inds], 16)
     for ind in tqdm(all_inds):
-        # json_path = results_root_path / (ind + '.json')
-        ind = ind.replace('_gt', '')
-        json_path = results_root_path / 'dets' / (ind + '.json')
-        info_all = json.load(open(json_path))
-        img_cat, ori_img_cat = get_cam_img(ind, info_all['pred'], cameras, results_root_path)
-        bev_img_pred = get_bev_img(ind, info_all['pred'], results_root_path)
+        img_final = cv2.imread( f'{tmp_save_path}/{ind}.jpg')
+        demo_video.write_frame(img_final)
+    import shutil
 
-        mat_path = Path(results_root_path / 'mat') / (ind + '.mat')
-        mat = loadmat(mat_path)
-        occ_edge = np.array(128 * (cv2.resize(mat['occ_edge'], (480, 640)) > 0.5), dtype=np.uint8)
-        freespace = np.array(40 * np.clip(cv2.resize(mat['sdf'], (480, 640)), 0.05, 4.5) + 64, dtype=np.uint8)
-        freespace[freespace <= 66] = 0
-        bev_img_occ = np.stack([occ_edge, freespace, np.zeros_like(occ_edge) + 64], axis=2)
-        # bev_img = cv2.resize(np.concatenate([bev_img_pred, bev_img_occ], axis=0), (240, 640))
-        # img_final = np.concatenate([img_cat, bev_img], axis=1)
-        img_final = np.concatenate([ori_img_cat, img_cat, bev_img_pred, bev_img_occ], axis=1)
-
-        (text_width, text_height), baseline = cv2.getTextSize(ind, cv2.FONT_HERSHEY_SIMPLEX, 0.75, 1)
-
-        # 计算文字位置（水平居中，顶部）
-        x = (img_final.shape[1] - text_width) - 10  # 水平居中
-        y = text_height + 10  # 顶部留10像素边距（可根据需要调整）
-
-        # cv2.putText(img_final, ind, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
-        cv2.putText(img_final, ind, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
-        # plt.imshow(img_final)
-        # plt.show()
+    shutil.rmtree(tmp_save_path)
+    # for ind in tqdm(all_inds):
+    #     # json_path = results_root_path / (ind + '.json')
+    #     ind = ind.replace('_gt', '')
+    #     json_path = results_root_path / 'dets' / (ind + '.json')
+    #     info_all = json.load(open(json_path))
+    #     img_cat, ori_img_cat = get_cam_img(ind, info_all['pred'], cameras, results_root_path)
+    #     bev_img_pred = get_bev_img(ind, info_all['pred'], results_root_path)
+    #
+    #     mat_path = Path(results_root_path / 'mat') / (ind + '.mat')
+    #     mat = loadmat(mat_path)
+    #     occ_edge = np.array(128 * (cv2.resize(mat['occ_edge'], (480, 640)) > 0.5), dtype=np.uint8)
+    #     freespace = np.array(40 * np.clip(cv2.resize(mat['sdf'], (480, 640)), 0.05, 4.5) + 64, dtype=np.uint8)
+    #     freespace[freespace <= 66] = 0
+    #     bev_img_occ = np.stack([occ_edge, freespace, np.zeros_like(occ_edge) + 64], axis=2)
+    #     # bev_img = cv2.resize(np.concatenate([bev_img_pred, bev_img_occ], axis=0), (240, 640))
+    #     # img_final = np.concatenate([img_cat, bev_img], axis=1)
+    #     img_final = np.concatenate([ori_img_cat, img_cat, bev_img_pred, bev_img_occ], axis=1)
+    #
+    #     (text_width, text_height), baseline = cv2.getTextSize(ind, cv2.FONT_HERSHEY_SIMPLEX, 0.75, 1)
+    #
+    #     # 计算文字位置（水平居中，顶部）
+    #     x = (img_final.shape[1] - text_width) - 10  # 水平居中
+    #     y = text_height + 10  # 顶部留10像素边距（可根据需要调整）
+    #
+    #     # cv2.putText(img_final, ind, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
+    #     cv2.putText(img_final, ind, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
+    #     # plt.imshow(img_final)
+    #     # plt.show()
         # break
 
-        demo_video.write_frame(img_final)
+
     demo_video.close()
