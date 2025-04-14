@@ -1,4 +1,10 @@
 {
+  "class_range_slot": {
+    "class.parking.parking_slot": [12, 9, -2, 3]
+  },
+  "conf_thres_slot": {
+    "class.parking.parking_slot": 0.5
+  },
   "class_range": {
     "passenger_car": [12, 9],
     "bus":[12, 9],
