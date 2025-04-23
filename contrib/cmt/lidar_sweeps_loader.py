@@ -52,7 +52,10 @@ class LidarSweepsLoader(TransformableLoader):
                          
                          ]
         if self.sweep_info_length is not None:
-            sweep_infos = sweep_infos[-self.sweep_info_length:]
+            if self.sweep_info_length == 0:
+                sweep_infos = []
+            else:
+                sweep_infos = sweep_infos[-self.sweep_info_length:]
         for sweep in sweep_infos:
             path = sweep['path']  # input points in ego coord
             Twei = sweep['Twe']
