@@ -164,6 +164,7 @@ refs
 vis
 data
 *.zip
+*.dat
 **/__pycache__
 work_dirs
 work_dir
