@@ -1,5 +1,6 @@
 
 import time
+import gc
 
 from tqdm import tqdm
 from mmengine.config import Config
@@ -17,17 +18,19 @@ def get_data(dataloader):
             idx = group_idx * 1 + frame_idx
             time.sleep(0.01)
             # print(idx, frame_batch['index_infos'])
+        gc.collect()
     print('DONE!')
             
 
 
 if __name__ == '__main__':
 
-    cfg = Config.fromfile('contrib/fastray_planar/configs/debug.py')
+    cfg = Config.fromfile('contrib/fastray_planar/configs/fastray_planar_single_frame_park_apa_scaled_relu6_a800.py')
     runner = Runner.from_cfg(cfg)
     runner.logger.name = "prefusion"
     
     print('Please start htop, and observe the RAM usage!')
     dataloader = Runner.build_dataloader(runner._train_dataloader)
-    get_data(dataloader)
-    
+
+    for _ in range(5):
+        get_data(dataloader)
