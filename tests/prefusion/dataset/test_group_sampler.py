@@ -1,10 +1,12 @@
 from typing import Dict, List
 from collections import defaultdict
 
+import polars as pl
 import pandas as pd
 import numpy as np
 import pytest
 
+from prefusion.dataset.utils import PolarDict
 from prefusion.dataset.index_info import IndexInfo
 from prefusion.dataset.group_sampler import (
     IndexGroupSampler, 
@@ -315,11 +317,14 @@ def test_cur_train_group_size():
 
 @pytest.fixture
 def mock_info():
-    return {
-        "20230901_000000": {"frame_info": {"1692759619664": {1}, "1692759619764": 1}},
-        "20230823_111111": {"frame_info": {}},
-        "20231023_222222": {"frame_info": {"1692759621364": [1]}},
-    }
+    return PolarDict({
+        "20230901_000000/1692759619664": {1},
+        "20230901_000000/1692759619764": 1,
+        "20231023_222222/1692759621364": [1],
+        "20250428_000007/1722759001064": {6},
+        "20250428_000007/1722759002064": [8],
+        "20250428_000007/1722759000064": "1",
+    })
 
 
 def test_get_scene_frame_inds_with_no_indices_provided(mock_info):
@@ -327,11 +332,12 @@ def test_get_scene_frame_inds_with_no_indices_provided(mock_info):
     assert indices == {
         "20230901_000000": ["20230901_000000/1692759619664", "20230901_000000/1692759619764"],
         "20231023_222222": ["20231023_222222/1692759621364"],
+        "20250428_000007": ["20250428_000007/1722759000064", "20250428_000007/1722759001064", "20250428_000007/1722759002064"],
     }
 
 
 def test_get_scene_frame_inds_with_indices_provided(mock_info):
-    indices = get_scene_frame_inds(mock_info, ["20230901_000000/1692759619664"])
+    indices = get_scene_frame_inds(mock_info, indices=["20230901_000000/1692759620664", "20231001_111111/1712759770664", "20230901_000000/1692759619664"])
     assert indices == {
         "20230901_000000": ["20230901_000000/1692759619664"],
     }

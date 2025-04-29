@@ -1,9 +1,11 @@
 import copy
-from typing import List, Union, Dict, TYPE_CHECKING, Any
+from typing import List, Union, Dict, TYPE_CHECKING, Tuple
 from pathlib import Path
 from cachetools import cached, Cache
 
 import torch
+import mmengine
+import polars as pl
 import mmcv
 import numpy as np
 from pypcd_imp import pypcd
@@ -16,6 +18,7 @@ if TYPE_CHECKING:
     from .transformable_loader import TransformableLoader
     from .subepoch_manager import SubEpochManager
     from .group_sampler import GroupSampler
+    from .index_info import IndexInfo
 
 INF_DIST = 1e8
 
@@ -248,3 +251,41 @@ def unstack_batch_size(batch_data: Dict[str, torch.Tensor]) -> Dict[str, torch.T
 
 def approx_equal(a, b, eps=1e-4):
     return abs(a - b) < eps
+
+
+class PolarDict:
+    def __init__(self, data: dict, *args, **kwargs):
+        self.data = pl.json_normalize(data)
+    
+    def __getitem__(self, key):
+        return self.data[key][0]
+    
+    def keys(self) -> List[str]:
+        return self.data.columns
+
+
+def load_info_pkl(path: Union[Path, str]) -> Tuple[PolarDict, PolarDict]:
+    info = mmengine.load(path)
+    scene_info = PolarDict({scene_id: scene_data['scene_info'] for scene_id, scene_data in info.items()})
+    frame_info = PolarDict({scene_id: scene_data['frame_info'] for scene_id, scene_data in info.items()}, separator="/")
+    return scene_info, frame_info
+
+
+def load_scene_data(scene_info: PolarDict, index_info: "IndexInfo") -> Dict:
+    return mmengine.load(scene_info[index_info.scene_id])
+
+def load_frame_data_in_the_group(frame_info: PolarDict, index_info: "IndexInfo") -> Dict[str, Dict]:
+    frame_data = {}
+    cur = index_info
+    while cur.prev is not None:
+        frame_data[cur.prev.frame_id] = mmengine.load(frame_info[cur.prev.scene_frame_id])
+        cur = cur.prev
+
+    cur = index_info
+    frame_data[cur.frame_id] = mmengine.load(frame_info[cur.scene_frame_id])
+
+    while cur.next is not None:
+        frame_data[cur.next.frame_id] = mmengine.load(frame_info[cur.next.scene_frame_id])
+        cur = cur.next
+    
+    return frame_data
