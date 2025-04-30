@@ -39,6 +39,14 @@ new_ids2025 = [
     "20250315_155653_1742025533764_1742025653764",
     "20250315_155653_1742025653764_1742025691764",
 ]
+new_0416_16 = [
+    "20250315_154730", "20250315_154940", "20250315_161940", "20250315_160135", "20250315_162031", "20250321_111631",
+    "20250321_112847", "20250321_131221", "20250321_160904", "20250321_170901", "20250322_112035", "20250322_162647",
+    "20250322_125640", "20250321_131754", "20250315_153742_1742024262664_1742024382664",
+    "20250315_153742_1742024382664_1742024467964", "20250315_161540_1742026540764_1742026660764",
+    "20250315_161540_1742026660764_1742026776664",
+]
+
 
 
 def is_all_item_file_exist(sid, ts, data_root='/ssd1/MV4D_12V3L', lidar=True, cam=True, occ=True):
@@ -126,15 +134,15 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--scene_root', default='/ssd1/MV4D_12V3L')
-    parser.add_argument('--indice_list', default='/ssd1/MV4D_12V3L/valid_indice_train_96_fix.txt')
-    parser.add_argument('--save_suffix', default='104')
+    parser.add_argument('--indice_list', default='/ssd1/MV4D_12V3L/valid_indice_118.txt')
+    parser.add_argument('--save_suffix', default='118')
     args = parser.parse_args()
     indice_list = args.indice_list
     data_root = args.scene_root
     save_suffix = args.save_suffix
 
     # scene_ids = ['20230823_110018']
-    scene_ids = old_pkl_ids + refactored_ids + new_ids + new_ids_0331 + new_ids2025
+    scene_ids = old_pkl_ids + refactored_ids + new_ids + new_ids_0331 + new_ids2025 + new_0416_16
 
     a = single_class_aug('class.pedestrian.pedestrian', scene_ids, data_root, indice_list=indice_list)
     write_txt(a, f'{data_root}/ped_aug_{save_suffix}.txt')
@@ -142,3 +150,5 @@ if __name__ == "__main__":
     write_txt(a, f'{data_root}/cone_aug_{save_suffix}.txt')
     a = single_class_aug('class.cycle.tricycle', scene_ids, data_root, indice_list=indice_list)
     write_txt(a, f'{data_root}/tricycle_aug_{save_suffix}.txt')
+    a = single_class_aug('class.cycle.motorcycle', scene_ids, data_root, indice_list=indice_list)
+    write_txt(a, f'{data_root}/motorcycle_aug_{save_suffix}.txt')
