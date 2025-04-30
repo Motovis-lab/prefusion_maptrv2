@@ -1,5 +1,5 @@
 import copy
-from typing import List, Union, Dict, TYPE_CHECKING, Tuple
+from typing import List, Union, Dict, TYPE_CHECKING, Tuple, Any
 from pathlib import Path
 from cachetools import cached, Cache
 
@@ -254,38 +254,60 @@ def approx_equal(a, b, eps=1e-4):
 
 
 class PolarDict:
-    def __init__(self, data: dict, *args, **kwargs):
-        self.data = pl.json_normalize(data)
+    def __init__(self, data: dict, *, separator: str = "/", **kwargs):
+        self.data = pl.json_normalize(data, separator=separator, **kwargs)
     
     def __getitem__(self, key):
         return self.data[key][0]
     
+    def __len__(self) -> int:
+        return len(self.keys()) 
+
     def keys(self) -> List[str]:
         return self.data.columns
+    
+    def values(self) -> List:
+        return [self[key] for key in self.keys()]
+
+    def items(self) -> List[Tuple[str, Any]]:
+        """Return a list of (key, value) tuples in column order."""
+        return [(key, self[key]) for key in self.keys()]
+
+    def __iter__(self):
+        return iter(self.keys())
+    
+    def __contains__(self, key):
+        return key in self.keys()
+    
+    def __repr__(self) -> str:
+        return f"PolarDict({self.to_python_dict()})"
+    
+    def to_python_dict(self) -> dict:
+        return self.data.to_dicts()[0]
 
 
 def load_info_pkl(path: Union[Path, str]) -> Tuple[PolarDict, PolarDict]:
     info = mmengine.load(path)
     scene_info = PolarDict({scene_id: scene_data['scene_info'] for scene_id, scene_data in info.items()})
-    frame_info = PolarDict({scene_id: scene_data['frame_info'] for scene_id, scene_data in info.items()}, separator="/")
+    frame_info = PolarDict({scene_id: scene_data['frame_info'] for scene_id, scene_data in info.items()})
     return scene_info, frame_info
 
 
-def load_scene_data(scene_info: PolarDict, index_info: "IndexInfo") -> Dict:
-    return mmengine.load(scene_info[index_info.scene_id])
+def load_scene_data(data_root: Union[Path, str], scene_info: PolarDict, index_info: "IndexInfo") -> Dict:
+    return mmengine.load(Path(data_root) / scene_info[index_info.scene_id])
 
-def load_frame_data_in_the_group(frame_info: PolarDict, index_info: "IndexInfo") -> Dict[str, Dict]:
+def load_frame_data_in_the_group(data_root: Union[Path, str], frame_info: PolarDict, index_info: "IndexInfo") -> Dict[str, Dict]:
     frame_data = {}
     cur = index_info
     while cur.prev is not None:
-        frame_data[cur.prev.frame_id] = mmengine.load(frame_info[cur.prev.scene_frame_id])
+        frame_data[cur.prev.frame_id] = mmengine.load(Path(data_root) / frame_info[cur.prev.scene_frame_id])
         cur = cur.prev
 
     cur = index_info
-    frame_data[cur.frame_id] = mmengine.load(frame_info[cur.scene_frame_id])
+    frame_data[cur.frame_id] = mmengine.load(Path(data_root) / frame_info[cur.scene_frame_id])
 
     while cur.next is not None:
-        frame_data[cur.next.frame_id] = mmengine.load(frame_info[cur.next.scene_frame_id])
+        frame_data[cur.next.frame_id] = mmengine.load(Path(data_root) / frame_info[cur.next.scene_frame_id])
         cur = cur.next
     
     return frame_data

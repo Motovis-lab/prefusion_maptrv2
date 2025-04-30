@@ -6,7 +6,16 @@ import torch
 from copious.io.fs import mktmpdir
 from pypcd_imp import pypcd
 
-from prefusion.dataset.utils import read_pcd, make_seed, read_ego_mask, T4x4, get_reversed_mapping, unstack_batch_size, divide
+from prefusion.dataset.utils import (
+    read_pcd, 
+    make_seed, 
+    read_ego_mask, 
+    T4x4, 
+    get_reversed_mapping, 
+    unstack_batch_size, 
+    divide,
+    PolarDict,
+)
 
 
 @pytest.fixture
@@ -160,3 +169,92 @@ def test_divide():
     assert divide(8, 8, drop_last=False) == 1
     assert divide(2, 7, drop_last=True) == 0
     assert divide(2, 7, drop_last=False) == 1
+
+
+def test_polar_dict():
+    pld = PolarDict({"S001": {"f001": ['a', 'b', 'c'], "f002": ['d', 'e', 'f']}, "S002": {"f001": ['aa', 'bb'], "f003": ['dd', 'ee']}})
+    assert pld.keys() == ["S001/f001", "S001/f002", "S002/f001", "S002/f003"]
+    assert list(pld["S001/f001"]) == ['a', 'b', 'c']
+    assert list(pld["S001/f002"]) == ['d', 'e', 'f']
+    assert list(pld["S002/f001"]) == ['aa', 'bb']
+    assert list(pld["S002/f003"]) == ['dd', 'ee']
+    assert len(pld) == 4
+
+
+@pytest.fixture
+def sample_dict():
+    """
+    Nested dictionary chosen so that every branch produces at least one
+    flattened key when json_normalize is applied.
+    """
+    return {
+        "a": {
+            "b": 1,
+            "c": {
+                "d": 2
+            }
+        },
+        "e": 3
+    }
+
+def test_polar_dict_default_separator_flattening_and_item_access(sample_dict):
+    pdict = PolarDict(sample_dict)  # uses default separator "/"
+
+    # json_normalize should yield exactly these keys
+    expected = {"a/b": 1, "a/c/d": 2, "e": 3}
+
+    # ─── __getitem__ & to_python_dict ────────────────────────────────
+    assert pdict.to_python_dict() == expected
+    for k, v in expected.items():
+        assert pdict[k] == v
+
+    # __contains__
+    assert "a/b" in pdict and "missing" not in pdict
+
+
+def test_polar_dict_len_keys_values_and_iteration(sample_dict):
+    pdict = PolarDict(sample_dict)
+    expected_dict = pdict.to_python_dict()
+
+    # __len__ & keys
+    assert len(pdict) == len(expected_dict)
+    assert set(pdict.keys()) == set(expected_dict.keys())
+
+    # values() preserves column order; rebuild dict to compare safely
+    assert dict(zip(pdict.keys(), pdict.values())) == expected_dict
+
+    # __iter__
+    assert list(iter(pdict)) == list(pdict.keys())
+
+    # items()
+    # 1️⃣  items() should round-trip to the underlying flattened dict
+    assert dict(pdict.items()) == pdict.to_python_dict()
+
+    # 2️⃣  Order of items must match order of keys()
+    keys_from_items = [k for k, _ in pdict.items()]
+    assert keys_from_items == list(pdict.keys())
+
+
+def test_polar_dict_repr_is_readable_and_roundtrips(sample_dict):
+    pdict = PolarDict(sample_dict)
+    rep = repr(pdict)
+
+    # Starts with class name, ends with a closing parenthesis,
+    # and contains the flattened dictionary representation.
+    assert rep.startswith("PolarDict(") and rep.endswith(")")
+    inside = rep[len("PolarDict("):-1]
+    assert inside == str(pdict.to_python_dict())
+
+
+def test_polar_dict_custom_separator(sample_dict):
+    """
+    Validate that an alternative separator is respected.  Using '.' here
+    yields keys like 'a.b' rather than 'a/b'.
+    """
+    pdict = PolarDict(sample_dict, separator=".")
+    expected_keys = ["a.b", "a.c.d", "e"]
+
+    assert set(pdict.keys()) == set(expected_keys)
+    expected_dict = {"a.b": 1, "a.c.d": 2, "e": 3}
+    assert pdict.to_python_dict() == expected_dict
+    assert [pdict[k] for k in expected_keys] == [1, 2, 3]

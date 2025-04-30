@@ -185,8 +185,8 @@ class GroupBatchDataset(Dataset):
         )
         
     def load_all_transformables(self, index_info: "IndexInfo") -> dict:
-        scene_data = load_scene_data(self.scene_info, index_info)
-        frame_data = load_frame_data_in_the_group(self.frame_info, index_info)
+        scene_data = load_scene_data(self.data_root, self.scene_info, index_info)
+        frame_data = load_frame_data_in_the_group(self.data_root, self.frame_info, index_info)
         transformables = {}
         for name in self.transformables:
             _t_cfg = self.transformables[name]

@@ -66,7 +66,7 @@ def test_load_all_transformables():
     dataset = GroupBatchDataset(
         name="gbd",
         data_root=Path("tests/prefusion/dataset/example_inputs"),
-        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl"),
+        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001_separated.pkl"),
         transformables=dict(
             my_camera_images=dict(type="CameraImageSet"),
             my_ego_poses=dict(type="EgoPoseSet")
@@ -101,9 +101,9 @@ def test_load_all_transformables():
 class CustomizedEgoPoseLoader:
     def __init__(self, data_root): self.data_root = data_root
 
-    def load(self, name: str, scene_data, index_info, **kwargs):
-        scene = scene_data['frame_info']
-        return scene[index_info.frame_id]["ego_pose"]["rotation"], scene[index_info.frame_id]["ego_pose"]["translation"]
+    def load(self, name: str, scene_data, frame_data, index_info, **kwargs):
+        cur_frame = frame_data[index_info.frame_id]
+        return cur_frame["ego_pose"]["rotation"], cur_frame["ego_pose"]["translation"]
 
 
 def test_load_all_transformables_customized_loader():
@@ -111,7 +111,7 @@ def test_load_all_transformables_customized_loader():
     dataset = GroupBatchDataset(
         name="gbd",
         data_root=Path("tests/prefusion/dataset/example_inputs"),
-        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl"),
+        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001_separated.pkl"),
         transformables=dict(
             single_frame_ego_pose=dict(
                 type="EgoPose",
@@ -138,7 +138,7 @@ def test_dataset_with_test_scene_by_scene_bs1():
     dataset = GroupBatchDataset(
         name="gbd",
         data_root=Path("tests/prefusion/dataset/example_inputs"),
-        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl"),
+        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001_separated.pkl"),
         transformables=dict(
             my_camera_images=dict(type="CameraImageSet"),
             my_ego_poses=dict(type="EgoPoseSet")
@@ -170,11 +170,12 @@ def test_dataset_with_test_scene_by_scene_bs2():
     create_dummy_camera_image_files(tmpdir, 1698825817864)
     create_dummy_camera_image_files(tmpdir, 1698825817964)
     shutil.copytree("tests/prefusion/dataset/example_inputs/self_mask", tmpdir / "self_mask")
+    shutil.copytree("tests/prefusion/dataset/example_inputs/20231101_160337", tmpdir / "20231101_160337")
 
     dataset = GroupBatchDataset(
         name="gbd",
         data_root=tmpdir,
-        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl"),
+        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001_separated.pkl"),
         transformables=dict(
             my_camera_images=dict(type="CameraImageSet", loader=dict(type="CameraImageSetLoader", data_root=tmpdir)), # if providing no loader, dataset._build_transformable_loader would cache and reuse other test caes's loader
             my_ego_poses=dict(type="EgoPoseSet")
@@ -196,7 +197,7 @@ def test_dataset_with_test_scene_by_scene_bs2():
 
 
 def test_dataset_with_test_scene_by_scene_2_scenes():
-    with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
+    with open("tests/prefusion/dataset/mv4d-infos-for-test-001_separated.pkl", "rb") as f:
         info = pickle.load(f)
     scene_info = info["20231101_160337"]["scene_info"]
     frame_info = info["20231101_160337"]["frame_info"]
@@ -204,17 +205,18 @@ def test_dataset_with_test_scene_by_scene_2_scenes():
     info["S1"] = {"frame_info": {k: v for k, v in list(frame_info.items())[10:]}, "scene_info": scene_info}
     del info["20231101_160337"]
     tmpdir = mktmpdir()
-    with open(tmpdir / "mv4d-infos-for-test-001.pkl", "wb") as f:
+    with open(tmpdir / "mv4d-infos-for-test-001_separated.pkl", "wb") as f:
         pickle.dump(info, f)
     
     create_dummy_camera_image_files(tmpdir, 1698825817864)
     create_dummy_camera_image_files(tmpdir, 1698825819264)
     shutil.copytree("tests/prefusion/dataset/example_inputs/self_mask", tmpdir / "self_mask")
+    shutil.copytree("tests/prefusion/dataset/example_inputs/20231101_160337", tmpdir / "20231101_160337")
 
     dataset = GroupBatchDataset(
         name="gbd",
         data_root=tmpdir,
-        info_path=tmpdir / "mv4d-infos-for-test-001.pkl",
+        info_path=tmpdir / "mv4d-infos-for-test-001_separated.pkl",
         transformables=dict(
             my_camera_images=dict(type="CameraImageSet", loader=dict(type="CameraImageSetLoader", data_root=tmpdir)), # if providing no loader, dataset._build_transformable_loader would cache and reuse other test caes's loader
             my_ego_poses=dict(type="EgoPoseSet")

@@ -386,7 +386,7 @@ class ClassBalancedGroupSampler(GroupSampler):
             obj_cnt = Counter()
             frm_cnt = Counter()
             for index_info in group:
-                transformables = self.load_all_transformables(frame_info, index_info)
+                transformables = self.load_all_transformables(data_root, scene_info, frame_info, index_info)
                 no_objects_found = True
                 for _, transformable in transformables.items():
                     classes = [ele['class'] for ele in transformable.elements]
@@ -487,17 +487,16 @@ class ClassBalancedGroupSampler(GroupSampler):
 
         return sampled_groups
 
-    def load_all_transformables(self, scene_info: PolarDict, frame_info: PolarDict, index_info: "IndexInfo") -> dict:
+    def load_all_transformables(self, data_root: Path, scene_info: PolarDict, frame_info: PolarDict, index_info: "IndexInfo") -> dict:
         transformables = {}
-        scene_data = load_scene_data(scene_info, index_info)
-        frame_data = load_frame_data_in_the_group(frame_info, index_info)
+        scene_data = load_scene_data(data_root, scene_info, index_info)
+        frame_data = load_frame_data_in_the_group(data_root, frame_info, index_info)
         for name in self.transformable_cfg:
             _t_cfg = self.transformable_cfg[name]
             if _t_cfg["type"] not in self.SUPPORTED_LOADERS:
                 continue
             loader_cfg = _t_cfg["loader"] if "loader" in _t_cfg else None
             loader = self._build_transformable_loader(loader_cfg, _t_cfg["type"])
-            scene_data = frame_info[index_info.scene_id]
             rest_kwargs = {k: v for k, v in _t_cfg.items() if k not in ["type", "loader", "tensor_smith"]}
             transformables[name] = loader.load(name, scene_data, frame_data, index_info, **rest_kwargs)
         
