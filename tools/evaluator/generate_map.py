@@ -20,19 +20,31 @@ from nuscenes.eval.detection.algo import calc_ap
 from tmp_scripts.fix_pkl import Rt_to_T
 from nuscenes.eval.common.utils import center_distance, velocity_l2, scale_iou, yaw_diff, attr_acc, cummean
 
+
 def precess_single_box(key, box, mode, mapping_label_to_pred_label={}):
-    output= EasyDict(
+    output = EasyDict(
         sample_token=key,
         translation=box['translation'],
         size=box['size'],
         rotation=rotation_to_wxyz(box['rotation']),
-        velocity=box['velocity'][:2] if 'velocity' in box.keys() else None, 
+        velocity=box['velocity'][:2] if 'velocity' in box.keys() else None,
         num_pts=100,
         detection_name=box['class'].split('.')[-1],
         attribute_name=box['class'].split('.')[-1],
     )
     output['detection_score'] = box['score'] if mode == 'pred' else 1
     return output
+
+
+def precess_single_slot(key, poly, mode, mapping_label_to_pred_label={}):
+    output = EasyDict(
+        sample_token=key,
+        points=np.array(poly).reshape(-1, 4)[:, :3],
+        detection_score=np.array(poly).reshape(-1, 4)[:, 3],
+        detection_name='class.parking.parking_slot',
+    )
+    return output
+
 
 def process_single_box_gt(ts, box, mapping_label_to_pred_label={}):
     return EasyDict(
@@ -69,8 +81,15 @@ def rotation_to_wxyz(rot):
     return Rotation.from_matrix(R).as_quat(scalar_first=True).tolist()  # wxyz, default False
 
 
-def process_data_to_coco(ts, data, mode='pred'):
-    return [precess_single_box(ts, box, mode) for box in data[mode]['bboxes']]
+def process_data_to_coco(ts, data, mode='pred', obj_type='bboxes'):
+    if obj_type == 'bboxes':
+        return [precess_single_box(ts, box, mode) for box in data[mode][obj_type]]
+    elif obj_type == 'slots':
+        return [precess_single_slot(ts, box, mode) for box in data[mode][obj_type]]
+    elif obj_type == 'cylinders':
+        raise NotImplementedError
+    else:
+        raise NotImplementedError
 
 
 def process_gt_data_to_coco(ts, data):
@@ -121,12 +140,12 @@ def draw_json_not_used_but_can_draw(input_dir, output_json_path="/tmp/1234/pred.
     return output
 
 
-def load_jsons_from_single_hooks(input_dir, mode, output_json_path="/tmp/1234/pred.json"):
+def load_jsons_from_single_hooks(input_dir, mode, obj_type, output_json_path="/tmp/1234/pred.json"):
     # sensor, calib_path = "camera8", "/ssd1/MV4D_12V3L/20230823_110018/calibration_center.yml"
-    if mode =='pred':
-        a = [i for i in sorted(P(input_dir).rglob('*.json'))  if '_gt.json' not in str(i)]
+    if mode == 'pred':
+        a = [i for i in sorted(P(input_dir).rglob('*.json')) if '_gt.json' not in str(i)]
     elif mode == 'gt':
-        a = sorted(P(input_dir).rglob('*_gt.json')) 
+        a = sorted(P(input_dir).rglob('*_gt.json'))
     else:
         raise NotImplementedError
     output, output_list = {}, []
@@ -135,8 +154,8 @@ def load_jsons_from_single_hooks(input_dir, mode, output_json_path="/tmp/1234/pr
         ts = path.stem.strip('_gt')
         key = f'{sid}/{ts}'
         data = read_json(str(path))
-        output[key] = process_data_to_coco(key, data, mode)  # TODO: 将timestamp的比较转换到key的比较上，也就是sid+timestamp
-        output_list += output[key]  
+        output[key] = process_data_to_coco(key, data, mode, obj_type=obj_type)
+        output_list += output[key]
     return output, output_list
 
 
@@ -279,21 +298,46 @@ def calculate_ap(metric_data, class_name, eval_detection_configs, dist_thres=Non
     return ap
 
 
-def filter_box_according_to_confidence(boxes, configs):
-    conf = configs.conf_thres
-    for k, v in boxes.items():
-        boxes[k] = [box for box in v if box.detection_name in conf.keys() and box.detection_score >= conf[box.detection_name]]
-    return boxes
+def filter_obj_according_to_confidence(objs, configs, obj_type):
+    if obj_type == 'bboxes':
+        conf = configs.conf_thres
+        for k, v in objs.items():
+            objs[k] = [box for box in v if
+                       box.detection_name in conf.keys() and box.detection_score >= conf[box.detection_name]]
+    elif obj_type == 'slots':
+        conf = configs.conf_thres_slot
+        for k, v in objs.items():
+            objs = [slot for slot in v
+                    if np.mean(slot.detection_score) > conf[slot.detection_name]
+                    ]
+    return objs
 
 
-def filter_box_according_to_range(boxes, configs):
-    conf = configs.class_range
-    for k, v in boxes.items():
-        boxes[k] = [box for box in v if
-                    box.detection_name in conf.keys() and
-                    abs(box.translation[0])<= conf[box.detection_name][0] and abs(box.translation[1]) <= conf[box.detection_name][1]
-        ]
-    return boxes
+def filter_obj_according_to_range(objs, configs, obj_type):
+    if obj_type == 'bboxes':
+        conf = configs.class_range
+        for k, v in objs.items():
+            objs[k] = [box for box in v if
+                       box.detection_name in conf.keys() and
+                       abs(box.translation[0]) <= conf[box.detection_name][0] and abs(box.translation[1]) <=
+                       conf[box.detection_name][1]
+                       ]
+    elif obj_type == 'slots':
+        conf = configs.class_range_slot
+        # -2, 3
+        for k, v in objs.items():
+            if len(v) > 0:
+                objs[k] = [slot for slot in v if
+                           (
+                                   (np.abs(slot.points[:, 0]) < conf[slot.detection_name][0]) * (
+                                   np.abs(slot.points[:, 1]) < conf[slot.detection_name][1]) *
+                                   (slot.points[:, 2] > conf[slot.detection_name][2]) * (
+                                           slot.points[:, 2] < conf[slot.detection_name][3])
+                           ).sum() >= 2
+                           ]
+    else:  # such as cylinders
+        raise NotImplementedError
+    return objs
 
 
 def reconcate_boxes(boxes):
@@ -303,15 +347,27 @@ def reconcate_boxes(boxes):
     return output
 
 
-def is_box_match(pred, gt, thres_dist, thres_direction=15/180*np.pi, thres_iou=0.5):
-    thres_dist = max(gt.size)
+def is_box_match(pred, gt, thres_dist, thres_direction=15 / 180 * np.pi, thres_iou=0.5):
+    if thres_dist is None:
+        thres_dist = max(gt.size) / 2
     if center_distance(pred, gt) > thres_dist: return False
     # if yaw_diff(pred, gt) > thres_direction: return False
     # if scale_iou(pred, gt) < thres_iou: return False
     return True
 
-def my_match_rate(A, B, A_list, B_list, class_name, thres_dist=0.5):
-    A_cls = [i for i in A_list if i['detection_name']==class_name]
+
+def is_slot_match(pred, gt, thres_dist=0.5):
+    slot1 = np.array(pred.points).reshape(-1, 3)[:, :2]
+    slot2 = np.array(gt.points).reshape(-1, 3)[:, :2]
+    return min(np.linalg.norm(slot1 - slot2[[0, 1, 2, 3]], axis=1).sum(),
+               np.linalg.norm(slot1 - slot2[[1, 2, 3, 0]], axis=1).sum(),
+               np.linalg.norm(slot1 - slot2[[2, 3, 0, 1]], axis=1).sum(),
+               np.linalg.norm(slot1 - slot2[[3, 0, 1, 2]], axis=1).sum()
+               ) / 4 < thres_dist
+
+
+def my_match_rate_box(A, B, A_list, B_list, class_name, thres_dist):
+    A_cls = [i for i in A_list if i['detection_name'] == class_name]
     total_num = 0
     if len(A_cls) == 0:
         return None
@@ -319,12 +375,12 @@ def my_match_rate(A, B, A_list, B_list, class_name, thres_dist=0.5):
     error_list_dict = defaultdict(list)
     for key, A_frame in A.items():
         sid, ts = key.split('/')
-        A_frame = [i for i in A_frame if i['detection_name']==class_name]
+        A_frame = [i for i in A_frame if i['detection_name'] == class_name]
         if len(A_frame) == 0:
             continue
         A_match_num = 0
         sample_token = A_frame[0]['sample_token']
-        box2_list = [j for j in B[sample_token] if j['detection_name']==class_name]
+        box2_list = [j for j in B[sample_token] if j['detection_name'] == class_name]
         for box1 in A_frame:
             for idx, box2 in enumerate(box2_list):
                 if is_box_match(box1, box2, thres_dist):
@@ -336,27 +392,90 @@ def my_match_rate(A, B, A_list, B_list, class_name, thres_dist=0.5):
                     del box2_list[idx]  # bufanghui bijiao
                     continue
         output_match += [A_match_num / len(A_frame)]
-    print(class_name, len(A_cls), "average", np.mean(output_match), "total", total_num/len(A_cls),
+    print(class_name, len(A_cls), "average", np.mean(output_match), "total", total_num / len(A_cls),
           "center_distance", np.mean(error_list_dict["center_distance"]),
           "yaw_diff", np.mean(error_list_dict["yaw_diff"]),
           "scale_iou", np.mean(error_list_dict["scale_iou"]),
           )
     return np.mean(output_match)
-def my_cal_recall(gts, preds, gts_list, preds_list, class_name, thres_dist=0.5):
-    return my_match_rate(gts, preds, gts_list, preds_list, class_name, thres_dist=thres_dist)
-def my_cal_precision(gts, preds, gts_list, preds_list, class_name, thres_dist=0.5):
-    return my_match_rate(preds, gts, preds_list, gts_list,  class_name, thres_dist=thres_dist)
 
-def main(input_pred_dir, pkl_path, cfg_path="tools/evaluator/config.json"):
+
+def entrance_and_direction_difference(slot1, slot2):
+    s1 = slot1.points.reshape(-1, 3)[:, :2]
+    s2 = slot2.points.reshape(-1, 3)[:, :2]
+    a = np.zeros(4)
+    a[0] = np.linalg.norm(s1 - s2[[0, 1, 2, 3]], axis=1).sum() / 4
+    a[1] = np.linalg.norm(s1 - s2[[1, 2, 3, 0]], axis=1).sum() / 4
+    a[2] = np.linalg.norm(s1 - s2[[2, 3, 0, 1]], axis=1).sum() / 4
+    a[3] = np.linalg.norm(s1 - s2[[3, 0, 1, 2]], axis=1).sum() / 4
+    idx = np.argmin(a)
+    d1 = (s1[0] - s1[3]) / np.linalg.norm(s1[0] - s1[3]) + (s1[1] - s1[2]) / np.linalg.norm(s1[1] - s1[2])
+    d2 = (s2[idx] - s2[(idx + 3) % 4]) / np.linalg.norm(s2[idx] - s2[(idx + 3) % 4]) + (
+            s2[(idx + 1) % 4] - s2[(idx + 2) % 4]) / np.linalg.norm(s2[(idx + 1) % 4] - s2[(idx + 2) % 4])
+    d1, d2 = d1 / 2, d2 / 2
+    dir_cos_dist = d1 @ d2
+    return np.linalg.norm(s1[:2] - s2[[idx, (idx + 1) % 4]], axis=1).sum() / 4, np.rad2deg(
+        np.arccos(np.clip(dir_cos_dist, -1, 1)))
+
+
+def my_match_rate_slot(A, B, A_list, B_list, class_name, thres_dist):
+    A_cls = A_list
+    total_num = 0
+    if len(A_cls) == 0:
+        return None
+    output_match = []
+    error_list_dict = defaultdict(list)
+    for key, A_frame in A.items():
+        sid, ts = key.split('/')
+        A_frame = [i for i in A_frame if i['detection_name'] == class_name]
+        if len(A_frame) == 0:
+            continue
+        A_match_num = 0
+        sample_token = A_frame[0]['sample_token']
+        box2_list = [j for j in B[sample_token] if j['detection_name'] == class_name]
+        for box1 in A_frame:
+            for idx, box2 in enumerate(box2_list):
+                if is_slot_match(box1, box2, thres_dist):
+                    A_match_num += 1
+                    total_num += 1
+                    entrance_distance, direction_difference = entrance_and_direction_difference(box1, box2)
+                    error_list_dict["entrance_distance"] += [entrance_distance]
+                    error_list_dict["direction_difference"] += [direction_difference]
+                    del box2_list[idx]
+                    continue
+        output_match += [A_match_num / len(A_frame)]
+    print(class_name, len(A_cls), "average", np.mean(output_match), "total", total_num / len(A_cls),
+          "entrance_distance", np.mean(error_list_dict["entrance_distance"]),
+          "direction_difference", np.mean(error_list_dict["direction_difference"]),
+          )
+    return np.mean(output_match)
+
+
+def my_cal_recall(gts, preds, gts_list, preds_list, class_name, obj_type, thres_dist):
+    if obj_type == 'bboxes':
+        return my_match_rate_box(gts, preds, gts_list, preds_list, class_name, thres_dist=thres_dist)
+    elif obj_type == "slots":
+        return my_match_rate_slot(gts, preds, gts_list, preds_list, class_name, thres_dist=thres_dist)
+
+
+def my_cal_precision(gts, preds, gts_list, preds_list, class_name, obj_type, thres_dist):
+    if obj_type == 'bboxes':
+        return my_match_rate_box(preds, gts, preds_list, gts_list, class_name, thres_dist=thres_dist)
+    elif obj_type == 'slots':
+        return my_match_rate_slot(preds, gts, preds_list, gts_list, class_name, thres_dist=thres_dist)
+
+
+def main_map_from_json_dirs_slot(pred_dir, gt_dir, cfg_path="tools/evaluator/config.json"):
+    obj_type = 'slots'
     eval_detection_configs = load_cfg(cfg_path=cfg_path)
-    preds, preds_list = load_jsons_from_single_hooks(input_pred_dir, output_json_path="/tmp/1234/pred.json")
-    gts, gts_list = load_pkl_to_gts(pkl_path, output_json_path="/tmp/1234/gt.json")
-    # gts, gts_list = load_pkl_to_gts(input_pred_dir, output_json_path="/tmp/1234/pred.json")
+    preds, preds_list = load_jsons_from_single_hooks(pred_dir, 'pred', obj_type=obj_type,
+                                                     output_json_path="/tmp/1234/pred.json")
+    gts, gts_list = load_jsons_from_single_hooks(gt_dir, 'gt', obj_type='slots', output_json_path="/tmp/1234/gt.json")
     if True:  # after this, reorganize the pred list
-        filter_box_according_to_range(preds, eval_detection_configs)
-        filter_box_according_to_range(gts, eval_detection_configs)
+        filter_obj_according_to_range(preds, eval_detection_configs, obj_type=obj_type)
+        filter_obj_according_to_range(gts, eval_detection_configs, obj_type=obj_type)  # has already filtered
     if True:
-        filter_box_according_to_confidence(preds, eval_detection_configs)
+        filter_obj_according_to_confidence(preds, eval_detection_configs, obj_type=obj_type)
     gts_list, preds_list = reconcate_boxes(gts), reconcate_boxes(preds)
     if False:  # draw im
         draw_json(input_dir, output_json_path="/tmp/1234/pred.json")
@@ -364,8 +483,8 @@ def main(input_pred_dir, pkl_path, cfg_path="tools/evaluator/config.json"):
 
     recall_dict = {}
     print('recall ===============')
-    for class_name in eval_detection_configs.class_range.keys():
-        recall = my_cal_recall(gts, preds, gts_list, preds_list, class_name, thres_dist=0.5)
+    for class_name in eval_detection_configs.class_range_slot.keys():  # type: ignore
+        recall = my_cal_recall(gts, preds, gts_list, preds_list, class_name, obj_type, thres_dist=0.5)
         if recall is not None:
             recall_dict[class_name] = recall
 
@@ -374,53 +493,35 @@ def main(input_pred_dir, pkl_path, cfg_path="tools/evaluator/config.json"):
     ### calculate precision rate
     precision_dict = {}
     print('precision ===============')
-    for class_name in eval_detection_configs.class_range.keys():
-        precision = my_cal_precision(gts, preds, gts_list, preds_list, class_name, thres_dist=0.5)
+    for class_name in eval_detection_configs.class_range_slot.keys():  # type: ignore
+        precision = my_cal_precision(gts, preds, gts_list, preds_list, class_name, obj_type, thres_dist=0.5)
         if precision is not None:
             precision_dict[class_name] = precision
     # for k, v in precision_dict.items():
     #     print(k, v)
-    print("-------------------")
-
-    # class_name = "passenger_car"
-    # pr = generate_ap(gts, preds, gts_list, preds_list, class_name, center_distance, dist_th=0.5)
-    # ap = calculate_ap(pr, class_name, eval_detection_configs)
-    map_list = []
-    for pred_cls in eval_detection_configs.class_range.keys():
-        pr = generate_ap(gts, preds, gts_list, preds_list, pred_cls, center_distance, dist_th=0.5)
-        if pr is None: continue
-        ap = calculate_ap(pr, pred_cls, eval_detection_configs)
-        print(pred_cls, ap)
-        map_list += [ap]
-    print('map', np.array(map_list).mean())
-    # output_ap = []
-    # for class_name in eval_detection_configs.class_names:
-    #     for dist_th in eval_detection_configs.dist_ths:
-    #         output_dist_th = generate_ap(gts, preds, gts_list, preds_list, class_name, dist_fcn, dist_th=dist_th)
-    #         ap = calculate_ap(output_dist_th, dist_th, class_name)
-    #         output_ap.append(ap)
-    # print(np.mean(output_ap))
-
 
 
 def main_map_from_json_dirs(pred_dir, gt_dir, cfg_path="tools/evaluator/config.json"):
+    obj_type = 'bboxes'
     eval_detection_configs = load_cfg(cfg_path=cfg_path)
-    preds, preds_list = load_jsons_from_single_hooks(pred_dir,'pred',  output_json_path="/tmp/1234/pred.json")
-    gts, gts_list = load_jsons_from_single_hooks(gt_dir, 'gt', output_json_path="/tmp/1234/gt.json")
+    preds, preds_list = load_jsons_from_single_hooks(pred_dir, 'pred', obj_type=obj_type,
+                                                     output_json_path="/tmp/1234/pred.json")
+    gts, gts_list = load_jsons_from_single_hooks(gt_dir, 'gt', obj_type=obj_type,
+                                                 output_json_path="/tmp/1234/gt.json")
     if True:  # after this, reorganize the pred list
-        filter_box_according_to_range(preds, eval_detection_configs)
-        filter_box_according_to_range(gts, eval_detection_configs)
+        filter_obj_according_to_range(preds, eval_detection_configs, obj_type=obj_type)
+        filter_obj_according_to_range(gts, eval_detection_configs, obj_type=obj_type)
     if True:
-        filter_box_according_to_confidence(preds, eval_detection_configs)
+        filter_obj_according_to_confidence(preds,eval_detection_configs, obj_type=obj_type)
     gts_list, preds_list = reconcate_boxes(gts), reconcate_boxes(preds)
     if False:  # draw im
-        draw_json(input_dir, output_json_path="/tmp/1234/pred.json")  
+        draw_json(input_dir, output_json_path="/tmp/1234/pred.json")
     ### calculate recall rate
 
     recall_dict = {}
     print('recall ===============')
     for class_name in eval_detection_configs.class_range.keys():  # type: ignore
-        recall = my_cal_recall(gts, preds, gts_list, preds_list, class_name, thres_dist=0.5)
+        recall = my_cal_recall(gts, preds, gts_list, preds_list, class_name, obj_type=obj_type, thres_dist=None)
         if recall is not None:
             recall_dict[class_name] = recall
 
@@ -430,7 +531,7 @@ def main_map_from_json_dirs(pred_dir, gt_dir, cfg_path="tools/evaluator/config.j
     precision_dict = {}
     print('precision ===============')
     for class_name in eval_detection_configs.class_range.keys():  # type: ignore
-        precision = my_cal_precision(gts, preds, gts_list, preds_list, class_name, thres_dist=0.5)
+        precision = my_cal_precision(gts, preds, gts_list, preds_list, class_name,  obj_type=obj_type, thres_dist=None)
         if precision is not None:
             precision_dict[class_name] = precision
     # for k, v in precision_dict.items():
@@ -462,12 +563,15 @@ def load_cfg(cfg_path):
         data = json.load(f)
     return EasyDict(data)
 
-import argparse
-parser = argparse.ArgumentParser()
-parser.add_argument("--input_pkl_path", default='/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_20230823_110018_evaluate.pkl')
-parser.add_argument("--input_json_dir", default="/home/yuanshiwei/4/prefusion/apa_demo_dumps_20250218/dets/20230823_110018")
-parser.add_argument("--cfg_path", default="tools/evaluator/config_mtv.json")
 
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--input_pkl_path",
+                    default='/ssd1/MV4D_12V3L/planar_lidar_nocamerapose_20230823_110018_evaluate.pkl')
+parser.add_argument("--input_json_dir",
+                    default="/home/yuanshiwei/4/prefusion/apa_demo_dumps_20250218/dets/20230823_110018")
+parser.add_argument("--cfg_path", default="tools/evaluator/config_mtv.json")
 
 if __name__ == "__main__":
     args = parser.parse_args()
@@ -484,7 +588,4 @@ if __name__ == "__main__":
         pred_dir = "/home/yuanshiwei/4/prefusion/work_dirs/borui_dets_71/gt_pred_dumps/dets"
         gt_dir = "/home/yuanshiwei/4/prefusion/work_dirs/borui_dets_71/gt_pred_dumps/dets"
         main_map_from_json_dirs(pred_dir, gt_dir, cfg_path=cfg_path)
-
-
-
-
+        # main_map_from_json_dirs_slot(pred_dir, gt_dir, cfg_path=cfg_path)

@@ -6,17 +6,18 @@ from pathlib import Path as P
 from mtv4d import write_txt, read_json
 
 
+
 def is_slot_valid(polylines):
     for p in polylines:
-        if p['class'] == 'class.parking.parking_slot':
-            if len(p['points']) != 4:
+        if p['obj_type'] == 'class.parking.parking_slot':
+            if len(p['geometry']) != 4:
                 return False
     return True
 
 
-def filter_data(sid, scene_root):
+def filter_data(sid):
     scene_root = f'/ssd1/MV4D_12V3L/{i}'
-    path = f'/ssd1/MV4D_12V3L/{i}/4d_anno_infos/4d_anno_infos_frame/frames_labels'
+    path = f'{scene_root}/4d_anno_infos/4d_anno_infos_frame/frames_labels'
     timestamps = [i.stem for i in P(path).glob('*')]
     # # filter lidar
     timestamps = [ts for ts in timestamps if
@@ -98,7 +99,15 @@ new_ids2025 = [
     "20250315_155653_1742025533764_1742025653764",
     "20250315_155653_1742025653764_1742025691764",
 ]
-ids = old_pkl_ids + refactored_ids + new_ids25 + new_ids13 + new_ids2025
+new_0416_16 = [
+    "20250315_154730", "20250315_154940", "20250315_161940", "20250315_160135", "20250315_162031", "20250321_111631",
+    "20250321_112847", "20250321_131221", "20250321_160904", "20250321_170901", "20250322_112035", "20250322_162647",
+    "20250322_125640", "20250321_131754", "20250315_153742_1742024262664_1742024382664",
+    "20250315_153742_1742024382664_1742024467964", "20250315_161540_1742026540764_1742026660764",
+    "20250315_161540_1742026660764_1742026776664",
+]
+
+ids = old_pkl_ids + refactored_ids + new_ids25 + new_ids13 + new_ids2025 + new_0416_16
 
 output = []
 o1 = {}
@@ -109,7 +118,7 @@ for _, i in enumerate(ids):
 # import torch
 # torch.save(o1, '/tmp/1234/number.pth')
 
-write_txt(output, '/ssd1/MV4D_12V3L/valid_indice_102.txt')
+write_txt(output, '/ssd1/MV4D_12V3L/valid_indice_118.txt')
 
 
 
