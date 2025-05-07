@@ -7,7 +7,6 @@ from cachetools import cached, Cache
 from pathlib import Path
 from typing import List, Dict, Union, TYPE_CHECKING
 
-import mmengine
 from mmengine.logging import print_log
 from torch.utils.data import Dataset
 from prefusion.registry import DATASETS, MMENGINE_FUNCTIONS, TENSOR_SMITHS
@@ -43,6 +42,10 @@ from prefusion.dataset.transform import (
 )
 
 from .utils import (
+    PolarDict,
+    load_info_pkl,
+    load_scene_data,
+    load_frame_data_in_the_group,
     build_transforms, 
     build_model_feeder, 
     build_tensor_smith, 
@@ -137,7 +140,7 @@ class GroupBatchDataset(Dataset):
         super().__init__()
         self.name = name
         self.data_root = Path(data_root)
-        self.info = mmengine.load(str(info_path))
+        self.scene_info, self.frame_info = load_info_pkl(info_path)
         self.transformables = transformables
         self.transforms = build_transforms(transforms)
         self.model_feeder = build_model_feeder(model_feeder)
@@ -161,7 +164,7 @@ class GroupBatchDataset(Dataset):
                 self.subepoch_manager.init(len(self.groups))
     
     def _sample_groups(self):
-        self.groups = self.group_sampler.sample(self.data_root, self.info)
+        self.groups = self.group_sampler.sample(self.data_root, self.scene_info, self.frame_info)
         self.num_total_group_batches = divide(len(self.groups), self.batch_size, drop_last=self.drop_last)
 
     @property
@@ -180,8 +183,10 @@ class GroupBatchDataset(Dataset):
                 f"    group_backtime_prob={self.group_backtime_prob}\n)",
             ]
         )
-
+        
     def load_all_transformables(self, index_info: "IndexInfo") -> dict:
+        scene_data = load_scene_data(self.data_root, self.scene_info, index_info)
+        frame_data = load_frame_data_in_the_group(self.data_root, self.frame_info, index_info)
         transformables = {}
         for name in self.transformables:
             _t_cfg = self.transformables[name]
@@ -189,9 +194,8 @@ class GroupBatchDataset(Dataset):
             tensor_smith_cfg = _t_cfg["tensor_smith"] if "tensor_smith" in _t_cfg else None
             loader = self._build_transformable_loader(loader_cfg, _t_cfg["type"])
             tensor_smith = build_tensor_smith(tensor_smith_cfg) if "tensor_smith" in _t_cfg else None
-            scene_data = self.info[index_info.scene_id]
             rest_kwargs = {k: v for k, v in _t_cfg.items() if k not in ["type", "loader", "tensor_smith"]}
-            transformables[name] = self._build_transformable(name, scene_data, index_info, loader, tensor_smith=tensor_smith, **rest_kwargs)
+            transformables[name] = self._build_transformable(name, scene_data, frame_data, index_info, loader, tensor_smith=tensor_smith, **rest_kwargs)
         
         return transformables
     
@@ -292,5 +296,5 @@ class GroupBatchDataset(Dataset):
         return model_food
 
 
-    def _build_transformable(self, name: str, scene_data: Dict, index_info: "IndexInfo", loader: "TransformableLoader", tensor_smith: "TensorSmith" = None, **kwargs) -> "Transformable":
-        return loader.load(name, scene_data, index_info, tensor_smith=tensor_smith, **kwargs)
+    def _build_transformable(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", loader: "TransformableLoader", tensor_smith: "TensorSmith" = None, **kwargs) -> "Transformable":
+        return loader.load(name, scene_data, frame_data, index_info, tensor_smith=tensor_smith, **kwargs)
