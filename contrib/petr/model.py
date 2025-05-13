@@ -95,7 +95,7 @@ class StreamPETR(BaseModel):
         _device = img_feats.device
         
         data = {
-            "timestamp": torch.tensor([int(ii.frame_id) for ii in index_info], device=_device, dtype=torch.float64),
+            "timestamp": torch.tensor([int(ii.frame_id) / 1000 for ii in index_info], device=_device, dtype=torch.float64),
             "prev_exists": torch.tensor([ii.prev is not None for ii in index_info], device=_device, dtype=torch.float32),
             "ego_pose": torch.tensor(np.array([p.transformables['0'].trans_mat for p in ego_poses]), device=_device, dtype=torch.float32),
             "ego_pose_inv": torch.tensor(np.array([np.linalg.inv(p.transformables['0'].trans_mat) for p in ego_poses]), device=_device, dtype=torch.float32),
@@ -110,6 +110,7 @@ class StreamPETR(BaseModel):
             })
         gt_labels = [m['bbox_3d']['classes'] for m in meta_info]
         outs = self.box_head(img_feats, location, img_metas, bbox_3d, gt_labels, topk_indexes=topk_indexes, **data)
+        outs = {k: v.float() if isinstance(v, torch.Tensor) else v for k, v in outs.items()}   # convert torch.float16 to torch.float32
 
         # self.visualize_bbox3d(data, bbox_3d, outs, meta_info, ego_poses)
 

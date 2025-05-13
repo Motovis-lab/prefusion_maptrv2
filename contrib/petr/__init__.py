@@ -2,7 +2,7 @@ from .model import *
 from .losses import *
 from .sampler import PseudoSamplerPetr
 from .metrics import *
-from .tensor_smith import Bbox3DBasic
+from .tensor_smith import Bbox3DBasic, DivisibleCameraImageTensor
 from .cp_fpn import CPFPN
 from .model_feeder import *
 from .focal_head import FocalHead
