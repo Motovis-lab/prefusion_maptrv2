@@ -100,7 +100,8 @@ class StreamPETR(BaseModel):
             "ego_pose": torch.tensor(np.array([p.transformables['0'].trans_mat for p in ego_poses]), device=_device, dtype=torch.float32),
             "ego_pose_inv": torch.tensor(np.array([np.linalg.inv(p.transformables['0'].trans_mat) for p in ego_poses]), device=_device, dtype=torch.float32),
             "intrinsics": torch.tensor(np.array([m["camera_images"]["intrinsic"] for m in meta_info]), device=_device, dtype=torch.float32),
-            "lidar2img": torch.tensor(np.array([m["camera_images"]["extrinsic_inv"] for m in meta_info]), device=_device, dtype=torch.float32)
+            "ego2img": torch.tensor(np.array([m["camera_images"]["extrinsic_inv"] for m in meta_info]), device=_device, dtype=torch.float32),
+            "lidar2img": torch.tensor(np.array([np.linalg.inv(np.linalg.inv(m['T_ego_lidar']) @ np.array(m['camera_images']['extrinsic'])) for m in meta_info]), device=_device, dtype=torch.float32),
         }
 
         img_metas = []

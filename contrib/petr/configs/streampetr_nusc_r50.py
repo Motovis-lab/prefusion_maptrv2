@@ -50,16 +50,16 @@ grid_size = _calc_grid_size(point_cloud_range, voxel_size)
 # camera_intrinsic_configs = camera_intrinsic_configs_center_crop
 
 class_mapping = dict(
-    bicycle=["vehicle.bicycle"],
     car=["vehicle.car"],
-    construction_vehicle=["vehicle.construction"],
-    motorcycle=["vehicle.motorcycle"],
-    trailer=["vehicle.trailer"],
     truck=["vehicle.truck"],
+    construction_vehicle=["vehicle.construction"],
     bus=["vehicle.bus.bendy", "vehicle.bus.rigid"],
-    traffic_cone=["movable_object.trafficcone"],
-    pedestrian=["human.pedestrian.adult" ,"human.pedestrian.child" ,"human.pedestrian.construction_worker" ,"human.pedestrian.police_officer"],
+    trailer=["vehicle.trailer"],
     barrier=['movable_object.barrier'],
+    motorcycle=["vehicle.motorcycle"],
+    bicycle=["vehicle.bicycle"],
+    pedestrian=["human.pedestrian.adult" ,"human.pedestrian.child" ,"human.pedestrian.construction_worker" ,"human.pedestrian.police_officer"],
+    traffic_cone=["movable_object.trafficcone"],
 )
 
 train_dataloader = dict(

@@ -408,11 +408,13 @@ class StreamPETRHead(AnchorFreeHead):
 
         coords = coords.unsqueeze(-1)
 
-        img2lidars = data['lidar2img'].inverse() # if error, change it to: torch.inverse(data['lidar2img'].cpu()).to(device=data['lidar2img'].device)
-        img2lidars = img2lidars.view(BN, 1, 1, 4, 4).repeat(1, H*W, D, 1, 1).view(B, LEN, D, 4, 4)
-        img2lidars = topk_gather(img2lidars, topk_indexes)
+        KT = (data['intrinsics'] @ data['lidar2img']).float()
+        KT_inv = KT.inverse() # if error, change it to: torch.inverse(data['lidar2img'].cpu()).to(device=data['lidar2img'].device)
+        KT_inv = KT_inv.view(BN, 1, 1, 4, 4).repeat(1, H*W, D, 1, 1).view(B, LEN, D, 4, 4)
+        KT_inv = topk_gather(KT_inv, topk_indexes)
 
-        coords3d = torch.matmul(img2lidars, coords).squeeze(-1)[..., :3]
+        with torch.amp.autocast("cuda", enabled=False):
+            coords3d = torch.matmul(KT_inv, coords).squeeze(-1)[..., :3]
         ###################################
         # FIXME: visualize coords3d
         ###################################

@@ -89,7 +89,7 @@ class StreamPETRModelFeeder(BaseModelFeeder):
         mat[0, 0] = param[2]
         mat[1, 1] = param[3]
         mat[0, 2] = param[0]
-        mat[2, 2] = param[1]
+        mat[1, 2] = param[1]
         return mat
 
     @staticmethod
