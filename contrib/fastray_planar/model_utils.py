@@ -720,7 +720,7 @@ def save_outputs(pred_dict, batched_input_dict):
                 # bboxes
                 for element in transformables[branch].elements:
                     for key in element:
-                        if type(element[key]) == np.ndarray:
+                        if type(element[key]) is np.ndarray:
                             element[key] = element[key].reshape(-1).tolist()
                     zrange = voxel_range[0]
                     xrange = voxel_range[1]
@@ -738,7 +738,7 @@ def save_outputs(pred_dict, batched_input_dict):
                         continue
                     element['class'] = class_name_list[np.argmax(element['confs'][1:num_class_channels + 1])]
                     for key in element:
-                        if type(element[key]) == np.ndarray:
+                        if type(element[key]) is np.ndarray:
                             element[key] = element[key].reshape(-1).tolist()
                     element.pop('confs')
                     result_dict['pred']['bboxes'].append(element)
@@ -798,7 +798,7 @@ def save_gt_outputs(batched_input_dict, gt_dict, tensor_smith_dict, save_dir,
                 # bboxes
                 for element in transformables[branch].elements:
                     for key in element:
-                        if type(element[key]) == np.ndarray:
+                        if type(element[key]) is np.ndarray:
                             element[key] = element[key].reshape(-1).tolist()
                     zrange = voxel_range[0]
                     xrange = voxel_range[1]
@@ -902,7 +902,7 @@ def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictiona
                         continue
                     element['class'] = class_name_list[np.argmax(element['confs'][1:num_class_channels + 1])]
                     for key in element:
-                        if type(element[key]) == np.ndarray:
+                        if type(element[key]) is np.ndarray:
                             element[key] = element[key].reshape(-1).tolist()
                         if type(element[key]) in (np.float32, np.float64):
                             element[key] = float(element[key])
@@ -917,7 +917,7 @@ def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictiona
                         continue
                     element['class'] = class_name_list[np.argmax(element['confs'][1:num_class_channels + 1])]
                     for key in element:
-                        if type(element[key]) == np.ndarray:
+                        if type(element[key]) is np.ndarray:
                             element[key] = element[key].reshape(-1).tolist()
                         if type(element[key]) in (np.float32, np.float64):
                             element[key] = float(element[key])
@@ -955,6 +955,10 @@ def save_pred_outputs(batched_input_dict, pred_dict, tensor_smith_dict, dictiona
                                    'sdf': sdf,
                                    'height': height})
             case PlanarPolyline3D():
+                mat_path = save_dir / 'polyline_seg' / f'{scene_frame_id}.mat'
+                mat_path.parent.mkdir(parents=True, exist_ok=True)
+                polyline = pred_dict_branch_0['seg'][0].detach().cpu().numpy()
+                savemat(mat_path, {'polyline': polyline})
                 if save_polyline:
                     results = tensor_smith.reverse(pred_dict_branch_0)
                     for polyline in results:

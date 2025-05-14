@@ -386,7 +386,8 @@ class DeployAndDebugHookAPA(Hook):
         save_polyline=False,
         save_dir=None,
         HWC=False,
-        sigmoid_out=False
+        sigmoid_out=False,
+        ZC_transpose=False
     ):
         super().__init__()
         self.tensor_smith_dict = tensor_smith_dict
@@ -453,6 +454,16 @@ class DeployAndDebugHookAPA(Hook):
         ## dump spatial_transform io data
         spatial_transform = ori_model.spatial_transform
         spatial_transform.dump_voxel_feats = True
+        # if self.ZC_transpose:
+        #     voxel_feats = voxel_feats.reshape(N, C, Z, X, Y).permute(0, 2, 1, 3, 4).reshape(N, Z*C, X, Y)
+        # if self.ZC_transpose:
+        #     from torch.nn import functional as F
+        #     weight = spatial_transform.weight
+        #     C_out, C_in, k1, k2 = weight.shape
+        #     assert C_in == C * Z
+        #     ZC_weight = weight.reshape(C_out, C, Z, k1, k2).permute(0, 2, 1, 3, 4).reshape(C_out, Z*C, k1, k2)
+        #     bev_feats = F.conv2d(voxel_feats, weight=ZC_weight, bias=spatial_transform.bias)
+
         _, voxel_feats = spatial_transform(camera_feats_dict, camera_lookups)
         savemat(str(feature_mat_dir / f'{scene_frame_id}_voxel_feats.mat'), {'voxel_feats': voxel_feats.cpu().detach().numpy()})
         # if self.HWC:
@@ -539,7 +550,7 @@ class DumpBevModel(nn.Module):
         self.voxel_encoder = voxel_encoder
         self.scale_exists = False
         self.scale_disabled = False
-        if head_bbox_3d.has_reg_scale == True:
+        if head_bbox_3d.has_reg_scale:
             self.scale_exists = True
             head_bbox_3d.has_reg_scale = False
             head_parkingslot_3d.has_reg_scale = False
@@ -551,7 +562,7 @@ class DumpBevModel(nn.Module):
         self.sigmoid_out = sigmoid_out
     
     def enable_scale(self):
-        if self.scale_exists == True:
+        if self.scale_exists:
             self.head_bbox_3d.has_reg_scale = True
             self.head_parkingslot_3d.has_reg_scale = True
             # self.head_occ_sdf_bev.has_reg_scale = True
