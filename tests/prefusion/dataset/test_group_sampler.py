@@ -349,6 +349,13 @@ def test_get_scene_frame_inds_with_indices_provided(mock_info):
     }
 
 
+def test_get_scene_frame_inds_with_duplicated_indices_provided(mock_info):
+    indices = get_scene_frame_inds(mock_info, indices=["20230901_000000/1692759619664", "20230901_000000/1692759620664", "20231001_111111/1712759770664", "20230901_000000/1692759619664"])
+    assert indices == {
+        "20230901_000000": ["20230901_000000/1692759619664", "20230901_000000/1692759619664"],
+    }
+
+
 dummy_sz = np.ones(3, dtype=np.float32).tolist()
 dummy_rot = np.eye(3, dtype=np.float32)
 dummy_pos = np.zeros(3, dtype=np.float32)
