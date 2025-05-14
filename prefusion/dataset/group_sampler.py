@@ -141,7 +141,8 @@ def get_scene_frame_inds(frame_info: PolarDict, indices: List[str] = None) -> Di
         ```
     """
     indices = indices or frame_info.keys()
-    indices = sorted(set(indices) & set(frame_info.keys()))
+    frame_info_keys = set(frame_info.keys())
+    indices = sorted([i for i in indices if i in frame_info_keys])
 
     available_indices = defaultdict(list)
     for scn_frm_id in indices:

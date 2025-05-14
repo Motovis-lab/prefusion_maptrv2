@@ -252,9 +252,9 @@ class VoVNetSlimFPN(BaseModule):
 
         if self.relu6:
             out = self.out_bn(out)
+            out = self.out_relu(out)
             if self.hwc_out:
                 out = out.permute(0, 2, 3, 1).contiguous()
-            out = self.out_relu(out)
         return out
 
 

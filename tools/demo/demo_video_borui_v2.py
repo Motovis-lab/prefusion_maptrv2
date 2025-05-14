@@ -63,19 +63,28 @@ heading_objs = [
     'arrow'
 ]
 
-# cameras = {
+
+# center ego
+cameras = {
+    'VCAMERA_FISHEYE_FRONT': vc.create_virtual_fisheye_camera((640, 384), (-120, 0, -90), [2.43686209, 0.0055232 , 0.74317797]),
+    'VCAMERA_FISHEYE_LEFT': vc.create_virtual_fisheye_camera((640, 384), (-135, 0, 0), [0.71698729, 1.06778281, 1.01063169]),
+    'VCAMERA_FISHEYE_BACK': vc.create_virtual_fisheye_camera((640, 384), (-120, 0, 90), [-2.43845655, -1.53496593e-04,  1.00320036]),
+    'VCAMERA_FISHEYE_RIGHT': vc.create_virtual_fisheye_camera((640, 384), (-135, 0, 180), [ 0.75621105, -1.0802392 ,  1.02806573]),
+}
+
+# cameras_back = {
 #     'VCAMERA_FISHEYE_FRONT': vc.create_virtual_fisheye_camera((640, 384), (-120, 0, -90), [3.81686209, 0.0055232 , 0.74317797]),
 #     'VCAMERA_FISHEYE_LEFT': vc.create_virtual_fisheye_camera((640, 384), (-135, 0, 0), [2.09698729, 1.06778281, 1.01063169]),
 #     'VCAMERA_FISHEYE_BACK': vc.create_virtual_fisheye_camera((640, 384), (-120, 0, 90), [-1.05845655, -1.53496593e-04,  1.00320036]),
 #     'VCAMERA_FISHEYE_RIGHT': vc.create_virtual_fisheye_camera((640, 384), (-135, 0, 180), [ 2.13621105, -1.0802392 ,  1.02806573]),
 # }
 
-cameras = {
-    'VCAMERA_FISHEYE_FRONT': vc.create_virtual_fisheye_camera((640, 384), (-120, 0, -90), [2.24360394, -0.042407  ,  0.69432598]),
-    'VCAMERA_FISHEYE_LEFT': vc.create_virtual_fisheye_camera((640, 384), (-135, 0, 0), [0.5738639831542967, 1.1372499465942385, 1.073140025138855]),
-    'VCAMERA_FISHEYE_BACK': vc.create_virtual_fisheye_camera((640, 384), (-120, 0, 90), [-2.419692039489746, 0.053640000522136154, 1.1092510223388672]),
-    'VCAMERA_FISHEYE_RIGHT': vc.create_virtual_fisheye_camera((640, 384), (-135, 0, 180), [0.47674098610878013, -1.0943230390548706, 1.080273985862732]),
-}
+# cameras = {
+#     'VCAMERA_FISHEYE_FRONT': vc.create_virtual_fisheye_camera((640, 384), (-120, 0, -90), [2.24360394, -0.042407  ,  0.69432598]),
+#     'VCAMERA_FISHEYE_LEFT': vc.create_virtual_fisheye_camera((640, 384), (-135, 0, 0), [0.5738639831542967, 1.1372499465942385, 1.073140025138855]),
+#     'VCAMERA_FISHEYE_BACK': vc.create_virtual_fisheye_camera((640, 384), (-120, 0, 90), [-2.419692039489746, 0.053640000522136154, 1.1092510223388672]),
+#     'VCAMERA_FISHEYE_RIGHT': vc.create_virtual_fisheye_camera((640, 384), (-135, 0, 180), [0.47674098610878013, -1.0943230390548706, 1.080273985862732]),
+# }
 
 def _get_xyvec_from_zvec(zvecs):
     zvecs /= np.linalg.norm(zvecs, axis=0)
@@ -102,7 +111,6 @@ def get_box_bev(element):
         translation
     ], dtype=np.float32)
     return class_name, corner_points, heading_points
-    
 
 def get_cylinder_bev(element):
     class_name = element['class']
@@ -158,6 +166,7 @@ def get_box_camera(element, camera):
     return class_name, line_segments_camera, front_face
 
 
+
 def get_cylinder_camera(element, camera):
     class_name = element['class']
     zvec = np.float32(element['zvec'])
@@ -188,6 +197,7 @@ def get_cylinder_camera(element, camera):
     center_line_camera = np.float32([uu[valid], vv[valid]]).T
 
     return class_name, top_points_camera, bottom_points_camera, center_line_camera
+
 
 
 def get_polyline_camera(polyline, camera):
@@ -230,7 +240,7 @@ def get_cam_img(ind, info, cameras, results_root_path):
     mat_path = Path(results_root_path / 'mat') / (ind + '.mat')
     mat = loadmat(mat_path)
     # 0.6225 ==> 0.5, 0.6682 ==> 0.7
-    occ_edge = cv2.resize(mat['occ_edge'], (480, 640)) > 0.5
+    occ_edge = cv2.resize(mat['occ_edge'], (480, 640)) > 0.6682
     # height = cv2.resize(mat['height'], (480, 640))
     hh, ww = occ_edge.nonzero()
     xx = voxel_range[1][0] + hh * (voxel_range[1][1] - voxel_range[1][0]) / 640
@@ -253,10 +263,8 @@ def get_cam_img(ind, info, cameras, results_root_path):
         plt.axis([0, 639, 319, 0])
         
         for slot in info['slots']:
-            slot = np.float32(slot).reshape(-1, 4)
-            if slot[:, 3][:2].mean() < 0.75:
-                continue
-            slot_line_segments_camera = get_polyline_camera(slot[:, :3][[0, 1, 2, 3, 0]], camera)
+            slot = np.float32(slot).reshape(-1, 4)[:, :3][[0, 1, 2, 3, 0]]
+            slot_line_segments_camera = get_polyline_camera(slot, camera)
             for i, line in enumerate(slot_line_segments_camera):
                 if i == 0:
                     continue
@@ -267,8 +275,6 @@ def get_cam_img(ind, info, cameras, results_root_path):
 
         for element in info['bboxes']:
             # class_name, corner_points, heading_points = get_box_bev(element)
-            if element['score'] < 0.7:
-                continue
             class_name, line_segments_camera, front_face = get_box_camera(element, camera)
             color = np.float32(NAME2COLOR[class_name]) / 255
             for line in line_segments_camera:
@@ -283,12 +289,13 @@ def get_cam_img(ind, info, cameras, results_root_path):
             plt.plot(center_line_camera[:, 0], center_line_camera[:, 1], color=color, linewidth=3)
             plt.fill(top_points_camera[:, 0], top_points_camera[:, 1], color=color, alpha=0.7)
 
-        if 'polylines' in info:
-            for polyline in info['polylines']:
-                polyline = np.float32(polyline).reshape(-1, 3)
-                line_segments_camera = get_polyline_camera(polyline, camera)
-                for line in line_segments_camera:
-                    plt.plot(line[:, 0], line[:, 1], 'orange')
+
+        # if 'polylines' in info:
+        #     for polyline in info['polylines']:
+        #         polyline = np.float32(polyline).reshape(-1, 3)
+        #         line_segments_camera = get_polyline_camera(polyline, camera)
+        #         for line in line_segments_camera:
+        #             plt.plot(line[:, 0], line[:, 1], 'orange')
         
         camera_edges = get_points_camera(edge_points, camera)
         if len(camera_edges) > 0:
@@ -321,7 +328,7 @@ def get_bev_img(ind, info, results_root_path):
     mat_path = Path(results_root_path / 'mat') / (ind + '.mat')
     mat = loadmat(mat_path)
     # 0.6225 ==> 0.5, 0.6682 ==> 0.7
-    occ_edge = cv2.resize(mat['occ_edge'], (480, 640)) > 0.5
+    occ_edge = cv2.resize(mat['occ_edge'], (480, 640)) > 0.6682
     # height = cv2.resize(mat['height'], (480, 640))
     hh, ww = occ_edge.nonzero()
     xx = voxel_range[1][0] + hh * (voxel_range[1][1] - voxel_range[1][0]) / 640
@@ -331,15 +338,23 @@ def get_bev_img(ind, info, results_root_path):
 
 
     for slot in info['slots']:
-        slot = np.float32(slot).reshape(-1, 4)
-        if slot[:, 3][:2].mean() > 0.75:
-            plt.fill(slot[[0, 1, 2, 3, 0], 1], slot[[0, 1, 2, 3, 0], 0], 'gray', alpha=0.3)
-            plt.plot(slot[[1, 2, 3, 0], 1], slot[[1, 2, 3, 0], 0], 'gray', linewidth=4)
+        slot = np.float32(slot).reshape(-1, 4)[:, :3]
+        plt.fill(slot[[0, 1, 2, 3, 0], 1], slot[[0, 1, 2, 3, 0], 0], 'gray', alpha=0.3)
+        plt.plot(slot[[1, 2, 3, 0], 1], slot[[1, 2, 3, 0], 0], 'gray', linewidth=4)
 
-    if 'polylines' in info:
-        for polyline in info['polylines']:
-            polyline = np.float32(polyline).reshape(-1, 3)
-            plt.plot(polyline[:, 1], polyline[:, 0], 'orange', linewidth=4)
+    # if 'polylines' in info:
+    #     for polyline in info['polylines']:
+    #         polyline = np.float32(polyline).reshape(-1, 3)
+    #         plt.plot(polyline[:, 1], polyline[:, 0], 'orange', linewidth=4)
+
+    # mat_path = Path(results_root_path / 'polyline_seg') / (ind + '.mat')
+    # mat = loadmat(mat_path)
+    # polyline = cv2.resize(mat['polyline'], (480, 640)) > 0.95
+    # hh, ww = polyline.nonzero()
+    # xx = voxel_range[1][0] + hh * (voxel_range[1][1] - voxel_range[1][0]) / 640
+    # yy = voxel_range[2][0] + ww * (voxel_range[2][1] - voxel_range[2][0]) / 480
+    # plt.plot(yy, xx, '.', color='orange', alpha=0.5)
+
     
     for cylinder in info['cylinders']:
         class_name, bottom_points = get_cylinder_bev(cylinder)
@@ -371,25 +386,30 @@ def get_bev_img(ind, info, results_root_path):
     return bev_img
 
 
+def draw_height_img(height):
+    plt.figure(figsize=(6, 8), dpi=80)
+    fig = plt.gcf()
+    plt.axis('off')
+
+    plt.imshow(height)
+
+    plt.tight_layout(pad=0)
+    fig.canvas.draw()
+    bev_img = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8).reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    plt.close()
+
+    return bev_img
+
+
 if __name__ == '__main__':
-    # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_20250225/pred_dumps/')
-    # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_20250305/pred_dumps/')
-    # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_20250305_1/pred_dumps/')
-    # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_deploys_debug_dumps_20250306/deploy_and_debug/')
-    # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_20250318/pred_dumps/')
-    # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_yangguangtiandi_0318/pred_dumps/')
-    # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_20250321/pred_dumps/')
-    # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_20250401_PARKING-130/pred_dumps/')
-    # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_20250403_PARKING-130/pred_dumps/')
-    results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/n5_dumps_yangguangtiandi_0408/pred_dumps/')
+    # results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/borui_demo_20250421_v2/pred_dumps')
+    results_root_path = Path('/home/alpha/Projects/PreFusion/work_dirs/borui_demo_20250421/pred_dumps')
     all_inds = sorted([str(p.relative_to(results_root_path / 'dets'))[:-5] for p in results_root_path.glob('dets/**/*.json')])
 
-
-    # demo_video = FFMPEG_VideoWriter('prefusion_apa_n5_demo.mp4', size=(1280, 640), fps=10)
-    # demo_video = FFMPEG_VideoWriter('prefusion_apa_n5_demo_v2.mp4', size=(1280 + 960, 640), fps=7.5)
-    demo_video = FFMPEG_VideoWriter(f'work_dirs/prefusion_apa_{results_root_path.parent.name}.mp4', size=(640 + 960, 640), fps=10)
-    for ind in tqdm(all_inds):
-        # json_path = results_root_path / (ind + '.json')
+    demo_video = FFMPEG_VideoWriter('work_dirs/borui_demo_20250421.mp4', size=(640 + 960, 640), fps=20)
+    
+    for ind in tqdm(all_inds[:]):
+        # ind = ind.replace('_gt', '')
         json_path = results_root_path / 'dets' / (ind + '.json')
         info_all = json.load(open(json_path))
         img_cat, ori_img_cat = get_cam_img(ind, info_all['pred'], cameras, results_root_path)
@@ -397,19 +417,28 @@ if __name__ == '__main__':
 
         mat_path = Path(results_root_path / 'mat') / (ind + '.mat')
         mat = loadmat(mat_path)
-        occ_edge = np.array(128 * (cv2.resize(mat['occ_edge'], (480, 640)) > 0.5), dtype=np.uint8)
-        freespace = np.array(40 * np.clip(cv2.resize(mat['sdf'], (480, 640)), 0.05, 4.5) + 64, dtype=np.uint8)
-        freespace[freespace <= 66] = 0
-        bev_img_occ = np.stack([occ_edge, freespace, np.zeros_like(occ_edge) + 64], axis=2)
-        # bev_img = cv2.resize(np.concatenate([bev_img_pred, bev_img_occ], axis=0), (240, 640))
-        # img_final = np.concatenate([img_cat, bev_img], axis=1)
-        img_final = np.concatenate([ori_img_cat, img_cat, bev_img_pred, bev_img_occ], axis=1)
+        # occ_edge = np.array(128 * (cv2.resize(mat['occ_edge'], (480, 640)) > 0.5), dtype=np.uint8)
+        # freespace = np.array(40 * np.clip(cv2.resize(mat['sdf'], (480, 640)), 0.05, 4.5) + 64, dtype=np.uint8)
+        # freespace[freespace <= 66] = 0
+        # bev_img_occ = np.stack([occ_edge, freespace, np.zeros_like(occ_edge) + 64], axis=2)
         
-        (text_width, text_height), baseline = cv2.getTextSize(ind, cv2.FONT_HERSHEY_SIMPLEX, 0.75, 1)
-        x = (img_final.shape[1] - text_width) - 10
-        y = text_height + 10
-        # cv2.putText(img_final, ind, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
-        cv2.putText(img_final, ind, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
+        height = np.array(64 + np.clip(cv2.resize(mat['height'], (480, 640), interpolation=cv2.INTER_LINEAR), -0.1, 2.5) * 64, dtype=np.uint8)
+        bev_img_occ = draw_height_img(height)
+
+        img_final = np.concatenate([ori_img_cat, img_cat, bev_img_pred, bev_img_occ], axis=1)
+
+        # (text_width, text_height), baseline = cv2.getTextSize(ind, cv2.FONT_HERSHEY_SIMPLEX, 0.75, 1)
+
+        # # 计算文字位置（水平居中，顶部）
+        # x = (img_final.shape[1] - text_width) - 10  # 水平居中
+        # y = text_height + 10  # 顶部留10像素边距（可根据需要调整）
+
+        # # cv2.putText(img_final, ind, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
+        # cv2.putText(img_final, ind, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
+        
+        # plt.imshow(img_final)
+        # plt.show()
+        # break
 
         demo_video.write_frame(img_final)
     demo_video.close()

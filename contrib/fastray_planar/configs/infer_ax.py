@@ -150,10 +150,10 @@ dictionary_dict = dict(
 ## camera configs for model inputs
 
 fisheye_camera_mapping = dict(
-    VCAMERA_FISHEYE_FRONT='front',
-    VCAMERA_FISHEYE_LEFT='left',
-    VCAMERA_FISHEYE_BACK='rear',
-    VCAMERA_FISHEYE_RIGHT='right' 
+    VCAMERA_FISHEYE_FRONT='FISHEYE_FRONT',
+    VCAMERA_FISHEYE_LEFT='FISHEYE_LEFT',
+    VCAMERA_FISHEYE_BACK='FISHEYE_BACK',
+    VCAMERA_FISHEYE_RIGHT='FISHEYE_RIGHT' 
 )
 
 fisheye_resolution = (640, 384)
@@ -198,16 +198,9 @@ transformables=dict(
 # datasets
 test_dataset = dict(
     type='GroupBatchDataset',
-    name="n5_demo",
-    data_root='../MV4D-PARKING/N5_data',
-    # info_path='../MV4D-PARKING/N5_data/2025_02_18_18-00-36_B1.pkl',
-    # info_path='../MV4D-PARKING/N5_data/2025_02_18_18-16-04_B1_B2.pkl',
-    # info_path='../MV4D-PARKING/N5_data/2025_02_24_10-30-28.pkl',
-    info_path='../MV4D-PARKING/N5_data/3_yangguangtiandi.pkl',
-    # info_path='../MV4D-PARKING/N5_data/2_hengshengwanpeng.pkl',
-    # info_path='../MV4D-PARKING/N5_data/0_changtai.pkl',
-    # info_path='../MV4D-PARKING/N5_data/test_n5.pkl',
-    # info_path='../MV4D-PARKING/N5_data/PARKING-130.pkl',
+    name="ax_demo",
+    data_root='../robosense',
+    info_path='../robosense/output/output.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -383,16 +376,7 @@ model = dict(
     debug_mode=False
 )
 
-# work_dir = "./work_dirs/n5_dumps_20250220"
-# work_dir = "./work_dirs/n5_dumps_20250225"
-# work_dir = "./work_dirs/n5_dumps_20250226"
-# work_dir = "./work_dirs/n5_dumps_20250305"
-# work_dir = "./work_dirs/n5_dumps_20250305_1"
-# work_dir = "./work_dirs/n5_dumps_20250318"
-# work_dir = "./work_dirs/n5_dumps_yangguangtiandi_0318"
-# work_dir = "./work_dirs/n5_dumps_20250321"
-# work_dir = "./work_dirs/n5_dumps_20250403_PARKING-130"
-work_dir = "./work_dirs/n5_dumps_yangguangtiandi_0408"
+work_dir = "./work_dirs/ax_e2e_0416"
 
 ## log_processor
 log_processor = dict(type='GroupAwareLogProcessor')

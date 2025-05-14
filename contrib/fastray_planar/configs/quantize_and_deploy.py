@@ -368,7 +368,8 @@ model = dict(
     debug_mode=False
 )
 
-work_dir = "./work_dirs/0_quantize_and_deploy_0320"
+# work_dir = "./work_dirs/0_quantize_and_deploy_0320"
+work_dir = "./work_dirs/0_quantize_and_deploy_0410_2"
 ## log_processor
 log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
@@ -394,6 +395,7 @@ env_cfg = dict(
 )
 
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
-load_from = "./work_dirs/collected_models/cbgs_ped_epoch_28.pth"
+# load_from = "./work_dirs/collected_models/cbgs_ped_epoch_28.pth"
+load_from = "./work_dirs/collected_models/scene_104_epoch_74.pth"
 
 # resume = False
