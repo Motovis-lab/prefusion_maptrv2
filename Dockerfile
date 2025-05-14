@@ -68,6 +68,7 @@ RUN pip install --no-cache-dir onnx==1.17.0
 RUN pip install --no-cache-dir onnxruntime==1.20.1
 RUN pip install --no-cache-dir copious==0.1.24
 RUN pip install --no-cache-dir mtv4d==0.1.4
+RUN pip install --no-cache-dir polars==1.28.0
 
 WORKDIR /workspace
 

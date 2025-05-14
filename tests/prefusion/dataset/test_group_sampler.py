@@ -1,10 +1,15 @@
+import pickle
 from typing import Dict, List
 from collections import defaultdict
+from pathlib import Path
 
+import polars as pl
 import pandas as pd
 import numpy as np
 import pytest
 
+from copious.io.fs import mktmpdir, parent_ensured_path
+from prefusion.dataset.utils import PolarDict
 from prefusion.dataset.index_info import IndexInfo
 from prefusion.dataset.group_sampler import (
     IndexGroupSampler, 
@@ -258,18 +263,21 @@ def test_group_sampler_sample_scene_groups(scene_frame_inds):
     info = defaultdict(lambda: defaultdict(dict))
     for scene in scene_frame_inds:
         for frm in scene_frame_inds[scene]:
-            info[scene]["frame_info"][frm.split('/')[1]] = {"dummy": 111}
-    scene_groups = gbs.sample(None, info)
-    assert _to_scene_frm_ids(scene_groups) == [['20231101_160337/1698825817664'],
-        ['20231101_160337/1698825817764'], ['20231101_160337/1698825817864'], ['20231101_160337/1698825817964'], ['20231101_160337/1698825818064'],
-        ['20231101_160337/1698825818164'], ['20231101_160337/1698825818264'], ['20231101_160337/1698825818364'], ['20231101_160337/1698825818464'],
-        ['20231101_160337/1698825818564'], ['20231101_160337/1698825818664'], ['20231101_160337/1698825818764'], ['20231101_160337/1698825818864'],
-        ['20231101_160337/1698825818964'], ['20231101_160337/1698825819064'], ['20231101_160337/1698825819164'], ['20231101_160337/1698825819264'],
-        ['20231101_160337_subset/1698825818164'], ['20231101_160337_subset/1698825818264'], ['20231101_160337_subset/1698825818364'], ['20231101_160337_subset/1698825818464'],
-        ['20231101_160337_subset/1698825818564'], ['20231101_160337_subset/1698825818664'], ['20231101_160337_subset/1698825818764'], ['20231101_160337_subset/1698825818864'],
+            info[scene]["frame_info"][frm.split('/')[1]] = "dummy_directory/dummy_path.dummy"
+    scene_info = PolarDict({scene_id: scene_data['scene_info'] for scene_id, scene_data in info.items()})
+    frame_info = PolarDict({scene_id: scene_data['frame_info'] for scene_id, scene_data in info.items()}, separator="/")
+    scene_groups = gbs.sample(None, scene_info, frame_info)
+    assert _to_scene_frm_ids(scene_groups) == [
         ['20230823_110018/1692759640764'], ['20230823_110018/1692759640864'], ['20230823_110018/1692759640964'], ['20230823_110018/1692759641064'],
         ['20230823_110018/1692759641164'], ['20230823_110018/1692759641264'], ['20230823_110018/1692759641364'], ['20230823_110018/1692759641464'],
-        ['20230823_110018/1692759641564'], ['20230823_110018/1692759641664'], ['20230823_110018/1692759641764']
+        ['20230823_110018/1692759641564'], ['20230823_110018/1692759641664'], ['20230823_110018/1692759641764'],
+        ['20231101_160337/1698825817664'], ['20231101_160337/1698825817764'], ['20231101_160337/1698825817864'], ['20231101_160337/1698825817964'], 
+        ['20231101_160337/1698825818064'], ['20231101_160337/1698825818164'], ['20231101_160337/1698825818264'], ['20231101_160337/1698825818364'], 
+        ['20231101_160337/1698825818464'], ['20231101_160337/1698825818564'], ['20231101_160337/1698825818664'], ['20231101_160337/1698825818764'], 
+        ['20231101_160337/1698825818864'], ['20231101_160337/1698825818964'], ['20231101_160337/1698825819064'], ['20231101_160337/1698825819164'], 
+        ['20231101_160337/1698825819264'],
+        ['20231101_160337_subset/1698825818164'], ['20231101_160337_subset/1698825818264'], ['20231101_160337_subset/1698825818364'], ['20231101_160337_subset/1698825818464'],
+        ['20231101_160337_subset/1698825818564'], ['20231101_160337_subset/1698825818664'], ['20231101_160337_subset/1698825818764'], ['20231101_160337_subset/1698825818864'],
     ]
 
 def test_group_sampler_convert_groups_to_info():
@@ -315,11 +323,14 @@ def test_cur_train_group_size():
 
 @pytest.fixture
 def mock_info():
-    return {
-        "20230901_000000": {"frame_info": {"1692759619664": {1}, "1692759619764": 1}},
-        "20230823_111111": {"frame_info": {}},
-        "20231023_222222": {"frame_info": {"1692759621364": [1]}},
-    }
+    return PolarDict({
+        "20230901_000000/1692759619664": {1},
+        "20230901_000000/1692759619764": 1,
+        "20231023_222222/1692759621364": [1],
+        "20250428_000007/1722759001064": {6},
+        "20250428_000007/1722759002064": [8],
+        "20250428_000007/1722759000064": "1",
+    })
 
 
 def test_get_scene_frame_inds_with_no_indices_provided(mock_info):
@@ -327,11 +338,12 @@ def test_get_scene_frame_inds_with_no_indices_provided(mock_info):
     assert indices == {
         "20230901_000000": ["20230901_000000/1692759619664", "20230901_000000/1692759619764"],
         "20231023_222222": ["20231023_222222/1692759621364"],
+        "20250428_000007": ["20250428_000007/1722759000064", "20250428_000007/1722759001064", "20250428_000007/1722759002064"],
     }
 
 
 def test_get_scene_frame_inds_with_indices_provided(mock_info):
-    indices = get_scene_frame_inds(mock_info, ["20230901_000000/1692759619664"])
+    indices = get_scene_frame_inds(mock_info, indices=["20230901_000000/1692759620664", "20231001_111111/1712759770664", "20230901_000000/1692759619664"])
     assert indices == {
         "20230901_000000": ["20230901_000000/1692759619664"],
     }
@@ -464,6 +476,31 @@ def dataset_info_pkl():
     }
 
 
+def get_separated_scene_info_and_frame_info(info: Dict, data_root: Path):
+    scene_dict = {}
+    for scene_id, scene_data in info.items():
+        frame_info = scene_data.get('frame_info', {})
+        for frame_id in frame_info.keys():
+            frame_pkl_save_path = parent_ensured_path(data_root / scene_id / "frame_info_pkl" / f"{frame_id}.pkl")
+
+            # Save the frame pickle data to the constructed path
+            with frame_pkl_save_path.open('wb') as f_out:
+                pickle.dump(frame_info[frame_id], f_out)
+
+            # Update the frame_data to reference the saved file path
+            frame_info[frame_id] = str(frame_pkl_save_path.relative_to(data_root))
+        
+        scene_pkl_save_path = parent_ensured_path(data_root / scene_id / "scene_info.pkl")
+        with scene_pkl_save_path.open('wb') as f_out:
+            pickle.dump(scene_data["scene_info"], f_out)
+        
+        scene_dict[scene_id] = str(scene_pkl_save_path.relative_to(data_root))
+
+    scene_info = PolarDict(scene_dict)
+    frame_info = PolarDict({scene_id: scene_data['frame_info'] for scene_id, scene_data in info.items()})
+    return scene_info, frame_info
+
+
 @pytest.fixture
 def transformable_cfg():
     return dict(
@@ -513,8 +550,10 @@ def cbgs_cfg():
 
 
 def test_index_group_sampler(dataset_info_pkl):
+    tmpdir = mktmpdir()
+    scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     gbs = IndexGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42)
-    groups = gbs.sample("/doesntcare", dataset_info_pkl, phase='train')
+    groups = gbs.sample(tmpdir, scene_info, frame_info, phase='train')
     assert [[f.frame_id for f in group] for group in groups] == [
         ['401', '402', '403'], # ├─ car=5, bus=1, truck=1, pedestrian=1, bicycle=3
                                # ├─ parking_slot=1, laneline=1, access_aisle=1
@@ -548,10 +587,12 @@ def test_index_group_sampler(dataset_info_pkl):
 
 
 def test_cgbs_count_frame_level_class_occurrence(dataset_info_pkl, transformable_cfg):
+    tmpdir = mktmpdir()
+    scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': True, 'oversampling_consider_object_attr': True, 'counter_type': 'group'}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample("/any_data_root", dataset_info_pkl, phase='train')
-    groups = gbs.count_class_and_attr_occurrence("/any_data_root", dataset_info_pkl, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
     assert len(groups) == 9
     assert groups[0].obj_cnt == {'car': 5, 'bus': 1, 'truck': 1, 'pedestrian': 1, 'bicycle': 3, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1, 'color.yellow': 3}
     assert groups[1].obj_cnt == {'car': 8, 'bus': 3, 'pedestrian': 3, 'bicycle': 4}
@@ -595,10 +636,12 @@ def test_cgbs_count_frame_level_class_occurrence(dataset_info_pkl, transformable
 
 
 def test_oversample_classes_1(dataset_info_pkl, transformable_cfg):
+    tmpdir = mktmpdir()
+    scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False, "counter_type": "frame"}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample("/any_data_root", dataset_info_pkl, phase='train')
-    groups = gbs.count_class_and_attr_occurrence("/any_data_root", dataset_info_pkl, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
     sampled_groups = gbs.sample_minority_groups(groups, ["barrier_soft", "access_aisle"], "barrier_hard", target_ratio=1.0)
     assert len(sampled_groups) == 6
     assert sampled_groups[0].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
@@ -610,10 +653,12 @@ def test_oversample_classes_1(dataset_info_pkl, transformable_cfg):
 
 
 def test_oversample_classes_2(dataset_info_pkl, transformable_cfg):
+    tmpdir = mktmpdir()
+    scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False, "counter_type": "frame"}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample("/any_data_root", dataset_info_pkl, phase='train')
-    groups = gbs.count_class_and_attr_occurrence("/any_data_root", dataset_info_pkl, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
     sampled_groups = gbs.sample_minority_groups(groups, ["barrier_soft", "access_aisle", "barrier_hard"], "car", target_ratio=0.3)
     assert len(sampled_groups) == 3
     assert sampled_groups[0].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
@@ -630,19 +675,23 @@ def _calc_class_distribution(groups):
 
 
 def test_oversample_0(dataset_info_pkl, transformable_cfg):
+    tmpdir = mktmpdir()
+    scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.1, "update_stats_during_oversampling": False}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample("/any_data_root", dataset_info_pkl, phase='train')
-    groups = gbs.count_class_and_attr_occurrence("/any_data_root", dataset_info_pkl, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
     sampled_groups = gbs.iterative_sample_minority_groups(groups)
     assert len(sampled_groups) == 0
 
 
 def test_oversample_1(dataset_info_pkl, transformable_cfg):
+    tmpdir = mktmpdir()
+    scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.3, "update_stats_during_oversampling": False}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample("/any_data_root", dataset_info_pkl, phase='train')
-    groups = gbs.count_class_and_attr_occurrence("/any_data_root", dataset_info_pkl, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
     sampled_groups = gbs.iterative_sample_minority_groups(groups)
     assert len(sampled_groups) == 9
     assert sampled_groups[0].cnt == {'car': 2, 'bus': 1, 'truck': 1, 'pedestrian': 1, 'bicycle': 2, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
@@ -657,10 +706,12 @@ def test_oversample_1(dataset_info_pkl, transformable_cfg):
 
 
 def test_oversample_2(dataset_info_pkl, transformable_cfg):
+    tmpdir = mktmpdir()
+    scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.5, "update_stats_during_oversampling": False}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample("/any_data_root", dataset_info_pkl, phase='train')
-    groups = gbs.count_class_and_attr_occurrence("/any_data_root", dataset_info_pkl, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
     sampled_groups = gbs.iterative_sample_minority_groups(groups)
     assert len(sampled_groups) == 21
     # [access_aisle, barrier_soft] => barrier_hard
@@ -693,12 +744,13 @@ def test_oversample_2(dataset_info_pkl, transformable_cfg):
     assert sampled_groups[20].cnt == {'car': 1, 'truck': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_hard': 2, 'parking_slot': 2, 'laneline': 2}
 
 
-
 def test_oversample_update_stats_1(dataset_info_pkl, transformable_cfg):
+    tmpdir = mktmpdir()
+    scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.3, "update_stats_during_oversampling": True}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample("/any_data_root", dataset_info_pkl, phase='train')
-    groups = gbs.count_class_and_attr_occurrence("/any_data_root", dataset_info_pkl, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
     sampled_groups = gbs.iterative_sample_minority_groups(groups)
     assert len(sampled_groups) == 9
     assert sampled_groups[0].cnt == {'car': 2, 'bus': 1, 'truck': 1, 'pedestrian': 1, 'bicycle': 2, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
@@ -713,10 +765,12 @@ def test_oversample_update_stats_1(dataset_info_pkl, transformable_cfg):
 
 
 def test_oversample_update_stats_2(dataset_info_pkl, transformable_cfg):
+    tmpdir = mktmpdir()
+    scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.5, "update_stats_during_oversampling": True}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample("/any_data_root", dataset_info_pkl, phase='train')
-    groups = gbs.count_class_and_attr_occurrence("/any_data_root", dataset_info_pkl, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
     sampled_groups = gbs.iterative_sample_minority_groups(groups)
     assert len(sampled_groups) == 62
     i = 0
@@ -795,9 +849,11 @@ def test_oversample_update_stats_2(dataset_info_pkl, transformable_cfg):
 
 
 def test_generate_cbgs_groups(dataset_info_pkl, transformable_cfg, cbgs_cfg):
+    tmpdir = mktmpdir()
+    scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.3, "update_stats_during_oversampling": False}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs.sample("/any_data_root", dataset_info_pkl, phase='train')
+    groups = gbs.sample(tmpdir, scene_info, frame_info, phase='train')
     
     assert len(groups) == 18
     i = 0

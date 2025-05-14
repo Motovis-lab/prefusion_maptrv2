@@ -106,9 +106,7 @@ def handle_camera_intrinsic(scene_info_calibration):
 
 
 def process_one_scene_with_pickle(data_root, scene_name, input_pickle_path, output_pickle_path):
-    # scene_name = '20231027_185823'
-    # input_pickle_path = f'{data_root}/mv_4d_infos_{scene_name}.pkl'
-    # output_pickle_path = f'{data_root}/mv_4d_infos_{scene_name}_lidar.pkl'
+
     with open(input_pickle_path, 'rb') as f:
         a = pickle.load(f)
     frame_info = a[scene_name]['frame_info']
@@ -122,8 +120,7 @@ def process_one_scene_with_pickle(data_root, scene_name, input_pickle_path, outp
     for ts in sorted(frame_info.keys()):
         frame = frame_info[ts]
         handle_ego_pose(frame, Twes)
-        handle_camera(frame['camera_image'],
-                      Twes)  # both not good function, because change the content of the parameter
+        # handle_camera(frame['camera_image'], Twes)  # both not good function, because change the content of the parameter
         is_lidar_exist = handle_lidar(frame, timestamps, Twes)
         if not is_lidar_exist:
             frame_info.pop(ts)
@@ -139,6 +136,9 @@ if __name__ == '__main__':
     # scene_name = '20231027_185823'
     args = parser.parse_args()
     # --------------------------------------------------------------
+    # 1. get ego pose
+    # 2. fix camera pose to world_left
+    # 3. fix data
     process_one_scene_with_pickle(args.data_root, args.scene_name,
                                   args.input_pickle_path, args.output_pickle_path)
 

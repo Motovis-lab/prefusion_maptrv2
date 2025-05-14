@@ -20,3 +20,4 @@ pytest-cov
 loguru
 tqdm
 redis==5.2.0
+polars==1.28.1
