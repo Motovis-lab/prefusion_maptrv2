@@ -391,7 +391,8 @@ if __name__ == '__main__':
     # demo_video = FFMPEG_VideoWriter('work_dirs/prefusion_apa_borui_demo_20250315.mp4', size=(640 + 960, 640), fps=10)
     # demo_video = FFMPEG_VideoWriter('work_dirs/prefusion_apa_borui_demo_20250315_3.mp4', size=(640 + 960, 640), fps=10)
     # demo_video = FFMPEG_VideoWriter('work_dirs/prefusion_apa_borui_demo_20250320.mp4', size=(640 + 960, 640), fps=5)
-    demo_video = FFMPEG_VideoWriter('work_dirs/prefusion_apa_borui_quantize_deploy.mp4', size=(640 + 960, 640), fps=1)
+    # demo_video = FFMPEG_VideoWriter('work_dirs/prefusion_apa_borui_quantize_deploy.mp4', size=(640 + 960, 640), fps=1)
+    demo_video = FFMPEG_VideoWriter('work_dirs/prefusion_apa_borui_quantize_deploy.mp4', size=(640 + 960, 640), fps=20)
     for ind in tqdm(all_inds):
         # json_path = results_root_path / (ind + '.json')
         ind = ind.replace('_gt', '')
