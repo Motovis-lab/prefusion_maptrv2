@@ -1,4 +1,6 @@
-experiment_name = "stream_petr_r50"
+import datetime
+
+experiment_name = "stream_petr_nusc_r50"
 
 _base_ = "../../../configs/default_runtime.py"
 
@@ -11,8 +13,7 @@ def _calc_grid_size(_range, _voxel_size, n_axis=3):
 
 batch_size = 2
 num_epochs = 500
-lr = 6e-5  # total lr per gpu lr is lr/n
-voxel_size = [0.1, 0.1, 3]
+voxel_size = [0.2, 0.2, 8]
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_range = (point_cloud_range[2::3], point_cloud_range[0::3][::-1], point_cloud_range[1::3][::-1])
 grid_size = _calc_grid_size(point_cloud_range, voxel_size)
@@ -116,12 +117,12 @@ train_dataloader = dict(
     ),
 )
 
-val_dataloader = train_dataloader
-test_dataloader = train_dataloader
+# val_dataloader = train_dataloader
+# test_dataloader = train_dataloader
 
 train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=num_epochs, val_interval=1)  # -1 note don't eval
-val_cfg = dict(type="GroupBatchValLoop")
-test_cfg = dict(type="GroupBatchTestLoop")
+# val_cfg = dict(type="GroupBatchValLoop")
+# test_cfg = dict(type="GroupBatchTestLoop")
 
 model = dict(
     type="StreamPETR",
@@ -210,7 +211,7 @@ model = dict(
             )),
         bbox_coder=dict(
             type='NMSFreeCoder',
-            post_center_range=[-13.0, -13.0, -3.0, 13.0, 13.0, 3.0],
+            post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
             pc_range=point_cloud_range,
             max_num=300,
             voxel_size=voxel_size,
@@ -239,8 +240,8 @@ model = dict(
     ),
 )
 
-val_evaluator = dict(type="AccuracyPetr")
-test_evaluator = dict(type="AccuracyPetr")
+# val_evaluator = dict(type="AccuracyPetr")
+# test_evaluator = dict(type="AccuracyPetr")
 
 
 env_cfg = dict(
@@ -253,7 +254,7 @@ optim_wrapper = dict(
     type="OptimWrapper",
     optimizer=dict(
         type="AdamW",
-        lr=lr,
+        lr=6e-5, # total lr per gpu lr is lr/n
         weight_decay=0.01,
     ),
     paramwise_cfg=dict(
@@ -264,7 +265,16 @@ optim_wrapper = dict(
     clip_grad=dict(max_norm=35, norm_type=2),
 )
 
-# param_scheduler = dict(type='MultiStepLR', milestones=[12, 20])
+## scheduler configs
+param_scheduler = [
+    dict(type='LinearLR', start_factor=0.1, end_factor=1, by_epoch=False, begin=0, end=500), # warmup
+    dict(type='CosineAnnealingLR', by_epoch=False, begin=500, eta_min=1e-5)     # main LR Scheduler
+    # dict(type='PolyLR', by_epoch=False, begin=0, eta_min=0, power=1.0)     # main LR Scheduler
+]
+
+
+visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"), dict(type="TensorboardVisBackend")])
+
 
 log_processor = dict(type='GroupAwareLogProcessor')
 
@@ -272,11 +282,14 @@ default_hooks = dict(
     timer=dict(type="IterTimerHook"),
     logger=dict(type="LoggerHook", interval=50),
     param_scheduler=dict(type="ParamSchedulerHook"),
-    checkpoint=dict(type="CheckpointHook", interval=1, save_best="precision", rule="greater"),
+    checkpoint=dict(type="CheckpointHook", interval=10, save_best="precision", rule="greater"),
     sampler_seed=dict(type="DistSamplerSeedHook"),
 )
 
-visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"), dict(type="TensorboardVisBackend")])
 
+today = datetime.datetime.now().strftime("%m%d")
+
+work_dir = f'./work_dirs/{experiment_name}_{today}'
 # load_from = "work_dirs/r50/epoch_5.pth"
-# resume = True
+
+resume = False

@@ -4,6 +4,7 @@ import torch
 import numpy as np
 from mmengine.model import BaseModel
 from mmengine.model.base_model.data_preprocessor import BaseDataPreprocessor
+from mmengine.structures import BaseDataElement
 
 from prefusion.registry import MODELS
 from contrib.petr.misc import locations
@@ -115,6 +116,9 @@ class StreamPETR(BaseModel):
 
         # self.visualize_bbox3d(data, bbox_3d, outs, meta_info, ego_poses)
 
+        if mode == 'tensor':
+            return outs
+        
         if mode == "loss":
             loss_inputs = [bbox_3d, gt_labels, outs]
             losses = self.box_head.loss(*loss_inputs)
@@ -122,11 +126,17 @@ class StreamPETR(BaseModel):
             #     loss2d_inputs = [gt_bboxes, gt_labels, centers2d, depths, outs_roi, img_metas]
             #     losses2d = self.img_roi_head.loss(*loss2d_inputs)
             #     losses.update(losses2d)
+
             return losses
-        elif mode == "predict":
+        if mode == "predict":
+            loss_inputs = [bbox_3d, gt_labels, outs]
+            losses = self.box_head.loss(*loss_inputs)
+            return (
+                *[{"name": k, "content": v.cpu() if isinstance(v, torch.Tensor) else v} for k, v in outs.items()],
+                BaseDataElement(loss=losses),
+            )
+
             return [{"name": k, "content": v} for k, v in outs.items()]
-        elif mode == "tensor":
-            return outs
 
     def visualize_bbox3d(self, data, bbox_3d, outs, meta_info, ego_poses, *args, **kwargs):
         ###########################

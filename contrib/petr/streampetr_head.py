@@ -601,7 +601,8 @@ class StreamPETRHead(AnchorFreeHead):
             _description_
         """
         # zero init the memory bank
-        self.pre_update_memory(data)
+        with torch.amp.autocast("cuda", enabled=False):
+            self.pre_update_memory(data)
 
         x = img_feats
         B, N, C, H, W = x.shape
@@ -649,7 +650,8 @@ class StreamPETRHead(AnchorFreeHead):
         all_bbox_preds[..., 0:3] = (all_bbox_preds[..., 0:3] * (self.pc_range[3:6] - self.pc_range[0:3]) + self.pc_range[0:3])
 
         # update the memory bank
-        self.post_update_memory(data, rec_ego_pose, all_cls_scores, all_bbox_preds, outs_dec, mask_dict)
+        with torch.amp.autocast("cuda", enabled=False):
+            self.post_update_memory(data, rec_ego_pose, all_cls_scores, all_bbox_preds, outs_dec, mask_dict)
 
         if mask_dict and mask_dict['pad_size'] > 0:
             output_known_class = all_cls_scores[:, :, :mask_dict['pad_size'], :]
