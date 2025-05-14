@@ -377,7 +377,7 @@ def get_bev_img(ind, info, results_root_path):
 
     return bev_img
 
-from pathlib import Path as P
+
 def func(data):
     ind, results_root_path, tmp_save_path = data
     # json_path = results_root_path / (ind + '.json')
@@ -406,7 +406,7 @@ def func(data):
     # cv2.putText(img_final, ind, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), 2)
     cv2.putText(img_final, ind, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
     # tmp_save_path = f'{tmp_save_path}/{ind}.jpg'
-    P(tmp_save_path).parent.mkdir(exist_ok=True, parents=True)
+    Path(tmp_save_path).parent.mkdir(exist_ok=True, parents=True)
     cv2.imwrite(tmp_save_path, img_final)
     # plt.imshow(img_final)
     # plt.show()
