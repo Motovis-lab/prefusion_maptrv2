@@ -63,65 +63,123 @@ class_mapping = dict(
     traffic_cone=["movable_object.trafficcone"],
 )
 
+train_dataset = dict(
+    type="GroupBatchDataset",
+    name="MvParkingTest",
+    data_root="/ssd4/datasets/nuScenes",
+    info_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
+    model_feeder=dict(
+        type="StreamPETRModelFeeder",
+        visible_range=point_cloud_range,
+        bbox_3d_pos_repr="bottom_center",
+        lidar_extrinsics=[
+            [ 0.00203327,  0.99970406,  0.02424172,  0.943713  ],
+            [-0.9999805 ,  0.00217566, -0.00584864,  0.        ],
+            [-0.00589965, -0.02422936,  0.99968904,  1.84023   ],
+            [ 0.        ,  0.        ,  0.        ,  1.        ]
+        ],
+    ),
+    transformables=dict(
+        camera_images=dict(
+            type="CameraImageSet",
+            loader=dict(type="NuscenesCameraImageSetLoader"),
+            tensor_smith=dict(
+                type="DivisibleCameraImageTensor",
+                means=[123.675, 116.280, 103.530],
+                stds=[58.395, 57.120, 57.375],
+                image_size_divisor=32,
+                image_pad_value=0.0)),
+        ego_poses=dict(type='EgoPoseSet'),
+        bbox_3d=dict(
+            type='Bbox3D',
+            loader=dict(
+                type="AdvancedBbox3DLoader",
+                class_mapping=class_mapping,
+            ),
+            # tensor_smith=dict(type='XyzLwhYawVeloBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+            tensor_smith=dict(type='Bbox3DBasic', classes=list(class_mapping.keys()), voxel_range=voxel_range)
+        ),
+    ),
+    transforms=[
+        dict(type='BGR2RGB'),
+    ],
+    group_sampler=dict(type="IndexGroupSampler",
+                        phase="val",
+                    #    indices_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated_indices.txt",
+                        possible_group_sizes=[20],
+                        possible_frame_intervals=[1]),
+    batch_size=batch_size,
+)
+
+val_dataset = dict(
+    type="GroupBatchDataset",
+    name="MvParkingTest",
+    data_root="/ssd4/datasets/nuScenes",
+    info_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
+    model_feeder=dict(
+        type="StreamPETRModelFeeder",
+        visible_range=point_cloud_range,
+        bbox_3d_pos_repr="bottom_center",
+        lidar_extrinsics=[
+            [ 0.00203327,  0.99970406,  0.02424172,  0.943713  ],
+            [-0.9999805 ,  0.00217566, -0.00584864,  0.        ],
+            [-0.00589965, -0.02422936,  0.99968904,  1.84023   ],
+            [ 0.        ,  0.        ,  0.        ,  1.        ]
+        ],
+    ),
+    transformables=dict(
+        camera_images=dict(
+            type="CameraImageSet",
+            loader=dict(type="NuscenesCameraImageSetLoader"),
+            tensor_smith=dict(
+                type="DivisibleCameraImageTensor",
+                means=[123.675, 116.280, 103.530],
+                stds=[58.395, 57.120, 57.375],
+                image_size_divisor=32,
+                image_pad_value=0.0)),
+        ego_poses=dict(type='EgoPoseSet'),
+        bbox_3d=dict(
+            type='Bbox3D',
+            loader=dict(
+                type="AdvancedBbox3DLoader",
+                class_mapping=class_mapping,
+            ),
+            # tensor_smith=dict(type='XyzLwhYawVeloBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
+            tensor_smith=dict(type='Bbox3DBasic', classes=list(class_mapping.keys()), voxel_range=voxel_range)
+        ),
+    ),
+    transforms=[
+        dict(type='BGR2RGB'),
+    ],
+    group_sampler=dict(type="IndexGroupSampler",
+                        phase="val",
+                    #    indices_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated_indices.txt",
+                        possible_group_sizes=[20],
+                        possible_frame_intervals=[1]),
+    batch_size=1,
+)
+
 train_dataloader = dict(
     num_workers=0,
     persistent_workers=False,
     sampler=dict(type="DefaultSampler"),
     collate_fn=dict(type="collate_dict"),
-    dataset=dict(
-        type="GroupBatchDataset",
-        name="MvParkingTest",
-        data_root="/ssd4/datasets/nuScenes",
-        info_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
-        model_feeder=dict(
-            type="StreamPETRModelFeeder",
-            visible_range=point_cloud_range,
-            bbox_3d_pos_repr="bottom_center",
-            lidar_extrinsics=[
-                [ 0.00203327,  0.99970406,  0.02424172,  0.943713  ],
-                [-0.9999805 ,  0.00217566, -0.00584864,  0.        ],
-                [-0.00589965, -0.02422936,  0.99968904,  1.84023   ],
-                [ 0.        ,  0.        ,  0.        ,  1.        ]
-            ],
-        ),
-        transformables=dict(
-            camera_images=dict(
-                type="CameraImageSet",
-                loader=dict(type="NuscenesCameraImageSetLoader"),
-                tensor_smith=dict(
-                    type="DivisibleCameraImageTensor",
-                    means=[123.675, 116.280, 103.530],
-                    stds=[58.395, 57.120, 57.375],
-                    image_size_divisor=32,
-                    image_pad_value=0.0)),
-            ego_poses=dict(type='EgoPoseSet'),
-            bbox_3d=dict(
-                type='Bbox3D',
-                loader=dict(
-                    type="AdvancedBbox3DLoader",
-                    class_mapping=class_mapping,
-                ),
-                # tensor_smith=dict(type='XyzLwhYawVeloBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
-                tensor_smith=dict(type='Bbox3DBasic', classes=list(class_mapping.keys()), voxel_range=voxel_range)
-            ),
-        ),
-        transforms=[
-            dict(type='BGR2RGB'),
-        ],
-        group_sampler=dict(type="IndexGroupSampler",
-                           phase="val",
-                        #    indices_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated_indices.txt",
-                           possible_group_sizes=[20],
-                           possible_frame_intervals=[1]),
-        batch_size=batch_size,
-    ),
+    dataset=train_dataset,
 )
 
-# val_dataloader = train_dataloader
+val_dataloader = dict(
+    num_workers=0,
+    sampler=dict(type="DefaultSampler"),
+    collate_fn=dict(type="collate_dict"),
+    dataset=val_dataset,
+    persistent_workers=False,
+    pin_memory=True,
+)
+
 # test_dataloader = train_dataloader
 
 train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=num_epochs, val_interval=1)  # -1 note don't eval
-# val_cfg = dict(type="GroupBatchValLoop")
+val_cfg = dict(type="GroupBatchValLoop")
 # test_cfg = dict(type="GroupBatchTestLoop")
 
 model = dict(
@@ -240,7 +298,7 @@ model = dict(
     ),
 )
 
-# val_evaluator = dict(type="AccuracyPetr")
+val_evaluator = dict(type="AccuracyPetr")
 # test_evaluator = dict(type="AccuracyPetr")
 
 
@@ -290,6 +348,6 @@ default_hooks = dict(
 today = datetime.datetime.now().strftime("%m%d")
 
 work_dir = f'./work_dirs/{experiment_name}_{today}'
-# load_from = "work_dirs/r50/epoch_5.pth"
+load_from = "work_dirs/stream_petr_nusc_r50_0513/stream_petr_nusc_r50_0513_epoch_500.pth"
 
 resume = False
