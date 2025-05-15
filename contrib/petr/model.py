@@ -136,8 +136,6 @@ class StreamPETR(BaseModel):
                 BaseDataElement(loss=losses),
             )
 
-            return [{"name": k, "content": v} for k, v in outs.items()]
-
     def visualize_bbox3d(self, data, bbox_3d, outs, meta_info, ego_poses, *args, **kwargs):
         ###########################
         # FIXME: Visualize Images
@@ -185,8 +183,8 @@ class StreamPETR(BaseModel):
         import math
         from contrib.petr.misc import denormalize_bbox
         for ts, gt_boxes, pred_bboxes, pred_scores, m, ep in zip(data['timestamp'], bbox_3d, outs['all_bbox_preds'][-1], outs['all_cls_scores'][-1], meta_info, ego_poses):
-            if int(ts.item()) not in [1698825828064, 1698825829564, 1698825837064, 1698825846064, 1698825852564]:
-                continue
+            # if int(ts.item()) not in [1698825828064, 1698825829564, 1698825837064, 1698825846064, 1698825852564]:
+            #     continue
             _ = plt.figure()
             _draw_boxes(gt_boxes, color='blue')
             denormalized_bbox = denormalize_bbox(pred_bboxes, None)
