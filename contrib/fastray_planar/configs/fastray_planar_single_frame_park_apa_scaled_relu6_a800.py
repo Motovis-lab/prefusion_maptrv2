@@ -1,5 +1,4 @@
 default_scope = "prefusion"
-experiment_name = "fastray_planar_single_frame_park_apa_scaled_relu6_a800"
 
 custom_imports = dict(
     imports=["prefusion", "contrib.fastray_planar"], 
@@ -174,8 +173,8 @@ if debug_mode:
     num_workers = 0
     transforms = [virtual_camera_transform]
 else:
-    batch_size = 8
-    num_workers = 4
+    batch_size = 16
+    num_workers = 9
     transforms = [
         # dict(type='RandomRenderExtrinsic'),
         virtual_camera_transform,
@@ -250,8 +249,8 @@ transformables=dict(
 train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='/ssd2/datasets/mv4d',
-    info_path='/ssd2/datasets/mv4d/fb_train_4_old_version_separated.pkl',
+    data_root='../MV4D_12V3L',
+    info_path='../MV4D_12V3L/mv_4d_infos_train_filtered.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -281,8 +280,8 @@ train_dataset = dict(
 val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='/ssd2/datasets/mv4d',
-    info_path='/ssd2/datasets/mv4d/fb_train_4_old_version_separated.pkl',
+    data_root='../MV4D_12V3L',
+    info_path='../MV4D_12V3L/mv_4d_infos_20231029_195612.pkl',
     # info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
@@ -698,10 +697,7 @@ env_cfg = dict(
 )
 
 
-import datetime
-today = datetime.datetime.now().strftime("%m%d")
-
-work_dir = "./work_dirs/{experiment_name}_{today}"
+work_dir = "./work_dirs/fastray_planar_single_frame_park_apa_0125"
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
-# load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_0109/epoch_14.pth"
+load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_0109/epoch_14.pth"
 resume = False

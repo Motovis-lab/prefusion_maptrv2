@@ -7,11 +7,9 @@ import open3d as o3d
 import cv2
 import pytest
 import numpy as np
-from numba.core.ir_utils import mk_alloc
 from numpy.testing import assert_almost_equal
 
 from copious.io.fs import mktmpdir
-from scipy.spatial.transform import Rotation
 
 from contrib.cmt import LidarSweepsLoader
 from prefusion.dataset.index_info import IndexInfo
@@ -819,7 +817,6 @@ def test_lidar_sweeps_loader():
         Path(dst_path).parent.mkdir(exist_ok=True, parents=True)
         ori_pcd_lidar_point(str(dst_path), points)
 
-    scene_data = info_data["20231027_185823"]["scene_info"]
     frame_data = info_data["20231027_185823"]["frame_info"]
 
     lidar_points = loader.load("lidar_points", frame_data, ii)
