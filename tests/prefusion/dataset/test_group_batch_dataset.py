@@ -1,6 +1,7 @@
-from pathlib import Path
 import shutil
 import pickle
+from functools import partial
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -12,6 +13,7 @@ from prefusion.dataset.group_sampler import IndexGroupSampler, SequentialSceneFr
 from prefusion.dataset.dataset import GroupBatchDataset
 from prefusion.dataset.model_feeder import BaseModelFeeder
 from prefusion.registry import TRANSFORMABLE_LOADERS
+from prefusion.dataset.utils import load_frame_data_within_group
 
 
 def test_batch_groups_1():
@@ -53,6 +55,13 @@ def test_batch_groups_4():
     assert batched_groups == [[1]]
 
 
+def test_batch_groups_5():
+    groups = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [8, 9, 10]]
+    get_batched_groups = partial(GroupBatchDataset._batch_groups, groups=groups, batch_size=2)
+    assert get_batched_groups(0) == [[1, 2, 3], [4, 5, 6]]
+    assert get_batched_groups(1) == [[7, 8, 9], [8, 9, 10]]
+
+
 class DummyTransform:
     def __init__(self, scope="frame") -> None:
         self.scope = scope
@@ -63,21 +72,28 @@ class DummyTransform:
 
 def test_load_all_transformables():
     index_info = IndexInfo("20231101_160337", "1698825817864", prev=IndexInfo("20231101_160337", "1698825817764"), next=IndexInfo("20231101_160337", "1698825817964"))
+    data_root = Path("tests/prefusion/dataset/example_inputs")
+    info_path = Path("tests/prefusion/dataset/mv4d-infos-for-test-001_separated.pkl")
     dataset = GroupBatchDataset(
         name="gbd",
-        data_root=Path("tests/prefusion/dataset/example_inputs"),
-        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001_separated.pkl"),
+        data_root=data_root,
+        info_path=info_path,
         transformables=dict(
             my_camera_images=dict(type="CameraImageSet"),
             my_ego_poses=dict(type="EgoPoseSet")
         ),
         transforms=[DummyTransform(scope="group")],
         model_feeder=BaseModelFeeder(),
-        group_sampler=IndexGroupSampler(phase="val", possible_group_sizes=[4], possible_frame_intervals=[2]),
+        group_sampler=IndexGroupSampler(phase="val", possible_group_sizes=(4,), possible_frame_intervals=(2,)),
         batch_size=2,
     )
 
-    all_transformables = dataset.load_all_transformables(index_info)
+    with open(info_path, "rb") as f:
+        info = pickle.load(f)
+    frame_info = {f"{scn_id}/{frm_id}": path for scn_id, scn_data in info.items() for frm_id, path in scn_data['frame_info'].items()}
+    group = [IndexInfo("20231101_160337", "1698825817764"), IndexInfo("20231101_160337", "1698825817864"), IndexInfo("20231101_160337", "1698825817964")]
+    frame_data_within_group = load_frame_data_within_group(data_root, frame_info, group)
+    all_transformables = dataset.load_all_transformables(frame_data_within_group, index_info)
 
     camera_image_set = all_transformables["my_camera_images"]
     assert camera_image_set.transformables['camera1'].img.sum() == 1752500
@@ -101,17 +117,19 @@ def test_load_all_transformables():
 class CustomizedEgoPoseLoader:
     def __init__(self, data_root): self.data_root = data_root
 
-    def load(self, name: str, scene_data, frame_data, index_info, **kwargs):
-        cur_frame = frame_data[index_info.frame_id]
+    def load(self, name: str, frame_data_within_group, index_info, **kwargs):
+        cur_frame = frame_data_within_group[index_info.frame_id]
         return cur_frame["ego_pose"]["rotation"], cur_frame["ego_pose"]["translation"]
 
 
 def test_load_all_transformables_customized_loader():
     index_info = IndexInfo("20231101_160337", "1698825817864", prev=IndexInfo("20231101_160337", "1698825817764"), next=IndexInfo("20231101_160337", "1698825817964"))
+    data_root = Path("tests/prefusion/dataset/example_inputs")
+    info_path = Path("tests/prefusion/dataset/mv4d-infos-for-test-001_separated.pkl")
     dataset = GroupBatchDataset(
         name="gbd",
-        data_root=Path("tests/prefusion/dataset/example_inputs"),
-        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001_separated.pkl"),
+        data_root=data_root,
+        info_path=info_path,
         transformables=dict(
             single_frame_ego_pose=dict(
                 type="EgoPose",
@@ -124,7 +142,12 @@ def test_load_all_transformables_customized_loader():
         batch_size=2,
     )
 
-    all_transformables = dataset.load_all_transformables(index_info)
+    with open(info_path, "rb") as f:
+        info = pickle.load(f)
+    frame_info = {f"{scn_id}/{frm_id}": path for scn_id, scn_data in info.items() for frm_id, path in scn_data['frame_info'].items()}
+    group = [IndexInfo("20231101_160337", "1698825817764"), IndexInfo("20231101_160337", "1698825817864"), IndexInfo("20231101_160337", "1698825817964")]
+    frame_data_within_group = load_frame_data_within_group(data_root, frame_info, group)
+    all_transformables = dataset.load_all_transformables(frame_data_within_group, index_info)
 
     ego_pose = all_transformables["single_frame_ego_pose"]
     np.testing.assert_almost_equal(ego_pose[0], np.array(

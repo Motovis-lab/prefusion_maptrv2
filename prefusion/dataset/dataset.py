@@ -42,10 +42,8 @@ from prefusion.dataset.transform import (
 )
 
 from .utils import (
-    PolarDict,
-    load_info_pkl,
-    load_scene_data,
-    load_frame_data_in_the_group,
+    load_frame_info,
+    load_frame_data_within_group,
     build_transforms, 
     build_model_feeder, 
     build_tensor_smith, 
@@ -62,7 +60,7 @@ if TYPE_CHECKING:
     from .transform import Transformable
     from .index_info import IndexInfo
     from .subepoch_manager import SubEpochManager
-    from .group_sampler import GroupSampler
+    from .group_sampler import GroupSampler, Group
 
 __all__ = ["GroupBatchDataset"]
 
@@ -140,7 +138,7 @@ class GroupBatchDataset(Dataset):
         super().__init__()
         self.name = name
         self.data_root = Path(data_root)
-        self.scene_info, self.frame_info = load_info_pkl(info_path)
+        self.frame_info = load_frame_info(info_path)
         self.transformables = transformables
         self.transforms = build_transforms(transforms)
         self.model_feeder = build_model_feeder(model_feeder)
@@ -164,7 +162,7 @@ class GroupBatchDataset(Dataset):
                 self.subepoch_manager.init(len(self.groups))
     
     def _sample_groups(self):
-        self.groups = self.group_sampler.sample(self.data_root, self.scene_info, self.frame_info)
+        self.groups = self.group_sampler.sample(self.data_root, self.frame_info)
         self.num_total_group_batches = divide(len(self.groups), self.batch_size, drop_last=self.drop_last)
 
     @property
@@ -184,9 +182,7 @@ class GroupBatchDataset(Dataset):
             ]
         )
         
-    def load_all_transformables(self, index_info: "IndexInfo") -> dict:
-        scene_data = load_scene_data(self.data_root, self.scene_info, index_info)
-        frame_data = load_frame_data_in_the_group(self.data_root, self.frame_info, index_info)
+    def load_all_transformables(self, frame_data_within_group: Dict[str, Dict], index_info: "IndexInfo") -> dict:
         transformables = {}
         for name in self.transformables:
             _t_cfg = self.transformables[name]
@@ -195,7 +191,7 @@ class GroupBatchDataset(Dataset):
             loader = self._build_transformable_loader(loader_cfg, _t_cfg["type"])
             tensor_smith = build_tensor_smith(tensor_smith_cfg) if "tensor_smith" in _t_cfg else None
             rest_kwargs = {k: v for k, v in _t_cfg.items() if k not in ["type", "loader", "tensor_smith"]}
-            transformables[name] = self._build_transformable(name, scene_data, frame_data, index_info, loader, tensor_smith=tensor_smith, **rest_kwargs)
+            transformables[name] = self._build_transformable(name, frame_data_within_group, index_info, loader, tensor_smith=tensor_smith, **rest_kwargs)
         
         return transformables
     
@@ -277,7 +273,8 @@ class GroupBatchDataset(Dataset):
             group_seed = int.from_bytes(os.urandom(2), byteorder="big")
             for i, index_info in enumerate(group):
                 frame_seed = int.from_bytes(os.urandom(2), byteorder="big")
-                transformables = self.load_all_transformables(index_info)
+                frame_data_within_group = load_frame_data_within_group(self.data_root, self.frame_info, group)
+                transformables = self.load_all_transformables(frame_data_within_group, index_info)
                 for transform in self.transforms:
                     transform(*transformables.values(), seeds={"group": group_seed, "batch": batch_seed, "frame": frame_seed})
                 input_dict = {
@@ -296,5 +293,5 @@ class GroupBatchDataset(Dataset):
         return model_food
 
 
-    def _build_transformable(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", loader: "TransformableLoader", tensor_smith: "TensorSmith" = None, **kwargs) -> "Transformable":
-        return loader.load(name, scene_data, frame_data, index_info, tensor_smith=tensor_smith, **kwargs)
+    def _build_transformable(self, name: str, frame_data_within_group: Dict[str, Dict], index_info: "IndexInfo", loader: "TransformableLoader", tensor_smith: "TensorSmith" = None, **kwargs) -> "Transformable":
+        return loader.load(name, frame_data_within_group, index_info, tensor_smith=tensor_smith, **kwargs)

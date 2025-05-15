@@ -62,9 +62,10 @@ def test_load_camera_image_set():
     ii = IndexInfo('20231101_160337', '1698825817864')
     with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
         info_data = pickle.load(f)
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
-    camera_images = loader.load("camera_images", scene_data, frame_data, ii, tensor_smith=DummyImgTensorSmith())
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
+    camera_images = loader.load("camera_images", frame_data, ii, tensor_smith=DummyImgTensorSmith())
     assert camera_images.transformables['camera1'].img.sum() == 1752500
     assert isinstance(camera_images.transformables['camera5'].tensor_smith, DummyImgTensorSmith)
     assert camera_images.transformables['camera8'].ego_mask.sum() == 1365268
@@ -81,9 +82,10 @@ def test_load_camera_image_set_modification():
     ii = IndexInfo('20231101_160337', '1698825817864')
     with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
         info_data = pickle.load(f)
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
-    camera_images = loader.load("camera_images", scene_data, frame_data, ii, tensor_smith=DummyImgTensorSmith())
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
+    camera_images = loader.load("camera_images", frame_data, ii, tensor_smith=DummyImgTensorSmith())
     
     def _assert_camera_images():
         assert camera_images.transformables['camera1'].img.sum() == 1752500
@@ -115,7 +117,7 @@ def test_load_camera_image_set_modification():
     camera_images.transformables['camera11'].extrinsic[1][2] *= 10
 
     # load and assert again
-    camera_images = loader.load("camera_images", scene_data, frame_data, ii, tensor_smith=DummyImgTensorSmith())
+    camera_images = loader.load("camera_images", frame_data, ii, tensor_smith=DummyImgTensorSmith())
     _assert_camera_images()
 
 
@@ -132,13 +134,14 @@ def test_load_camera_seg_mask():
         info_data["20231101_160337"]["frame_info"]["1698825817864"]["camera_image_seg"]["camera8"] = Path("seg/fisheye_semantic_segmentation/camera8/1698825817864.png")
         info_data["20231101_160337"]["frame_info"]["1698825817864"]["camera_image_seg"]["camera11"] = Path("seg/fisheye_semantic_segmentation/camera11/1698825817864.png")
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
     with pytest.raises(AssertionError):
-        loader.load("camera_segs", scene_data, frame_data, ii, tensor_smith=DummyImgTensorSmith())
+        loader.load("camera_segs", frame_data, ii, tensor_smith=DummyImgTensorSmith())
 
-    camera_segs = loader.load("camera_segs", scene_data, frame_data, ii, tensor_smith=DummyImgTensorSmith(), dictionary=dic)
+    camera_segs = loader.load("camera_segs", frame_data, ii, tensor_smith=DummyImgTensorSmith(), dictionary=dic)
     assert camera_segs.transformables['camera1'].dictionary == dic
     assert camera_segs.transformables['camera1'].img.sum() == 1160515
     assert isinstance(camera_segs.transformables['camera5'].tensor_smith, DummyImgTensorSmith)
@@ -189,10 +192,11 @@ def test_load_camera_depths(info_pkl_with_depth_path):
     data_root = info_pkl_with_depth_path.parent
     loader = CameraDepthSetLoader(data_root)
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    camera_depth = loader.load('camera_depths', scene_data, frame_data, ii)
+    camera_depth = loader.load('camera_depths', frame_data, ii)
     assert len(camera_depth.transformables) == 12
 
     depth_fish_front = np.load(data_root / Path("camera1_depth.npz"))['depth'][..., None].astype(np.float32)
@@ -212,10 +216,11 @@ def test_load_ego_poses():
     with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
         info_data = pickle.load(f)
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    ego_pose_set = loader.load('ego_poses', scene_data, frame_data, index_info)
+    ego_pose_set = loader.load('ego_poses', frame_data, index_info)
     assert len(ego_pose_set.transformables) == 3
     assert list(ego_pose_set.transformables.keys()) == ['-1', '0', '+1']
     assert ego_pose_set.transformables['-1'].timestamp == "1698825817764"
@@ -223,7 +228,7 @@ def test_load_ego_poses():
     assert ego_pose_set.transformables['+1'].timestamp == "1698825817964"
 
     index_info2 = IndexInfo("20231101_160337", "1698825817864", prev=IndexInfo("20231101_160337", "1698825817764", prev=IndexInfo("20231101_160337", "1698825817664")), next=IndexInfo("20231101_160337", "1698825817964"))
-    ego_pose_set = loader.load('ego_poses', scene_data, frame_data, index_info2)
+    ego_pose_set = loader.load('ego_poses', frame_data, index_info2)
     assert len(ego_pose_set.transformables) == 4
     assert list(ego_pose_set.transformables.keys()) == ['-2', '-1', '0', '+1']
     assert ego_pose_set.transformables['-2'].timestamp == "1698825817664"
@@ -237,7 +242,7 @@ def test_load_ego_poses():
         frame_id="1698825817864",
         next=IndexInfo("20231101_160337", "1698825817964", next=IndexInfo("20231101_160337", "1698825818064"))
     )
-    ego_pose_set = loader.load('ego_poses', scene_data, frame_data, index_info3)
+    ego_pose_set = loader.load('ego_poses', frame_data, index_info3)
     assert len(ego_pose_set.transformables) == 5
     assert list(ego_pose_set.transformables.keys()) == ['-2', '-1', '0', '+1', '+2']
     assert ego_pose_set.transformables['-2'].timestamp == "1698825817664"
@@ -255,13 +260,14 @@ def test_load_bbox_3d():
     with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
         info_data = pickle.load(f)
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
     with pytest.raises(AssertionError):
-        loader.load("bbox_3d", scene_data, frame_data, ii, tensor_smith=DummyAnnoTensorSmith())
+        loader.load("bbox_3d", frame_data, ii, tensor_smith=DummyAnnoTensorSmith())
 
-    bbox_3d = loader.load("bbox_3d", scene_data, frame_data, ii, tensor_smith=DummyAnnoTensorSmith(), dictionary=dic)
+    bbox_3d = loader.load("bbox_3d", frame_data, ii, tensor_smith=DummyAnnoTensorSmith(), dictionary=dic)
     assert bbox_3d.dictionary == dic
     assert isinstance(bbox_3d.tensor_smith, DummyAnnoTensorSmith)
     assert len(bbox_3d.elements) == 7
@@ -276,10 +282,11 @@ def test_load_bbox_3d_and_modify():
     with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
         info_data = pickle.load(f)
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    bbox_3d = loader.load("bbox_3d", scene_data, frame_data, ii, tensor_smith=DummyAnnoTensorSmith(), dictionary=dic)
+    bbox_3d = loader.load("bbox_3d", frame_data, ii, tensor_smith=DummyAnnoTensorSmith(), dictionary=dic)
 
     def _assert_bbox3d():
         assert bbox_3d.elements[-1]['class'] == "class.road_marker.arrow"
@@ -307,7 +314,7 @@ def test_load_bbox_3d_and_modify():
     bbox_3d.dictionary["classes"].append("yyyy")
 
     # load and assert again
-    bbox_3d = loader.load("bbox_3d", scene_data, frame_data, ii, tensor_smith=DummyAnnoTensorSmith(), dictionary=dic)
+    bbox_3d = loader.load("bbox_3d", frame_data, ii, tensor_smith=DummyAnnoTensorSmith(), dictionary=dic)
     _assert_bbox3d()
 
 
@@ -328,10 +335,11 @@ def test_advanced_bbox3d_loader_mapping():
     with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
         info_data = pickle.load(f)
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    adv_bbox3d = loader.load("adv_bbox3d", scene_data, frame_data, ii, tensor_smith=DummyAnnoTensorSmith(), dictionary=dic) # won't honor dic (dic is a distraction here)
+    adv_bbox3d = loader.load("adv_bbox3d", frame_data, ii, tensor_smith=DummyAnnoTensorSmith(), dictionary=dic) # won't honor dic (dic is a distraction here)
     assert adv_bbox3d.dictionary == {
         "classes": ["speed_bump", "passenger_car", "arrow", "text_icon"],
         "attrs": ["is_door_open", "static"]
@@ -397,10 +405,11 @@ def test_advanced_bbox3d_loader_rearrange_axis_longer_edge_as_y():
     with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
         info_data = pickle.load(f)
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    adv_bbox3d = loader.load("adv_bbox3d", scene_data, frame_data, ii, tensor_smith=DummyAnnoTensorSmith())
+    adv_bbox3d = loader.load("adv_bbox3d", frame_data, ii, tensor_smith=DummyAnnoTensorSmith())
     assert adv_bbox3d.dictionary == { "classes": ["speed_bump", "arrow", "text_icon"], "attrs": [] }
     assert len(adv_bbox3d.elements) == 15
     assert sum(ele['class'] == "speed_bump" for ele in adv_bbox3d.elements) == 1
@@ -435,10 +444,11 @@ def test_advanced_bbox3d_loader_rearrange_axis_longer_edge_as_x():
     with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:
         info_data = pickle.load(f)
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    adv_bbox3d = loader.load("adv_bbox3d", scene_data, frame_data, ii, tensor_smith=DummyAnnoTensorSmith())
+    adv_bbox3d = loader.load("adv_bbox3d", frame_data, ii, tensor_smith=DummyAnnoTensorSmith())
     assert adv_bbox3d.dictionary == { "classes": ["speed_bump", "arrow", "text_icon"], "attrs": [] }
     assert len(adv_bbox3d.elements) == 15
     assert sum(ele['class'] == "speed_bump" for ele in adv_bbox3d.elements) == 1
@@ -467,17 +477,18 @@ def test_advanced_bbox3d_loader_rearrange_axis_corners():
         info_data = pickle.load(f)
     loader = Bbox3DLoader(data_root)
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    bbox3d = loader.load("bbox3d", scene_data, frame_data, ii, tensor_smith=DummyAnnoTensorSmith(), dictionary={"classes": ["class.traffic_facility.speed_bump"]})
+    bbox3d = loader.load("bbox3d", frame_data, ii, tensor_smith=DummyAnnoTensorSmith(), dictionary={"classes": ["class.traffic_facility.speed_bump"]})
     assert len(bbox3d.elements) == 1
 
     clsmap = {
         "speed_bump": ["class.traffic_facility.speed_bump"],
     }
     adv_loader = AdvancedBbox3DLoader(data_root, class_mapping=clsmap, axis_rearrange_method="longer_edge_as_x")
-    bbox3d_rearranged = adv_loader.load("bbox3d_rearranged", scene_data, frame_data, ii)
+    bbox3d_rearranged = adv_loader.load("bbox3d_rearranged", frame_data, ii)
     assert bbox3d_rearranged.dictionary == { "classes": ["speed_bump"], "attrs": [] }
     assert len(bbox3d_rearranged.elements) == 1
 
@@ -504,10 +515,11 @@ def test_advanced_bbox3d_loader_with_clsmap_and_attrmap():
     attrmap = {"is_door_closed": ["attr.vehicle.is_door_open.false"], "is_static": ['attr.time_varying.object.state.stationary']}
     loader = AdvancedBbox3DLoader(data_root, class_mapping=clsmap, attr_mapping=attrmap, axis_rearrange_method="none")
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    bbox3d = loader.load("bbox3d", scene_data, frame_data, ii, dictionary={"classes": ["class.vehicle.passenger_car"]})
+    bbox3d = loader.load("bbox3d", frame_data, ii, dictionary={"classes": ["class.vehicle.passenger_car"]})
     assert bbox3d.dictionary == { "classes": ["static_car"], "attrs": ["is_door_closed", "is_static"] }
     assert len(bbox3d.elements) == 12
     assert bbox3d.elements[0]["class"] == "static_car"
@@ -522,10 +534,11 @@ def test_advanced_bbox3d_loader_no_clsmap():
     attrmap = {"hello": ["world"], "is_static": ['attr.time_varying.object.state.stationary']}
     loader = AdvancedBbox3DLoader(data_root, attr_mapping=attrmap, axis_rearrange_method="none")
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    bbox3d = loader.load("bbox3d", scene_data, frame_data, ii, dictionary={"classes": ["class.traffic_facility.speed_bump"]})
+    bbox3d = loader.load("bbox3d", frame_data, ii, dictionary={"classes": ["class.traffic_facility.speed_bump"]})
     assert bbox3d.dictionary == { "classes": ["class.traffic_facility.speed_bump"], "attrs": ["hello", "is_static"] }
     assert len(bbox3d.elements) == 1
 
@@ -538,10 +551,11 @@ def test_advanced_bbox3d_loader_no_clsmap_2():
     attrmap = {"is_door_closed": ["attr.vehicle.is_door_open.false"], "is_static": ['attr.time_varying.object.state.stationary']}
     loader = AdvancedBbox3DLoader(data_root, attr_mapping=attrmap, axis_rearrange_method="none")
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    bbox3d = loader.load("bbox3d", scene_data, frame_data, ii, dictionary={"classes": ["class.vehicle.passenger_car"]})
+    bbox3d = loader.load("bbox3d", frame_data, ii, dictionary={"classes": ["class.vehicle.passenger_car"]})
     assert bbox3d.dictionary == { "classes": ["class.vehicle.passenger_car"], "attrs": ["is_door_closed", "is_static"] }
     assert len(bbox3d.elements) == 13
     assert bbox3d.elements[0]["class"] == "class.vehicle.passenger_car"
@@ -557,10 +571,11 @@ def test_advanced_bbox3d_loader_no_clsmap_no_attrmap():
         info_data = pickle.load(f)
     loader = AdvancedBbox3DLoader(data_root, axis_rearrange_method="none")
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    bbox3d = loader.load("bbox3d", scene_data, frame_data, ii, dictionary={"classes": ["class.traffic_facility.speed_bump"]})
+    bbox3d = loader.load("bbox3d", frame_data, ii, dictionary={"classes": ["class.traffic_facility.speed_bump"]})
     assert bbox3d.dictionary == { "classes": ["class.traffic_facility.speed_bump"], "attrs": [] }
     assert len(bbox3d.elements) == 1
 
@@ -572,10 +587,11 @@ def test_advanced_bbox3d_loader_modification():
         info_data = pickle.load(f)
     loader = AdvancedBbox3DLoader(data_root, axis_rearrange_method="none")
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    bbox3d = loader.load("bbox3d", scene_data, frame_data, ii, dictionary={"classes": ["class.traffic_facility.speed_bump"]})
+    bbox3d = loader.load("bbox3d", frame_data, ii, dictionary={"classes": ["class.traffic_facility.speed_bump"]})
 
     def _assert_box3d():
         assert bbox3d.dictionary == { "classes": ["class.traffic_facility.speed_bump"], "attrs": [] }
@@ -605,7 +621,7 @@ def test_advanced_bbox3d_loader_modification():
     bbox3d.dictionary["attrs"].append("aaa")
 
     # load and assert again
-    bbox3d = loader.load("bbox3d", scene_data, frame_data, ii, dictionary={"classes": ["class.traffic_facility.speed_bump"]})
+    bbox3d = loader.load("bbox3d", frame_data, ii, dictionary={"classes": ["class.traffic_facility.speed_bump"]})
     _assert_box3d()
 
 
@@ -616,10 +632,11 @@ def test_variable_loader():
     info_data["20231101_160337"]["frame_info"]["1698825817864"]["sample_token"] = "18283747face123"
     ii = IndexInfo('20231101_160337', '1698825817864')
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    var = loader.load("sample_token", scene_data, frame_data, ii)
+    var = loader.load("sample_token", frame_data, ii)
     assert var.name == "sample_token"
     assert var.value == "18283747face123"
 
@@ -631,10 +648,11 @@ def test_polyline3d_loader_and_modify():
         info_data = pickle.load(f)
     loader = Polyline3DLoader(data_root)
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    polylines = loader.load("polyline3d", scene_data, frame_data, ii, dictionary={"classes": ["class.road_marker.lane_line"]})
+    polylines = loader.load("polyline3d", frame_data, ii, dictionary={"classes": ["class.road_marker.lane_line"]})
     assert len(polylines.elements) == 2
 
     def _assert_polylines():
@@ -663,7 +681,7 @@ def test_polyline3d_loader_and_modify():
     polylines.elements[0]["points"] *= 0.9
 
     # load and assert again
-    polylines = loader.load("polyline3d", scene_data, frame_data, ii, dictionary={"classes": ["class.road_marker.lane_line"]})
+    polylines = loader.load("polyline3d", frame_data, ii, dictionary={"classes": ["class.road_marker.lane_line"]})
     _assert_polylines()
 
 
@@ -674,10 +692,11 @@ def test_polygon3d_loader_and_modify():
         info_data = pickle.load(f)
     loader = Polygon3DLoader(data_root)
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    polygons = loader.load("polygon3d", scene_data, frame_data, ii, dictionary={"classes": ["class.parking.parking_slot"]})
+    polygons = loader.load("polygon3d", frame_data, ii, dictionary={"classes": ["class.parking.parking_slot"]})
     assert len(polygons.elements) == 17
 
     def _assert_parkingslots():
@@ -697,7 +716,7 @@ def test_polygon3d_loader_and_modify():
     polygons.elements[0]["points"] *= 0.9
 
     # load and assert again
-    polygons = loader.load("polygons3d", scene_data, frame_data, ii, dictionary={"classes": ["class.parking.parking_slot"]})
+    polygons = loader.load("polygons3d", frame_data, ii, dictionary={"classes": ["class.parking.parking_slot"]})
     _assert_parkingslots()
 
 
@@ -709,10 +728,11 @@ def test_parkingslot3d_loader_and_modify():
         info_data = pickle.load(f)
     loader = ParkingSlot3DLoader(data_root)
 
-    scene_data = info_data["20231101_160337"]["scene_info"]
     frame_data = info_data["20231101_160337"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231101_160337"]["scene_info"]
 
-    parkingslots = loader.load("parkingslot3d", scene_data, frame_data, ii, dictionary={"classes": ["class.parking.parking_slot"]})
+    parkingslots = loader.load("parkingslot3d", frame_data, ii, dictionary={"classes": ["class.parking.parking_slot"]})
     assert len(parkingslots.elements) == 17
 
     def _assert_parkingslots():
@@ -732,7 +752,7 @@ def test_parkingslot3d_loader_and_modify():
     parkingslots.elements[0]["points"] *= 0.9
 
     # load and assert again
-    parkingslots = loader.load("parkingslot3d", scene_data, frame_data, ii, dictionary={"classes": ["class.parking.parking_slot"]})
+    parkingslots = loader.load("parkingslot3d", frame_data, ii, dictionary={"classes": ["class.parking.parking_slot"]})
     _assert_parkingslots()
 
 
@@ -750,10 +770,11 @@ def test_camera_time_loader_modification():
         Path(p).parent.mkdir(exist_ok=True, parents=True)
         cv2.imwrite(str(p), a)
 
-    scene_data = info_data["20231027_185823"]["scene_info"]
     frame_data = info_data["20231027_185823"]["frame_info"]
+    for frm_id in frame_data:
+        frame_data[frm_id]["scene_info"] = info_data["20231027_185823"]["scene_info"]
 
-    camera_images = loader.load("camera_image", scene_data, frame_data, ii)
+    camera_images = loader.load("camera_image", frame_data, ii)
 
     def _assert_camera_images(camera_images):
         assert_almost_equal(
@@ -775,7 +796,7 @@ def test_camera_time_loader_modification():
     # modify camera_images
     camera_images.transformables['camera1'].intrinsic[1] = 100
     camera_images.transformables['camera1'].extrinsic[0][0, 1] = 100
-    camera_images = loader.load("camera_image", scene_data, frame_data, ii)
+    camera_images = loader.load("camera_image", frame_data, ii)
     _assert_camera_images(camera_images)
 
 
@@ -801,7 +822,7 @@ def test_lidar_sweeps_loader():
     scene_data = info_data["20231027_185823"]["scene_info"]
     frame_data = info_data["20231027_185823"]["frame_info"]
 
-    lidar_points = loader.load("lidar_points", scene_data, frame_data, ii)
+    lidar_points = loader.load("lidar_points", frame_data, ii)
 
     def _assert_lidar_points(lidar_points):
         assert_almost_equal(

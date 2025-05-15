@@ -19,8 +19,8 @@ class LidarSweepsLoader(TransformableLoader):
         self.data_root = data_root
         self.sweep_info_length = sweep_info_length
 
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> LidarPoints:
-        cur_frame = frame_data[index_info.frame_id]
+    def load(self, name: str, frame_data_within_group: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> LidarPoints:
+        cur_frame = frame_data_within_group[index_info.frame_id]
         sweep_infos = cur_frame['lidar_points']['lidar1_sweeps']
 
         def Rt2T(R, t):

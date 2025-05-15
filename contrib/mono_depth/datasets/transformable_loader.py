@@ -18,9 +18,10 @@ __all__ = ["MonoDepthLoader"]
 
 @TRANSFORMABLE_LOADERS.register_module()
 class MonoDepthLoader(TransformableLoader):
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraImageSet:
-        cur_frame = frame_data[index_info.frame_id]
-        calib = scene_data["scene_info"]["calibration"]
+    def load(self, name: str, scene_data: Dict, frame_data_within_group: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraImageSet:
+        cur_frame = frame_data_within_group[index_info.frame_id]
+        scene_data = cur_frame["scene_info"]
+        calib = scene_data["calibration"]
         camera_images = {
             cam_id: CameraImage(
                 name=f"{name}:{cam_id}",
