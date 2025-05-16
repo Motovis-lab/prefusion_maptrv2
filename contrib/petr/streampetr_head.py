@@ -1085,8 +1085,8 @@ class StreamPETRHead(AnchorFreeHead):
         for i in range(num_samples):
             preds = preds_dicts[i]
             bboxes = preds['bboxes']
-            bboxes[:, 2] = bboxes[:, 2] - bboxes[:, 5] * 0.5
-            bboxes = img_metas[i]['box_type_3d'](bboxes, bboxes.size(-1))
+            # bboxes[:, 2] = bboxes[:, 2] - bboxes[:, 5] * 0.5
+            # bboxes = img_metas[i]['box_type_3d'](bboxes, bboxes.size(-1))
             scores = preds['scores']
             labels = preds['labels']
             ret_list.append([bboxes, scores, labels])

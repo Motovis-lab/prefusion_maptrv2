@@ -2,10 +2,11 @@ from typing import List, Dict, Any
 
 import torch
 import numpy as np
-from mmengine.model import BaseModel
 from mmengine.model.base_model.data_preprocessor import BaseDataPreprocessor
 from mmengine.structures import BaseDataElement
+from mmdet3d.structures.ops.transforms import bbox3d2result
 
+from prefusion import BaseModel
 from prefusion.registry import MODELS
 from contrib.petr.misc import locations
 
@@ -117,7 +118,12 @@ class StreamPETR(BaseModel):
         # self.visualize_bbox3d(data, bbox_3d, outs, meta_info, ego_poses)
 
         if mode == 'tensor':
-            return outs
+            bbox_list = self.box_head.get_bboxes(outs, img_metas)
+            bbox_results = [
+                bbox3d2result(bboxes, scores, labels)
+                for bboxes, scores, labels in bbox_list
+            ]
+            return bbox_results
         
         if mode == "loss":
             loss_inputs = [bbox_3d, gt_labels, outs]

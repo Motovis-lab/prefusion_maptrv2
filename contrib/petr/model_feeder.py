@@ -81,6 +81,10 @@ class StreamPETRModelFeeder(BaseModelFeeder):
                 frame["meta_info"]["T_ego_lidar"] = self.T_e_l
                 self.convert_model_food_to_lidar_coordsys_(frame)
 
+        # Dedicated data handling for Nuscenes data
+        for frame in processed_frame_batch:
+            frame.update(dictionary=frame_batch[0]['transformables']['bbox_3d'].dictionary)
+
         return processed_frame_batch
 
     @staticmethod

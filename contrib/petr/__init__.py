@@ -1,4 +1,4 @@
-from .model import *
+from .streampetr import *
 from .losses import *
 from .sampler import PseudoSamplerPetr
 from .metrics import *
@@ -12,3 +12,4 @@ from .match_cost import BBox3DL1Cost
 from .petr_transformer import *
 from .streampetr_head import StreamPETRHead
 from .nms_free_coder import NMSFreeCoder
+from .hooks import DumpPETRDetectionAsNuscenesJsonHook
