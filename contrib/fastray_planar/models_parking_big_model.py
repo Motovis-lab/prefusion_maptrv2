@@ -447,14 +447,14 @@ class ParkingFastRayPlanarMultiFrameModelAPALidarBigModel(BaseModel):
         # after modal fusion feature cache
         if self.multi_frame_fusion:  # stream feature fusion
             # delta pose: Tpre-curr, like use F.grid sample to
-            if batched_input_dict['index_infos'][0].prev is not None:  # fuse previous feat
+            if batched_input_dict['index_infos'][0].g_prev is not None:  # fuse previous feat
                 delta_poses = batched_input_dict['delta_poses'].clone().detach()
                 prev_bev_feats = self.temporal_transform(self.cached_voxel_feats, delta_poses)  # pose: Last frame;
                 bev_feats = self.voxel_fusion(bev_feats, prev_bev_feats)
-            elif batched_input_dict['index_infos'][0].prev is None:
+            elif batched_input_dict['index_infos'][0].g_prev is None:
                 bev_feats = self.voxel_fusion(bev_feats, bev_feats.clone().detach())  # stream line temporal
 
-            if batched_input_dict['index_infos'][0].next is not None:  # cached feat is next frame exists
+            if batched_input_dict['index_infos'][0].g_next is not None:  # cached feat is next frame exists
                 self.cached_voxel_feats = bev_feats.clone().detach()
                 self.cached_delta_poses = batched_input_dict['delta_poses'].clone().detach()
 

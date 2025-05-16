@@ -2,7 +2,7 @@ import copy
 import warnings
 from collections import defaultdict, UserDict, Counter
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Union, List
+from typing import TYPE_CHECKING, Dict, Union, List, Optional
 
 import cv2
 import mmcv
@@ -291,7 +291,7 @@ class LidarPointsLoader(TransformableLoader):
 
 @TRANSFORMABLE_LOADERS.register_module()
 class EgoPoseSetLoader(TransformableLoader):
-    def load(self, name: str, frame_data_within_group: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> EgoPoseSet:
+    def load(self, name: str, frame_data_within_group: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, **kwargs) -> EgoPoseSet:
 
         def _create_pose(frame_id, rel_pos):
             return EgoPose(
@@ -374,7 +374,7 @@ class AdvancedBbox3DLoader(TransformableLoader):
 
     rot90deg = Rotation.from_euler("XYZ", [0, 0, 90], degrees=True).as_matrix()
     
-    def __init__(self, data_root: Path, class_mapping: Dict = None, attr_mapping: Dict = None, axis_rearrange_method="none") -> None:
+    def __init__(self, data_root: Path, class_mapping: Optional[Dict] = None, attr_mapping: Optional[Dict] = None, axis_rearrange_method="none") -> None:
         """ Advanced Bbox3D Loader
         # CAUTION
         FIXME:

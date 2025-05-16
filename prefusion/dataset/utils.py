@@ -299,6 +299,6 @@ def load_frame_data_within_group(data_root: Union[Path, str], frame_info: PolarD
     }
 
 
-# @lru_cache(maxsize=20)
+@lru_cache(maxsize=20)
 def read_frame_pickle(path: Union[Path, str]) -> Dict[str, Dict]:
     return mmengine.load(path)
