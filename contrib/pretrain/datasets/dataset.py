@@ -8,9 +8,15 @@ from collections.abc import Mapping
 from mmengine import Config
 import numpy as np
 from mmengine.dataset import Compose
+from mmdet.datasets import XMLDataset as MMdetBaseDetDataset
+import os.path as osp
+import xml.etree.ElementTree as ET
+from typing import List, Optional, Union
+from mmengine.fileio import get, get_local_path, list_from_file
 
 
-__all__ = ['PretrainDataset', 'PretrainDataset_AVP']
+
+__all__ = ['PretrainDataset', 'PretrainDataset_AVP', "PretrainDataset_FrontData"]
 
 @DATASETS.register_module()
 class PretrainDataset(BaseDataset):
@@ -132,4 +138,60 @@ class PretrainDataset_AVP(PretrainDataset):
                         seg_fields=[],
                         swap_seg_labels=None)
                     data_list.append(data_info)
+        return data_list
+    
+
+
+@DATASETS.register_module()
+class PretrainDataset_FrontData(MMdetBaseDetDataset):
+    METAINFO = {
+        'classes':
+        ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat',
+         'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike', 'person',
+         'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor'),
+        # palette is a list of color tuples, which is used for visualization.
+        'palette': [(106, 0, 228), (119, 11, 32), (165, 42, 42), (0, 0, 192),
+                    (197, 226, 255), (0, 60, 100), (0, 0, 142), (255, 77, 255),
+                    (153, 69, 1), (120, 166, 157), (0, 182, 199),
+                    (0, 226, 252), (182, 182, 255), (0, 0, 230), (220, 20, 60),
+                    (163, 255, 0), (0, 82, 0), (3, 95, 161), (0, 80, 100),
+                    (183, 130, 88)]
+    }
+    def __init__(self, index, **kwargs):
+        self.index = index
+        super().__init__(**kwargs)
+        self.data_root = kwargs.get('data_root')
+        self.ann_file = kwargs.get('ann_file')
+        self.pipeline = Compose(kwargs.get('pipeline'))
+        self.camera_types = kwargs.get('camera_types')
+        self.reduce_zero_label = kwargs.get('reduce_zero_label')
+        self.test_mode = kwargs.get('test_mode', False)
+        self.data_list: List[dict] = []
+    
+    def load_data_list(self) -> List[dict]:
+        """Load annotation from XML style ann_file.
+
+        Returns:
+            list[dict]: Annotation info from XML file.
+        """
+        
+        self.cat2label = {
+            cat: i
+            for i, cat in enumerate(self._metainfo['classes'])
+        }
+
+        data_list = []
+        img_ids = list_from_file(self.ann_file, backend_args=self.backend_args)
+        for img_id in img_ids:
+            file_name = osp.join(self.img_subdir, img_id)
+            xml_path = osp.join(self.sub_data_root, self.ann_subdir,
+                                img_id.replace('.jpg', '.xml'))
+
+            raw_img_info = {}
+            raw_img_info['img_id'] = img_id
+            raw_img_info['file_name'] = file_name
+            raw_img_info['xml_path'] = xml_path
+
+            parsed_data_info = self.parse_data_info(raw_img_info)
+            data_list.append(parsed_data_info)
         return data_list
