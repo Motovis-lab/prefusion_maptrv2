@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from .model_feeder import BaseModelFeeder
     from .transformable_loader import TransformableLoader
     from .subepoch_manager import SubEpochManager
-    from .group_sampler import GroupSampler, Group
+    from .group_sampler import GroupSampler
 
 INF_DIST = 1e8
 
@@ -290,13 +290,6 @@ def load_frame_info(path: Union[Path, str]) -> PolarDict:
     info = mmengine.load(path)
     frame_info = PolarDict({scene_id: scene_data['frame_info'] for scene_id, scene_data in info.items()}) # PolarDict transforms nested dict to flattened dict (sep='/')
     return frame_info
-
-
-def load_frame_data_within_group(data_root: Union[Path, str], frame_info: PolarDict, group: "Group") -> Dict[str, Dict]:
-    return {
-        index_info.frame_id: read_frame_pickle(Path(data_root) / frame_info[index_info.scene_frame_id])
-        for index_info in group
-    }
 
 
 @lru_cache(maxsize=20)

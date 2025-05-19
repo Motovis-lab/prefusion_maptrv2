@@ -96,9 +96,9 @@ def test_establish_linkings_prev_pointers():
     establish_linkings(nodes)
     
     assert node1.prev is None
-    assert node1.next is None  # Due to the bug in establish_linkings
-    assert node2.prev == node1
-    assert node2.next == node2  # Current node's next is set to itself
+    assert node1.next is node2
+    assert node2.prev is node1
+    assert node2.next is None
 def test_establish_linkings_with_single_node():
     node = IndexInfo("s1", "f0")
     result = establish_linkings([node])
@@ -112,9 +112,9 @@ def test_establish_group_linkings():
     establish_group_linkings(nodes)
     
     assert node1.g_prev is None
-    assert node1.g_next is None  # Due to the same bug for group links
-    assert node2.g_prev == node1
-    assert node2.g_next == node2  # Current node's g_next is set to itself
+    assert node1.g_next is node2
+    assert node2.g_prev is node1
+    assert node2.g_next is None
 def test_equality_with_linked_nodes():
     node1 = IndexInfo("s1", "f1")
     node2 = IndexInfo("s1", "f2", g_prev=node1)

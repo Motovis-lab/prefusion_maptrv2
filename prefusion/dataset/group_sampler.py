@@ -18,7 +18,7 @@ from prefusion.registry import GROUP_SAMPLERS
 from prefusion.dataset.index_info import IndexInfo, establish_linkings, establish_group_linkings
 from prefusion.dataset.transformable_loader import Bbox3DLoader, Polyline3DLoader, Polygon3DLoader, ParkingSlot3DLoader
 from prefusion.dataset.transform import Bbox3D, Polyline3D, Polygon3D, ParkingSlot3D
-from prefusion.dataset.utils import build_transformable_loader, PolarDict, load_frame_data_within_group
+from prefusion.dataset.utils import build_transformable_loader, PolarDict, read_frame_pickle
 
 if TYPE_CHECKING:
     from .dataset import TransformableLoader
@@ -379,8 +379,7 @@ class ClassBalancedGroupSampler(GroupSampler):
             obj_cnt = Counter()
             frm_cnt = Counter()
             for index_info in group:
-                frame_data_within_group = load_frame_data_within_group(data_root, frame_info, group)
-                transformables = self.load_all_transformables(data_root, frame_data_within_group, index_info)
+                transformables = self.load_all_transformables(data_root, frame_info, index_info)
                 no_objects_found = True
                 for _, transformable in transformables.items():
                     classes = [ele['class'] for ele in transformable.elements]
@@ -481,7 +480,8 @@ class ClassBalancedGroupSampler(GroupSampler):
 
         return sampled_groups
 
-    def load_all_transformables(self, data_root: Path, frame_data_within_group: Dict[str, Dict], index_info: "IndexInfo") -> dict:
+    def load_all_transformables(self, data_root: Path, frame_info: PolarDict, index_info: "IndexInfo") -> dict:
+        frame_data = read_frame_pickle(data_root / frame_info[index_info.scene_frame_id])
         transformables = {}
         for name in self.transformable_cfg:
             _t_cfg = self.transformable_cfg[name]
@@ -490,7 +490,7 @@ class ClassBalancedGroupSampler(GroupSampler):
             loader_cfg = _t_cfg["loader"] if "loader" in _t_cfg else None
             loader = self._build_transformable_loader(loader_cfg, _t_cfg["type"])
             rest_kwargs = {k: v for k, v in _t_cfg.items() if k not in ["type", "loader", "tensor_smith"]}
-            transformables[name] = loader.load(name, frame_data_within_group, index_info, **rest_kwargs)
+            transformables[name] = loader.load(name, frame_info, frame_data, index_info, **rest_kwargs)
         
         return transformables
     
