@@ -31,7 +31,7 @@ class StreamPETRModelFeeder(BaseModelFeeder):
         assert bbox_3d_pos_repr in ["cuboid_center", "bottom_center"]
         self.bbox_3d_pos_repr = bbox_3d_pos_repr
 
-        # 4x4 transformation matrix from lidar to ego
+        # 4x4 transformation matrix from lidar to ego (i.e. what we normally provided in calib)
         self.T_e_l: Union[np.ndarray, None] = np.array(lidar_extrinsics) if lidar_extrinsics is not None else None
 
     def process(self, frame_batch: list) -> dict | list:
@@ -120,6 +120,8 @@ class StreamPETRModelFeeder(BaseModelFeeder):
         if self.T_e_l is None:
             return
         for t, pose in ego_pose_set.transformables.items():
+            # explaination: what we want is T_w_l = T_w_e @ T_e_l
+            # `pose` is T_w_e
             pose.rotation, pose.translation = (
                 pose.rotation @ self.T_e_l[:3, :3],
                 pose.rotation @ self.T_e_l[:3, 3][:, None] + pose.translation

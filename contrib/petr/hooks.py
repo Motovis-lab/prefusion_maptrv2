@@ -49,7 +49,38 @@ OBJ_RANGE_THRESH = {
 }
 
 
-def format_boxes_as_nuscenes_format(token: str, pred_boxes: np.ndarray, pred_scores: np.ndarray, pred_class_ids: np.ndarray, ego_pose: "EgoPose", dictionary: list[str]):
+def format_boxes_as_nuscenes_format(
+    token: str,
+    pred_boxes: np.ndarray,
+    pred_scores: np.ndarray,
+    pred_class_ids: np.ndarray,
+    ego_pose: "EgoPose",
+    dictionary: list[str]
+) -> List[Dict]:
+    """Format predicted boxes as the format that Nuscenes Evaluator expcected in the global (world) coordsys.
+
+    Parameters
+    ----------
+    token : str
+        nuscenes sample token
+    pred_boxes : np.ndarray
+        of shape (N, 9)
+    pred_scores : np.ndarray
+        of shape (N, 1)
+    pred_class_ids : np.ndarray
+        of shape (N, 1)
+    ego_pose : EgoPose
+        The ego pose (pls. refer to StreamPETRModelFeeder.convert_ego_pose_set_to_lidar_coordsys_)
+    T_ego_lidar : np.ndarray
+        of shape (4, 4), the transformation matrix from lidar coordsys to ego coordsys
+    dictionary : list[str]
+        _description_
+
+    Returns
+    -------
+    List[Dict]
+        formatted boxes information in the global (world) coordsys
+    """
     formatted_boxes = []
     for bx, sc, lb in zip(pred_boxes, pred_scores, pred_class_ids):
         dist_to_ego_origin = np.linalg.norm(bx[:2], 2)
@@ -60,7 +91,6 @@ def format_boxes_as_nuscenes_format(token: str, pred_boxes: np.ndarray, pred_sco
         formatted_bx = {
             "sample_token": token,
             "size": bx[[4, 3, 5]].tolist(), # size in nusc is [width, length, height]
-            "velocity": bx[-2:].tolist(),  # TODO: check and confirm whether the velocity needs to to be rotated according to ego pose and box coordsys
             "detection_name": det_name,
             "detection_score": float(sc),
             "attribute_name": get_box_attr(bx[-2:], det_name),
@@ -73,6 +103,7 @@ def format_boxes_as_nuscenes_format(token: str, pred_boxes: np.ndarray, pred_sco
         formatted_bx.update(
             translation=T_w_b[:3, 3].flatten().tolist(),
             rotation=R.from_matrix(T_w_b[:3, :3]).as_quat()[[3, 0, 1, 2]].tolist(), # nusc uses pyquaternion repr
+            velocity=(T_w_e[:3, :3] @ np.array(bx[-2:].tolist() + [0])[:, None]).flatten()[:2].tolist(),
         )
         formatted_boxes.append(formatted_bx)
     return formatted_boxes
