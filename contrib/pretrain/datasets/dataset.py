@@ -146,27 +146,21 @@ class PretrainDataset_AVP(PretrainDataset):
 class PretrainDataset_FrontData(MMdetBaseDetDataset):
     METAINFO = {
         'classes':
-        ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car', 'cat',
-         'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike', 'person',
-         'pottedplant', 'sheep', 'sofa', 'train', 'tvmonitor'),
-        # palette is a list of color tuples, which is used for visualization.
-        'palette': [(106, 0, 228), (119, 11, 32), (165, 42, 42), (0, 0, 192),
-                    (197, 226, 255), (0, 60, 100), (0, 0, 142), (255, 77, 255),
-                    (153, 69, 1), (120, 166, 157), (0, 182, 199),
-                    (0, 226, 252), (182, 182, 255), (0, 0, 230), (220, 20, 60),
-                    (163, 255, 0), (0, 82, 0), (3, 95, 161), (0, 80, 100),
-                    (183, 130, 88)]
+        ('car','mpv','mini','van','bus','lorry','truck','special','adult','child','bicycle','motorcycle',
+         'tricycle','bicyclist','tricyclist','trafficsign','tunnel_entry','vehicle_front','vehicle_back',
+         'tricycle_front','tricycle_back','wheel','plate','head','mirror','cabin','info_ts','other_ts','cone',
+         'bollard','direction_guidance','soft_barrier','guardrail','dontcareregion','front_wheel_point',
+         'back_wheel_point','suv')
     }
-    def __init__(self, index, **kwargs):
-        self.index = index
-        super().__init__(**kwargs)
+    def __init__(self, reduce_zero_label, **kwargs):
+        super().__init__(img_subdir="", ann_subdir="", **kwargs)
         self.data_root = kwargs.get('data_root')
         self.ann_file = kwargs.get('ann_file')
         self.pipeline = Compose(kwargs.get('pipeline'))
-        self.camera_types = kwargs.get('camera_types')
-        self.reduce_zero_label = kwargs.get('reduce_zero_label')
+        self.reduce_zero_label = reduce_zero_label
         self.test_mode = kwargs.get('test_mode', False)
         self.data_list: List[dict] = []
+        
     
     def load_data_list(self) -> List[dict]:
         """Load annotation from XML style ann_file.
@@ -183,9 +177,9 @@ class PretrainDataset_FrontData(MMdetBaseDetDataset):
         data_list = []
         img_ids = list_from_file(self.ann_file, backend_args=self.backend_args)
         for img_id in img_ids:
-            file_name = osp.join(self.img_subdir, img_id)
+            file_name = osp.join(self.img_subdir, img_id + '.jpg')
             xml_path = osp.join(self.sub_data_root, self.ann_subdir,
-                                img_id.replace('.jpg', '.xml'))
+                                img_id + '.xml')
 
             raw_img_info = {}
             raw_img_info['img_id'] = img_id

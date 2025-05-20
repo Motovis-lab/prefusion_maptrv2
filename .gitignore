@@ -181,3 +181,5 @@ convert_model_key.py
 
 
 tools/gene_nusc_occ
+pyrightconfig.json
+pyrightconfig.py

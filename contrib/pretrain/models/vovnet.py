@@ -8,6 +8,8 @@ import torch
 import collections
 from torch import nn
 
+__all__ = ["VoVNet"]
+
 # The paper is unclear as to where to downsample, so the downsampling was
 # derived from the pretrained model graph as visualized by Netron. V2 simply
 # enables ESE and identity connections here, nothing else changes.
@@ -66,7 +68,7 @@ CONFIG = {
 }
 
 class ESE(BaseModule):
-    def __init__(self, channels,conv_cfg=None, init_cfg: dict | torch.List[dict] | None = None):
+    def __init__(self, channels,conv_cfg=None, init_cfg: dict | torch.List[dict] | None = None): # type: ignore
         super().__init__(init_cfg)
         self.conv = build_conv_layer(conv_cfg, channels, channels, 1, bias=True)
 
@@ -90,7 +92,7 @@ class ConvBnRelu(BaseModule):
         super().__init__(init_cfg)
         self.conv = build_conv_layer(conv_cfg, in_ch, out_ch, kernel_size, stride=stride,
                                      padding=kernel_size//2, bias=False)
-        self.norm_name, self.norm  = build_norm_layer(norm_cfg, out_ch)
+        self.norm_name, self.norm  = build_norm_layer(norm_cfg, out_ch) # type: ignore
         self.relu = build_activation_layer(act_cfg)
 
     @property
@@ -117,7 +119,7 @@ class OSA(BaseModule):
         kernel_size: int = 3,
         stride: int = 1,
         downsample: bool = False,
-        init_cfg=None    # type: dict   
+        init_cfg=None    # type: ignore
     ) -> None:
         super().__init__(init_cfg)
         self.downsample = downsample
