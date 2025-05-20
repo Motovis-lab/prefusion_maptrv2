@@ -5,33 +5,33 @@ custom_imports = dict(
     allow_failed_imports=False
 )
 dataset_front_type = 'PretrainDataset_FrontData'
-data_root = '/home/wuhan/prefusion/tests/contrib/pretrain/data'
+data_root = '/home/wuhan/prefusion'
 # ori_shape=(640, 1024)
 crop_size = (640, 1024)
 train_pipeline = [
-    dict(type='mmseg.LoadImageFromFile'),
-    dict(type='LoadAnnotationsPretrain', with_depth=True, with_seg_mask=True, reduce_zero_label=False),
+    dict(type='LoadImageFromFile'),
+    dict(type='LoadAnnotations', with_bbox=True),
     dict(
         type='RandomResize',
         scale=crop_size,
         ratio_range=(0.5, 2.0),
         keep_ratio=True),
-    dict(type='mmseg.RandomCrop', crop_size=crop_size, cat_max_ratio=0.75),
-    dict(type='mmseg.RandomFlip', prob=0.5),
-    dict(type='mmseg.PhotoMetricDistortion'),
-    dict(type='PackSegInputs')
+    dict(type='mmdet.RandomCrop', crop_size=crop_size),
+    dict(type='RandomFlip', prob=0.5),
+    dict(type='mmdet.PhotoMetricDistortion'),
+    dict(type='mmdet.PackDetInputs')
 ]
 
 val_pipeline = [
-    dict(type='mmseg.LoadImageFromFile'),
-    dict(type='LoadAnnotationsPretrain', with_depth=True, with_seg_mask=True, reduce_zero_label=False),
+    dict(type='LoadImageFromFile'),
+    dict(type='LoadAnnotations', with_bbox=True),
     dict(
         type='Resize',
         scale=crop_size,
         keep_ratio=True),
-    dict(type='PackSegInputs')
+    dict(type='mmdet.PackDetInputs')
 ]
-batch_size = 32
+batch_size = 2
 
 dataset_front = dict(
     type=dataset_front_type,
@@ -97,6 +97,8 @@ model = dict(
     bbox_head=dict(
         type='mmdet.FCOSHead',
         num_classes=37,
+        regress_ranges=((-1, 64), (64, 128), (128, 256),
+                        (256, 100000000)),
         in_channels=256,
         stacked_convs=4,
         feat_channels=256,
@@ -113,6 +115,7 @@ model = dict(
             alpha=0.25,
             loss_weight=1.0),
         loss_bbox=dict(type='mmdet.GIoULoss', loss_weight=1.0),
+        bbox_coder=dict(type='mmdet.DistancePointBBoxCoder'),
         loss_centerness=dict(
             type='mmdet.CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0)),
     # model training and testing settings
@@ -188,5 +191,5 @@ custom_hooks = [
 
 vis_backends = [dict(type='LocalVisBackend')]
 
-load_from = "work_dirs/mv_4d_fastbev_pretrain/20241106_102113/epoch_24.pth"
+load_from = None
 resume=False
