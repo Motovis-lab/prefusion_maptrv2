@@ -14,6 +14,23 @@ class IndexInfo:
         g_prev: Optional["IndexInfo"] = None,
         g_next: Optional["IndexInfo"] = None,
     ):
+        """Object that stores scene_id and frame_id as well as the adjacent linking relationships.
+
+        Parameters
+        ----------
+        scene_id : str
+            scene id
+        frame_id : str
+            frame id
+        prev : IndexInfo, optional
+            previous index_info, by default None
+        next : IndexInfo, optional
+            next index_info, by default None
+        g_prev : IndexInfo, optional
+            previous index_info within the same group, by default None
+        g_next : IndexInfo, optional
+            next index_info within the same group, by default None
+        """
         self.scene_id = scene_id
         self.frame_id = frame_id
         self.prev = prev

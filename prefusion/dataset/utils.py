@@ -292,6 +292,6 @@ def load_frame_info(path: Union[Path, str]) -> PolarDict:
     return frame_info
 
 
-@lru_cache(maxsize=20)
+@lru_cache(maxsize=256)
 def read_frame_pickle(path: Union[Path, str]) -> Dict[str, Dict]:
     return mmengine.load(path)

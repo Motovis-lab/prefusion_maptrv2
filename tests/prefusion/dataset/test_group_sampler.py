@@ -315,7 +315,20 @@ def mock_info():
 
 def test_get_scene_frame_inds_with_no_indices_provided(mock_info):
     indices = get_scene_frame_inds(mock_info)
-    
+
+    i6 = IndexInfo.from_str("20230901_000000/1692759619664")
+    i7 = IndexInfo.from_str("20230901_000000/1692759619764")
+    i0 = IndexInfo.from_str("20250428_000007/1722759000064")
+    i2 = IndexInfo.from_str("20250428_000007/1722759002064")
+    i1 = IndexInfo.from_str("20250428_000007/1722759001064")
+
+    assert indices == {
+        "20230901_000000": [i6, i7],
+        "20231023_222222": [IndexInfo.from_str("20231023_222222/1692759621364")],
+        "20250428_000007": [i0, i1, i2],
+    }
+
+    indices = {scene_id: establish_linkings(_inds) for scene_id, _inds in indices.items()}
     i6 = IndexInfo.from_str("20230901_000000/1692759619664")
     i7 = IndexInfo.from_str("20230901_000000/1692759619764", prev=i6)
     i0 = IndexInfo.from_str("20250428_000007/1722759000064")
@@ -338,6 +351,14 @@ def test_get_scene_frame_inds_with_indices_provided(mock_info):
 
 def test_get_scene_frame_inds_with_duplicated_indices_provided(mock_info):
     indices = get_scene_frame_inds(mock_info, indices=["20230901_000000/1692759619664", "20230901_000000/1692759620664", "20231001_111111/1712759770664", "20230901_000000/1692759619664"])
+    
+    i0 = IndexInfo.from_str("20230901_000000/1692759619664")
+    i1 = IndexInfo.from_str("20230901_000000/1692759619664")
+    assert indices == {
+        "20230901_000000": [i0, i1],
+    }
+    
+    indices = {scene_id: establish_linkings(_inds) for scene_id, _inds in indices.items()}
     i0 = IndexInfo.from_str("20230901_000000/1692759619664")
     i1 = IndexInfo.from_str("20230901_000000/1692759619664", prev=i0)
     assert indices == {

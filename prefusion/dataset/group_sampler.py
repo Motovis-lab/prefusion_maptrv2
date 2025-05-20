@@ -149,10 +149,7 @@ def get_scene_frame_inds(frame_info: PolarDict, indices: Optional[List[str]] = N
         available_indices[scene_id].append(scn_frm_id)
     for scene_id in available_indices:
         available_indices[scene_id] = sorted(available_indices[scene_id])
-    return {
-        scene_id: establish_linkings([IndexInfo.from_str(i) for i in _inds]) 
-        for scene_id, _inds in available_indices.items()
-    }
+    return {scene_id: [IndexInfo.from_str(i) for i in _inds] for scene_id, _inds in available_indices.items()}
 
 
 def establish_adjacent_linking_within_group(groups: List[Group["IndexInfo"]]) -> List[Group["IndexInfo"]]:
@@ -295,6 +292,10 @@ class SequentialSceneFrameGroupSampler(GroupSampler):
 
     def sample(self, data_root: Path, frame_info: PolarDict, **kwargs) -> List[Group["IndexInfo"]]:
         scene_frame_inds: Dict[str, List[IndexInfo]] = get_scene_frame_inds(frame_info)
+        
+        # establishing long chaining of index_info only works for num_workers=0 in dataloader
+        scene_frame_inds = {scene_id: establish_linkings(_inds) for scene_id, _inds in scene_frame_inds.items()}
+
         groups = [Group([frm]) for scene_inds in scene_frame_inds.values() for frm in scene_inds] # flatten all scenes into single-frame groups
         return groups
 
