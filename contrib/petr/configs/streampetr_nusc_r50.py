@@ -139,7 +139,7 @@ val_dataset = dict(
                     #    indices_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated_indices.txt",
                         possible_group_sizes=[20],
                         possible_frame_intervals=[1]),
-    batch_size=1,
+    batch_size=batch_size,
 )
 
 test_dataset = dict(
@@ -359,7 +359,7 @@ default_hooks = dict(
     timer=dict(type="IterTimerHook"),
     logger=dict(type="LoggerHook", interval=50),
     param_scheduler=dict(type="ParamSchedulerHook"),
-    checkpoint=dict(type="CheckpointHook", interval=10, save_best="precision", rule="greater"),
+    checkpoint=dict(type="CheckpointHook", interval=10, save_best="accuracy", rule="greater"),
     sampler_seed=dict(type="DistSamplerSeedHook"),
 )
 
@@ -373,6 +373,6 @@ custom_hooks = [
 today = datetime.datetime.now().strftime("%m%d")
 
 work_dir = f'./work_dirs/{experiment_name}_{today}'
-load_from = "work_dirs/stream_petr_nusc_r50_0513/stream_petr_nusc_r50_0513_epoch_500.pth"
+# load_from = "work_dirs/stream_petr_nusc_r50_0513/stream_petr_nusc_r50_0513_epoch_500.pth"
 
 resume = False
