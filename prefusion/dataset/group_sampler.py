@@ -152,10 +152,6 @@ def get_scene_frame_inds(frame_info: PolarDict, indices: Optional[List[str]] = N
     return {scene_id: [IndexInfo.from_str(i) for i in _inds] for scene_id, _inds in available_indices.items()}
 
 
-def establish_adjacent_linking_within_group(groups: List[Group["IndexInfo"]]) -> List[Group["IndexInfo"]]:
-    return [establish_group_linkings(grp) for grp in groups]
-
-
 class GroupSampler:
     def __init__(
         self, 
@@ -240,7 +236,7 @@ class IndexGroupSampler(GroupSampler):
             case "val" | "test":
                 groups: List[Group[IndexInfo]] = self.sample_val_groups(scene_frame_inds)
 
-        return establish_adjacent_linking_within_group(groups)
+        return [establish_group_linkings(grp) for grp in groups]
 
     def sample_train_groups(self, scene_frame_inds: Dict[str, List["IndexInfo"]]) -> List[Group["IndexInfo"]]:
         if self.seed: 

@@ -318,20 +318,20 @@ class EgoPoseSetLoader(TransformableLoader):
         max_prev = max(num_prev_infos_in_group, self.prev_window_size)
         max_next = max(num_next_infos_in_group, self.next_window_size)
 
-        while (the_prev := cur.g_prev or cur.prev) is not None and cnt < max_prev:
+        while cur.prev is not None and cnt < max_prev:
             rel_pos = f"-{cnt+1}" # relative position
-            poses[rel_pos] = _create_pose(the_prev, rel_pos)
-            cur = the_prev
+            poses[rel_pos] = _create_pose(cur.prev, rel_pos)
+            cur = cur.prev
             cnt += 1
 
         cur = index_info
         poses["0"] = _create_pose(cur, "0")
 
         cnt = 0
-        while (the_next := cur.g_next or cur.next) is not None and cnt < max_next:
+        while cur.next is not None and cnt < max_next:
             rel_pos = f"+{cnt+1}" # relative position
-            poses[rel_pos] = _create_pose(the_next, rel_pos)
-            cur = the_next
+            poses[rel_pos] = _create_pose(cur.next, rel_pos)
+            cur = cur.next
             cnt += 1
 
         sorted_poses = dict(sorted(poses.items(), key=lambda x: int(x[0])))

@@ -30,10 +30,10 @@ def test_fastray_model_feeder():
     )
     index_infos = [
         IndexInfo("20231101_160337", "1698825817764", 
-            next=IndexInfo("20231101_160337", "1698825817864")
+            s_next=IndexInfo("20231101_160337", "1698825817864")
         ),
         IndexInfo("20231101_160337", "1698825817864", 
-            prev=IndexInfo("20231101_160337", "1698825817764")
+            s_prev=IndexInfo("20231101_160337", "1698825817764")
         ),
     ]
     camera_images = CameraImageSet("camera_images", dict(

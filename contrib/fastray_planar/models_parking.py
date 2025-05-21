@@ -103,7 +103,7 @@ class ParkingFastRayPlanarMultiFrameModel(BaseModel):
         self.cached_voxel_feats[f'pre_0'] = voxel_feats_cur
         self.cached_delta_poses[f'pre_0'] = delta_poses
         for pre_i in range(self.pre_nframes):
-            index_info_prev_str = 'cur_first_index_info' + ''.join(['.g_prev'] * (pre_i+1))
+            index_info_prev_str = 'cur_first_index_info' + ''.join(['.prev'] * (pre_i+1))
             if eval(index_info_prev_str) is None:
                 for pre_j in range(pre_i, self.pre_nframes):
                     self.cached_voxel_feats[f'pre_{pre_j+1}'] = self.cached_voxel_feats[f'pre_{pre_j}'].clone().detach()
@@ -476,7 +476,7 @@ class ParkingFastRayPlanarMultiFrameModelAPA(BaseModel):
         self.cached_voxel_feats[f'pre_0'] = voxel_feats_cur
         self.cached_delta_poses[f'pre_0'] = delta_poses
         for pre_i in range(self.pre_nframes):
-            index_info_prev_str = 'cur_first_index_info' + ''.join(['.g_prev'] * (pre_i+1))
+            index_info_prev_str = 'cur_first_index_info' + ''.join(['.prev'] * (pre_i+1))
             if eval(index_info_prev_str) is None:
                 for pre_j in range(pre_i, self.pre_nframes):
                     self.cached_voxel_feats[f'pre_{pre_j+1}'] = self.cached_voxel_feats[f'pre_{pre_j}'].clone().detach()
@@ -744,7 +744,7 @@ class ParkingFastRayPlanarMultiFrameModelAPALidar(BaseModel):
         self.cached_voxel_feats[f'pre_0'] = voxel_feats_cur
         self.cached_delta_poses[f'pre_0'] = delta_poses
         for pre_i in range(self.pre_nframes):
-            index_info_prev_str = 'cur_first_index_info' + ''.join(['.g_prev'] * (pre_i + 1))
+            index_info_prev_str = 'cur_first_index_info' + ''.join(['.prev'] * (pre_i + 1))
             if eval(index_info_prev_str) is None:
                 for pre_j in range(pre_i, self.pre_nframes):
                     self.cached_voxel_feats[f'pre_{pre_j + 1}'] = self.cached_voxel_feats[

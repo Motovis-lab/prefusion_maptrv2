@@ -269,12 +269,12 @@ def test_load_ego_poses_with_scene_linkings():
     data_root = Path("tests/prefusion/dataset/example_inputs")
     
     i0 = IndexInfo("20231101_160337", "1698825817664")
-    i1 = IndexInfo("20231101_160337", "1698825817764", prev=i0, g_prev=i0)
-    i2 = IndexInfo("20231201_000000", "1698825817864", prev=i1)
-    i3 = IndexInfo("20231201_000000", "1698825817964", prev=i2, g_prev=i2)
-    i4 = IndexInfo("20231201_000000", "1698825818064", prev=i3, g_prev=i3)
-    i5 = IndexInfo("20231201_000000", "1698825818164", prev=i4, g_prev=i4)
-    i6 = IndexInfo("20240101_777777", "1698825818264", prev=i5)
+    i1 = IndexInfo("20231101_160337", "1698825817764", s_prev=i0, g_prev=i0)
+    i2 = IndexInfo("20231201_000000", "1698825817864", s_prev=i1)
+    i3 = IndexInfo("20231201_000000", "1698825817964", s_prev=i2, g_prev=i2)
+    i4 = IndexInfo("20231201_000000", "1698825818064", s_prev=i3, g_prev=i3)
+    i5 = IndexInfo("20231201_000000", "1698825818164", s_prev=i4, g_prev=i4)
+    i6 = IndexInfo("20240101_777777", "1698825818264", s_prev=i5)
     cur = i3
     
     with open("tests/prefusion/dataset/mv4d-infos-for-test-001.pkl", "rb") as f:

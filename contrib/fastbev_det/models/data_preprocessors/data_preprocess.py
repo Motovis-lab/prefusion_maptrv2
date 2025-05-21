@@ -164,8 +164,8 @@ class GroupDataPreprocess(DetDataPreprocessor):
         # targets = self.cast_data(self.collate_targets(data))
         frame_ids = [x['index_info'].frame_id for x in data]
         frame_exists = dict(
-            prev_exists = [x['index_info'].g_prev for x in data],
-            next_exists = [x['index_info'].g_next for x in data]
+            prev_exists = [x['index_info'].prev for x in data],
+            next_exists = [x['index_info'].next for x in data]
         )
 
         return {'batch_data':{'fish_data': fish_data, 'front_data':front_data, 'pv_data':pv_data}, 'frame_ids':frame_ids, 'frame_exists':frame_exists, 'ori_data': data}

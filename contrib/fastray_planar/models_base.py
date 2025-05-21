@@ -254,7 +254,7 @@ class FastRayPlanarMultiFrameModel(BaseModel):
         self.cached_voxel_feats[f'pre_0'] = voxel_feats_cur
         self.cached_delta_poses[f'pre_0'] = delta_poses
         for pre_i in range(self.pre_nframes):
-            index_info_prev_str = 'cur_first_index_info' + ''.join(['.g_prev'] * (pre_i+1))
+            index_info_prev_str = 'cur_first_index_info' + ''.join(['.prev'] * (pre_i+1))
             if eval(index_info_prev_str) is None:
                 for pre_j in range(pre_i, self.pre_nframes):
                     self.cached_voxel_feats[f'pre_{pre_j+1}'] = self.cached_voxel_feats[f'pre_{pre_j}'].clone().detach()
@@ -432,7 +432,7 @@ class FastRayPlanarStreamModel(BaseModel):
         # spatial transform: output shape can be 4D or 5D (N, C*Z, X, Y) or (N, C, Z, X, Y)
         voxel_feats_cur = self.spatial_transform(camera_feats_dict, camera_lookups)
         # temporal transform
-        if batched_input_dict['index_infos'][0].g_prev is None:
+        if batched_input_dict['index_infos'][0].prev is None:
             self.voxel_feats_pre = voxel_feats_cur.clone().detach()
         voxel_feats_pre_aligned = self.temporal_transform(self.voxel_feats_pre, delta_poses)
         # voxel fusion

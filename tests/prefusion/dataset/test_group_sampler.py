@@ -330,10 +330,10 @@ def test_get_scene_frame_inds_with_no_indices_provided(mock_info):
 
     indices = {scene_id: establish_linkings(_inds) for scene_id, _inds in indices.items()}
     i6 = IndexInfo.from_str("20230901_000000/1692759619664")
-    i7 = IndexInfo.from_str("20230901_000000/1692759619764", prev=i6)
+    i7 = IndexInfo.from_str("20230901_000000/1692759619764", s_prev=i6)
     i0 = IndexInfo.from_str("20250428_000007/1722759000064")
     i2 = IndexInfo.from_str("20250428_000007/1722759002064")
-    i1 = IndexInfo.from_str("20250428_000007/1722759001064", prev=i0, next=i2)
+    i1 = IndexInfo.from_str("20250428_000007/1722759001064", s_prev=i0, s_next=i2)
 
     assert indices == {
         "20230901_000000": [i6, i7],
@@ -360,7 +360,7 @@ def test_get_scene_frame_inds_with_duplicated_indices_provided(mock_info):
     
     indices = {scene_id: establish_linkings(_inds) for scene_id, _inds in indices.items()}
     i0 = IndexInfo.from_str("20230901_000000/1692759619664")
-    i1 = IndexInfo.from_str("20230901_000000/1692759619664", prev=i0)
+    i1 = IndexInfo.from_str("20230901_000000/1692759619664", s_prev=i0)
     assert indices == {
         "20230901_000000": [i0, i1],
     }
@@ -898,9 +898,9 @@ def test_create_index_info_list_with_adjacent_linking():
     inds = ['s1/a', 's1/b', 's1/c', 's1/d']
     index_info_list = establish_linkings([IndexInfo.from_str(i) for i in inds])
     a = IndexInfo.from_str('s1/a')
-    b = IndexInfo.from_str('s1/b', prev=a)
-    c = IndexInfo.from_str('s1/c', prev=b)
-    d = IndexInfo.from_str('s1/d', prev=c)
+    b = IndexInfo.from_str('s1/b', s_prev=a)
+    c = IndexInfo.from_str('s1/c', s_prev=b)
+    d = IndexInfo.from_str('s1/d', s_prev=c)
     assert index_info_list == [a, b, c, d]
     assert establish_linkings([]) == []
     assert establish_linkings([IndexInfo.from_str('s2/e')]) == [IndexInfo.from_str('s2/e')]
