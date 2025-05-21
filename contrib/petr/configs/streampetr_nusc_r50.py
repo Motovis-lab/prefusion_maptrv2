@@ -4,7 +4,7 @@ experiment_name = "stream_petr_nusc_r50"
 
 _base_ = "../../../configs/default_runtime.py"
 
-custom_imports = dict(imports=["prefusion", "contrib.petr", "mmdet"], allow_failed_imports=False)
+custom_imports = dict(imports=["prefusion", "contrib.petr", "mmdet", "contrib.cmt"], allow_failed_imports=False)
 
 backend_args = None
 
@@ -197,7 +197,7 @@ test_dataloader = dict(
     pin_memory=True,
 )
 
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=num_epochs, val_interval=1)  # -1 note don't eval
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=num_epochs, val_interval=-1)  # -1 note don't eval
 val_cfg = dict(type="GroupBatchValLoop")
 test_cfg = dict(type="GroupBatchInferLoop")
 
@@ -220,27 +220,27 @@ model = dict(
         style="pytorch",
     ),
     img_neck=dict(type="mmdet3d.CPFPN", in_channels=[1024, 2048], out_channels=256, num_outs=2),
-    # roi_head=dict(
-    #     type="FocalHead",
-    #     num_classes=len(class_mapping),
-    #     loss_cls2d=dict(
-    #         type='mmdet.QualityFocalLoss',
-    #         use_sigmoid=True,
-    #         beta=2.0,
-    #         loss_weight=2.0),
-    #     loss_centerness=dict(type='mmdet.GaussianFocalLoss', reduction='mean', loss_weight=1.0),
-    #     loss_bbox2d=dict(type='mmdet.L1Loss', loss_weight=5.0),
-    #     loss_iou2d=dict(type='mmdet.GIoULoss', loss_weight=2.0),
-    #     loss_centers2d=dict(type='mmdet.L1Loss', loss_weight=10.0),
-    #     train_cfg=dict(
-    #         assigner2d=dict(
-    #             type='mmdet.HungarianAssigner2D',
-    #             cls_cost=dict(type='FocalLossCost', weight=2.),
-    #             reg_cost=dict(type='mmdet.BBoxL1Cost', weight=5.0, box_format='xywh'),
-    #             iou_cost=dict(type='mmdet.IoUCost', iou_mode='giou', weight=2.0),
-    #             centers2d_cost=dict(type='mmdet.BBox3DL1Cost', weight=10.0))
-    #     ),
-    # ),
+    roi_head=dict(
+        type="FocalHead",
+        num_classes=len(class_mapping),
+        loss_cls2d=dict(
+            type='mmdet.QualityFocalLoss',
+            use_sigmoid=True,
+            beta=2.0,
+            loss_weight=2.0),
+        loss_centerness=dict(type='mmdet.GaussianFocalLoss', reduction='mean', loss_weight=1.0),
+        loss_bbox2d=dict(type='mmdet.L1Loss', loss_weight=5.0),
+        loss_iou2d=dict(type='mmdet.GIoULoss', loss_weight=2.0),
+        loss_centers2d=dict(type='mmdet.L1Loss', loss_weight=10.0),
+        train_cfg=dict(
+            assigner2d=dict(
+                type='HungarianAssigner2D',
+                cls_cost=dict(type='FocalLossCost', weight=2.),
+                reg_cost=dict(type='BBoxL1Cost', weight=5.0, box_format='xywh'),
+                iou_cost=dict(type='IoUCost', iou_mode='giou', weight=2.0),
+                centers2d_cost=dict(type='BBox3DL1Cost', weight=10.0))
+        ),
+    ),
     box_head=dict(
         type='StreamPETRHead',
         num_classes=len(class_mapping),
@@ -309,8 +309,8 @@ model = dict(
             assigner=dict(
                 type="mmdet.HungarianAssigner3D",
                 cls_cost=dict(type="FocalLossCost", weight=2.0),
-                reg_cost=dict(type="mmdet.BBox3DL1Cost", weight=0.25),
-                iou_cost=dict( type="mmdet.IoUCost", weight=0.0 ),  # Fake cost. This is just to make it compatible with DETR head.
+                reg_cost=dict(type="BBox3DL1Cost", weight=0.25),
+                iou_cost=dict( type="IoUCost", weight=0.0 ),  # Fake cost. This is just to make it compatible with DETR head.
                 pc_range=point_cloud_range,
             ),
         ),
@@ -359,7 +359,7 @@ default_hooks = dict(
     timer=dict(type="IterTimerHook"),
     logger=dict(type="LoggerHook", interval=50),
     param_scheduler=dict(type="ParamSchedulerHook"),
-    checkpoint=dict(type="CheckpointHook", interval=10, save_best="accuracy", rule="greater"),
+    checkpoint=dict(type="CheckpointHook", interval=100, save_best="accuracy", rule="greater"),
     sampler_seed=dict(type="DistSamplerSeedHook"),
 )
 

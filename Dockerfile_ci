@@ -72,6 +72,7 @@ RUN mim install --no-cache-dir -r /mim-requirements.txt
 RUN pip install --no-cache-dir flash-attn==2.6.3
 RUN pip install --no-cache-dir mtv4d==0.1.3
 RUN pip install --no-cache-dir polars==1.28.0
+RUN pip install --no-cache-dir copious==0.1.26
 
 # RUN pip install --no-cache-dir \
         # nuscenes-devkit \
