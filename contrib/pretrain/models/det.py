@@ -5,6 +5,10 @@ from mmengine.model import BaseModel
 from prefusion.registry import MODELS
 import torch.nn.functional as F
 import numpy as np
+from mmdet.models import FCOS
+from mmdet.models import FCOSHead
+from mmdet.datasets.transforms import LoadAnnotations
+from mmdet.datasets.transforms import PackDetInputs
 
 __all__ = ['ADAS_Det']
 

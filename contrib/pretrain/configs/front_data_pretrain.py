@@ -5,18 +5,19 @@ custom_imports = dict(
     allow_failed_imports=False
 )
 dataset_front_type = 'PretrainDataset_FrontData'
-data_root = '/home/wuhan/prefusion'
+data_root = '/mnt/ssd1/wuhan/prefusion'
 # ori_shape=(640, 1024)
-crop_size = (640, 1024)
+crop_size = (640, 1280)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True),
     dict(
         type='RandomResize',
         scale=crop_size,
-        ratio_range=(0.5, 2.0),
+        # ratio_range=(0.5, 2.0),
+        ratio_range=(1.0,1.0),
         keep_ratio=True),
-    dict(type='mmdet.RandomCrop', crop_size=crop_size),
+    # dict(type='mmdet.RandomCrop', crop_size=crop_size),
     dict(type='RandomFlip', prob=0.5),
     dict(type='mmdet.PhotoMetricDistortion'),
     dict(type='mmdet.PackDetInputs')
@@ -64,7 +65,8 @@ val_dataloader = dict(
         type=dataset_front_type,
         data_root=data_root,
         ann_file="tests/contrib/pretrain/index.txt",
-        pipeline=val_pipeline
+        pipeline=val_pipeline,
+        reduce_zero_label=False
     )
 )
 
@@ -90,8 +92,8 @@ model = dict(
         type='mmdet.FPN',
         in_channels=[256, 512, 768, 1024],
         out_channels=256,
-        start_level=1,
-        add_extra_convs='on_output',  # use P5
+        start_level=0,
+        add_extra_convs=False, 
         num_outs=4,
         relu_before_extra_convs=True),
     bbox_head=dict(
@@ -128,13 +130,13 @@ model = dict(
         max_per_img=100)
 )
 
-train_cfg = dict(type="mmengine.EpochBasedTrainLoop",max_epochs=24, val_interval=100)  # -1 note don't eval
+train_cfg = dict(type="mmengine.EpochBasedTrainLoop",max_epochs=24, val_interval=1)  # -1 note don't eval
 val_cfg = dict(type="mmengine.ValLoop")
 
 backend_args = None
 
 val_evaluator = dict(
-    type='CocoMetric',
+    type='FusionCocoMetric',
     metric='bbox')
 
 debug_mode = False
@@ -153,7 +155,7 @@ find_unused_parameters = True
 
 runner_type = 'GroupBatchRunner'
 
-lr = 0.002  # total lr per gpu lr is lr/n 
+lr = 0.02  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(
     type='OptimWrapper',
     optimizer=dict(type='AdamW', lr=lr, weight_decay=0.0001),

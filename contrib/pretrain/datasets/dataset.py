@@ -152,7 +152,7 @@ class PretrainDataset_FrontData(MMdetBaseDetDataset):
          'bollard','direction_guidance','soft_barrier','guardrail','dontcareregion','front_wheel_point',
          'back_wheel_point','suv')
     }
-    def __init__(self, reduce_zero_label, **kwargs):
+    def __init__(self, reduce_zero_label=False, **kwargs):
         super().__init__(img_subdir="", ann_subdir="", **kwargs)
         self.data_root = kwargs.get('data_root')
         self.ann_file = kwargs.get('ann_file')
