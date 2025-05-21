@@ -133,22 +133,17 @@ val_cfg = dict(type="mmengine.ValLoop")
 
 backend_args = None
 
-val_evaluator = dict(type='mmseg.IoUMetric', iou_metrics=['mIoU'])
 val_evaluator = dict(
     type='CocoMetric',
-    ann_file=data_root + 'annotations/instances_val2017.json',
-    metric='bbox',
-    format_only=False,
-    backend_args=backend_args)
+    metric='bbox')
 
-debug_mode = True
+debug_mode = False
 
 if debug_mode:
     val_evaluator = None
     val_dataloader = None
     val_cfg = None
 
-test_evaluator = val_evaluator
 env_cfg = dict(
     cudnn_benchmark=False,
     mp_cfg=dict(mp_start_method='fork', opencv_num_threads=0),
