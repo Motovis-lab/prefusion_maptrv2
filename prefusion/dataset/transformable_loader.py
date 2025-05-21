@@ -2,7 +2,7 @@ import copy
 import warnings
 from collections import defaultdict, UserDict, Counter
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Union, List
+from typing import TYPE_CHECKING, Dict, Union, List, Optional
 
 import cv2
 import mmcv
@@ -11,7 +11,7 @@ from scipy.spatial.transform import Rotation
 
 from prefusion.registry import TRANSFORMABLE_LOADERS
 from prefusion.dataset.tensor_smith import TensorSmith
-from prefusion.dataset.utils import read_pcd, read_ego_mask, get_reversed_mapping
+from prefusion.dataset.utils import read_pcd, read_ego_mask, get_reversed_mapping, read_frame_pickle, PolarDict
 from prefusion.dataset.transform import (
     Transformable,
     CameraImage, 
@@ -51,53 +51,56 @@ class TransformableLoader:
     def __init__(self, data_root: Path) -> None:
         self.data_root = data_root
 
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> Transformable:
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, **kwargs) -> Transformable:
         """Load Transformable data
 
         Parameters
         ----------
         name : str
             name of the transformable (best to be unique)
-        scene_data : Dict
+        frame_info : PolarDict
             >>> {
-            >>>     camera_mask: {
-            >>>         camera1: 'ego_mask/camera1.png',
-            >>>         camera2: 'ego_mask/camera2.png',
-            >>>         ...
-            >>>     } ,
-            >>>     calibration: {
-            >>>         lidar1: [...],
-            >>>         camera1: {extrinsic: [...], intrinsic: [...]},
-            >>>         ...
-            >>>     } , 
+            >>>     '20230823_110018/1742024381864': '20230823_110018/frame_info_pkl/1742024381864.pkl',
+            >>>     '20230823_110018/1742024381964': '20230823_110018/frame_info_pkl/1742024381964.pkl',
             >>>     ...
             >>> }
         frame_data : Dict[str, Dict]
-            >>> { '1742024381864': {
-            >>>         camera_image: {
-            >>>             camera1: '20250315_153742_1742024262664_1742024382664/camera/camera1/1742024381864.jpg',
-            >>>             camera2: '20250315_153742_1742024262664_1742024382664/camera/camera2/1742024381864.jpg',
+            >>> {
+            >>>     scene_info: {
+            >>>         camera_mask: {
+            >>>             camera1: 'ego_mask/camera1.png',
+            >>>             camera2: 'ego_mask/camera2.png',
             >>>             ...
             >>>         } ,
-            >>>         3d_boxes: [
-            >>>             {'class': 'class.traffic_facility.hard_barrier',
-            >>>             'attr': {'attr.traffic_facility.hard_barrier.type': 'attr.traffic_facility.hard_barrier.type.undefined'},
-            >>>             'size': [0.5223, 10.985, 1.1785],
-            >>>             'rotation': array([[ 4.27838545e-02,  9.99084344e-01,  1.22456978e-04],
-            >>>                     [-9.98961743e-01,  4.27766835e-02,  1.56713547e-02],
-            >>>                     [ 1.56517668e-02, -7.92810795e-04,  9.99877189e-01]]),
-            >>>             'translation': array([13.53816211,  9.52569891,  0.51868851]),
-            >>>             'track_id': '10252_0',
-            >>>             'velocity': array([0., 0., 0.])},
-            >>>             ... ,
-            >>>         ] , 
-            >>>         ego_pose: {
-            >>>             rotation: [...],
-            >>>             translation: [...],
+            >>>         calibration: {
+            >>>             lidar1: [...],
+            >>>             camera1: {extrinsic: [...], intrinsic: [...]},
+            >>>             ...
             >>>         } , 
             >>>         ...
-            >>>     }
-            >>>     ..., 
+            >>>     } ,
+            >>>     camera_image: {
+            >>>         camera1: '20250315_153742_1742024262664_1742024382664/camera/camera1/1742024381864.jpg',
+            >>>         camera2: '20250315_153742_1742024262664_1742024382664/camera/camera2/1742024381864.jpg',
+            >>>         ...
+            >>>     } ,
+            >>>     3d_boxes: [
+            >>>         {'class': 'class.traffic_facility.hard_barrier',
+            >>>         'attr': {'attr.traffic_facility.hard_barrier.type': 'attr.traffic_facility.hard_barrier.type.undefined'},
+            >>>         'size': [0.5223, 10.985, 1.1785],
+            >>>         'rotation': array([[ 4.27838545e-02,  9.99084344e-01,  1.22456978e-04],
+            >>>                 [-9.98961743e-01,  4.27766835e-02,  1.56713547e-02],
+            >>>                 [ 1.56517668e-02, -7.92810795e-04,  9.99877189e-01]]),
+            >>>         'translation': array([13.53816211,  9.52569891,  0.51868851]),
+            >>>         'track_id': '10252_0',
+            >>>         'velocity': array([0., 0., 0.])},
+            >>>         ... ,
+            >>>     ] , 
+            >>>     ego_pose: {
+            >>>         rotation: [...],
+            >>>         translation: [...],
+            >>>     } , 
+            >>>     ...
             >>> }
 
         index_info : IndexInfo
@@ -122,23 +125,23 @@ class CameraSetLoader(TransformableLoader):
 
 @TRANSFORMABLE_LOADERS.register_module()
 class CameraImageSetLoader(CameraSetLoader):
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraImageSet:
-        cur_frame = frame_data[index_info.frame_id]
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, **kwargs) -> CameraImageSet:
+        scene_data = frame_data["scene_info"]
         calib = scene_data["calibration"]
         camera_images = {}
         if self.camera_mapping is None:
             self.camera_mapping = {}
-            for cam_id in cur_frame["camera_image"]:
+            for cam_id in frame_data["camera_image"]:
                 self.camera_mapping[cam_id] = cam_id
         for cam_id in self.camera_mapping:
             cam_id_ori = self.camera_mapping[cam_id]
-            if cam_id_ori in cur_frame["camera_image"]:
+            if cam_id_ori in frame_data["camera_image"]:
                 # need to get the real
                 camera_images[cam_id] = CameraImage(
                     name=f"{name}:{cam_id}",
                     cam_id=cam_id,
                     cam_type=calib[cam_id_ori]["camera_type"],
-                    img=mmcv.imread(self.data_root / cur_frame["camera_image"][cam_id_ori]),
+                    img=mmcv.imread(self.data_root / frame_data["camera_image"][cam_id_ori]),
                     ego_mask=read_ego_mask(self.data_root / scene_data["camera_mask"][cam_id_ori]),
                     extrinsic=list(np.array(p) for p in calib[cam_id_ori]["extrinsic"]),
                     intrinsic=np.array(calib[cam_id_ori]["intrinsic"]),
@@ -160,26 +163,26 @@ class CameraTimeImageSetLoader(CameraSetLoader):
     def T2Rt(T):
         return (T[:3, :3], T[:3, 3])
 
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraImageSet:
-        cur_frame = frame_data[index_info.frame_id]
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, **kwargs) -> CameraImageSet:
+        scene_data = frame_data["scene_info"]
         calib = scene_data["calibration"]
         camera_images = {}
         if self.camera_mapping is None:
             self.camera_mapping = {}
-            for cam_id in cur_frame["camera_image"]:
+            for cam_id in frame_data["camera_image"]:
                 self.camera_mapping[cam_id] = cam_id
         for cam_id in self.camera_mapping:
             cam_id_ori = self.camera_mapping[cam_id]
             Tec = self.Rt2T(calib[cam_id_ori]["extrinsic"][0], calib[cam_id_ori]["extrinsic"][1])
-            Twe0 = self.Rt2T(cur_frame['ego_pose']['rotation'], cur_frame['ego_pose']['translation'])
-            if cam_id_ori in cur_frame["camera_image"]:
-                Twe1 = cur_frame["camera_image"][cam_id_ori]['Twe']
+            Twe0 = self.Rt2T(frame_data['ego_pose']['rotation'], frame_data['ego_pose']['translation'])
+            if cam_id_ori in frame_data["camera_image"]:
+                Twe1 = frame_data["camera_image"][cam_id_ori]['Twe']
                 Te0c = np.linalg.inv(Twe0) @ Twe1 @ Tec
                 camera_images[cam_id] = CameraImage(
                     name=f"{name}:{cam_id}",
                     cam_id=cam_id,
                     cam_type=calib[cam_id_ori]["camera_type"],
-                    img=mmcv.imread(self.data_root / cur_frame["camera_image"][cam_id_ori]['path']),
+                    img=mmcv.imread(self.data_root / frame_data["camera_image"][cam_id_ori]['path']),
                     ego_mask=read_ego_mask(self.data_root / scene_data["camera_mask"][cam_id_ori]),
                     extrinsic=self.T2Rt(Te0c),
                     intrinsic=copy.copy(calib[cam_id_ori]["intrinsic"]),
@@ -190,42 +193,42 @@ class CameraTimeImageSetLoader(CameraSetLoader):
 
 @TRANSFORMABLE_LOADERS.register_module()
 class NuscenesCameraImageSetLoader(TransformableLoader):
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraImageSet:
-        cur_frame = frame_data[index_info.frame_id]
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, **kwargs) -> CameraImageSet:
+        scene_data = frame_data["scene_info"]
         camera_images = {
             cam_id: CameraImage(
                 name=f"{name}:{cam_id}",
                 cam_id=cam_id,
-                cam_type=cur_frame["camera_image"][cam_id]["calibration"]["camera_type"],
-                img=mmcv.imread(self.data_root / cur_frame["camera_image"][cam_id]["path"]),
+                cam_type=frame_data["camera_image"][cam_id]["calibration"]["camera_type"],
+                img=mmcv.imread(self.data_root / frame_data["camera_image"][cam_id]["path"]),
                 ego_mask=read_ego_mask(self.data_root / scene_data["camera_mask"][cam_id]),
-                extrinsic=list(np.array(p) for p in cur_frame["camera_image"][cam_id]["calibration"]["extrinsic"]),
-                intrinsic=np.array(cur_frame["camera_image"][cam_id]["calibration"]["intrinsic"]),
+                extrinsic=list(np.array(p) for p in frame_data["camera_image"][cam_id]["calibration"]["extrinsic"]),
+                intrinsic=np.array(frame_data["camera_image"][cam_id]["calibration"]["intrinsic"]),
                 tensor_smith=tensor_smith
             )
-            for cam_id in cur_frame["camera_image"]
+            for cam_id in frame_data["camera_image"]
         }
         return CameraImageSet(name, camera_images)
 
 
 @TRANSFORMABLE_LOADERS.register_module()
 class CameraDepthSetLoader(CameraSetLoader):
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> CameraDepthSet:
-        cur_frame = frame_data[index_info.frame_id]
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, **kwargs) -> CameraDepthSet:
+        scene_data = frame_data["scene_info"]
         calib = scene_data["calibration"]
         camera_depths = {}
         if self.camera_mapping is None:
             self.camera_mapping = {}
-            for cam_id in cur_frame["camera_image_depth"]:
+            for cam_id in frame_data["camera_image_depth"]:
                 self.camera_mapping[cam_id] = cam_id
         for cam_id in self.camera_mapping:
             cam_id_ori = self.camera_mapping[cam_id]
-            if cam_id_ori in cur_frame["camera_image_depth"]:
+            if cam_id_ori in frame_data["camera_image_depth"]:
                 camera_depths[cam_id] = CameraDepth(
                     name=f"{name}:{cam_id}",
                     cam_id=cam_id,
                     cam_type=calib[cam_id_ori]["camera_type"],
-                    img=np.load(self.data_root / cur_frame['camera_image_depth'][cam_id_ori])['depth'][..., None].astype(np.float32),
+                    img=np.load(self.data_root / frame_data['camera_image_depth'][cam_id_ori])['depth'][..., None].astype(np.float32),
                     ego_mask=read_ego_mask(self.data_root / scene_data["camera_mask"][cam_id_ori]),
                     extrinsic=list(np.array(p) for p in calib[cam_id_ori]["extrinsic"]),
                     intrinsic=np.array(calib[cam_id_ori]["intrinsic"]),
@@ -237,22 +240,22 @@ class CameraDepthSetLoader(CameraSetLoader):
 
 @TRANSFORMABLE_LOADERS.register_module()
 class CameraSegMaskSetLoader(CameraSetLoader):
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> CameraSegMaskSet:
-        cur_frame = frame_data[index_info.frame_id]
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, dictionary: Optional[Dict] = None, **kwargs) -> CameraSegMaskSet:
+        scene_data = frame_data["scene_info"]
         calib = scene_data["calibration"]
         camera_segs = {}
         if self.camera_mapping is None:
             self.camera_mapping = {}
-            for cam_id in cur_frame["camera_image_seg"]:
+            for cam_id in frame_data["camera_image_seg"]:
                 self.camera_mapping[cam_id] = cam_id
         for cam_id in self.camera_mapping:
             cam_id_ori = self.camera_mapping[cam_id]
-            if cam_id_ori in cur_frame["camera_image_seg"]:
+            if cam_id_ori in frame_data["camera_image_seg"]:
                 camera_segs[cam_id] = CameraSegMask(
                     name=f"{name}:{cam_id}",
                     cam_id=cam_id,
                     cam_type=calib[cam_id_ori]["camera_type"],
-                    img=mmcv.imread(self.data_root / cur_frame["camera_image_seg"][cam_id_ori], flag="unchanged"),
+                    img=mmcv.imread(self.data_root / frame_data["camera_image_seg"][cam_id_ori], flag="unchanged"),
                     ego_mask=read_ego_mask(self.data_root / scene_data["camera_mask"][cam_id_ori]),
                     extrinsic=list(np.array(p) for p in calib[cam_id_ori]["extrinsic"]),
                     intrinsic=np.array(calib[cam_id_ori]["intrinsic"]),
@@ -264,43 +267,70 @@ class CameraSegMaskSetLoader(CameraSetLoader):
 
 @TRANSFORMABLE_LOADERS.register_module()
 class LidarPointsLoader(TransformableLoader):
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> LidarPoints:
-        cur_frame = frame_data[index_info.frame_id]
-        points = read_pcd(self.data_root / cur_frame["lidar_points"]["lidar1"])
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, **kwargs) -> LidarPoints:
+        points = read_pcd(self.data_root / frame_data["lidar_points"]["lidar1"])
         points = np.pad(points, [[0, 0], [0, 1]], constant_values=0)
         return LidarPoints(name, points[:, :3], points[:, 3:], tensor_smith=tensor_smith)
 
 
 @TRANSFORMABLE_LOADERS.register_module()
 class EgoPoseSetLoader(TransformableLoader):
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> EgoPoseSet:
+    def __init__(self, data_root: Path, prev_window_size: int = 0, next_window_size: int = 0):
+        """This loader not only load current frame's ego pose, but also load surrounding frames' ego pose within the same group (by default).
+        If `self.prev_window_size` or `self.next_window_size` is set, then the ego poses lies in the unioned window will be loaded.
 
-        def _create_pose(frame_id, rel_pos):
+        Args:
+            data_root (Path): root directory of the data
+            prev_window_size (Optional[int], optional): load previous frames' ego_pose no matter whether these frames are in the same group. Defaults to None.
+            next_window_size (Optional[int], optional): load next frames' ego_pose no matter whether these frames are in the same group. Defaults to None.
+        """
+        super().__init__(data_root)
+        self.prev_window_size = prev_window_size
+        self.next_window_size = next_window_size
+
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, **kwargs) -> EgoPoseSet:
+
+        def _create_pose(_another_index_info: "IndexInfo", rel_pos: str):
+            _another_frame_data = read_frame_pickle(self.data_root / frame_info[_another_index_info.scene_frame_id])
             return EgoPose(
-                f"{name}:{rel_pos}:{frame_id}",
-                frame_id, 
-                np.array(frame_data[frame_id]["ego_pose"]["rotation"]),
-                frame_data[frame_id]["ego_pose"]["translation"].reshape(3, 1), # it should be a column vector
+                f"{name}:{rel_pos}:{_another_index_info.frame_id}",
+                _another_index_info.frame_id, 
+                np.array(_another_frame_data["ego_pose"]["rotation"]),
+                _another_frame_data["ego_pose"]["translation"].reshape(3, 1), # it should be a column vector
                 tensor_smith=tensor_smith
             )
+        
+        def _find_num_infos_in_the_group(cur: Union["IndexInfo", None], direction: str) -> int:
+            assert direction in ["prev", "next"]
+            _attr = "g_" + direction
+            if cur is None:
+                raise ValueError("cur cannot be None")
+            if getattr(cur, _attr) is None:
+                return 0
+            return 1 + _find_num_infos_in_the_group(getattr(cur, _attr), direction)
 
         poses = {}
 
         cnt = 0
-        cur = index_info
-        while cur.prev is not None:
+        cur = index_info # no need to clone or copy
+        num_prev_infos_in_group = _find_num_infos_in_the_group(cur, "prev")
+        num_next_infos_in_group = _find_num_infos_in_the_group(cur, "next")
+        max_prev = max(num_prev_infos_in_group, self.prev_window_size)
+        max_next = max(num_next_infos_in_group, self.next_window_size)
+
+        while cur.prev is not None and cnt < max_prev:
             rel_pos = f"-{cnt+1}" # relative position
-            poses[rel_pos] = _create_pose(cur.prev.frame_id, rel_pos)
+            poses[rel_pos] = _create_pose(cur.prev, rel_pos)
             cur = cur.prev
             cnt += 1
 
         cur = index_info
-        poses["0"] = _create_pose(cur.frame_id, "0")
+        poses["0"] = _create_pose(cur, "0")
 
         cnt = 0
-        while cur.next is not None:
+        while cur.next is not None and cnt < max_next:
             rel_pos = f"+{cnt+1}" # relative position
-            poses[rel_pos] = _create_pose(cur.next.frame_id, rel_pos)
+            poses[rel_pos] = _create_pose(cur.next, rel_pos)
             cur = cur.next
             cnt += 1
 
@@ -311,7 +341,7 @@ class EgoPoseSetLoader(TransformableLoader):
 
 @TRANSFORMABLE_LOADERS.register_module()
 class Bbox3DLoader(TransformableLoader):
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> Bbox3D:
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, dictionary: Optional[Dict] = None, **kwargs) -> Bbox3D:
         """Basic loader that loads bbox3d info
 
         Parameters
@@ -331,9 +361,8 @@ class Bbox3DLoader(TransformableLoader):
         Bbox3D
             Bbox3D transformable
         """
-        cur_frame = frame_data[index_info.frame_id]
         elements = []
-        for bx in cur_frame["3d_boxes"]:
+        for bx in frame_data["3d_boxes"]:
             ele = {
                 "class": bx["class"],
                 "attr": list(bx["attr"].values()) if isinstance(bx["attr"], dict) else copy.copy(bx["attr"]),
@@ -356,13 +385,13 @@ class AdvancedBbox3DLoader(TransformableLoader):
 
     rot90deg = Rotation.from_euler("XYZ", [0, 0, 90], degrees=True).as_matrix()
     
-    def __init__(self, data_root: Path, class_mapping: Dict = None, attr_mapping: Dict = None, axis_rearrange_method="none") -> None:
+    def __init__(self, data_root: Path, class_mapping: Optional[Dict] = None, attr_mapping: Optional[Dict] = None, axis_rearrange_method="none") -> None:
         """ Advanced Bbox3D Loader
         # CAUTION
         FIXME:
         only a minimum check has been applied to class_mapping and attr_mapping
         there's still some configurations could lead to strange class mapping behavior,
-        such as: "new_cls1": ["c1\:\:attr1.True", "c1\:\:attr2.True"]
+        such as: "new_cls1": ["c1::attr1.True", "c1::attr2.True"]
 
         Parameters
         ----------
@@ -396,12 +425,11 @@ class AdvancedBbox3DLoader(TransformableLoader):
         self.axis_rearrange_method = axis_rearrange_method
         assert axis_rearrange_method in ["none", "longer_edge_as_x", "longer_edge_as_y"]
 
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> Bbox3D:
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, dictionary: Optional[Dict] = None, **kwargs) -> Bbox3D:
         updated_dictionary = self._update_dictionary(dictionary)
-        cur_frame = frame_data[index_info.frame_id]
 
         elements = []
-        for bx in cur_frame["3d_boxes"]:
+        for bx in frame_data["3d_boxes"]:
             ele = {
                 "class": self.class_mapping.get_mapped_class(bx["class"], bx["attr"]),
                 "attr": self.attr_mapping.get_mapped_attr(bx["attr"]),
@@ -423,7 +451,7 @@ class AdvancedBbox3DLoader(TransformableLoader):
 
         return Bbox3D(name, elements, updated_dictionary, tensor_smith=tensor_smith)
     
-    def _update_dictionary(self, dictionary: Dict = None) -> Dict:
+    def _update_dictionary(self, dictionary: Optional[Dict] = None) -> Dict:
         if not dictionary:
             dictionary = {"classes": [], "attrs": []}
         else:
@@ -455,10 +483,9 @@ class AdvancedBbox3DLoader(TransformableLoader):
 
 @TRANSFORMABLE_LOADERS.register_module()
 class Polyline3DLoader(TransformableLoader):
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> Polyline3D:
-        cur_frame = frame_data[index_info.frame_id]
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, dictionary: Optional[Dict] = None, **kwargs) -> Polyline3D:
         elements = []
-        for pl in cur_frame["3d_polylines"]:
+        for pl in frame_data["3d_polylines"]:
             ele = {
                 "class": pl["class"],
                 "attr": list(pl["attr"].values()) if isinstance(pl["attr"], dict) else copy.copy(pl["attr"]),
@@ -472,10 +499,9 @@ class Polyline3DLoader(TransformableLoader):
 
 @TRANSFORMABLE_LOADERS.register_module()
 class Polygon3DLoader(TransformableLoader):
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> Polygon3D:
-        cur_frame = frame_data[index_info.frame_id]
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, dictionary: Optional[Dict] = None, **kwargs) -> Polygon3D:
         elements = []
-        for pg in cur_frame["3d_polylines"]:
+        for pg in frame_data["3d_polylines"]:
             ele = {
                 "class": pg["class"],
                 "attr": list(pg["attr"].values()) if isinstance(pg["attr"], dict) else copy.copy(pg["attr"]),
@@ -489,10 +515,9 @@ class Polygon3DLoader(TransformableLoader):
 
 @TRANSFORMABLE_LOADERS.register_module()
 class ParkingSlot3DLoader(TransformableLoader):
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> ParkingSlot3D:
-        cur_frame = frame_data[index_info.frame_id]
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, dictionary: Optional[Dict] = None, **kwargs) -> ParkingSlot3D:
         elements = []
-        for slot in cur_frame["3d_polylines"]:
+        for slot in frame_data["3d_polylines"]:
             ele = {
                 "class": slot["class"],
                 "attr": list(slot["attr"].values()) if isinstance(slot["attr"], dict) else copy.copy(slot["attr"]),
@@ -517,26 +542,27 @@ class OccSdfBevLoader(TransformableLoader):
         height = height_lidar * mask_lidar + height_ground * mask_left
         return height, mask
 
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> OccSdfBev:
-        cur_frame = frame_data[index_info.frame_id]
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, **kwargs) -> OccSdfBev:
+        scene_data = frame_data["scene_info"]
+
         # get sdf
         if self.load_sdf:
-            sdf = cv2.imread(str(self.data_root / cur_frame["occ_sdf"]["sdf"]), cv2.IMREAD_UNCHANGED).astype(np.float32) / 860 - 36
+            sdf = cv2.imread(str(self.data_root / frame_data["occ_sdf"]["sdf"]), cv2.IMREAD_UNCHANGED).astype(np.float32) / 860 - 36
         else:
             sdf = None
         # get occ
         # occ_path = str(self.data_root / frame["occ_sdf"]["occ_2d"])
-        occ_path = str(self.data_root / cur_frame["occ_sdf"]["occ_map_sdf"])
+        occ_path = str(self.data_root / frame_data["occ_sdf"]["occ_map_sdf"])
         occ = mmcv.imread(occ_path)
         # get height
         mask_ground = np.float32(occ[..., 1] > 128)
 
         # height_ground_path = str(self.data_root / frame["occ_sdf"]["ground"])
-        height_ground_path = str(self.data_root / cur_frame["occ_sdf"]["ground_height_map"])
+        height_ground_path = str(self.data_root / frame_data["occ_sdf"]["ground_height_map"])
         height_ground = mmcv.imread(height_ground_path, 'unchanged').astype(np.float32) / 3000 - 10
 
-        height_lidar_path = str(self.data_root / cur_frame["occ_sdf"]["bev_height_map"])
-        mask_lidar_path = str(self.data_root / cur_frame["occ_sdf"]["bev_lidar_mask"])
+        height_lidar_path = str(self.data_root / frame_data["occ_sdf"]["bev_height_map"])
+        mask_lidar_path = str(self.data_root / frame_data["occ_sdf"]["bev_lidar_mask"])
         height_lidar = mmcv.imread(height_lidar_path, 'unchanged').astype(np.float32) * 3.0 / 255.0 - 1
         mask_lidar = np.float32(mmcv.imread(mask_lidar_path, 'unchanged') > 128)
 
@@ -557,13 +583,13 @@ class OccSdfBevLoader(TransformableLoader):
 
 @TRANSFORMABLE_LOADERS.register_module()
 class SegBevLoader(TransformableLoader):
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> SegBev:
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, dictionary: Optional[Dict] = None, **kwargs) -> SegBev:
         raise NotImplementedError
 
 
 @TRANSFORMABLE_LOADERS.register_module()
 class OccSdf3DLoader(TransformableLoader):
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, dictionary: Dict = None, **kwargs) -> OccSdf3D:
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, dictionary: Optional[Dict] = None, **kwargs) -> OccSdf3D:
         raise NotImplementedError
 
 
@@ -648,7 +674,6 @@ class VariableLoader(TransformableLoader):
         super().__init__(data_root)
         self.data_root = data_root
         self.variable_key = variable_key
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> Transformable:
-        cur_frame = frame_data[index_info.frame_id]
-        variable_value = copy.deepcopy(cur_frame[self.variable_key])
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, **kwargs) -> Transformable:
+        variable_value = copy.deepcopy(frame_data[self.variable_key])
         return Variable(name, variable_value, tensor_smith=tensor_smith)

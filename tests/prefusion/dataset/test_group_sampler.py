@@ -10,13 +10,12 @@ import pytest
 
 from copious.io.fs import mktmpdir, parent_ensured_path
 from prefusion.dataset.utils import PolarDict
-from prefusion.dataset.index_info import IndexInfo
+from prefusion.dataset.index_info import IndexInfo, establish_linkings
 from prefusion.dataset.group_sampler import (
     IndexGroupSampler, 
     SequentialSceneFrameGroupSampler,
     ClassBalancedGroupSampler, 
     generate_groups, 
-    convert_str_index_to_index_info, 
     get_scene_frame_inds,
 )
 
@@ -264,9 +263,8 @@ def test_group_sampler_sample_scene_groups(scene_frame_inds):
     for scene in scene_frame_inds:
         for frm in scene_frame_inds[scene]:
             info[scene]["frame_info"][frm.split('/')[1]] = "dummy_directory/dummy_path.dummy"
-    scene_info = PolarDict({scene_id: scene_data['scene_info'] for scene_id, scene_data in info.items()})
     frame_info = PolarDict({scene_id: scene_data['frame_info'] for scene_id, scene_data in info.items()}, separator="/")
-    scene_groups = gbs.sample(None, scene_info, frame_info)
+    scene_groups = gbs.sample(None, frame_info)
     assert _to_scene_frm_ids(scene_groups) == [
         ['20230823_110018/1692759640764'], ['20230823_110018/1692759640864'], ['20230823_110018/1692759640964'], ['20230823_110018/1692759641064'],
         ['20230823_110018/1692759641164'], ['20230823_110018/1692759641264'], ['20230823_110018/1692759641364'], ['20230823_110018/1692759641464'],
@@ -278,24 +276,6 @@ def test_group_sampler_sample_scene_groups(scene_frame_inds):
         ['20231101_160337/1698825819264'],
         ['20231101_160337_subset/1698825818164'], ['20231101_160337_subset/1698825818264'], ['20231101_160337_subset/1698825818364'], ['20231101_160337_subset/1698825818464'],
         ['20231101_160337_subset/1698825818564'], ['20231101_160337_subset/1698825818664'], ['20231101_160337_subset/1698825818764'], ['20231101_160337_subset/1698825818864'],
-    ]
-
-def test_group_sampler_convert_groups_to_info():
-    groups = [
-        ['Scn/00', 'Scn/02', 'Scn/04', 'Scn/06'], 
-        ['Scn/01', 'Scn/03', 'Scn/05', 'Scn/07'], 
-        ['Scn/08', 'Scn/10', 'Scn/12', 'Scn/14'], 
-        ['Scn/09', 'Scn/11', 'Scn/13', 'Scn/15'],
-    ]
-    groups_as_index_info = convert_str_index_to_index_info(groups)
-    def ii(scene_frame_str, prev=None, next=None):
-        return IndexInfo.from_str(scene_frame_str, prev=prev, next=next)
-
-    assert groups_as_index_info == [
-        [ii('Scn/00', next=ii('Scn/02')), ii('Scn/02', prev=ii('Scn/00'), next=ii('Scn/04')), ii('Scn/04', prev=ii('Scn/02', next=ii('Scn/06'))), ii('Scn/06', prev=ii('Scn/04'))], 
-        [ii('Scn/01', next=ii('Scn/03')), ii('Scn/03', prev=ii('Scn/01'), next=ii('Scn/05')), ii('Scn/05', prev=ii('Scn/03', next=ii('Scn/07'))), ii('Scn/07', prev=ii('Scn/05'))], 
-        [ii('Scn/08', next=ii('Scn/10')), ii('Scn/10', prev=ii('Scn/08'), next=ii('Scn/12')), ii('Scn/12', prev=ii('Scn/10'), next=ii('Scn/14')), ii('Scn/14', prev=ii('Scn/12'))], 
-        [ii('Scn/09', next=ii('Scn/11')), ii('Scn/11', prev=ii('Scn/09'), next=ii('Scn/13')), ii('Scn/13', prev=ii('Scn/11'), next=ii('Scn/15')), ii('Scn/15', prev=ii('Scn/13'))],
     ]
 
     
@@ -335,24 +315,54 @@ def mock_info():
 
 def test_get_scene_frame_inds_with_no_indices_provided(mock_info):
     indices = get_scene_frame_inds(mock_info)
+
+    i6 = IndexInfo.from_str("20230901_000000/1692759619664")
+    i7 = IndexInfo.from_str("20230901_000000/1692759619764")
+    i0 = IndexInfo.from_str("20250428_000007/1722759000064")
+    i2 = IndexInfo.from_str("20250428_000007/1722759002064")
+    i1 = IndexInfo.from_str("20250428_000007/1722759001064")
+
     assert indices == {
-        "20230901_000000": ["20230901_000000/1692759619664", "20230901_000000/1692759619764"],
-        "20231023_222222": ["20231023_222222/1692759621364"],
-        "20250428_000007": ["20250428_000007/1722759000064", "20250428_000007/1722759001064", "20250428_000007/1722759002064"],
+        "20230901_000000": [i6, i7],
+        "20231023_222222": [IndexInfo.from_str("20231023_222222/1692759621364")],
+        "20250428_000007": [i0, i1, i2],
+    }
+
+    indices = {scene_id: establish_linkings(_inds) for scene_id, _inds in indices.items()}
+    i6 = IndexInfo.from_str("20230901_000000/1692759619664")
+    i7 = IndexInfo.from_str("20230901_000000/1692759619764", s_prev=i6)
+    i0 = IndexInfo.from_str("20250428_000007/1722759000064")
+    i2 = IndexInfo.from_str("20250428_000007/1722759002064")
+    i1 = IndexInfo.from_str("20250428_000007/1722759001064", s_prev=i0, s_next=i2)
+
+    assert indices == {
+        "20230901_000000": [i6, i7],
+        "20231023_222222": [IndexInfo.from_str("20231023_222222/1692759621364")],
+        "20250428_000007": [i0, i1, i2],
     }
 
 
 def test_get_scene_frame_inds_with_indices_provided(mock_info):
     indices = get_scene_frame_inds(mock_info, indices=["20230901_000000/1692759620664", "20231001_111111/1712759770664", "20230901_000000/1692759619664"])
     assert indices == {
-        "20230901_000000": ["20230901_000000/1692759619664"],
+        "20230901_000000": [IndexInfo.from_str("20230901_000000/1692759619664")],
     }
 
 
 def test_get_scene_frame_inds_with_duplicated_indices_provided(mock_info):
     indices = get_scene_frame_inds(mock_info, indices=["20230901_000000/1692759619664", "20230901_000000/1692759620664", "20231001_111111/1712759770664", "20230901_000000/1692759619664"])
+    
+    i0 = IndexInfo.from_str("20230901_000000/1692759619664")
+    i1 = IndexInfo.from_str("20230901_000000/1692759619664")
     assert indices == {
-        "20230901_000000": ["20230901_000000/1692759619664", "20230901_000000/1692759619664"],
+        "20230901_000000": [i0, i1],
+    }
+    
+    indices = {scene_id: establish_linkings(_inds) for scene_id, _inds in indices.items()}
+    i0 = IndexInfo.from_str("20230901_000000/1692759619664")
+    i1 = IndexInfo.from_str("20230901_000000/1692759619664", s_prev=i0)
+    assert indices == {
+        "20230901_000000": [i0, i1],
     }
 
 
@@ -560,7 +570,7 @@ def test_index_group_sampler(dataset_info_pkl):
     tmpdir = mktmpdir()
     scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     gbs = IndexGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42)
-    groups = gbs.sample(tmpdir, scene_info, frame_info, phase='train')
+    groups = gbs.sample(tmpdir, frame_info, phase='train')
     assert [[f.frame_id for f in group] for group in groups] == [
         ['401', '402', '403'], # ├─ car=5, bus=1, truck=1, pedestrian=1, bicycle=3
                                # ├─ parking_slot=1, laneline=1, access_aisle=1
@@ -598,8 +608,8 @@ def test_cgbs_count_frame_level_class_occurrence(dataset_info_pkl, transformable
     scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': True, 'oversampling_consider_object_attr': True, 'counter_type': 'group'}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
-    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, frame_info, groups)
     assert len(groups) == 9
     assert groups[0].obj_cnt == {'car': 5, 'bus': 1, 'truck': 1, 'pedestrian': 1, 'bicycle': 3, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1, 'color.yellow': 3}
     assert groups[1].obj_cnt == {'car': 8, 'bus': 3, 'pedestrian': 3, 'bicycle': 4}
@@ -647,8 +657,8 @@ def test_oversample_classes_1(dataset_info_pkl, transformable_cfg):
     scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False, "counter_type": "frame"}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
-    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, frame_info, groups)
     sampled_groups = gbs.sample_minority_groups(groups, ["barrier_soft", "access_aisle"], "barrier_hard", target_ratio=1.0)
     assert len(sampled_groups) == 6
     assert sampled_groups[0].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
@@ -664,8 +674,8 @@ def test_oversample_classes_2(dataset_info_pkl, transformable_cfg):
     scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False, "counter_type": "frame"}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
-    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, frame_info, groups)
     sampled_groups = gbs.sample_minority_groups(groups, ["barrier_soft", "access_aisle", "barrier_hard"], "car", target_ratio=0.3)
     assert len(sampled_groups) == 3
     assert sampled_groups[0].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
@@ -686,8 +696,8 @@ def test_oversample_0(dataset_info_pkl, transformable_cfg):
     scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.1, "update_stats_during_oversampling": False}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
-    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, frame_info, groups)
     sampled_groups = gbs.iterative_sample_minority_groups(groups)
     assert len(sampled_groups) == 0
 
@@ -697,8 +707,8 @@ def test_oversample_1(dataset_info_pkl, transformable_cfg):
     scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.3, "update_stats_during_oversampling": False}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
-    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, frame_info, groups)
     sampled_groups = gbs.iterative_sample_minority_groups(groups)
     assert len(sampled_groups) == 9
     assert sampled_groups[0].cnt == {'car': 2, 'bus': 1, 'truck': 1, 'pedestrian': 1, 'bicycle': 2, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
@@ -717,8 +727,8 @@ def test_oversample_2(dataset_info_pkl, transformable_cfg):
     scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.5, "update_stats_during_oversampling": False}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
-    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, frame_info, groups)
     sampled_groups = gbs.iterative_sample_minority_groups(groups)
     assert len(sampled_groups) == 21
     # [access_aisle, barrier_soft] => barrier_hard
@@ -756,8 +766,8 @@ def test_oversample_update_stats_1(dataset_info_pkl, transformable_cfg):
     scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.3, "update_stats_during_oversampling": True}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
-    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, frame_info, groups)
     sampled_groups = gbs.iterative_sample_minority_groups(groups)
     assert len(sampled_groups) == 9
     assert sampled_groups[0].cnt == {'car': 2, 'bus': 1, 'truck': 1, 'pedestrian': 1, 'bicycle': 2, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1}
@@ -776,8 +786,8 @@ def test_oversample_update_stats_2(dataset_info_pkl, transformable_cfg):
     scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.5, "update_stats_during_oversampling": True}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs._base_group_sampler.sample(tmpdir, scene_info, frame_info, phase='train')
-    groups = gbs.count_class_and_attr_occurrence(tmpdir, scene_info, frame_info, groups)
+    groups = gbs._base_group_sampler.sample(tmpdir, frame_info, phase='train')
+    groups = gbs.count_class_and_attr_occurrence(tmpdir, frame_info, groups)
     sampled_groups = gbs.iterative_sample_minority_groups(groups)
     assert len(sampled_groups) == 62
     i = 0
@@ -860,7 +870,7 @@ def test_generate_cbgs_groups(dataset_info_pkl, transformable_cfg, cbgs_cfg):
     scene_info, frame_info = get_separated_scene_info_and_frame_info(dataset_info_pkl, tmpdir)
     cbgs_cfg = {'oversampling_consider_no_objects': False, 'oversampling_consider_object_attr': False,  "counter_type": "frame", "desired_ratio": 0.3, "update_stats_during_oversampling": False}
     gbs = ClassBalancedGroupSampler("train", possible_group_sizes=3, possible_frame_intervals=1, seed=42, transformable_cfg=transformable_cfg, cbgs_cfg=cbgs_cfg)
-    groups = gbs.sample(tmpdir, scene_info, frame_info, phase='train')
+    groups = gbs.sample(tmpdir, frame_info, phase='train')
     
     assert len(groups) == 18
     i = 0
@@ -882,3 +892,15 @@ def test_generate_cbgs_groups(dataset_info_pkl, transformable_cfg, cbgs_cfg):
     assert groups[i].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1} ; i += 1
     assert groups[i].cnt == {'car': 1, 'bus': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_soft': 1, 'parking_slot': 1, 'laneline': 1, 'access_aisle': 1} ; i += 1
     assert groups[i].cnt == {'car': 1, 'truck': 2, 'pedestrian': 2, 'bicycle': 1, 'barrier_hard': 2, 'parking_slot': 2, 'laneline': 2} ; i += 1
+
+
+def test_create_index_info_list_with_adjacent_linking():
+    inds = ['s1/a', 's1/b', 's1/c', 's1/d']
+    index_info_list = establish_linkings([IndexInfo.from_str(i) for i in inds])
+    a = IndexInfo.from_str('s1/a')
+    b = IndexInfo.from_str('s1/b', s_prev=a)
+    c = IndexInfo.from_str('s1/c', s_prev=b)
+    d = IndexInfo.from_str('s1/d', s_prev=c)
+    assert index_info_list == [a, b, c, d]
+    assert establish_linkings([]) == []
+    assert establish_linkings([IndexInfo.from_str('s2/e')]) == [IndexInfo.from_str('s2/e')]

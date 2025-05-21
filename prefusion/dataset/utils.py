@@ -1,6 +1,7 @@
 import copy
 from typing import List, Union, Dict, TYPE_CHECKING, Tuple, Any
 from pathlib import Path
+from functools import lru_cache
 from cachetools import cached, Cache
 
 import torch
@@ -18,7 +19,6 @@ if TYPE_CHECKING:
     from .transformable_loader import TransformableLoader
     from .subepoch_manager import SubEpochManager
     from .group_sampler import GroupSampler
-    from .index_info import IndexInfo
 
 INF_DIST = 1e8
 
@@ -286,28 +286,12 @@ class PolarDict:
         return self.data.to_dicts()[0]
 
 
-def load_info_pkl(path: Union[Path, str]) -> Tuple[PolarDict, PolarDict]:
+def load_frame_info(path: Union[Path, str]) -> PolarDict:
     info = mmengine.load(path)
-    scene_info = PolarDict({scene_id: scene_data['scene_info'] for scene_id, scene_data in info.items()})
-    frame_info = PolarDict({scene_id: scene_data['frame_info'] for scene_id, scene_data in info.items()})
-    return scene_info, frame_info
+    frame_info = PolarDict({scene_id: scene_data['frame_info'] for scene_id, scene_data in info.items()}) # PolarDict transforms nested dict to flattened dict (sep='/')
+    return frame_info
 
 
-def load_scene_data(data_root: Union[Path, str], scene_info: PolarDict, index_info: "IndexInfo") -> Dict:
-    return mmengine.load(Path(data_root) / scene_info[index_info.scene_id])
-
-def load_frame_data_in_the_group(data_root: Union[Path, str], frame_info: PolarDict, index_info: "IndexInfo") -> Dict[str, Dict]:
-    frame_data = {}
-    cur = index_info
-    while cur.prev is not None:
-        frame_data[cur.prev.frame_id] = mmengine.load(Path(data_root) / frame_info[cur.prev.scene_frame_id])
-        cur = cur.prev
-
-    cur = index_info
-    frame_data[cur.frame_id] = mmengine.load(Path(data_root) / frame_info[cur.scene_frame_id])
-
-    while cur.next is not None:
-        frame_data[cur.next.frame_id] = mmengine.load(Path(data_root) / frame_info[cur.next.scene_frame_id])
-        cur = cur.next
-    
-    return frame_data
+@lru_cache(maxsize=256)
+def read_frame_pickle(path: Union[Path, str]) -> Dict[str, Dict]:
+    return mmengine.load(path)
