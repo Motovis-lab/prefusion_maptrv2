@@ -13,6 +13,7 @@ def _calc_grid_size(_range, _voxel_size, n_axis=3):
 
 batch_size = 2
 num_epochs = 50
+possible_group_sizes = [10]
 voxel_size = [0.2, 0.2, 8]
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_range = (point_cloud_range[2::3], point_cloud_range[0::3][::-1], point_cloud_range[1::3][::-1])
@@ -108,7 +109,7 @@ train_dataset = dict(
     ],
     group_sampler=dict(type="IndexGroupSampler",
                         phase="val",
-                        possible_group_sizes=[20],
+                        possible_group_sizes=possible_group_sizes,
                         possible_frame_intervals=[1]),
     batch_size=batch_size,
 )
@@ -135,7 +136,7 @@ val_dataset = dict(
     ],
     group_sampler=dict(type="IndexGroupSampler",
                         phase="val",
-                        possible_group_sizes=[20],
+                        possible_group_sizes=possible_group_sizes,
                         possible_frame_intervals=[1]),
     batch_size=batch_size,
 )
@@ -166,8 +167,8 @@ test_dataset = dict(
 )
 
 train_dataloader = dict(
-    num_workers=0,
-    persistent_workers=False,
+    num_workers=2,
+    persistent_workers=True,
     pin_memory=True,
     sampler=dict(type="DefaultSampler"),
     collate_fn=dict(type="collate_dict"),
