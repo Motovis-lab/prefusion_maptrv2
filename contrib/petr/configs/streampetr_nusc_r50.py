@@ -13,7 +13,7 @@ def _calc_grid_size(_range, _voxel_size, n_axis=3):
 
 batch_size = 2
 num_epochs = 50
-possible_group_sizes = [10]
+possible_group_sizes = [8]
 voxel_size = [0.2, 0.2, 8]
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_range = (point_cloud_range[2::3], point_cloud_range[0::3][::-1], point_cloud_range[1::3][::-1])
@@ -91,7 +91,7 @@ train_dataset = dict(
     name="MvParkingTest",
     data_root="/data/datasets/nuScenes",
     info_path="/data/datasets/nuScenes/nusc_train_info_separated.pkl",
-    # info_path="/data/datasets/nuScenes/nusc_scene0123_train_info_separated.pkl",
+    # info_path="/data/datasets/nuScenes/nusc_scene1087_train_info_separated.pkl",
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
@@ -108,7 +108,7 @@ train_dataset = dict(
         dict(type='BGR2RGB'),
     ],
     group_sampler=dict(type="IndexGroupSampler",
-                        phase="val",
+                        phase="train",
                         possible_group_sizes=possible_group_sizes,
                         possible_frame_intervals=[1]),
     batch_size=batch_size,
@@ -369,6 +369,6 @@ custom_hooks = [
 today = datetime.datetime.now().strftime("%m%d")
 
 work_dir = f'./work_dirs/{experiment_name}_{today}'
-# load_from = "./ckpts/stream_petr_nusc_r50_0521_epoch_1000.pth"
+load_from = "./work_dirs/stream_petr_nusc_r50_0522/epoch_1.pth"
 
-resume = False
+resume = True

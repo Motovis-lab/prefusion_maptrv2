@@ -112,10 +112,17 @@ class StreamPETR(BaseModel):
                 "pad_shape": [(im_size[1], im_size[0], 3)] * N,
             })
         gt_labels = [m['bbox_3d']['classes'] for m in meta_info]
-        outs = self.box_head(img_feats, location, img_metas, bbox_3d, gt_labels, topk_indexes=topk_indexes, **data)
+        gt_bboxes_3d = [b.reshape(0, 9) if len(b) == 0 else b for b in bbox_3d]  # 9 is hard coded here for: (x,y,z,l,w,h,yaw,vx,vy)
+        try:
+            outs = self.box_head(img_feats, location, img_metas, gt_bboxes_3d, gt_labels, topk_indexes=topk_indexes, **data)
+        except Exception as e:
+            from loguru import logger
+            logger.error(f"index_info: {index_info}")
+            print(e)
+            raise
         outs = {k: v.float() if isinstance(v, torch.Tensor) else v for k, v in outs.items()}   # convert torch.float16 to torch.float32
 
-        # self.visualize_bbox3d(data, bbox_3d, outs, meta_info, ego_poses)
+        # self.visualize_bbox3d(data, gt_bboxes_3d, outs, meta_info, ego_poses)
 
         if mode == 'tensor':
             bbox_list = self.box_head.get_bboxes(outs, img_metas)
@@ -126,9 +133,14 @@ class StreamPETR(BaseModel):
             return bbox_results
         
         if mode == "loss":
-            gt_bboxes_3d = [b.reshape(0, 9) if len(b) == 0 else b for b in bbox_3d]  # 9 is hard coded here for: (x,y,z,l,w,h,yaw,vx,vy)
             loss_inputs = [gt_bboxes_3d, gt_labels, outs]
-            losses = self.box_head.loss(*loss_inputs)
+            try:
+                losses = self.box_head.loss(*loss_inputs)
+            except Exception as e:
+                from loguru import logger
+                logger.error(f"index_info: {index_info}")
+                print(e)
+                raise
             # if self.with_img_roi_head:
             #     loss2d_inputs = [gt_bboxes, gt_labels, centers2d, depths, outs_roi, img_metas]
             #     losses2d = self.img_roi_head.loss(*loss2d_inputs)
@@ -136,7 +148,7 @@ class StreamPETR(BaseModel):
 
             return losses
         if mode == "predict":
-            loss_inputs = [bbox_3d, gt_labels, outs]
+            loss_inputs = [gt_bboxes_3d, gt_labels, outs]
             losses = self.box_head.loss(*loss_inputs)
             return (
                 *[{"name": k, "content": v.cpu() if isinstance(v, torch.Tensor) else v} for k, v in outs.items()],
