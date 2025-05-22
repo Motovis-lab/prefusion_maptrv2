@@ -12,7 +12,7 @@ def _calc_grid_size(_range, _voxel_size, n_axis=3):
     return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
 
 batch_size = 2
-num_epochs = 500
+num_epochs = 50
 voxel_size = [0.2, 0.2, 8]
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_range = (point_cloud_range[2::3], point_cloud_range[0::3][::-1], point_cloud_range[1::3][::-1])
@@ -90,7 +90,7 @@ train_dataset = dict(
     type="GroupBatchDataset",
     name="MvParkingTest",
     data_root="/ssd4/datasets/nuScenes",
-    info_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
+    info_path="/ssd4/datasets/nuScenes/nusc_train_info_separated.pkl",
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
@@ -344,8 +344,8 @@ optim_wrapper = dict(
 
 ## scheduler configs
 param_scheduler = [
-    dict(type='LinearLR', start_factor=0.1, end_factor=1, by_epoch=False, begin=0, end=500), # warmup
-    dict(type='CosineAnnealingLR', by_epoch=False, begin=500, eta_min=1e-5)     # main LR Scheduler
+    dict(type='LinearLR', start_factor=0.1, end_factor=1, by_epoch=False, begin=0, end=1000), # warmup
+    dict(type='CosineAnnealingLR', by_epoch=False, begin=1000, eta_min=1e-5)     # main LR Scheduler
     # dict(type='PolyLR', by_epoch=False, begin=0, eta_min=0, power=1.0)     # main LR Scheduler
 ]
 
@@ -373,6 +373,6 @@ custom_hooks = [
 today = datetime.datetime.now().strftime("%m%d")
 
 work_dir = f'./work_dirs/{experiment_name}_{today}'
-# load_from = "work_dirs/stream_petr_nusc_r50_0513/stream_petr_nusc_r50_0513_epoch_500.pth"
+# load_from = "./ckpts/stream_petr_nusc_r50_0521_epoch_1000.pth"
 
 resume = False
