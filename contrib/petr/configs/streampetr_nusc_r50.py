@@ -327,7 +327,7 @@ optim_wrapper = dict(
     type="OptimWrapper",
     optimizer=dict(
         type="AdamW",
-        lr=8e-5, # total lr per gpu lr is lr/n
+        lr=5e-5, # total lr per gpu lr is lr/n
         weight_decay=0.01,
     ),
     paramwise_cfg=dict(
@@ -369,6 +369,6 @@ custom_hooks = [
 today = datetime.datetime.now().strftime("%m%d")
 
 work_dir = f'./work_dirs/{experiment_name}_{today}'
-load_from = "./work_dirs/stream_petr_nusc_r50_0522/epoch_1.pth"
+# load_from = "./work_dirs/stream_petr_nusc_r50_0522/epoch_1.pth"
 
-resume = True
+resume = False
