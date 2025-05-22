@@ -5,12 +5,13 @@ custom_imports = dict(
     allow_failed_imports=False
 )
 dataset_front_type = 'PretrainDataset_FrontData'
-data_root = '/mnt/ssd1/wuhan/prefusion'
+data_root = 'data/voc_bm_with_attrs_resized'
+# data_root = "/home/wuhan/prefusion"
 # ori_shape=(640, 1024)
-crop_size = (640, 1280)
+crop_size = (384, 768)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
-    dict(type='LoadAnnotations', with_bbox=True),
+    dict(type='DetLoadAnnotations', with_bbox=True),
     dict(
         type='RandomResize',
         scale=crop_size,
@@ -18,26 +19,27 @@ train_pipeline = [
         ratio_range=(1.0,1.0),
         keep_ratio=True),
     # dict(type='mmdet.RandomCrop', crop_size=crop_size),
-    dict(type='RandomFlip', prob=0.5),
-    dict(type='mmdet.PhotoMetricDistortion'),
+    # dict(type='mmdet.RandomFlip', prob=0.5),
+    # dict(type='mmdet.PhotoMetricDistortion'),
     dict(type='mmdet.PackDetInputs')
 ]
 
 val_pipeline = [
     dict(type='LoadImageFromFile'),
-    dict(type='LoadAnnotations', with_bbox=True),
+    dict(type='DetLoadAnnotations', with_bbox=True),
     dict(
         type='Resize',
         scale=crop_size,
         keep_ratio=True),
     dict(type='mmdet.PackDetInputs')
 ]
-batch_size = 2
+batch_size = 8
 
 dataset_front = dict(
     type=dataset_front_type,
     data_root=data_root,
-    ann_file="tests/contrib/pretrain/index.txt",
+    ann_file="front_data_val_index.txt",
+    # ann_file="tests/contrib/pretrain/index.txt",
     pipeline=train_pipeline,
     reduce_zero_label=False
 )
@@ -64,7 +66,8 @@ val_dataloader = dict(
     dataset=dict(
         type=dataset_front_type,
         data_root=data_root,
-        ann_file="tests/contrib/pretrain/index.txt",
+        ann_file="front_data_val_index.txt",
+        # ann_file="tests/contrib/pretrain/index.txt",
         pipeline=val_pipeline,
         reduce_zero_label=False
     )
@@ -79,8 +82,8 @@ data_preprocessor=dict(
         mean=[128, 128, 128],
         std=[255, 255, 255],
         bgr_to_rgb=True,
-        pad_size_divisor=32,
-        batch_augments=batch_augments)
+        pad_size_divisor=32
+        )
 
 model = dict(
     type='mmdet.FCOS',
@@ -97,8 +100,8 @@ model = dict(
         num_outs=4,
         relu_before_extra_convs=True),
     bbox_head=dict(
-        type='mmdet.FCOSHead',
-        num_classes=37,
+        type='FusionFCOSHead',
+        num_classes=1,
         regress_ranges=((-1, 64), (64, 128), (128, 256),
                         (256, 100000000)),
         in_channels=256,
@@ -130,14 +133,12 @@ model = dict(
         max_per_img=100)
 )
 
-train_cfg = dict(type="mmengine.EpochBasedTrainLoop",max_epochs=24, val_interval=1)  # -1 note don't eval
+train_cfg = dict(type="mmengine.EpochBasedTrainLoop",max_epochs=24, val_interval=2)  # -1 note don't eval
 val_cfg = dict(type="mmengine.ValLoop")
 
 backend_args = None
 
-val_evaluator = dict(
-    type='FusionCocoMetric',
-    metric='bbox')
+val_evaluator = dict(type='mmdet.VOCMetric', metric='mAP', eval_mode='11points')
 
 debug_mode = False
 
@@ -158,7 +159,7 @@ runner_type = 'GroupBatchRunner'
 lr = 0.02  # total lr per gpu lr is lr/n 
 optim_wrapper = dict(
     type='OptimWrapper',
-    optimizer=dict(type='AdamW', lr=lr, weight_decay=0.0001),
+    optimizer=dict(type='SGD', lr=lr, weight_decay=0.0001),
     clip_grad=dict(max_norm=35, norm_type=2),
     # paramwise_cfg=dict(
     #     custom_keys={

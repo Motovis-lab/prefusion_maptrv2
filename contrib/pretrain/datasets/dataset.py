@@ -145,12 +145,13 @@ class PretrainDataset_AVP(PretrainDataset):
 @DATASETS.register_module()
 class PretrainDataset_FrontData(MMdetBaseDetDataset):
     METAINFO = {
-        'classes':
-        ('car','mpv','mini','van','bus','lorry','truck','special','adult','child','bicycle','motorcycle',
-         'tricycle','bicyclist','tricyclist','trafficsign','tunnel_entry','vehicle_front','vehicle_back',
-         'tricycle_front','tricycle_back','wheel','plate','head','mirror','cabin','info_ts','other_ts','cone',
-         'bollard','direction_guidance','soft_barrier','guardrail','dontcareregion','front_wheel_point',
-         'back_wheel_point','suv')
+        # 'classes':
+        # ('car','mpv','mini','van','bus','lorry','truck','special','adult','child','bicycle','motorcycle',
+        #  'tricycle','bicyclist','tricyclist','trafficsign','tunnel_entry','vehicle_front','vehicle_back',
+        #  'tricycle_front','tricycle_back','wheel','plate','head','mirror','cabin','info_ts','other_ts','cone',
+        #  'bollard','direction_guidance','soft_barrier','guardrail','dontcareregion','front_wheel_point',
+        #  'back_wheel_point','suv')
+        'classes': ('car', )
     }
     def __init__(self, reduce_zero_label=False, **kwargs):
         super().__init__(img_subdir="", ann_subdir="", **kwargs)
@@ -177,8 +178,8 @@ class PretrainDataset_FrontData(MMdetBaseDetDataset):
         data_list = []
         img_ids = list_from_file(self.ann_file, backend_args=self.backend_args)
         for img_id in img_ids:
-            file_name = osp.join(self.img_subdir, img_id + '.jpg')
-            xml_path = osp.join(self.sub_data_root, self.ann_subdir,
+            file_name = osp.join(self.data_root, img_id + '.jpg')
+            xml_path = osp.join(self.data_root,
                                 img_id + '.xml')
 
             raw_img_info = {}

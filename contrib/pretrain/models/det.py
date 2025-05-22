@@ -17,8 +17,8 @@ class ADAS_Det(BaseModel):
     def __init__(self,
                  data_preprocessor,
                  backbone,
-                 bbox_head,
                  fpn=None,
+                 bbox_head=None,
                  train_cfg=None,
                  test_cfg=None,
                  init_cfg=None):

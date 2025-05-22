@@ -5,3 +5,4 @@ from .decoder import *
 from .seg import *
 from .det import *
 from .vovnet import *
+from .det_head import *
