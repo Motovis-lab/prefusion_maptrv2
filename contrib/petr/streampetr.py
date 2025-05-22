@@ -126,7 +126,8 @@ class StreamPETR(BaseModel):
             return bbox_results
         
         if mode == "loss":
-            loss_inputs = [bbox_3d, gt_labels, outs]
+            gt_bboxes_3d = [b.reshape(0, 9) if len(b) == 0 else b for b in bbox_3d]  # 9 is hard coded here for: (x,y,z,l,w,h,yaw,vx,vy)
+            loss_inputs = [gt_bboxes_3d, gt_labels, outs]
             losses = self.box_head.loss(*loss_inputs)
             # if self.with_img_roi_head:
             #     loss2d_inputs = [gt_bboxes, gt_labels, centers2d, depths, outs_roi, img_metas]

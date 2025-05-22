@@ -69,11 +69,17 @@ class StreamPETRModelFeeder(BaseModelFeeder):
                         ],
                     }
                     continue
-                if isinstance(trnsfmb, Bbox3D) and len(trnsfmb.elements) > 0:
-                    visible_boxes = self.get_boxes_within_visible_range(trnsfmb.tensor)
-                    processed_frame[k] = visible_boxes["xyz_lwh_yaw_vx_vy"]
-                    processed_frame["meta_info"][k] = {"classes": visible_boxes["classes"]}
-                    processed_frame["meta_info"][k].update(bbox3d_corners=visible_boxes["corners"])
+                if isinstance(trnsfmb, Bbox3D):
+                    if len(trnsfmb.tensor["classes"]) > 0:
+                        visible_boxes = self.get_boxes_within_visible_range(trnsfmb.tensor)
+                        processed_frame[k] = visible_boxes["xyz_lwh_yaw_vx_vy"]
+                        processed_frame["meta_info"][k] = {"classes": visible_boxes["classes"]}
+                        processed_frame["meta_info"][k].update(bbox3d_corners=visible_boxes["corners"])
+                    else:
+                        processed_frame[k] = trnsfmb.tensor["xyz_lwh_yaw_vx_vy"]
+                        processed_frame["meta_info"][k] = {"classes": trnsfmb.tensor["classes"]}
+                        processed_frame["meta_info"][k].update(bbox3d_corners=trnsfmb.tensor["corners"])
+
             processed_frame_batch.append(processed_frame)
 
         if self.T_e_l is not None:
@@ -130,7 +136,10 @@ class StreamPETRModelFeeder(BaseModelFeeder):
     def convert_bbox3d_to_lidar_coordsys_(self, bbox3d: torch.Tensor):
         if self.T_e_l is None:
             return
-        
+
+        if len(bbox3d) == 0:
+            return
+
         T_l_e = torch.tensor(np.linalg.inv(self.T_e_l), dtype=torch.float32)
 
         # convert positions from ego coordsys to lidar coordsys

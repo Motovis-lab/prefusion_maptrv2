@@ -81,7 +81,6 @@ transformables = dict(
             type="AdvancedBbox3DLoader",
             class_mapping=class_mapping,
         ),
-        # tensor_smith=dict(type='XyzLwhYawVeloBbox3D', voxel_shape=voxel_shape, voxel_range=voxel_range)
         tensor_smith=dict(type='Bbox3DBasic', classes=list(class_mapping.keys()), voxel_range=voxel_range)
     ),
 )
@@ -89,8 +88,9 @@ transformables = dict(
 train_dataset = dict(
     type="GroupBatchDataset",
     name="MvParkingTest",
-    data_root="/ssd4/datasets/nuScenes",
-    info_path="/ssd4/datasets/nuScenes/nusc_train_info_separated.pkl",
+    data_root="/data/datasets/nuScenes",
+    info_path="/data/datasets/nuScenes/nusc_train_info_separated.pkl",
+    # info_path="/data/datasets/nuScenes/nusc_scene0123_train_info_separated.pkl",
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
@@ -108,7 +108,6 @@ train_dataset = dict(
     ],
     group_sampler=dict(type="IndexGroupSampler",
                         phase="val",
-                    #    indices_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated_indices.txt",
                         possible_group_sizes=[20],
                         possible_frame_intervals=[1]),
     batch_size=batch_size,
@@ -117,8 +116,8 @@ train_dataset = dict(
 val_dataset = dict(
     type="GroupBatchDataset",
     name="MvParkingTest",
-    data_root="/ssd4/datasets/nuScenes",
-    info_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
+    data_root="/data/datasets/nuScenes",
+    info_path="/data/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
@@ -136,7 +135,6 @@ val_dataset = dict(
     ],
     group_sampler=dict(type="IndexGroupSampler",
                         phase="val",
-                    #    indices_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated_indices.txt",
                         possible_group_sizes=[20],
                         possible_frame_intervals=[1]),
     batch_size=batch_size,
@@ -145,8 +143,8 @@ val_dataset = dict(
 test_dataset = dict(
     type="GroupBatchDataset",
     name="MvParkingTest",
-    data_root="/ssd4/datasets/nuScenes",
-    info_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
+    data_root="/data/datasets/nuScenes",
+    info_path="/data/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
@@ -162,11 +160,8 @@ test_dataset = dict(
     transforms=[
         dict(type='BGR2RGB'),
     ],
-    group_sampler=dict(type="IndexGroupSampler",
-                        phase="val",
-                    #    indices_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated_indices.txt",
-                        possible_group_sizes=[20],
-                        possible_frame_intervals=[1]),
+    group_sampler=dict(type="SequentialSceneFrameGroupSampler",
+                        phase="test_scene_by_scene"),
     batch_size=1,
 )
 
@@ -331,7 +326,7 @@ optim_wrapper = dict(
     type="OptimWrapper",
     optimizer=dict(
         type="AdamW",
-        lr=6e-5, # total lr per gpu lr is lr/n
+        lr=8e-5, # total lr per gpu lr is lr/n
         weight_decay=0.01,
     ),
     paramwise_cfg=dict(
@@ -359,7 +354,7 @@ default_hooks = dict(
     timer=dict(type="IterTimerHook"),
     logger=dict(type="LoggerHook", interval=50),
     param_scheduler=dict(type="ParamSchedulerHook"),
-    checkpoint=dict(type="CheckpointHook", interval=100, save_best="accuracy", rule="greater"),
+    checkpoint=dict(type="CheckpointHook", interval=1, save_best="accuracy", rule="greater"),
     sampler_seed=dict(type="DistSamplerSeedHook"),
 )
 
