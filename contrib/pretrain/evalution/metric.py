@@ -6,6 +6,7 @@ import datetime
 import random
 import cv2
 import os
+from PIL import Image, ImageDraw, ImageFont
 
 
 __all__ = ['FusionDetMetric']
@@ -39,28 +40,30 @@ class FusionDetMetric(VOCMetric):
         
     def process(self, data_batch, data_samples):
         super().process(data_batch, data_samples)
-        import numpy as np
-        im = np.zeros((224, 224, 3), dtype=np.float32)
-        cv2.rectangle(im, (100, 100), (200, 200), (255, 0, 0), 2)
-        cv2.imwrite("test.jpg", im)
         for ind, (ann, pred) in enumerate(self.results):
             if random.random() < self.random_show:
-                img = data_batch['inputs'][ind].cpu().detach().numpy()
+                img = data_batch['inputs'][ind].cpu().detach().numpy().transpose(1, 2, 0)[..., ::-1]
+                img = Image.fromarray(img.astype('uint8'))
+                draw = ImageDraw.Draw(img)
                 gt_bboxes = ann['bboxes'].tolist()
                 gt_labels = ann['labels'].tolist()
+                for b, l in zip(gt_bboxes, gt_labels):
+                    draw.rectangle(b, outline=(255, 0, 0), width=2)
+                    draw.text((b[0], b[1]-10), str(l), fill=(255, 0, 0))
+                
                 pred_bboxes = []
                 pred_labels = []
                 pred_scores = []
-                
                 for i in range(len(pred)):
                     tmp = pred[i][:, :-1].tolist()
                     pred_bboxes.extend(tmp)
                     pred_labels.extend([i] * len(tmp))
                     pred_scores.extend(pred[i][:, -1].tolist())
-                img = self.draw(img, gt_bboxes, gt_labels, color=(255, 0, 0))  # GT
-                img = self.draw(img, pred_bboxes, pred_labels, pred_scores, color=(0, 0, 255))  # Pred
+                for b, l, s in zip(pred_bboxes, pred_labels, pred_scores):
+                    draw.rectangle(b, outline=(0, 255, 0), width=2)
+                    draw.text((b[0], b[1]-10), f"{l}: {s:.2f}", fill=(0, 255, 0))
                 filename = f"{self.save_dir}/{data_samples[ind]['img_id'].split('/')[-1]}.jpg"
-                cv2.imwrite(filename, img.transpose(1, 2, 0))
+                img.save(filename)
     
     def draw(self, img, bboxes, labels, scores=None, color=None):
         if scores is None:

@@ -7,7 +7,7 @@ custom_imports = dict(
 dataset_front_type = 'PretrainDataset_FrontData'
 data_root = 'data/voc_bm_with_attrs_resized'
 # data_root = "/home/wuhan/prefusion"
-# ori_shape=(640, 1024)
+
 crop_size = (384, 768)
 train_pipeline = [
     dict(type='LoadImageFromFile'),
@@ -33,7 +33,7 @@ val_pipeline = [
         keep_ratio=True),
     dict(type='mmdet.PackDetInputs')
 ]
-batch_size = 1
+batch_size = 8
 
 dataset_front = dict(
     type=dataset_front_type,
@@ -128,7 +128,7 @@ model = dict(
     test_cfg=dict(
         nms_pre=1000,
         min_bbox_size=0,
-        score_thr=0.05,
+        score_thr=0.5,
         nms=dict(type='nms', iou_threshold=0.6),
         max_per_img=100)
 )
@@ -139,7 +139,7 @@ val_cfg = dict(type="mmengine.ValLoop")
 
 backend_args = None
 
-val_evaluator = dict(type='FusionDetMetric', metric='mAP', eval_mode='11points', random_show=0)
+val_evaluator = dict(type='FusionDetMetric', metric='mAP', eval_mode='11points', random_show=0.001)
 
 debug_mode = False
 
