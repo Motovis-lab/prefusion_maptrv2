@@ -15,12 +15,12 @@ train_pipeline = [
     dict(
         type='RandomResize',
         scale=crop_size,
-        # ratio_range=(0.5, 2.0),
-        ratio_range=(1.0,1.0),
+        ratio_range=(0.5, 2.0),
+        # ratio_range=(1.0,1.0),
         keep_ratio=True),
-    # dict(type='mmdet.RandomCrop', crop_size=crop_size),
-    # dict(type='mmdet.RandomFlip', prob=0.5),
-    # dict(type='mmdet.PhotoMetricDistortion'),
+    dict(type='mmdet.RandomCrop', crop_size=crop_size),
+    dict(type='mmdet.RandomFlip', prob=0.5),
+    dict(type='mmdet.PhotoMetricDistortion'),
     dict(type='mmdet.PackDetInputs')
 ]
 
@@ -33,12 +33,12 @@ val_pipeline = [
         keep_ratio=True),
     dict(type='mmdet.PackDetInputs')
 ]
-batch_size = 8
+batch_size = 1
 
 dataset_front = dict(
     type=dataset_front_type,
     data_root=data_root,
-    ann_file="front_data_val_index.txt",
+    ann_file="front_data_index.txt",
     # ann_file="tests/contrib/pretrain/index.txt",
     pipeline=train_pipeline,
     reduce_zero_label=False
@@ -86,7 +86,7 @@ data_preprocessor=dict(
         )
 
 model = dict(
-    type='mmdet.FCOS',
+    type='ADAS_Det',
     data_preprocessor=data_preprocessor,
     backbone=dict(type='VoVNet',
                   out_indices=(0, 1, 3, 5),
@@ -101,7 +101,7 @@ model = dict(
         relu_before_extra_convs=True),
     bbox_head=dict(
         type='FusionFCOSHead',
-        num_classes=1,
+        num_classes=8,
         regress_ranges=((-1, 64), (64, 128), (128, 256),
                         (256, 100000000)),
         in_channels=256,
@@ -133,12 +133,13 @@ model = dict(
         max_per_img=100)
 )
 
-train_cfg = dict(type="mmengine.EpochBasedTrainLoop",max_epochs=24, val_interval=2)  # -1 note don't eval
+max_epochs = 24
+train_cfg = dict(type="mmengine.EpochBasedTrainLoop",max_epochs=max_epochs, val_interval=2)  # -1 note don't eval
 val_cfg = dict(type="mmengine.ValLoop")
 
 backend_args = None
 
-val_evaluator = dict(type='mmdet.VOCMetric', metric='mAP', eval_mode='11points')
+val_evaluator = dict(type='FusionDetMetric', metric='mAP', eval_mode='11points', random_show=0)
 
 debug_mode = False
 
@@ -176,7 +177,7 @@ default_hooks = dict(
     timer=dict(type='mmengine.IterTimerHook'),
     logger=dict(type='LoggerHook', interval=5),
     param_scheduler=dict(type='ParamSchedulerHook'),
-    checkpoint=dict(type='ExperimentWiseCheckpointHook', interval=2))
+    checkpoint=dict(type='ExperimentWiseCheckpointHook', interval=max_epochs))
 
 custom_hooks = [
     dict(

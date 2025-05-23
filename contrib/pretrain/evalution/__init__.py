@@ -1,1 +1,1 @@
-from .coco_metric import *
+from .metric import *
