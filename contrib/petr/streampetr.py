@@ -2,9 +2,11 @@ from typing import List, Dict, Any
 
 import torch
 import numpy as np
-from mmengine.model import BaseModel
 from mmengine.model.base_model.data_preprocessor import BaseDataPreprocessor
+from mmengine.structures import BaseDataElement
+from mmdet3d.structures.ops.transforms import bbox3d2result
 
+from prefusion import BaseModel
 from prefusion.registry import MODELS
 from contrib.petr.misc import locations
 
@@ -95,12 +97,13 @@ class StreamPETR(BaseModel):
         _device = img_feats.device
         
         data = {
-            "timestamp": torch.tensor([int(ii.frame_id) for ii in index_info], device=_device, dtype=torch.float64),
+            "timestamp": torch.tensor([int(ii.frame_id) / 1000 for ii in index_info], device=_device, dtype=torch.float64),
             "prev_exists": torch.tensor([ii.prev is not None for ii in index_info], device=_device, dtype=torch.float32),
             "ego_pose": torch.tensor(np.array([p.transformables['0'].trans_mat for p in ego_poses]), device=_device, dtype=torch.float32),
             "ego_pose_inv": torch.tensor(np.array([np.linalg.inv(p.transformables['0'].trans_mat) for p in ego_poses]), device=_device, dtype=torch.float32),
             "intrinsics": torch.tensor(np.array([m["camera_images"]["intrinsic"] for m in meta_info]), device=_device, dtype=torch.float32),
-            "lidar2img": torch.tensor(np.array([m["camera_images"]["extrinsic_inv"] for m in meta_info]), device=_device, dtype=torch.float32)
+            "ego2img": torch.tensor(np.array([m["camera_images"]["extrinsic_inv"] for m in meta_info]), device=_device, dtype=torch.float32),
+            "lidar2img": torch.tensor(np.array([np.linalg.inv(np.linalg.inv(m['T_ego_lidar']) @ np.array(m['camera_images']['extrinsic'])) for m in meta_info]), device=_device, dtype=torch.float32),
         }
 
         img_metas = []
@@ -109,22 +112,48 @@ class StreamPETR(BaseModel):
                 "pad_shape": [(im_size[1], im_size[0], 3)] * N,
             })
         gt_labels = [m['bbox_3d']['classes'] for m in meta_info]
-        outs = self.box_head(img_feats, location, img_metas, bbox_3d, gt_labels, topk_indexes=topk_indexes, **data)
+        gt_bboxes_3d = [b.reshape(0, 9) if len(b) == 0 else b for b in bbox_3d]  # 9 is hard coded here for: (x,y,z,l,w,h,yaw,vx,vy)
+        try:
+            outs = self.box_head(img_feats, location, img_metas, gt_bboxes_3d, gt_labels, topk_indexes=topk_indexes, **data)
+        except Exception as e:
+            from loguru import logger
+            logger.error(f"index_info: {index_info}")
+            print(e)
+            raise
+        outs = {k: v.float() if isinstance(v, torch.Tensor) else v for k, v in outs.items()}   # convert torch.float16 to torch.float32
 
-        # self.visualize_bbox3d(data, bbox_3d, outs, meta_info, ego_poses)
+        # self.visualize_bbox3d(data, gt_bboxes_3d, outs, meta_info, ego_poses)
 
+        if mode == 'tensor':
+            bbox_list = self.box_head.get_bboxes(outs, img_metas)
+            bbox_results = [
+                bbox3d2result(bboxes, scores, labels)
+                for bboxes, scores, labels in bbox_list
+            ]
+            return bbox_results
+        
         if mode == "loss":
-            loss_inputs = [bbox_3d, gt_labels, outs]
-            losses = self.box_head.loss(*loss_inputs)
+            loss_inputs = [gt_bboxes_3d, gt_labels, outs]
+            try:
+                losses = self.box_head.loss(*loss_inputs)
+            except Exception as e:
+                from loguru import logger
+                logger.error(f"index_info: {index_info}")
+                print(e)
+                raise
             # if self.with_img_roi_head:
             #     loss2d_inputs = [gt_bboxes, gt_labels, centers2d, depths, outs_roi, img_metas]
             #     losses2d = self.img_roi_head.loss(*loss2d_inputs)
             #     losses.update(losses2d)
+
             return losses
-        elif mode == "predict":
-            return [{"name": k, "content": v} for k, v in outs.items()]
-        elif mode == "tensor":
-            return outs
+        if mode == "predict":
+            loss_inputs = [gt_bboxes_3d, gt_labels, outs]
+            losses = self.box_head.loss(*loss_inputs)
+            return (
+                *[{"name": k, "content": v.cpu() if isinstance(v, torch.Tensor) else v} for k, v in outs.items()],
+                BaseDataElement(loss=losses),
+            )
 
     def visualize_bbox3d(self, data, bbox_3d, outs, meta_info, ego_poses, *args, **kwargs):
         ###########################
@@ -173,8 +202,8 @@ class StreamPETR(BaseModel):
         import math
         from contrib.petr.misc import denormalize_bbox
         for ts, gt_boxes, pred_bboxes, pred_scores, m, ep in zip(data['timestamp'], bbox_3d, outs['all_bbox_preds'][-1], outs['all_cls_scores'][-1], meta_info, ego_poses):
-            if int(ts.item()) not in [1698825828064, 1698825829564, 1698825837064, 1698825846064, 1698825852564]:
-                continue
+            # if int(ts.item()) not in [1698825828064, 1698825829564, 1698825837064, 1698825846064, 1698825852564]:
+            #     continue
             _ = plt.figure()
             _draw_boxes(gt_boxes, color='blue')
             denormalized_bbox = denormalize_bbox(pred_bboxes, None)

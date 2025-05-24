@@ -24,6 +24,7 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+*.whl
 MANIFEST
 
 # PyInstaller
@@ -181,3 +182,6 @@ convert_model_key.py
 
 
 tools/gene_nusc_occ
+mprofile*
+mprof*
+output/

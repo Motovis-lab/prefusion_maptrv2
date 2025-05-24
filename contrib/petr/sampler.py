@@ -1,6 +1,7 @@
 import torch
-from mmdet.models.task_modules.samplers import BaseSampler, SamplingResult
+from mmdet.models.task_modules.samplers import BaseSampler
 
+from .sampling_result import SamplingResult
 from prefusion.registry import DATA_SAMPLERS
 
 

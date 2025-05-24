@@ -4,12 +4,11 @@
 # ---------------------------------------------
 import torch
 
-from mmdet.registry import TASK_UTILS
 from mmdet.models.task_modules import build_match_cost
 from mmdet.models.task_modules.assigners import AssignResult, BaseAssigner
 from mmdet.structures.bbox.transforms import bbox_cxcywh_to_xyxy
 
-from prefusion.registry import MODELS
+from prefusion.registry import MODELS, TASK_UTILS
 
 try:
     from scipy.optimize import linear_sum_assignment

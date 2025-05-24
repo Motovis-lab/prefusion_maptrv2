@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import cv2
 from easydict import EasyDict as edict
+from unittest.mock import Mock
 
 from prefusion.dataset.transform import Bbox3D, ParkingSlot3D, Polyline3D, OccSdfBev
 from prefusion.dataset.tensor_smith import (
@@ -18,6 +19,7 @@ from prefusion.dataset.tensor_smith import (
     PlanarPolyline3D,
     PlanarOccSdfBev,
 )
+from contrib.petr.tensor_smith import DivisibleCameraImageTensor
 
 def test_get_bev_intrinsics():
     voxel_shape=(6, 200, 160)
@@ -43,6 +45,56 @@ def test_camera_image_tensor():
         [[-3.33333333,  6.66666667, 16.66666667, 26.66666667],
          [36.66666667, 46.66666667, 56.66666667, 66.66666667]]
     ]), decimal=5)
+
+
+def test_divisible_camera_image_tensor():
+    """Test padding when image dimensions are not divisible by the divisor."""
+    # Setup processor with divisor 32 and pad value 0.0
+    tensor_smith = DivisibleCameraImageTensor(
+        means=[128, 128, 128], 
+        stds=[255, 255, 255], 
+        image_size_divisor=32, 
+        image_pad_value=0.0
+    )
+    
+    # Create 30x31x3 image (HWC) filled with 130 (uint8)
+    h, w = 30, 31
+    img_data = np.full((h, w, 3), 130, dtype=np.uint8)
+    camera_image = Mock()
+    camera_image.img = img_data
+    camera_image.ego_mask = np.ones_like(img_data, dtype=np.uint8)
+    
+    tensor_dict = tensor_smith(camera_image)
+    img_tensor = tensor_dict['img']
+    
+    # Check padded shape is 3x32x32
+    assert img_tensor.shape == (3, 32, 32)
+    
+    # Expected normalized value: (130 - 128) / 255 ≈ 0.00784314
+    expected_value = (130 - 128) / 255
+    original_region = img_tensor[:, :h, :w]
+    assert torch.allclose(original_region, torch.full_like(original_region, expected_value))
+    
+    # Check padding regions are zeros
+    pad_region_bottom = img_tensor[:, h:, :]
+    pad_region_right = img_tensor[:, :, w:]
+    assert torch.allclose(pad_region_bottom, torch.zeros_like(pad_region_bottom))
+    assert torch.allclose(pad_region_right, torch.zeros_like(pad_region_right))
+
+    ego_mask_tensor = tensor_dict['ego_mask']
+
+    # Check padded ego_mask shape is 3x32x32
+    assert ego_mask_tensor.shape == (32, 32, 3)
+    
+    # Expected normalized value: (130 - 128) / 255 ≈ 0.00784314
+    original_region = ego_mask_tensor[:h, :w, :]
+    assert torch.allclose(original_region, torch.full_like(original_region, 1))
+    
+    # Check padding regions are zeros
+    pad_region_bottom = ego_mask_tensor[h:, :, :]
+    pad_region_right = ego_mask_tensor[:, w:, :]
+    assert torch.allclose(pad_region_bottom, torch.zeros_like(pad_region_bottom))
+    assert torch.allclose(pad_region_right, torch.zeros_like(pad_region_right))
 
 
 def test_planar_bbox_3d_get_roll_from_xyvecs():
