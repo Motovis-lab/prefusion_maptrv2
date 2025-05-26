@@ -14,6 +14,7 @@ from mmdet.models import FCOSHead
 from mmdet.datasets.transforms import LoadAnnotations
 from mmdet.datasets.transforms import PackDetInputs
 from mmdet.models.task_modules import DistancePointBBoxCoder
+from mmcv.transforms.loading import LoadImageFromFile
 
 __all__ = ['ADAS_Det']
 

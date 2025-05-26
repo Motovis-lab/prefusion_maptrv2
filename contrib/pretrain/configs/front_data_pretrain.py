@@ -10,7 +10,7 @@ data_root = 'data/voc_bm_with_attrs_resized'
 
 crop_size = (384, 768)
 train_pipeline = [
-    dict(type='LoadImageFromFile'),
+    dict(type='FusionLoadImageFromFile'),
     dict(type='DetLoadAnnotations', with_bbox=True),
     dict(
         type='RandomResize',
@@ -25,7 +25,7 @@ train_pipeline = [
 ]
 
 val_pipeline = [
-    dict(type='LoadImageFromFile'),
+    dict(type='FusionLoadImageFromFile'),
     dict(type='DetLoadAnnotations', with_bbox=True),
     dict(
         type='Resize',
@@ -46,7 +46,7 @@ dataset_front = dict(
 
 train_dataloader = dict(
     batch_size=batch_size,
-    num_workers=16,
+    num_workers=8,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     # batch_sampler=dict(type="SameSourceBatchSampler", drop_last=True),
@@ -60,7 +60,7 @@ train_dataloader = dict(
 
 val_dataloader = dict(
     batch_size=batch_size,
-    num_workers=12,
+    num_workers=8,
     persistent_workers=True,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
