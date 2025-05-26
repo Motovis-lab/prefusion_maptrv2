@@ -19,7 +19,7 @@ from mmdet.models.dense_heads.anchor_free_head import AnchorFreeHead
 from mmdet.structures.bbox.bbox_overlaps import bbox_overlaps
 from mmdet3d.models.utils import clip_sigmoid
 
-from prefusion.registry import MODELS, DATA_SAMPLERS
+from prefusion.registry import MODELS, DATA_SAMPLERS, TASK_UTILS
 from contrib.petr.misc import draw_heatmap_gaussian, apply_center_offset, apply_ltrb, bias_init_with_prob
 
 
@@ -94,7 +94,7 @@ class FocalHead(AnchorFreeHead):
             assert "assigner2d" in train_cfg, "assigner2d should be provided " "when train_cfg is set."
             assigner2d = train_cfg["assigner2d"]
 
-            self.assigner2d = build_assigner(assigner2d)
+            self.assigner2d = TASK_UTILS.build(assigner2d)
             # DETR sampling=False, so use PseudoSampler
             sampler_cfg = dict(type="PseudoSampler")
             self.sampler = DATA_SAMPLERS.build(sampler_cfg)

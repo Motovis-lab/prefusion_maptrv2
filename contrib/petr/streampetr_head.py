@@ -408,11 +408,13 @@ class StreamPETRHead(AnchorFreeHead):
 
         coords = coords.unsqueeze(-1)
 
-        img2lidars = data['lidar2img'].inverse() # if error, change it to: torch.inverse(data['lidar2img'].cpu()).to(device=data['lidar2img'].device)
-        img2lidars = img2lidars.view(BN, 1, 1, 4, 4).repeat(1, H*W, D, 1, 1).view(B, LEN, D, 4, 4)
-        img2lidars = topk_gather(img2lidars, topk_indexes)
+        KT = (data['intrinsics'] @ data['lidar2img']).float()
+        KT_inv = KT.inverse() # if error, change it to: torch.inverse(data['lidar2img'].cpu()).to(device=data['lidar2img'].device)
+        KT_inv = KT_inv.view(BN, 1, 1, 4, 4).repeat(1, H*W, D, 1, 1).view(B, LEN, D, 4, 4)
+        KT_inv = topk_gather(KT_inv, topk_indexes)
 
-        coords3d = torch.matmul(img2lidars, coords).squeeze(-1)[..., :3]
+        with torch.amp.autocast("cuda", enabled=False):
+            coords3d = torch.matmul(KT_inv, coords).squeeze(-1)[..., :3]
         ###################################
         # FIXME: visualize coords3d
         ###################################
@@ -599,7 +601,8 @@ class StreamPETRHead(AnchorFreeHead):
             _description_
         """
         # zero init the memory bank
-        self.pre_update_memory(data)
+        with torch.amp.autocast("cuda", enabled=False):
+            self.pre_update_memory(data)
 
         x = img_feats
         B, N, C, H, W = x.shape
@@ -647,7 +650,8 @@ class StreamPETRHead(AnchorFreeHead):
         all_bbox_preds[..., 0:3] = (all_bbox_preds[..., 0:3] * (self.pc_range[3:6] - self.pc_range[0:3]) + self.pc_range[0:3])
 
         # update the memory bank
-        self.post_update_memory(data, rec_ego_pose, all_cls_scores, all_bbox_preds, outs_dec, mask_dict)
+        with torch.amp.autocast("cuda", enabled=False):
+            self.post_update_memory(data, rec_ego_pose, all_cls_scores, all_bbox_preds, outs_dec, mask_dict)
 
         if mask_dict and mask_dict['pad_size'] > 0:
             output_known_class = all_cls_scores[:, :, :mask_dict['pad_size'], :]
@@ -1081,8 +1085,8 @@ class StreamPETRHead(AnchorFreeHead):
         for i in range(num_samples):
             preds = preds_dicts[i]
             bboxes = preds['bboxes']
-            bboxes[:, 2] = bboxes[:, 2] - bboxes[:, 5] * 0.5
-            bboxes = img_metas[i]['box_type_3d'](bboxes, bboxes.size(-1))
+            # bboxes[:, 2] = bboxes[:, 2] - bboxes[:, 5] * 0.5
+            # bboxes = img_metas[i]['box_type_3d'](bboxes, bboxes.size(-1))
             scores = preds['scores']
             labels = preds['labels']
             ret_list.append([bboxes, scores, labels])

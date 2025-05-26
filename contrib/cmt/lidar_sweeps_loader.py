@@ -1,10 +1,10 @@
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, Optional
 import numpy as np
 
 from prefusion.registry import TRANSFORMABLE_LOADERS
 from prefusion.dataset.tensor_smith import TensorSmith
-from prefusion.dataset.utils import read_pcd
+from prefusion.dataset.utils import read_pcd, PolarDict
 from prefusion.dataset.transform import LidarPoints
 from prefusion.dataset.transformable_loader import TransformableLoader
 
@@ -19,9 +19,8 @@ class LidarSweepsLoader(TransformableLoader):
         self.data_root = data_root
         self.sweep_info_length = sweep_info_length
 
-    def load(self, name: str, scene_data: Dict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: TensorSmith = None, **kwargs) -> LidarPoints:
-        cur_frame = frame_data[index_info.frame_id]
-        sweep_infos = cur_frame['lidar_points']['lidar1_sweeps']
+    def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, **kwargs) -> LidarPoints:
+        sweep_infos = frame_data['lidar_points']['lidar1_sweeps']
 
         def Rt2T(R, t):
             T = np.eye(4)
@@ -43,10 +42,10 @@ class LidarSweepsLoader(TransformableLoader):
             points_output = (to_homo(points) @ T.T)[:, :3].reshape(*shape)
             return points_output
 
-        points = read_pcd(self.data_root / cur_frame["lidar_points"]["lidar1"])
-        Twe = Rt2T(cur_frame["ego_pose"]["rotation"], cur_frame['ego_pose']["translation"])
+        points = read_pcd(self.data_root / frame_data["lidar_points"]["lidar1"])
+        Twe = Rt2T(frame_data["ego_pose"]["rotation"], frame_data['ego_pose']["translation"])
         Tew = np.linalg.inv(Twe)
-        ts = float(Path(cur_frame["lidar_points"]["lidar1"]).stem) / 1000
+        ts = float(Path(frame_data["lidar_points"]["lidar1"]).stem) / 1000
         output_points = [
                          np.concatenate([ points, np.zeros_like(points[:, :1])], axis=1)
                          

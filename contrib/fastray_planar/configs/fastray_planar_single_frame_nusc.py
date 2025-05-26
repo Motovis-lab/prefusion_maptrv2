@@ -429,7 +429,7 @@ log_processor = dict(type='GroupAwareLogProcessor')
 default_hooks = dict(timer=dict(type='GroupIterTimerHook'))
 
 custom_hooks = [
-    dict(type="DumpDetectionAsNuscenesJsonHook",
+    dict(type="DumpFastrayDetectionAsNuscenesJsonHook",
          det_anno_transformable_keys=["bbox_3d", "bbox_3d_rect_cuboid", "bbox_3d_cylinder", "bbox_3d_oriented_cylinder"],
          voxel_shape=voxel_shape,
          voxel_range=voxel_range,

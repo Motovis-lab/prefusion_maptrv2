@@ -66,7 +66,7 @@ RUN rm -rf /pytorch3d-0.7.8+pt2.4.1cu121-cp310-cp310-linux_x86_64.whl
 RUN pip install --no-cache-dir spconv-cu121==2.3.7
 RUN pip install --no-cache-dir onnx==1.17.0
 RUN pip install --no-cache-dir onnxruntime==1.20.1
-RUN pip install --no-cache-dir copious==0.1.24
+RUN pip install --no-cache-dir copious==0.1.26
 RUN pip install --no-cache-dir mtv4d==0.1.4
 RUN pip install --no-cache-dir polars==1.28.0
 

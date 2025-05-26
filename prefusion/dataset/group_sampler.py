@@ -7,21 +7,18 @@ from itertools import cycle
 from pathlib import Path
 from cachetools import cached, Cache
 from collections import defaultdict, UserList, Counter
-from typing import List, Tuple, Dict, Union, TYPE_CHECKING
+from typing import List, Tuple, Dict, Union, TypeVar, Generic, Optional, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd
-import polars as pl
-from copious.data_structure.dict import defaultdict2dict
 from loguru import logger
 from tabulate import tabulate
 
 from prefusion.registry import GROUP_SAMPLERS
-from prefusion.dataset.transformable_loader import Bbox3DLoader
-from prefusion.dataset.index_info import IndexInfo
+from prefusion.dataset.index_info import IndexInfo, establish_linkings, establish_group_linkings
 from prefusion.dataset.transformable_loader import Bbox3DLoader, Polyline3DLoader, Polygon3DLoader, ParkingSlot3DLoader
 from prefusion.dataset.transform import Bbox3D, Polyline3D, Polygon3D, ParkingSlot3D
-from prefusion.dataset.utils import build_transformable_loader, PolarDict, load_frame_data_in_the_group, load_scene_data
+from prefusion.dataset.utils import build_transformable_loader, PolarDict, read_frame_pickle
 
 if TYPE_CHECKING:
     from .dataset import TransformableLoader
@@ -29,8 +26,10 @@ if TYPE_CHECKING:
 
 __all__ = ["IndexGroupSampler", "ClassBalancedGroupSampler"]
 
+T = TypeVar("T")
 
-class Group(UserList):
+
+class Group(UserList, Generic[T]):
     pass
 
 
@@ -41,7 +40,7 @@ def generate_groups(
     start_ind: int = 0, 
     random_start_ind: bool = False, 
     pad_mode: str = 'both',
-    seed: int = None,
+    seed: Optional[int] = None,
 ) -> List[Tuple[int]]:
     """
     Generate groups of frames from a single scene.
@@ -119,7 +118,7 @@ def generate_groups(
     return np.unique(ind_lists, axis=0)
 
 
-def get_scene_frame_inds(frame_info: PolarDict, indices: List[str] = None) -> Dict[str, List[str]]:
+def get_scene_frame_inds(frame_info: PolarDict, indices: Optional[List[str]] = None) -> Dict[str, List["IndexInfo"]]:
     """prepare scene_frame_inds for later usage
 
     Parameters
@@ -131,13 +130,13 @@ def get_scene_frame_inds(frame_info: PolarDict, indices: List[str] = None) -> Di
 
     Returns
     -------
-    scene_frame_inds : Dict[str, List[str]]
-        e.g.  
+    scene_frame_inds : Dict[str, List["IndexInfo"]]
+        pseudo example: 
         ```
         {
-            "20231101_160337": [ "20231101_160337/1698825817664", "20231101_160337/1698825817764"],
-            "20230823_110018": [ "20230823_110018/1692759640764", "20230823_110018/1692759640864"],
-        }
+            "20231101_160337": [ IndexInfo("20231101_160337", "1698825817664"), IndexInfo("20231101_160337", "1698825817764")],
+            "20230823_110018": [ IndexInfo("20230823_110018", "1692759640764"), IndexInfo("20230823_110018", "1692759640864")],
+        } # the index infos within the same scene is connected by `prev` and `next`.
         ```
     """
     indices = indices or frame_info.keys()
@@ -150,21 +149,7 @@ def get_scene_frame_inds(frame_info: PolarDict, indices: List[str] = None) -> Di
         available_indices[scene_id].append(scn_frm_id)
     for scene_id in available_indices:
         available_indices[scene_id] = sorted(available_indices[scene_id])
-
-    return defaultdict2dict(available_indices)
-
-
-def convert_str_index_to_index_info(groups: List[Union[List[str], Group[str]]]) -> List[Group["IndexInfo"]]:
-    index_info_groups = []
-    for grp in groups:
-        index_info_grp = []
-        prev = None
-        for i, scn_frm_str in enumerate(grp):
-            cur = IndexInfo.from_str(scn_frm_str, prev=prev)
-            prev = cur
-            index_info_grp.append(cur)
-        index_info_groups.append(Group(index_info_grp))
-    return index_info_groups
+    return {scene_id: [IndexInfo.from_str(i) for i in _inds] for scene_id, _inds in available_indices.items()}
 
 
 class GroupSampler:
@@ -173,7 +158,7 @@ class GroupSampler:
         phase: str, 
         possible_group_sizes: Union[int, Tuple[int]], 
         possible_frame_intervals: Union[int, Tuple[int]] = 1, 
-        seed: int = None,
+        seed: Optional[int] = None,
         **kwargs,
     ):
         self.phase = phase.lower()
@@ -187,7 +172,7 @@ class GroupSampler:
         return self._cur_train_group_size
 
     @abc.abstractmethod
-    def sample(self, data_root: Path, scene_info: PolarDict, frame_info: PolarDict, **kwargs) -> List[Group["IndexInfo"]]:
+    def sample(self, data_root: Path, frame_info: PolarDict, **kwargs) -> List[Group["IndexInfo"]]:
         raise NotImplementedError
 
 
@@ -198,8 +183,8 @@ class IndexGroupSampler(GroupSampler):
         phase: str, 
         possible_group_sizes: Union[int, Tuple[int]], 
         possible_frame_intervals: Union[int, Tuple[int]] = 1, 
-        seed: int = None,
-        indices_path: Union[str, Path] = None,
+        seed: Optional[int] = None,
+        indices_path: Optional[Union[str, Path]] = None,
         **kwargs,
     ):
         """Sample groups
@@ -225,7 +210,7 @@ class IndexGroupSampler(GroupSampler):
         assert phase in ["train", "val", "test"]
         self.indices_path = indices_path
 
-    def sample(self, data_root: Path, scene_info: PolarDict, frame_info: PolarDict, **kwargs) -> List[Group["IndexInfo"]]:
+    def sample(self, data_root: Path, frame_info: PolarDict, **kwargs) -> List[Group["IndexInfo"]]:
         """Sample groups
 
         Parameters
@@ -240,37 +225,38 @@ class IndexGroupSampler(GroupSampler):
         # generate scene_frame_inds
         if self.indices_path is not None:
             indices = [line.strip() for line in open(self.indices_path, "r")]
-            scene_frame_inds = get_scene_frame_inds(frame_info, indices=indices)
+            scene_frame_inds: Dict[str, List[IndexInfo]] = get_scene_frame_inds(frame_info, indices=indices)
         else:
-            scene_frame_inds = get_scene_frame_inds(frame_info)
+            scene_frame_inds: Dict[str, List[IndexInfo]] = get_scene_frame_inds(frame_info)
 
         # sample groups
         match self.phase:
             case "train":
-                groups: List[List[str]] = self.sample_train_groups(scene_frame_inds)
+                groups: List[Group[IndexInfo]] = self.sample_train_groups(scene_frame_inds)
             case "val" | "test":
-                groups: List[List[str]] = self.sample_val_groups(scene_frame_inds)
+                groups: List[Group[IndexInfo]] = self.sample_val_groups(scene_frame_inds)
 
-        return convert_str_index_to_index_info(groups)
+        return [establish_group_linkings(grp) for grp in groups]
 
-    def sample_train_groups(self, scene_frame_inds: Dict[str, List[str]]) -> List[List[str]]:
-        if self.seed: random.seed(self.seed)
+    def sample_train_groups(self, scene_frame_inds: Dict[str, List["IndexInfo"]]) -> List[Group["IndexInfo"]]:
+        if self.seed: 
+            random.seed(self.seed)
         self._cur_train_group_size = random.choice(self.possible_group_sizes)
         return self._generate_groups(scene_frame_inds, self._cur_train_group_size, random_start_ind=True, shuffle=True, seed=self.seed)
 
-    def sample_val_groups(self, scene_frame_inds: Dict[str, List[str]]) -> List[List[str]]:
+    def sample_val_groups(self, scene_frame_inds: Dict[str, List["IndexInfo"]]) -> List[Group["IndexInfo"]]:
         return self._generate_groups(scene_frame_inds, self.possible_group_sizes[0], frame_interval=self.possible_frame_intervals[0], start_ind=0, random_start_ind=False, shuffle=False)
     
     def _generate_groups(
         self, 
-        scene_frame_inds: Dict[str, List[str]],
+        scene_frame_inds: Dict[str, List["IndexInfo"]],
         group_size: int, 
-        frame_interval: int = None, 
+        frame_interval: Optional[int] = None, 
         start_ind: int = 0, 
         random_start_ind: bool = False, 
         shuffle: bool = False, 
-        seed: int = None
-    ) -> List[List[str]]:
+        seed: Optional[int] = None
+    ) -> List[Group["IndexInfo"]]:
         all_groups = []
         for _, frame_ids in scene_frame_inds.items():
             if not frame_interval:
@@ -287,7 +273,7 @@ class IndexGroupSampler(GroupSampler):
 
 @GROUP_SAMPLERS.register_module()
 class SequentialSceneFrameGroupSampler(GroupSampler):
-    def __init__(self, phase: str, seed: int = None, **kwargs):
+    def __init__(self, phase: str, seed: Optional[int] = None, **kwargs):
         """Prepare groups frame by frame, scene by scene.
 
         Parameters
@@ -300,10 +286,13 @@ class SequentialSceneFrameGroupSampler(GroupSampler):
         super().__init__(phase, possible_group_sizes=1, possible_frame_intervals=1, seed=seed)
         assert phase == "test_scene_by_scene"
 
-    def sample(self, data_root: Path, scene_info: PolarDict, frame_info: PolarDict, **kwargs) -> List[Group["IndexInfo"]]:
-        scene_frame_inds = get_scene_frame_inds(frame_info)
-        groups = convert_str_index_to_index_info(list(scene_frame_inds.values())) # build prev/next connections between adjacent frames in the same scene
-        groups = [Group([frm]) for grp in groups for frm in grp] # flatten all scenes into single-frame groups
+    def sample(self, data_root: Path, frame_info: PolarDict, **kwargs) -> List[Group["IndexInfo"]]:
+        scene_frame_inds: Dict[str, List[IndexInfo]] = get_scene_frame_inds(frame_info)
+        
+        # establishing long chaining of index_info only works for num_workers=0 in dataloader
+        scene_frame_inds = {scene_id: establish_linkings(_inds) for scene_id, _inds in scene_frame_inds.items()}
+
+        groups = [Group([frm]) for scene_inds in scene_frame_inds.values() for frm in scene_inds] # flatten all scenes into single-frame groups
         return groups
 
 
@@ -321,9 +310,9 @@ class ClassBalancedGroupSampler(GroupSampler):
         phase: str, 
         possible_group_sizes: Union[int, Tuple[int]], 
         possible_frame_intervals: Union[int, Tuple[int]] = 1, 
-        seed: int = None,
-        transformable_cfg: Dict[str, "Transformable"] = None,
-        cbgs_cfg: Union[str, Dict] = None,
+        seed: Optional[int] = None,
+        transformable_cfg: Optional[Dict[str, "Transformable"]] = None,
+        cbgs_cfg: Optional[Union[str, Dict]] = None,
         num_processes: int = 0,
         **kwargs
     ):
@@ -357,10 +346,10 @@ class ClassBalancedGroupSampler(GroupSampler):
         return gpdf
 
 
-    def sample(self, data_root: Path, scene_info: PolarDict, frame_info: PolarDict, **kwargs) -> List[Group["IndexInfo"]]:
+    def sample(self, data_root: Path, frame_info: PolarDict, **kwargs) -> List[Group["IndexInfo"]]:
         self.default_data_root = data_root
-        groups = self._base_group_sampler.sample(data_root, scene_info, frame_info)
-        groups = self.count_class_and_attr_occurrence(data_root, scene_info, frame_info, groups)
+        groups = self._base_group_sampler.sample(data_root, frame_info)
+        groups = self.count_class_and_attr_occurrence(data_root, frame_info, groups)
         sampled_groups = self.iterative_sample_minority_groups(groups)
         total_groups = groups + sampled_groups
         self.print_cbgs_report(groups, total_groups, self.cbgs_cfg)
@@ -382,12 +371,12 @@ class ClassBalancedGroupSampler(GroupSampler):
             f"{tabulate(combined, headers='keys', tablefmt='psql')}\n"
         )
 
-    def count_class_and_attr_occurrence(self, data_root: Path, scene_info: PolarDict, frame_info: PolarDict, groups: List[Group]) -> List[Group]:
+    def count_class_and_attr_occurrence(self, data_root: Path, frame_info: PolarDict, groups: List[Group]) -> List[Group]:
         for group in groups:
             obj_cnt = Counter()
             frm_cnt = Counter()
             for index_info in group:
-                transformables = self.load_all_transformables(data_root, scene_info, frame_info, index_info)
+                transformables = self.load_all_transformables(data_root, frame_info, index_info)
                 no_objects_found = True
                 for _, transformable in transformables.items():
                     classes = [ele['class'] for ele in transformable.elements]
@@ -488,10 +477,9 @@ class ClassBalancedGroupSampler(GroupSampler):
 
         return sampled_groups
 
-    def load_all_transformables(self, data_root: Path, scene_info: PolarDict, frame_info: PolarDict, index_info: "IndexInfo") -> dict:
+    def load_all_transformables(self, data_root: Path, frame_info: PolarDict, index_info: "IndexInfo") -> dict:
+        frame_data = read_frame_pickle(data_root / frame_info[index_info.scene_frame_id])
         transformables = {}
-        scene_data = load_scene_data(data_root, scene_info, index_info)
-        frame_data = load_frame_data_in_the_group(data_root, frame_info, index_info)
         for name in self.transformable_cfg:
             _t_cfg = self.transformable_cfg[name]
             if _t_cfg["type"] not in self.SUPPORTED_LOADERS:
@@ -499,7 +487,7 @@ class ClassBalancedGroupSampler(GroupSampler):
             loader_cfg = _t_cfg["loader"] if "loader" in _t_cfg else None
             loader = self._build_transformable_loader(loader_cfg, _t_cfg["type"])
             rest_kwargs = {k: v for k, v in _t_cfg.items() if k not in ["type", "loader", "tensor_smith"]}
-            transformables[name] = loader.load(name, scene_data, frame_data, index_info, **rest_kwargs)
+            transformables[name] = loader.load(name, frame_info, frame_data, index_info, **rest_kwargs)
         
         return transformables
     
@@ -527,16 +515,16 @@ class SceneLevelBalancedGroupSampler(GroupSampler):
         phase: str, 
         possible_group_sizes: Union[int, Tuple[int]], 
         possible_frame_intervals: Union[int, Tuple[int]] = 1, 
-        seed: int = None,
-        transformable_cfg: Dict[str, "Transformable"] = None,
-        cbgs_cfg: Union[str, Dict] = None,
+        seed: Optional[int] = None,
+        transformable_cfg: Optional[Dict[str, "Transformable"]] = None,
+        cbgs_cfg: Optional[Union[str, Dict]] = None,
         num_processes: int = 0,
         **kwargs
     ):
         super().__init__(phase, possible_group_sizes, possible_frame_intervals, seed)
         self._base_group_sampler = ClassBalancedGroupSampler(phase, possible_group_sizes, possible_frame_intervals, seed)
 
-    def sample(self, data_root: Path, scene_info: PolarDict, frame_info: PolarDict, **kwargs) -> List[Group["IndexInfo"]]:
+    def sample(self, data_root: Path, frame_info: PolarDict, **kwargs) -> List[Group["IndexInfo"]]:
         # TODO: [ ] 1. calculate occurred tags for each scene based on the groups generated by self._base_group_sampler
         # TODO: [ ] 2. expand scenes according to tag distribution (e.g. expand groups that in the rare scenes)
         raise NotImplementedError

@@ -12,7 +12,9 @@ from mmengine.logging import print_log
 from scipy.io import savemat
 from scipy.spatial.transform import Rotation as R
 from copious.data_structure.dict import defaultdict2dict
+from copious.cv.geometry import rt2mat
 
+from contrib.petr.hooks import get_box_attr
 from prefusion.registry import HOOKS
 from .model_utils import save_gt_outputs, save_pred_outputs
 
@@ -21,7 +23,7 @@ if TYPE_CHECKING:
 
 DATA_BATCH = Optional[Union[dict, tuple, list]]
 
-__all__ = ["DumpDetectionAsNuscenesJsonHook"]
+__all__ = ["DumpFastrayDetectionAsNuscenesJsonHook"]
 
 
 DEFAULT_ATTR = {
@@ -52,7 +54,7 @@ OBJ_RANGE_THRESH = {
 
 
 @HOOKS.register_module()
-class DumpDetectionAsNuscenesJsonHook(Hook):
+class DumpFastrayDetectionAsNuscenesJsonHook(Hook):
     def __init__(
         self,
         voxel_shape,
@@ -138,49 +140,17 @@ def format_boxes_as_nuscenes_format(boxes: List[Dict], ego_pose: "EgoPose"):
         if dist_to_ego_origin > OBJ_RANGE_THRESH[bx['detection_name']]:
             continue
 
-        bx['attribute_name'] = get_box_attr(bx)
+        bx['attribute_name'] = get_box_attr(bx['velocity'], bx['detection_name'])
         bx['size'] = [bx['size'][1], bx['size'][0], bx['size'][2]] # size in nusc is [width, length, height]
 
         # convert box location to world coord sys
-        bx_pos_rot_ego = mat4x4(bx['translation'], bx['rotation'])
-        ego_to_world = mat4x4(ego_pose.translation, ego_pose.rotation)
+        bx_pos_rot_ego = rt2mat(bx['translation'], bx['rotation'], as_homo=True)
+        ego_to_world = rt2mat(ego_pose.translation, ego_pose.rotation, as_homo=True)
         bx_pos_rot_world = ego_to_world @ bx_pos_rot_ego
         bx['translation'] = bx_pos_rot_world[:3, 3].flatten().tolist()
         bx['rotation'] = R.from_matrix(bx_pos_rot_world[:3, :3]).as_quat()[[3, 0, 1, 2]].tolist() # nusc uses pyquaternion repr
         formatted_boxes.append(bx)
     return formatted_boxes
-
-
-def get_box_attr(bx):
-    if np.sqrt(bx['velocity'][0]**2 + bx['velocity'][1]**2) > 0.2:
-        if bx['detection_name'] in [
-                'car',
-                'construction_vehicle',
-                'bus',
-                'truck',
-                'trailer',
-        ]:
-            attr = 'vehicle.moving'
-        elif bx['detection_name'] in ['bicycle', 'motorcycle']:
-            attr = 'cycle.with_rider'
-        else:
-            attr = DEFAULT_ATTR[bx['detection_name']]
-    else:
-        if bx['detection_name'] in ['pedestrian']:
-            attr = 'pedestrian.standing'
-        elif bx['detection_name'] in ['bus']:
-            attr = 'vehicle.stopped'
-        else:
-            attr = DEFAULT_ATTR[bx['detection_name']]
-    return attr
-
-
-def mat4x4(translation, rotation):
-    _mat = np.eye(4)
-    _mat[:3, :3] = rotation
-    _mat[:3, 3] = np.array(translation).flatten()
-    return _mat
-
 
 def remove_boxes_by_area_score_(pred, area_score_thresh=0.5):
     for i in range(len(pred) - 1, -1, -1):

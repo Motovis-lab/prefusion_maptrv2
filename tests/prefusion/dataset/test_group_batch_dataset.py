@@ -1,6 +1,7 @@
-from pathlib import Path
 import shutil
 import pickle
+from functools import partial
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -53,6 +54,13 @@ def test_batch_groups_4():
     assert batched_groups == [[1]]
 
 
+def test_batch_groups_5():
+    groups = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [8, 9, 10]]
+    get_batched_groups = partial(GroupBatchDataset._batch_groups, groups=groups, batch_size=2)
+    assert get_batched_groups(0) == [[1, 2, 3], [4, 5, 6]]
+    assert get_batched_groups(1) == [[7, 8, 9], [8, 9, 10]]
+
+
 class DummyTransform:
     def __init__(self, scope="frame") -> None:
         self.scope = scope
@@ -62,18 +70,20 @@ class DummyTransform:
 
 
 def test_load_all_transformables():
-    index_info = IndexInfo("20231101_160337", "1698825817864", prev=IndexInfo("20231101_160337", "1698825817764"), next=IndexInfo("20231101_160337", "1698825817964"))
+    index_info = IndexInfo("20231101_160337", "1698825817864", g_prev=IndexInfo("20231101_160337", "1698825817764"), g_next=IndexInfo("20231101_160337", "1698825817964"))
+    data_root = Path("tests/prefusion/dataset/example_inputs")
+    info_path = Path("tests/prefusion/dataset/mv4d-infos-for-test-001_separated.pkl")
     dataset = GroupBatchDataset(
         name="gbd",
-        data_root=Path("tests/prefusion/dataset/example_inputs"),
-        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001_separated.pkl"),
+        data_root=data_root,
+        info_path=info_path,
         transformables=dict(
             my_camera_images=dict(type="CameraImageSet"),
             my_ego_poses=dict(type="EgoPoseSet")
         ),
         transforms=[DummyTransform(scope="group")],
         model_feeder=BaseModelFeeder(),
-        group_sampler=IndexGroupSampler(phase="val", possible_group_sizes=[4], possible_frame_intervals=[2]),
+        group_sampler=IndexGroupSampler(phase="val", possible_group_sizes=(4,), possible_frame_intervals=(2,)),
         batch_size=2,
     )
 
@@ -101,17 +111,18 @@ def test_load_all_transformables():
 class CustomizedEgoPoseLoader:
     def __init__(self, data_root): self.data_root = data_root
 
-    def load(self, name: str, scene_data, frame_data, index_info, **kwargs):
-        cur_frame = frame_data[index_info.frame_id]
-        return cur_frame["ego_pose"]["rotation"], cur_frame["ego_pose"]["translation"]
+    def load(self, name: str, frame_info, frame_data, index_info, **kwargs):
+        return frame_data["ego_pose"]["rotation"], frame_data["ego_pose"]["translation"]
 
 
 def test_load_all_transformables_customized_loader():
-    index_info = IndexInfo("20231101_160337", "1698825817864", prev=IndexInfo("20231101_160337", "1698825817764"), next=IndexInfo("20231101_160337", "1698825817964"))
+    index_info = IndexInfo("20231101_160337", "1698825817864", g_prev=IndexInfo("20231101_160337", "1698825817764"), g_next=IndexInfo("20231101_160337", "1698825817964"))
+    data_root = Path("tests/prefusion/dataset/example_inputs")
+    info_path = Path("tests/prefusion/dataset/mv4d-infos-for-test-001_separated.pkl")
     dataset = GroupBatchDataset(
         name="gbd",
-        data_root=Path("tests/prefusion/dataset/example_inputs"),
-        info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001_separated.pkl"),
+        data_root=data_root,
+        info_path=info_path,
         transformables=dict(
             single_frame_ego_pose=dict(
                 type="EgoPose",
@@ -141,7 +152,7 @@ def test_dataset_with_test_scene_by_scene_bs1():
         info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001_separated.pkl"),
         transformables=dict(
             my_camera_images=dict(type="CameraImageSet"),
-            my_ego_poses=dict(type="EgoPoseSet")
+            my_ego_poses=dict(type="EgoPoseSet", loader=dict(type="EgoPoseSetLoader", prev_window_size=15, next_window_size=15))
         ),
         transforms=[DummyTransform(scope="group")],
         model_feeder=BaseModelFeeder(),
@@ -178,7 +189,7 @@ def test_dataset_with_test_scene_by_scene_bs2():
         info_path=Path("tests/prefusion/dataset/mv4d-infos-for-test-001_separated.pkl"),
         transformables=dict(
             my_camera_images=dict(type="CameraImageSet", loader=dict(type="CameraImageSetLoader", data_root=tmpdir)), # if providing no loader, dataset._build_transformable_loader would cache and reuse other test caes's loader
-            my_ego_poses=dict(type="EgoPoseSet")
+            my_ego_poses=dict(type="EgoPoseSet", loader=dict(type="EgoPoseSetLoader", prev_window_size=15, next_window_size=15))
         ),
         transforms=[DummyTransform(scope="group")],
         model_feeder=BaseModelFeeder(),
@@ -219,7 +230,7 @@ def test_dataset_with_test_scene_by_scene_2_scenes():
         info_path=tmpdir / "mv4d-infos-for-test-001_separated.pkl",
         transformables=dict(
             my_camera_images=dict(type="CameraImageSet", loader=dict(type="CameraImageSetLoader", data_root=tmpdir)), # if providing no loader, dataset._build_transformable_loader would cache and reuse other test caes's loader
-            my_ego_poses=dict(type="EgoPoseSet")
+            my_ego_poses=dict(type="EgoPoseSet", loader=dict(type="EgoPoseSetLoader", prev_window_size=15, next_window_size=15))
         ),
         transforms=[DummyTransform(scope="group")],
         model_feeder=BaseModelFeeder(),
