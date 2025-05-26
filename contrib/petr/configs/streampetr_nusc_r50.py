@@ -89,9 +89,9 @@ transformables = dict(
 train_dataset = dict(
     type="GroupBatchDataset",
     name="MvParkingTest",
-    data_root="/data/datasets/nuScenes",
-    info_path="/data/datasets/nuScenes/nusc_train_info_separated.pkl",
-    # info_path="/data/datasets/nuScenes/nusc_scene1087_train_info_separated.pkl",
+    data_root="/ssd4/datasets/nuScenes",
+    info_path="/ssd4/datasets/nuScenes/nusc_train_info_separated.pkl",
+    # info_path="/ssd4/datasets/nuScenes/nusc_scene1087_train_info_separated.pkl",
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
@@ -106,6 +106,11 @@ train_dataset = dict(
     transformables=transformables,
     transforms=[
         dict(type='BGR2RGB'),
+        dict(type='RandomRotateSpace', angles=(0, 0, 90), prob_inverse_cameras_rotation=0),
+        dict(type='RandomMirrorSpace'),
+        dict(type='RandomImageISP', prob=0.1),
+        dict(type='RandomSetIntrinsicParam', prob=0.1, jitter_ratio=0.01),
+        dict(type='RandomSetExtrinsicParam', prob=0.1, angle=1, translation=0.02)
     ],
     group_sampler=dict(type="IndexGroupSampler",
                         phase="train",
@@ -117,8 +122,8 @@ train_dataset = dict(
 val_dataset = dict(
     type="GroupBatchDataset",
     name="MvParkingTest",
-    data_root="/data/datasets/nuScenes",
-    info_path="/data/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
+    data_root="/ssd4/datasets/nuScenes",
+    info_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
@@ -144,8 +149,8 @@ val_dataset = dict(
 test_dataset = dict(
     type="GroupBatchDataset",
     name="MvParkingTest",
-    data_root="/data/datasets/nuScenes",
-    info_path="/data/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
+    data_root="/ssd4/datasets/nuScenes",
+    info_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
@@ -162,7 +167,7 @@ test_dataset = dict(
         dict(type='BGR2RGB'),
     ],
     group_sampler=dict(type="SequentialSceneFrameGroupSampler",
-                        phase="test_scene_by_scene"),
+                       phase="test_scene_by_scene"),
     batch_size=1,
 )
 
@@ -192,10 +197,6 @@ test_dataloader = dict(
     persistent_workers=False,
     pin_memory=True,
 )
-
-train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=num_epochs, val_interval=-1)  # -1 note don't eval
-val_cfg = dict(type="GroupBatchValLoop")
-test_cfg = dict(type="GroupBatchInferLoop")
 
 model = dict(
     type="StreamPETR",
@@ -322,6 +323,10 @@ env_cfg = dict(
     mp_cfg=dict(mp_start_method="fork", opencv_num_threads=0),
     dist_cfg=dict(backend="nccl"),
 )
+
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=num_epochs, val_interval=-1)  # -1 note don't eval
+val_cfg = dict(type="GroupBatchValLoop")
+test_cfg = dict(type="GroupBatchInferLoop")
 
 optim_wrapper = dict(
     type="OptimWrapper",

@@ -75,9 +75,23 @@ class StreamPETR(BaseModel):
         self.stride = stride
         self.position_level = position_level
 
-    def forward(self, *, index_info=None, camera_images=None, bbox_3d=None, ego_poses=None, meta_info=None, mode="loss", **kwargs):
+    def forward(self, *, index_info=None, camera_images=None, bbox_3d=None, bbox_2d=None, bbox_center_2d=None, ego_poses=None, meta_info=None, mode="loss", **kwargs):
         B, (N, C, H, W) = len(camera_images), camera_images[0].shape
         camera_images = torch.vstack([i.unsqueeze(0) for i in camera_images]).reshape(B * N, C, H, W)
+
+        # FIXME: Visualize 2D boxes
+        # import cv2
+        # import matplotlib.pyplot as plt
+        # im = (camera_images[3].cpu().numpy().transpose(1, 2, 0) * np.array([58.395, 57.120, 57.375]) + np.array([123.675, 116.280, 103.530])).astype(np.uint8)
+        # im = np.ascontiguousarray(im)
+        # bboxes = bbox_2d[0][3]
+        # for bx in bboxes:
+        #     cv2.rectangle(im, (int(bx[0]), int(bx[1])), (int(bx[2]), int(bx[3])), (0, 255, 0), 2)
+        # plt.imshow(im)
+        # plt.savefig("2dbbox_vis.png")
+        # plt.close()
+        # FIXME
+
         im_size = camera_images.shape[-2:][::-1]
         img_feats = self.extract_img_feat(camera_images)
 
@@ -141,10 +155,14 @@ class StreamPETR(BaseModel):
                 logger.error(f"index_info: {index_info}")
                 print(e)
                 raise
-            # if self.with_img_roi_head:
-            #     loss2d_inputs = [gt_bboxes, gt_labels, centers2d, depths, outs_roi, img_metas]
-            #     losses2d = self.img_roi_head.loss(*loss2d_inputs)
-            #     losses.update(losses2d)
+            if self.roi_head:
+                gt_bboxes = [[boxes.to(device=_device, dtype=torch.float32) for boxes in batch]for batch in bbox_2d]
+                gt_labels = [[cls.to(device=_device, dtype=torch.int64) for cls in batch['bbox_2d']['classes']] for batch in meta_info]
+                centers2d = [[cnts.to(device=_device, dtype=torch.float32) for cnts in batch]for batch in bbox_center_2d]
+                dummy_depths = [[torch.tensor([], device=_device, dtype=torch.float32) for _ in m['bbox_2d']['classes']] for m in meta_info]
+                loss2d_inputs = [gt_bboxes, gt_labels, centers2d, dummy_depths, outs_roi, img_metas]
+                losses2d = self.roi_head.loss(*loss2d_inputs)
+                losses.update(losses2d)
 
             return losses
         if mode == "predict":

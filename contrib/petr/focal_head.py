@@ -394,6 +394,9 @@ class FocalHead(AnchorFreeHead):
         bboxes_gt = bbox_cxcywh_to_xyxy(bbox_targets) * factors
 
         # regression IoU loss, defaultly GIoU loss
+        bboxes = bboxes.float()
+        bboxes_gt = bboxes_gt.float()
+        bbox_weights = bbox_weights.float()
         loss_iou = self.loss_iou2d(bboxes, bboxes_gt, bbox_weights, avg_factor=num_total_pos)
 
         iou_score = bbox_overlaps(bboxes_gt, bboxes, is_aligned=True).reshape(-1)
@@ -406,6 +409,9 @@ class FocalHead(AnchorFreeHead):
             cls_avg_factor = reduce_mean(cls_scores.new_tensor([cls_avg_factor]))
         cls_avg_factor = max(cls_avg_factor, 1)
 
+        cls_scores = cls_scores.float()
+        labels = labels.long()
+        label_weights = label_weights.float()
         loss_cls = self.loss_cls2d(cls_scores, (labels, iou_score.detach()), label_weights, avg_factor=cls_avg_factor)
         # Compute the average number of gt boxes across all gpus, for
         # normalization purposes
@@ -598,7 +604,7 @@ class FocalHead(AnchorFreeHead):
         factor = bbox_pred.new_tensor([img_w, img_h, img_w, img_h]).unsqueeze(0)
         pos_gt_bboxes_normalized = sampling_result.pos_gt_bboxes / factor
         pos_gt_bboxes_targets = bbox_xyxy_to_cxcywh(pos_gt_bboxes_normalized)
-        bbox_targets[pos_inds] = pos_gt_bboxes_targets
+        bbox_targets[pos_inds] = pos_gt_bboxes_targets.to(dtype=torch.float16)
 
         # centers2d target
         centers2d_targets = bbox_pred.new_full((num_bboxes, 2), 0.0, dtype=torch.float32)
@@ -609,5 +615,5 @@ class FocalHead(AnchorFreeHead):
         else:
             centers2d_labels = centers2d[sampling_result.pos_assigned_gt_inds.long(), :]
         centers2d_labels_normalized = centers2d_labels / factor[:, 0:2]
-        centers2d_targets[pos_inds] = centers2d_labels_normalized
+        centers2d_targets[pos_inds] = centers2d_labels_normalized.to(dtype=torch.float32)
         return (labels, label_weights, bbox_targets, bbox_weights, centers2d_targets, pos_inds, neg_inds)

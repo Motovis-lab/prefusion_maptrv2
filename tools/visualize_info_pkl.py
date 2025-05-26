@@ -12,15 +12,10 @@ from easydict import EasyDict as edict
 from loguru import logger
 from copious.io.fs import ensured_path
 from copious.cv.geometry import Box3d, points3d_to_homo
-from copious.cv.camera_model import FisheyeCameraModel
 from copious.io.parallelism import maybe_multiprocessing
 
 from prefusion.dataset.utils import T4x4
-
-
-class NotOnImageError(Exception):
-    pass
-
+from prefusion.utils.visualization import fisheye_project, pinhole_project, PointNotOnImageError
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -126,10 +121,6 @@ def _draw_3d_polyline(img, vertices, color=(0, 255, 0)):
     cv2.circle(img, (int(next_vertex[0]), int(next_vertex[1])), 2, color, -1)
 
 
-def K3x3(cx, cy, fx, fy):
-    return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
-
-
 def _plot_bbox_bev_of_single_frame(data_args):
     bbox_3d, ego_pose, save_path = data_args
     ego2world = T4x4(ego_pose["rotation"], ego_pose["translation"])
@@ -215,7 +206,7 @@ def _plot_bbox_2d_of_single_frame(data_args):
         bbox_corners = points3d_to_homo(bbox.corners)
         try:
             im_coords = _project_points_to_image(bbox_corners, calib, (w, h))
-        except NotOnImageError:
+        except PointNotOnImageError:
             continue
         _draw_3d_box(im, im_coords)
 
@@ -231,7 +222,7 @@ def _plot_polyline_2d_of_single_frame(data_args):
         vertices = points3d_to_homo(pl["points"])
         try:
             im_coords = _project_points_to_image(vertices, calib, (w, h))
-        except NotOnImageError:
+        except PointNotOnImageError:
             continue
         _draw_3d_polyline(im, im_coords)
 
@@ -240,59 +231,9 @@ def _plot_polyline_2d_of_single_frame(data_args):
 
 def _project_points_to_image(points, calib, im_size):
     if calib["camera_type"] == "PerspectiveCamera":
-        im_coords = pinhole_project(points, calib, im_size)
+        im_coords = pinhole_project(points, calib["extrinsic"], calib["intrinsic"], im_size)
     elif calib["camera_type"] == "FisheyeCamera":
-        im_coords = fisheye_project(points, calib, im_size)
-    return im_coords
-
-
-def im_pts_within_image(pts, im_size):
-    w, h = im_size
-    return (pts[:, 0] >= 0) & (pts[:, 0] < w) & (pts[:, 1] >= 0) & (pts[:, 1] < h)
-
-
-def pinhole_project(points_homo, calib, im_size, conservative=True):
-    cam_extr, cam_intr = T4x4(*calib["extrinsic"]), K3x3(*calib["intrinsic"][:4])
-    T_cam_ego = np.linalg.inv(cam_extr)
-    cam_coords = (T_cam_ego @ points_homo.T).T[:, :3]
-    cam_coords = check_camera_coords_visibility_on_image(cam_coords, conservative)
-    normalized_cam_coords = cam_coords[:, :2] / cam_coords[:, 2:3]
-    im_coords = (cam_intr[:2, :2] @ normalized_cam_coords.T).T + cam_intr[:2, 2]
-    im_coords = check_im_coords_visibility_on_image(im_coords, im_size, conservative)
-    return im_coords
-
-
-def fisheye_project(points_homo, calib, im_size, conservative=True):
-    pp, focal, inv_poly = calib["intrinsic"][:2], calib["intrinsic"][2:4], calib["intrinsic"][4:]
-    cam_extr = T4x4(*calib["extrinsic"])
-    T_cam_ego = np.linalg.inv(cam_extr)
-    cam_coords = (T_cam_ego @ points_homo.T).T[:, :3]
-    cam_coords = check_camera_coords_visibility_on_image(cam_coords, conservative)
-    cam_model = FisheyeCameraModel(pp, focal, inv_poly, im_size, 180)
-    im_coords = cam_model.project_points(cam_coords)
-    im_coords = check_im_coords_visibility_on_image(im_coords, im_size, conservative)
-    return im_coords
-
-
-def check_camera_coords_visibility_on_image(cam_coords, conservative=True):
-    if conservative:
-        if (cam_coords[:, 2] < 0).any():
-            raise NotOnImageError
-    else:
-        if (cam_coords[:, 2] < 0).all():
-            raise NotOnImageError
-        cam_coords = cam_coords[cam_coords[:, 2] >= 0]
-    return cam_coords
-
-
-def check_im_coords_visibility_on_image(im_coords, im_size, conservative=True):
-    if conservative:
-        if not im_pts_within_image(im_coords, im_size).all():
-            raise NotOnImageError
-    else:
-        if not im_pts_within_image(im_coords, im_size).any():
-            raise NotOnImageError
-        im_coords = im_coords[im_pts_within_image(im_coords, im_size)]
+        im_coords = fisheye_project(points, calib["extrinsic"], calib["intrinsic"], im_size)
     return im_coords
 
 
