@@ -57,11 +57,6 @@ model_config = dict(
 
 import torch
 from prefusion.registry import MODELS, DATASETS
-from contrib.pretrain.models.vovnet import VoVNet
-from pathlib import Path
-from mmengine.dataset import Compose
-from contrib.pretrain.datasets.dataset import PretrainDataset_FrontData
-
 
 def test_front_model():
     # Create a dummy input tensor

@@ -1,6 +1,5 @@
 import pytest
 from pathlib import Path
-from mmengine.dataset import Compose
 from contrib.pretrain.datasets.dataset import PretrainDataset_FrontData
 
 
