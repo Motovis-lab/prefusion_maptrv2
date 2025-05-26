@@ -33,7 +33,7 @@ val_pipeline = [
         keep_ratio=True),
     dict(type='mmdet.PackDetInputs')
 ]
-batch_size = 8
+batch_size = 4
 
 dataset_front = dict(
     type=dataset_front_type,
@@ -82,7 +82,8 @@ data_preprocessor=dict(
         mean=[128, 128, 128],
         std=[255, 255, 255],
         bgr_to_rgb=True,
-        pad_size_divisor=32
+        pad_size_divisor=32,
+        batch_augments=batch_augments
         )
 
 model = dict(
