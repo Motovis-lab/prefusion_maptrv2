@@ -7,7 +7,7 @@ from contrib.pretrain.datasets.dataset import PretrainDataset_FrontData
 def test_pretrain_dataset_frontdata_load_data_list():
     dataset = PretrainDataset_FrontData(
         reduce_zero_label=True,
-        data_root="/home/wuhan/prefusion",
+        data_root="./",
         ann_file="tests/contrib/pretrain/index.txt",
         pipeline=[],
         test_mode=False
