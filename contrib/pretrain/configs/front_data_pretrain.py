@@ -33,7 +33,7 @@ val_pipeline = [
         keep_ratio=True),
     dict(type='mmdet.PackDetInputs')
 ]
-batch_size = 4
+batch_size = 24
 
 dataset_front = dict(
     type=dataset_front_type,
@@ -41,13 +41,16 @@ dataset_front = dict(
     ann_file="front_data_index.txt",
     # ann_file="tests/contrib/pretrain/index.txt",
     pipeline=train_pipeline,
-    reduce_zero_label=False
+    reduce_zero_label=False,
+    lazy_init=True,
 )
 
 train_dataloader = dict(
     batch_size=batch_size,
     num_workers=8,
     persistent_workers=True,
+    pin_memory=True,
+    drop_last=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     # batch_sampler=dict(type="SameSourceBatchSampler", drop_last=True),
     # dataset=dict(
@@ -62,6 +65,8 @@ val_dataloader = dict(
     batch_size=batch_size,
     num_workers=8,
     persistent_workers=True,
+    pin_memory=True,
+    drop_last=False,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
         type=dataset_front_type,
