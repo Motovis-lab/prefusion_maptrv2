@@ -15,7 +15,7 @@ jobs:
 
       # Pull your pre-built Docker image
       - name: Pull Docker image
-        run: docker pull brianlan/prefusion:ci-v13
+        run: docker pull brianlan/prefusion:ci-v15
 
       # Run pytest inside the Docker container
       - name: Run pytest
@@ -23,5 +23,5 @@ jobs:
           docker run --rm \
             -v "$(pwd):/workspace" \
             -w /workspace \
-            brianlan/prefusion:ci-v13 \
+            brianlan/prefusion:ci-v15 \
             python -m pytest tests --junitxml=report.xml --cov=./ --cov-report=xml
