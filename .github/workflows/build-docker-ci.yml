@@ -17,12 +17,14 @@ jobs:
       - name: Build and push prefusion:ci-latest
         uses: docker/build-push-action@v6
         with:
-          context: ./Dockerfile_ci
+          context: .
+          file: ./Dockerfile_ci
           push: true
           tags: ${{ vars.DOCKER_USERNAME }}/prefusion:ci-latest
       - name: Build and push prefusion:latest
         uses: docker/build-push-action@v6
         with:
-          context: ./Dockerfile
+          context: .
+          file: ./Dockerfile
           push: true
           tags: ${{ vars.DOCKER_USERNAME }}/prefusion:latest
