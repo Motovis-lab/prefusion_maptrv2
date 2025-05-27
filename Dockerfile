@@ -70,6 +70,8 @@ RUN pip install --no-cache-dir copious==0.1.26
 RUN pip install --no-cache-dir mtv4d==0.1.9
 RUN pip install --no-cache-dir polars==1.28.0
 RUN pip install --no-cache-dir mmsegmentation==1.2.2
+RUN pip install --no-cache-dir ftfy==6.3.1
+RUN pip install --no-cache-dir regex==2024.11.6
 
 WORKDIR /workspace
 
