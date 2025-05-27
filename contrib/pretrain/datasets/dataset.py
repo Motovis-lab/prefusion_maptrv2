@@ -176,6 +176,8 @@ class PretrainDataset_FrontData(MMdetBaseDetDataset):
         }
 
         data_list = []
+        if self.ann_file.split('/')[0] != "data":
+            self._join_prefix()
         img_ids = list_from_file(self.ann_file, backend_args=self.backend_args)
         for img_id in img_ids:
             file_name = osp.join(self.data_root, img_id + '.jpg')

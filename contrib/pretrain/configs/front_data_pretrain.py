@@ -5,7 +5,7 @@ custom_imports = dict(
     allow_failed_imports=False
 )
 dataset_front_type = 'PretrainDataset_FrontData'
-data_root = 'data/voc_bm_with_attrs_resized'
+data_root = 'data/voc_bm_with_attrs_resized/'
 # data_root = "/home/wuhan/prefusion"
 
 crop_size = (384, 768)
@@ -33,12 +33,12 @@ val_pipeline = [
         keep_ratio=True),
     dict(type='mmdet.PackDetInputs')
 ]
-batch_size = 24
+batch_size = 4
 
 dataset_front = dict(
     type=dataset_front_type,
     data_root=data_root,
-    ann_file="front_data_index.txt",
+    ann_file="front_data_val_index.txt",
     # ann_file="tests/contrib/pretrain/index.txt",
     pipeline=train_pipeline,
     reduce_zero_label=False,
