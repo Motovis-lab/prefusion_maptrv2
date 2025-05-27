@@ -8,9 +8,15 @@ from collections.abc import Mapping
 from mmengine import Config
 import numpy as np
 from mmengine.dataset import Compose
+from mmdet.datasets import XMLDataset as MMdetBaseDetDataset
+import os.path as osp
+import xml.etree.ElementTree as ET
+from typing import List, Optional, Union
+from mmengine.fileio import get, get_local_path, list_from_file
 
 
-__all__ = ['PretrainDataset', 'PretrainDataset_AVP']
+
+__all__ = ['PretrainDataset', 'PretrainDataset_AVP', "PretrainDataset_FrontData"]
 
 @DATASETS.register_module()
 class PretrainDataset(BaseDataset):
@@ -132,4 +138,55 @@ class PretrainDataset_AVP(PretrainDataset):
                         seg_fields=[],
                         swap_seg_labels=None)
                     data_list.append(data_info)
+        return data_list
+    
+
+
+@DATASETS.register_module()
+class PretrainDataset_FrontData(MMdetBaseDetDataset):
+    METAINFO = {
+        # 'classes':
+        # ('car','mpv','mini','van','bus','lorry','truck','special','adult','child','bicycle','motorcycle',
+        #  'tricycle','bicyclist','tricyclist','trafficsign','tunnel_entry','vehicle_front','vehicle_back',
+        #  'tricycle_front','tricycle_back','wheel','plate','head','mirror','cabin','info_ts','other_ts','cone',
+        #  'bollard','direction_guidance','soft_barrier','guardrail','dontcareregion','front_wheel_point',
+        #  'back_wheel_point','suv')
+        'classes': ('car','mpv','mini','van','bus','lorry','truck','suv')
+    }
+    def __init__(self, reduce_zero_label=False, **kwargs):
+        super().__init__(img_subdir="", ann_subdir="", **kwargs)
+        self.data_root = kwargs.get('data_root')
+        self.ann_file = kwargs.get('ann_file')
+        self.pipeline = Compose(kwargs.get('pipeline'))
+        self.reduce_zero_label = reduce_zero_label
+        self.test_mode = kwargs.get('test_mode', False)
+        self.data_list: List[dict] = []
+        
+    
+    def load_data_list(self) -> List[dict]:
+        """Load annotation from XML style ann_file.
+
+        Returns:
+            list[dict]: Annotation info from XML file.
+        """
+        
+        self.cat2label = {
+            cat: i
+            for i, cat in enumerate(self._metainfo['classes'])
+        }
+
+        data_list = []
+        img_ids = list_from_file(self.ann_file, backend_args=self.backend_args)
+        for img_id in img_ids:
+            file_name = osp.join(self.data_root, img_id + '.jpg')
+            xml_path = osp.join(self.data_root,
+                                img_id + '.xml')
+
+            raw_img_info = {}
+            raw_img_info['img_id'] = img_id
+            raw_img_info['file_name'] = file_name
+            raw_img_info['xml_path'] = xml_path
+
+            parsed_data_info = self.parse_data_info(raw_img_info)
+            data_list.append(parsed_data_info)
         return data_list

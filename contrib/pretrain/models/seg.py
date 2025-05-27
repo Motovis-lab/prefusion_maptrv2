@@ -25,7 +25,7 @@ class SegEncoderDecoder(BaseModel):
         self.decoder_head = MODELS.build(decode_head)
         self.init_weights()
     
-    def forward(self, inputs, data_samples, mode):
+    def forward(self, inputs, data_samples, mode):  # type: ignore
         out = self.decoder_head(self.backbone(inputs))
         # import pdb
         # pdb.set_trace()
