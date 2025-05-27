@@ -12,8 +12,8 @@ def _calc_grid_size(_range, _voxel_size, n_axis=3):
     return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
 
 batch_size = 2
-num_epochs = 50
-possible_group_sizes = [8]
+num_epochs = 1000
+possible_group_sizes = [20]
 voxel_size = [0.2, 0.2, 8]
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_range = (point_cloud_range[2::3], point_cloud_range[0::3][::-1], point_cloud_range[1::3][::-1])
@@ -90,8 +90,8 @@ train_dataset = dict(
     type="GroupBatchDataset",
     name="MvParkingTest",
     data_root="/ssd4/datasets/nuScenes",
-    info_path="/ssd4/datasets/nuScenes/nusc_train_info_separated.pkl",
-    # info_path="/ssd4/datasets/nuScenes/nusc_scene1087_train_info_separated.pkl",
+    # info_path="/ssd4/datasets/nuScenes/nusc_train_info_separated.pkl",
+    info_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
@@ -106,14 +106,14 @@ train_dataset = dict(
     transformables=transformables,
     transforms=[
         dict(type='BGR2RGB'),
-        dict(type='RandomRotateSpace', angles=(0, 0, 90), prob_inverse_cameras_rotation=0),
-        dict(type='RandomMirrorSpace'),
-        dict(type='RandomImageISP', prob=0.1),
-        dict(type='RandomSetIntrinsicParam', prob=0.1, jitter_ratio=0.01),
-        dict(type='RandomSetExtrinsicParam', prob=0.1, angle=1, translation=0.02)
+        # dict(type='RandomRotateSpace', angles=(0, 0, 90), prob_inverse_cameras_rotation=0),
+        # dict(type='RandomMirrorSpace'),
+        # dict(type='RandomImageISP', prob=0.1),
+        # dict(type='RandomSetIntrinsicParam', prob=0.1, jitter_ratio=0.01),
+        # dict(type='RandomSetExtrinsicParam', prob=0.1, angle=1, translation=0.02)
     ],
     group_sampler=dict(type="IndexGroupSampler",
-                        phase="train",
+                        phase="val",
                         possible_group_sizes=possible_group_sizes,
                         possible_frame_intervals=[1]),
     batch_size=batch_size,
@@ -172,8 +172,8 @@ test_dataset = dict(
 )
 
 train_dataloader = dict(
-    num_workers=2,
-    persistent_workers=True,
+    num_workers=0,
+    persistent_workers=False,
     pin_memory=True,
     sampler=dict(type="DefaultSampler"),
     collate_fn=dict(type="collate_dict"),
@@ -345,8 +345,8 @@ optim_wrapper = dict(
 
 ## scheduler configs
 param_scheduler = [
-    dict(type='LinearLR', start_factor=0.1, end_factor=1, by_epoch=False, begin=0, end=1000), # warmup
-    dict(type='CosineAnnealingLR', by_epoch=False, begin=1000, eta_min=1e-5)     # main LR Scheduler
+    dict(type='LinearLR', start_factor=0.1, end_factor=1, by_epoch=False, begin=0, end=500), # warmup
+    dict(type='CosineAnnealingLR', by_epoch=False, begin=500, eta_min=1e-5)     # main LR Scheduler
     # dict(type='PolyLR', by_epoch=False, begin=0, eta_min=0, power=1.0)     # main LR Scheduler
 ]
 
@@ -360,7 +360,7 @@ default_hooks = dict(
     timer=dict(type="IterTimerHook"),
     logger=dict(type="LoggerHook", interval=50),
     param_scheduler=dict(type="ParamSchedulerHook"),
-    checkpoint=dict(type="CheckpointHook", interval=1, save_best="accuracy", rule="greater"),
+    checkpoint=dict(type="CheckpointHook", interval=100, save_best="accuracy", rule="greater"),
     sampler_seed=dict(type="DistSamplerSeedHook"),
 )
 

@@ -4,10 +4,12 @@ import torch
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from mmdet3d.structures.bbox_3d.utils import limit_period
+from copious.cv.geometry import points3d_to_homo, rt2mat
 
 from prefusion.registry import MODEL_FEEDERS
 from prefusion.dataset import BaseModelFeeder
 from prefusion.dataset.transform import CameraImageSet, Bbox3D
+from prefusion.utils.visualization import PointNotOnImageError, pinhole_project, corner_pts_to_img_bbox
 
 __all__ = ["StreamPETRModelFeeder"]
 
@@ -62,9 +64,9 @@ class StreamPETRModelFeeder(BaseModelFeeder):
                     processed_frame["meta_info"][k] = {
                         "camera_ids": cam_ids,
                         "intrinsic": [self._intrinsic_param_to_4x4_mat(cam_im.intrinsic) for cam_im in camera_images],
-                        "extrinsic": [self._extrinsic_param_to_4x4_mat(*cam_im.extrinsic) for cam_im in camera_images],
+                        "extrinsic": [rt2mat(*cam_im.extrinsic, as_homo=True) for cam_im in camera_images],
                         "extrinsic_inv": [
-                            np.linalg.inv(self._extrinsic_param_to_4x4_mat(*cam_im.extrinsic))
+                            np.linalg.inv(rt2mat(*cam_im.extrinsic, as_homo=True))
                             for cam_im in camera_images
                         ],
                     }
@@ -85,6 +87,7 @@ class StreamPETRModelFeeder(BaseModelFeeder):
         if self.T_e_l is not None:
             for frame in processed_frame_batch:
                 frame["meta_info"]["T_ego_lidar"] = self.T_e_l
+                self.derive_2d_bboxes_(frame) # must run before self.convert_model_food_to_lidar_coordsys_, coz' we need the boxes to be in ego coordsys
                 self.convert_model_food_to_lidar_coordsys_(frame)
 
         # Dedicated data handling for Nuscenes data
@@ -102,13 +105,6 @@ class StreamPETRModelFeeder(BaseModelFeeder):
         mat[1, 2] = param[1]
         return mat
 
-    @staticmethod
-    def _extrinsic_param_to_4x4_mat(rotation, translation):
-        mat = np.eye(4)
-        mat[:3, :3] = rotation
-        mat[:3, 3] = translation
-        return mat
-
     def get_boxes_within_visible_range(self, box3d_tensor_dict: dict):
         box_centers = box3d_tensor_dict["xyz_lwh_yaw_vx_vy"][:, :3]
         visible_mask = (
@@ -121,6 +117,7 @@ class StreamPETRModelFeeder(BaseModelFeeder):
     def convert_model_food_to_lidar_coordsys_(self, frame_data: dict):
         self.convert_ego_pose_set_to_lidar_coordsys_(frame_data["ego_poses"])
         self.convert_bbox3d_to_lidar_coordsys_(frame_data["bbox_3d"])
+        self.convert_bbox3d_corners_to_lidar_coordsys_(frame_data["meta_info"]["bbox_3d"]["bbox3d_corners"])
 
     def convert_ego_pose_set_to_lidar_coordsys_(self, ego_pose_set: "EgoPoseSet"):
         if self.T_e_l is None:
@@ -154,7 +151,67 @@ class StreamPETRModelFeeder(BaseModelFeeder):
 
         # convert velocity from ego coordsys to lidar coordsys (do not apply translation to velocity)
         bbox3d[:, 7:9] = (T_l_e[:2, :2] @ bbox3d[:, 7:9].T).T
-    
+
+    def convert_bbox3d_corners_to_lidar_coordsys_(self, bbox3d_corners: torch.Tensor):
+        if self.T_e_l is None:
+            return
+
+        if len(bbox3d_corners) == 0:
+            return
+
+        T_l_e = torch.tensor(np.linalg.inv(self.T_e_l), dtype=torch.float32)
+
+        N = bbox3d_corners.shape[0]
+        bbox3d_corners[:, :, :3] = (T_l_e @ self.to_homo(bbox3d_corners.to(dtype=torch.float32).reshape(-1, 3)[:, :3]).T).T[:, :3].reshape(N, 8, 3)
+
     @staticmethod
     def to_homo(pts: torch.Tensor):
         return torch.cat((pts, torch.ones_like(pts[..., :1])), dim=-1)
+
+    def derive_2d_bboxes_(self, frame_data: dict):
+        cam_ids = frame_data['meta_info']['camera_images']['camera_ids']
+        cam_extrinsics = frame_data['meta_info']['camera_images']['extrinsic']
+        cam_intrinsics = frame_data['meta_info']['camera_images']['intrinsic']
+        # T_w_e = rt2mat(frame_data["ego_poses"].transformables["0"].rotation, frame_data["ego_poses"].transformables["0"].translation, as_homo=True)
+        bboxes_3d_corners = frame_data['meta_info']['bbox_3d']['bbox3d_corners']
+        bboxes_3d = frame_data['bbox_3d']
+        classes_3d = frame_data['meta_info']['bbox_3d']['classes']
+        frame_data["bbox_2d"] = []
+        frame_data["bbox_center_2d"] = []
+        frame_data["meta_info"]["bbox_2d"] = {"classes": []}
+        for cam_id, cam_extr, cam_intr, im in zip(cam_ids, cam_extrinsics, cam_intrinsics, frame_data['camera_images']):
+            im_size = im.shape[-2:][::-1]
+            bboxes_2d = []
+            centers_2d = []
+            classes_2d = []
+            _extr = (cam_extr[:3, :3], cam_extr[:3, 3])
+            _intr = (cam_intr[0, 2], cam_intr[1, 2], cam_intr[0, 0], cam_intr[1, 1])
+            for bx_corners, bx, cls in zip(bboxes_3d_corners, bboxes_3d, classes_3d):
+                try:
+                    corners_on_img = pinhole_project(points3d_to_homo(bx_corners), _extr, _intr, im_size)
+                except PointNotOnImageError:
+                    continue
+                
+                center2d = pinhole_project(points3d_to_homo(bx[:3][None, :]), _extr, _intr, im_size)[0]
+                bbox2d = corner_pts_to_img_bbox(corners_on_img, imsize=im_size)
+
+                # FIXME: Visualize 2D boxes
+                # import cv2
+                # import matplotlib.pyplot as plt
+                # im = (im.numpy().transpose(1, 2, 0) * np.array([58.395, 57.120, 57.375]) + np.array([123.675, 116.280, 103.530])).astype(np.uint8)
+                # im = np.ascontiguousarray(im)
+
+                # cv2.rectangle(im, (int(bbox2d[0]), int(bbox2d[1])), (int(bbox2d[2]), int(bbox2d[3])), (0, 255, 0), 2)
+                # cv2.circle(im, (int(center2d[0]), int(center2d[1])), 5, (255, 0, 0), -1)
+                # plt.imshow(im)
+                # plt.savefig("2dbbox_vis.png")
+                # plt.close()
+                # FIXME
+                
+                bboxes_2d.append(bbox2d)
+                centers_2d.append(center2d)
+                classes_2d.append(cls)
+
+            frame_data["bbox_2d"].append(torch.tensor(bboxes_2d))
+            frame_data["bbox_center_2d"].append(torch.tensor([c for c in centers_2d]))
+            frame_data["meta_info"]["bbox_2d"]["classes"].append(torch.tensor(classes_2d))

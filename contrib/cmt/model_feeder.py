@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 
+from copious.cv.geometry import rt2mat
+
 from prefusion import LidarPoints
 from prefusion.registry import MODEL_FEEDERS
 from prefusion.dataset import BaseModelFeeder
@@ -58,9 +60,9 @@ class CMTModelFeeder(BaseModelFeeder):
                     processed_frame["meta_info"][k] = {
                         "camera_ids": cam_ids,
                         "intrinsic": [self._intrinsic_param_to_4x4_mat(cam_im.intrinsic) for cam_im in camera_images],
-                        "extrinsic": [self._extrinsic_param_to_4x4_mat(*cam_im.extrinsic) for cam_im in camera_images],
+                        "extrinsic": [rt2mat(*cam_im.extrinsic, as_homo=True) for cam_im in camera_images],
                         "extrinsic_inv": [
-                            np.linalg.inv(self._extrinsic_param_to_4x4_mat(*cam_im.extrinsic))
+                            np.linalg.inv(rt2mat(*cam_im.extrinsic, as_homo=True))
                             for cam_im in camera_images
                         ],
                         'cam_inv_poly': [cam_im.intrinsic[4:] for cam_im in camera_images],
@@ -81,11 +83,4 @@ class CMTModelFeeder(BaseModelFeeder):
         mat[1, 1] = param[3]
         mat[0, 2] = param[0]
         mat[1, 2] = param[1]
-        return mat
-
-    @staticmethod
-    def _extrinsic_param_to_4x4_mat(rotation, translation):
-        mat = np.eye(4)
-        mat[:3, :3] = rotation
-        mat[:3, 3] = translation
         return mat

@@ -7,7 +7,7 @@ from mmengine.structures import BaseDataElement
 
 from prefusion import BaseModel
 from prefusion.registry import MODELS
-
+from prefusion.utils.visualization import K3x3
 from .model_utils import *
 
 
@@ -98,9 +98,6 @@ class NuscenesFastRayPlanarSingleFrameModel(BaseModel):
         def im_pts_within_image(pts, im_size):
             w, h = im_size
             return (pts[:, 0] >= 0) & (pts[:, 0] < w) & (pts[:, 1] >= 0) & (pts[:, 1] < h)
-
-        def K3x3(cx, cy, fx, fy):
-            return np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
 
         def check_camera_coords_visibility_on_image(cam_coords, conservative=True):
             if conservative:
