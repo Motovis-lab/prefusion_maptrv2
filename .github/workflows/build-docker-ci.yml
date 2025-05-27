@@ -1,0 +1,28 @@
+name: Build and Push Docker Images
+on:
+  push:
+    branches:
+      - main
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build and push prefusion:ci-latest
+        uses: docker/build-push-action@v6
+        with:
+          context: ./Dockerfile_ci
+          push: true
+          tags: ${{ vars.DOCKER_USERNAME }}/prefusion:ci-latest
+      - name: Build and push prefusion:latest
+        uses: docker/build-push-action@v6
+        with:
+          context: ./Dockerfile
+          push: true
+          tags: ${{ vars.DOCKER_USERNAME }}/prefusion:latest
