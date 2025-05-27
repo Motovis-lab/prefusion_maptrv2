@@ -213,5 +213,5 @@ class StreamPETRModelFeeder(BaseModelFeeder):
                 classes_2d.append(cls)
 
             frame_data["bbox_2d"].append(torch.tensor(bboxes_2d))
-            frame_data["bbox_center_2d"].append(torch.tensor([c for c in centers_2d]))
+            frame_data["bbox_center_2d"].append(torch.tensor(np.array(centers_2d)))
             frame_data["meta_info"]["bbox_2d"]["classes"].append(torch.tensor(classes_2d))

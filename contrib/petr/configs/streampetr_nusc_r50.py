@@ -8,6 +8,9 @@ custom_imports = dict(imports=["prefusion", "contrib.petr", "mmdet", "contrib.cm
 
 backend_args = None
 
+# Add this to enable unused parameter detection for DDP
+find_unused_parameters = True
+
 def _calc_grid_size(_range, _voxel_size, n_axis=3):
     return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
 
@@ -213,7 +216,7 @@ model = dict(
         frozen_stages=-1,
         norm_cfg=dict(type="BN2d", requires_grad=False),
         norm_eval=True,
-        with_cp=True,
+        with_cp=False,
         style="pytorch",
     ),
     img_neck=dict(type="mmdet3d.CPFPN", in_channels=[1024, 2048], out_channels=256, num_outs=2),
@@ -279,7 +282,8 @@ model = dict(
                         ],
                     feedforward_channels=2048,
                     ffn_dropout=0.1,
-                    with_cp=True,  ###use checkpoint to save memory
+                    # with_cp=True,  ###use checkpoint to save memory
+                    with_cp=False,  ### prevent DDP error
                     operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
                                      'ffn', 'norm')),
             )),
