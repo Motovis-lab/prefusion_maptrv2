@@ -40,7 +40,8 @@ class FusionDetMetric(VOCMetric):
         
     def process(self, data_batch, data_samples):
         super().process(data_batch, data_samples)
-        for ind, (ann, pred) in enumerate(self.results):
+        for ind in range(len(data_batch['inputs'])):
+            ann, pred = self.results[ind]
             if random.random() < self.random_show:
                 img = data_batch['inputs'][ind].cpu().detach().numpy().transpose(1, 2, 0)[..., ::-1]
                 img = Image.fromarray(img.astype('uint8'))

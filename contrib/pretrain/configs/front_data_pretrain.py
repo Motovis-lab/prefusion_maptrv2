@@ -42,14 +42,17 @@ dataset_front = dict(
     # ann_file="tests/contrib/pretrain/index.txt",
     pipeline=train_pipeline,
     reduce_zero_label=False,
-    lazy_init=True,
+    lazy_init=False,
 )
+
+persistent_workers=True
+pin_memory=True
 
 train_dataloader = dict(
     batch_size=batch_size,
-    num_workers=8,
-    persistent_workers=True,
-    pin_memory=True,
+    num_workers=16,
+    persistent_workers=persistent_workers,
+    pin_memory=persistent_workers,
     drop_last=True,
     sampler=dict(type='DefaultSampler', shuffle=True),
     # batch_sampler=dict(type="SameSourceBatchSampler", drop_last=True),
@@ -63,9 +66,9 @@ train_dataloader = dict(
 
 val_dataloader = dict(
     batch_size=batch_size,
-    num_workers=8,
-    persistent_workers=True,
-    pin_memory=True,
+    num_workers=16,
+    persistent_workers=persistent_workers,
+    pin_memory=persistent_workers,
     drop_last=False,
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
@@ -107,7 +110,7 @@ model = dict(
         relu_before_extra_convs=True),
     bbox_head=dict(
         type='FusionFCOSHead',
-        num_classes=8,
+        num_classes=3,
         regress_ranges=((-1, 64), (64, 128), (128, 256),
                         (256, 100000000)),
         in_channels=256,
@@ -134,18 +137,18 @@ model = dict(
     test_cfg=dict(
         nms_pre=1000,
         min_bbox_size=0,
-        score_thr=0.5,
+        score_thr=0.3,
         nms=dict(type='nms', iou_threshold=0.6),
         max_per_img=100)
 )
 
 max_epochs = 24
-train_cfg = dict(type="mmengine.EpochBasedTrainLoop",max_epochs=max_epochs, val_interval=2)  # -1 note don't eval
+train_cfg = dict(type="mmengine.EpochBasedTrainLoop",max_epochs=max_epochs, val_interval=1)  # -1 note don't eval
 val_cfg = dict(type="mmengine.ValLoop")
 
 backend_args = None
 
-val_evaluator = dict(type='FusionDetMetric', metric='mAP', eval_mode='11points', random_show=0.001)
+val_evaluator = dict(type='FusionDetMetric', metric='mAP', eval_mode='11points', random_show=0.0001)
 
 debug_mode = False
 
@@ -181,9 +184,9 @@ auto_scale_lr = dict(enable=False, batch_size=32)
 log_processor = dict(type='mmengine.LogProcessor')
 default_hooks = dict(
     timer=dict(type='mmengine.IterTimerHook'),
-    logger=dict(type='LoggerHook', interval=5),
+    logger=dict(type='LoggerHook', interval=50),
     param_scheduler=dict(type='ParamSchedulerHook'),
-    checkpoint=dict(type='ExperimentWiseCheckpointHook', interval=max_epochs))
+    checkpoint=dict(type='ExperimentWiseCheckpointHook', interval=1))
 
 custom_hooks = [
     dict(

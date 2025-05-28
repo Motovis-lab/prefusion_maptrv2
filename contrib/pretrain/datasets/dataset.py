@@ -151,7 +151,12 @@ class PretrainDataset_FrontData(MMdetBaseDetDataset):
         #  'tricycle_front','tricycle_back','wheel','plate','head','mirror','cabin','info_ts','other_ts','cone',
         #  'bollard','direction_guidance','soft_barrier','guardrail','dontcareregion','front_wheel_point',
         #  'back_wheel_point','suv')
-        'classes': ('car','mpv','mini','van','bus','lorry','truck','suv')
+        'classes': ("vehicle", "pedestrian", "bicycle"),
+        'sub_classes': {
+            ('car','mpv','mini','van','bus','lorry','truck','suv'): "vehicle",
+            ('adult', 'child'): "pedestrian",
+            ('bicycle', 'motorcycle', 'tricycle', 'bicyclist', 'tricyclist'): "bicycle"
+        }
     }
     def __init__(self, reduce_zero_label=False, **kwargs):
         super().__init__(img_subdir="", ann_subdir="", **kwargs)
@@ -192,3 +197,57 @@ class PretrainDataset_FrontData(MMdetBaseDetDataset):
             parsed_data_info = self.parse_data_info(raw_img_info)
             data_list.append(parsed_data_info)
         return data_list
+    
+    def _parse_instance_info(self,
+                             raw_ann_info: ET,
+                             minus_one: bool = True) -> List[dict]:
+        """parse instance information.
+
+        Args:
+            raw_ann_info (ElementTree): ElementTree object.
+            minus_one (bool): Whether to subtract 1 from the coordinates.
+                Defaults to True.
+
+        Returns:
+            List[dict]: List of instances.
+        """
+        instances = []
+        for obj in raw_ann_info.findall('object'):
+            instance = {}
+            name = obj.find('name').text
+            if name not in self._metainfo['classes']:
+                continue
+            difficult = obj.find('difficult')
+            difficult = 0 if difficult is None else int(difficult.text)
+            bnd_box = obj.find('bndbox')
+            bbox = [
+                int(float(bnd_box.find('xmin').text)),
+                int(float(bnd_box.find('ymin').text)),
+                int(float(bnd_box.find('xmax').text)),
+                int(float(bnd_box.find('ymax').text))
+            ]
+
+            # VOC needs to subtract 1 from the coordinates
+            if minus_one:
+                bbox = [x - 1 for x in bbox]
+
+            ignore = False
+            if self.bbox_min_size is not None:
+                assert not self.test_mode
+                w = bbox[2] - bbox[0]
+                h = bbox[3] - bbox[1]
+                if w < self.bbox_min_size or h < self.bbox_min_size:
+                    ignore = True
+            if difficult or ignore:
+                instance['ignore_flag'] = 1
+            else:
+                instance['ignore_flag'] = 0
+            instance['bbox'] = bbox
+            sub_classes = list(self._metainfo['sub_classes'].keys())
+            for sub in sub_classes:
+                if name in sub:
+                    name = self._metainfo['sub_classes'][sub]
+                    break
+            instance['bbox_label'] = self.cat2label[name]
+            instances.append(instance)
+        return instances
