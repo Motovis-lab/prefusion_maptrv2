@@ -153,10 +153,12 @@ class PretrainDataset_FrontData(MMdetBaseDetDataset):
         #  'back_wheel_point','suv')
         'classes': ("vehicle", "pedestrian", "bicycle"),
         'sub_classes': {
-            ('car','mpv','mini','van','bus','lorry','truck','suv'): "vehicle",
+            ('car','mpv','mini','van','bus','lorry','truck','suv', 'special'): "vehicle",
             ('adult', 'child'): "pedestrian",
             ('bicycle', 'motorcycle', 'tricycle', 'bicyclist', 'tricyclist'): "bicycle"
-        }
+        },
+        "all_det_classes": ('car','mpv','mini','van','bus','lorry','truck','suv','special',
+                            'adult','child','bicycle','motorcycle','tricycle', 'bicyclist', 'tricyclist')
     }
     def __init__(self, reduce_zero_label=False, **kwargs):
         super().__init__(img_subdir="", ann_subdir="", **kwargs)
@@ -212,10 +214,11 @@ class PretrainDataset_FrontData(MMdetBaseDetDataset):
             List[dict]: List of instances.
         """
         instances = []
+        sub_classes = list(self._metainfo['sub_classes'].keys())
         for obj in raw_ann_info.findall('object'):
             instance = {}
             name = obj.find('name').text
-            if name not in self._metainfo['classes']:
+            if name not in self._metainfo['all_det_classes']:
                 continue
             difficult = obj.find('difficult')
             difficult = 0 if difficult is None else int(difficult.text)
@@ -243,7 +246,6 @@ class PretrainDataset_FrontData(MMdetBaseDetDataset):
             else:
                 instance['ignore_flag'] = 0
             instance['bbox'] = bbox
-            sub_classes = list(self._metainfo['sub_classes'].keys())
             for sub in sub_classes:
                 if name in sub:
                     sub_name = self._metainfo['sub_classes'][sub]
