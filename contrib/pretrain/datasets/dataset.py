@@ -246,8 +246,8 @@ class PretrainDataset_FrontData(MMdetBaseDetDataset):
             sub_classes = list(self._metainfo['sub_classes'].keys())
             for sub in sub_classes:
                 if name in sub:
-                    name = self._metainfo['sub_classes'][sub]
+                    sub_name = self._metainfo['sub_classes'][sub]
                     break
-            instance['bbox_label'] = self.cat2label[name]
+            instance['bbox_label'] = self.cat2label[sub_name]
             instances.append(instance)
         return instances
