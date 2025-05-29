@@ -15,6 +15,7 @@ from mmdet.datasets.transforms import LoadAnnotations
 from mmdet.datasets.transforms import PackDetInputs
 from mmdet.models.task_modules import DistancePointBBoxCoder
 from mmcv.transforms.loading import LoadImageFromFile
+from mmdet.models.losses import FocalLoss
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 

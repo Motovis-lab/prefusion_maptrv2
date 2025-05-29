@@ -128,6 +128,7 @@ model = dict(
             gamma=2.0,
             alpha=0.25,
             loss_weight=1.0),
+        loss_cls_weight = [1., 3.5, 3.5],
         loss_bbox=dict(type='mmdet.GIoULoss', loss_weight=1.0),
         bbox_coder=dict(type='mmdet.DistancePointBBoxCoder'),
         loss_centerness=dict(
