@@ -90,6 +90,7 @@ class FusionFCOSHead(AnchorFreeHead):
                      type='CrossEntropyLoss',
                      use_sigmoid=True,
                      loss_weight=1.0),
+                 loss_cls_weight: List = [1.,2.,2.],
                  norm_cfg: ConfigType = dict(
                      type='GN', num_groups=32, requires_grad=True),
                  cls_predictor_cfg=None,
@@ -109,6 +110,8 @@ class FusionFCOSHead(AnchorFreeHead):
         self.norm_on_bbox = norm_on_bbox
         self.centerness_on_reg = centerness_on_reg
         self.cls_predictor_cfg = cls_predictor_cfg
+        self.loss_cls_weight = torch.tensor(loss_cls_weight, dtype=torch.float32)
+        assert self.loss_cls_weight.shape[0] == num_classes, "The length of loss_cls_weight should be equal to num_classes."
         super().__init__(
             num_classes=num_classes,
             in_channels=in_channels,
@@ -266,8 +269,9 @@ class FusionFCOSHead(AnchorFreeHead):
         num_pos = torch.tensor(
             len(pos_inds), dtype=torch.float, device=bbox_preds[0].device)
         num_pos = max(reduce_mean(num_pos), 1.0)
+        self.loss_cls_weight_ = self.loss_cls_weight.expand_as(flatten_cls_scores).to(flatten_cls_scores.device)
         loss_cls = self.loss_cls(
-            flatten_cls_scores, flatten_labels, avg_factor=num_pos)
+            flatten_cls_scores, flatten_labels, weight=self.loss_cls_weight_, avg_factor=num_pos)
 
         if getattr(self.loss_cls, 'custom_accuracy', False):
             acc = self.loss_cls.get_accuracy(flatten_cls_scores,
