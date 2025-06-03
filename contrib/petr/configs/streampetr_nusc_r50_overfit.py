@@ -8,6 +8,9 @@ custom_imports = dict(imports=["prefusion", "contrib.petr", "mmdet", "contrib.cm
 
 backend_args = None
 
+# Add this to enable unused parameter detection for DDP
+find_unused_parameters = True
+
 def _calc_grid_size(_range, _voxel_size, n_axis=3):
     return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
 

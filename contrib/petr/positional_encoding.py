@@ -20,7 +20,7 @@ def pos2posemb3d(pos, num_pos_feats=128, temperature=10000):
     pos_x = torch.stack((pos_x[..., 0::2].sin(), pos_x[..., 1::2].cos()), dim=-1).flatten(-2)
     pos_y = torch.stack((pos_y[..., 0::2].sin(), pos_y[..., 1::2].cos()), dim=-1).flatten(-2)
     pos_z = torch.stack((pos_z[..., 0::2].sin(), pos_z[..., 1::2].cos()), dim=-1).flatten(-2)
-    posemb = torch.cat((pos_y, pos_x, pos_z), dim=-1)
+    posemb = torch.cat((pos_y, pos_x, pos_z), dim=-1) # FIXME: possible bug, may need to change the order to (pos_x, pos_y, pos_z)
     return posemb
 
 def pos2posemb1d(pos, num_pos_feats=256, temperature=10000):
