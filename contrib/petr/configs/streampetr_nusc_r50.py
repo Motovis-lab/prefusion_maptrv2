@@ -216,7 +216,7 @@ model = dict(
         frozen_stages=-1,
         norm_cfg=dict(type="BN2d", requires_grad=False),
         norm_eval=True,
-        with_cp=False,
+        with_cp=True,
         style="pytorch",
     ),
     img_neck=dict(type="mmdet3d.CPFPN", in_channels=[1024, 2048], out_channels=256, num_outs=2),
@@ -283,7 +283,7 @@ model = dict(
                     feedforward_channels=2048,
                     ffn_dropout=0.1,
                     # with_cp=True,  ###use checkpoint to save memory
-                    with_cp=False,  ### prevent DDP error
+                    with_cp=True,  ### prevent DDP error
                     operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
                                      'ffn', 'norm')),
             )),

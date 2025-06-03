@@ -3,6 +3,12 @@ import logging
 import os
 import os.path as osp
 
+# Monkey-patch torch.utils.checkpoint to default to non-reentrant mode to avoid DDP duplicate-ready errors
+# Details for the gradient checkpointing behavior controled by `use_reentrant` can be found in: https://docs.pytorch.org/docs/stable/checkpoint.html
+import torch.utils.checkpoint as cp
+_orig_checkpoint = cp.checkpoint
+cp.checkpoint = lambda func, *args, **kwargs: _orig_checkpoint(func, *args, use_reentrant=False, **kwargs)
+
 from mmengine.config import Config, DictAction
 from mmengine.logging import print_log
 from prefusion.registry import RUNNERS
