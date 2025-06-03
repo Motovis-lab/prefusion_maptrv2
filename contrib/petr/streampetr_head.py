@@ -428,15 +428,15 @@ class StreamPETRHead(AnchorFreeHead):
         focal = topk_gather(focal, topk_indexes)
 
         # for spatial alignment in focal petr
-        # FIXME: Why?? Why?? Why?? Why?? 应该是对应论文图4上的pose, time, velo才对？
-        cone = torch.cat([focal, coords3d[..., -3:], coords3d[..., -90:-87]], dim=-1)
+        # Note: The purpose of this operation is to encode the the camera rays (extrinsics) into context. We assume that sampling two points is able to define a camera ray
+        cone = torch.cat([focal, coords3d[..., -3:], coords3d[..., -90:-87]], dim=-1) # [fx, fy, x1, y1, z1, x2, y2, z2]
 
         return coords_position_embeding, cone
 
     def temporal_alignment(self, query_pos, tgt, reference_points):
         B = query_pos.size(0)
 
-        temp_reference_point = (self.memory_reference_point - self.pc_range[:3]) / (self.pc_range[3:6] - self.pc_range[0:3])
+        temp_reference_point = (self.memory_reference_point - self.pc_range[:3]) / (self.pc_range[3:6] - self.pc_range[0:3]) # normalized to [0, 1]
         temp_pos = self.query_embedding(pos2posemb3d(temp_reference_point))
         temp_memory = self.memory_embedding
         rec_ego_pose = torch.eye(4, device=query_pos.device).unsqueeze(0).unsqueeze(0).repeat(B, query_pos.size(1), 1, 1)
@@ -495,7 +495,7 @@ class StreamPETRHead(AnchorFreeHead):
 
                 known_bbox_center = known_bbox_center.clamp(min=0.0, max=1.0)
                 mask = torch.norm(rand_prob, 2, 1) > self.split
-                known_labels[mask] = self.num_classes
+                known_labels[mask] = self.num_classes # discussion: https://github.com/exiawsh/StreamPETR/issues/233
 
             single_pad = int(max(known_num))
             pad_size = int(single_pad * self.scalar)
@@ -615,13 +615,13 @@ class StreamPETRHead(AnchorFreeHead):
         memory = self.memory_embed(memory)
 
         # spatial_alignment in focal petr
-        memory = self.spatial_alignment(memory, cone) # MLN
+        memory = self.spatial_alignment(memory, cone) # MLN (对应Focal-PETR中的spatial alignment module，其形式与MLN正好非常相似)
         pos_embed = self.featurized_pe(pos_embed, memory)
 
         reference_points = self.reference_points.weight
         reference_points, attn_mask, mask_dict = self.prepare_for_dn(B, reference_points, gt_bboxes_3d, gt_labels)
         query_pos = self.query_embedding(pos2posemb3d(reference_points))
-        tgt = torch.zeros_like(query_pos)
+        tgt = torch.zeros_like(query_pos) # The tgt is context embedding of object queries, may be of no use at all per the author (https://github.com/exiawsh/StreamPETR/issues/119)
 
         # prepare for the tgt and query_pos using mln.
         tgt, query_pos, reference_points, temp_memory, temp_pos, rec_ego_pose = self.temporal_alignment(query_pos, tgt, reference_points)
