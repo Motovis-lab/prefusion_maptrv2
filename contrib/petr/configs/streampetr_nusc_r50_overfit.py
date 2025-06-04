@@ -4,7 +4,7 @@ experiment_name = "stream_petr_nusc_r50"
 
 _base_ = "../../../configs/default_runtime.py"
 
-custom_imports = dict(imports=["prefusion", "contrib.petr", "mmdet", "contrib.cmt"], allow_failed_imports=False)
+custom_imports = dict(imports=["prefusion", "contrib.petr", "mmdet"], allow_failed_imports=False)
 
 backend_args = None
 
@@ -307,7 +307,7 @@ model = dict(
             point_cloud_range=point_cloud_range,
             out_size_factor=4,
             assigner=dict(
-                type="mmdet.HungarianAssigner3D",
+                type="HungarianAssigner3D",
                 cls_cost=dict(type="FocalLossCost", weight=2.0),
                 reg_cost=dict(type="BBox3DL1Cost", weight=0.25),
                 iou_cost=dict(type="IoUCost", weight=0.0 ),  # Fake cost. This is just to make it compatible with DETR head.

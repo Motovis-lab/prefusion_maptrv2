@@ -4,7 +4,6 @@
 # ---------------------------------------------
 import torch
 
-from mmdet.models.task_modules import build_match_cost
 from mmdet.models.task_modules.assigners import AssignResult, BaseAssigner
 from mmdet.structures.bbox.transforms import bbox_cxcywh_to_xyxy
 
@@ -51,9 +50,9 @@ class HungarianAssigner2D(BaseAssigner):
                  iou_cost=None,
                  centers2d_cost=None):
         self.cls_cost = MODELS.build(cls_cost)
-        self.reg_cost = build_match_cost(reg_cost)
-        self.iou_cost = build_match_cost(iou_cost)
-        self.centers2d_cost = build_match_cost(centers2d_cost)
+        self.reg_cost = TASK_UTILS.build(reg_cost)
+        self.iou_cost = TASK_UTILS.build(iou_cost)
+        self.centers2d_cost = TASK_UTILS.build(centers2d_cost)
 
     def assign(self,
                bbox_pred,

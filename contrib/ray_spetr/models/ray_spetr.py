@@ -4,6 +4,7 @@ import torch
 from mmdet3d.structures.ops.transforms import bbox3d2result
 from mmengine.structures import BaseDataElement
 import numpy as np
+import torch.nn as nn
 
 
 __all__ = ['RaySPETR']
@@ -12,7 +13,7 @@ __all__ = ['RaySPETR']
 class RaySPETR(StreamPETR):
     def __init__(self, *args, **kwargs):
         super(RaySPETR, self).__init__(*args, **kwargs)
-
+        
     def forward(self, *, index_info=None, camera_images=None, bbox_3d=None, bbox_2d=None, bbox_center_2d=None, ego_poses=None, meta_info=None, mode="loss", **kwargs):
         B, (N, C, H, W) = len(camera_images), camera_images[0].shape
         camera_images = torch.vstack([i.unsqueeze(0) for i in camera_images]).reshape(B * N, C, H, W)

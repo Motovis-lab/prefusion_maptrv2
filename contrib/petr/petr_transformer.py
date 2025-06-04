@@ -17,13 +17,12 @@ import torch.nn as nn
 import torch.utils.checkpoint as cp
 from mmcv.cnn.bricks.transformer import (BaseTransformerLayer,
                                          TransformerLayerSequence,
-                                         build_transformer_layer_sequence,
-                                         build_attention,
                                          build_feedforward_network)
 from mmcv.cnn.bricks.drop import build_dropout
 from mmcv.cnn import build_norm_layer
+from mmcv.cnn.bricks.transformer import MultiheadAttention as _MMCVMultiheadAttention
 from mmengine.model import xavier_init
-from mmengine.model import BaseModule
+from mmengine.model import BaseModule, ModuleList
 from mmengine.config import ConfigDict
 
 from contrib.petr.attention import FlashMHA
@@ -37,7 +36,12 @@ __all__ = [
     "PETRTransformerDecoder",
     "PETRTemporalTransformer",
     "PETRTemporalDecoderLayer",
+    "MultiheadAttention",
 ]
+
+@MODELS.register_module()
+class MultiheadAttention(_MMCVMultiheadAttention):
+    pass
 
 @MODELS.register_module()
 class PETRMultiheadFlashAttention(BaseModule):
@@ -166,7 +170,7 @@ class PETRMultiheadFlashAttention(BaseModule):
             query = query.transpose(0, 1)
             key = key.transpose(0, 1)
             value = value.transpose(0, 1)
-        
+
         out = self.attn(
             q=query,
             k=key,
@@ -372,21 +376,41 @@ class PETRTransformerEncoder(TransformerLayerSequence):
 
 
 @MODELS.register_module()
-class PETRTransformerDecoder(TransformerLayerSequence):
-    """Implements the decoder in DETR transformer.
+class PETRTransformerDecoder(BaseModule):
+    """Base class for TransformerEncoder and TransformerDecoder in vision
+    transformer.
+
+    As base-class of Encoder and Decoder in vision transformer.
+    Support customization such as specifying different kind
+    of `transformer_layer` in `transformer_coder`.
+
     Args:
-        return_intermediate (bool): Whether to return intermediate outputs.
-        post_norm_cfg (dict): Config of last normalization layer. Default：
-            `LN`.
+        transformerlayer (list[obj:`mmcv.ConfigDict`] |
+            obj:`mmcv.ConfigDict`): Config of transformerlayer
+            in TransformerCoder. If it is obj:`mmcv.ConfigDict`,
+             it would be repeated `num_layer` times to a
+             list[`mmcv.ConfigDict`]. Default: None.
+        num_layers (int): The number of `TransformerLayer`. Default: None.
+        init_cfg (obj:`mmcv.ConfigDict`): The Config for initialization.
+            Default: None.
     """
 
-    def __init__(self,
-                 *args,
-                 post_norm_cfg=dict(type='LN'),
-                 return_intermediate=False,
-                 **kwargs):
+    def __init__(self, transformerlayers=None, num_layers=None, return_intermediate=False, post_norm_cfg=dict(type='LN'), init_cfg=None):
+        super().__init__(init_cfg)
+        if isinstance(transformerlayers, dict):
+            transformerlayers = [
+                copy.deepcopy(transformerlayers) for _ in range(num_layers)
+            ]
+        else:
+            assert isinstance(transformerlayers, list) and \
+                   len(transformerlayers) == num_layers
+        self.num_layers = num_layers
+        self.layers = ModuleList()
+        for i in range(num_layers):
+            self.layers.append(MODELS.build(transformerlayers[i]))
+        self.embed_dims = self.layers[0].embed_dims
+        self.pre_norm = self.layers[0].pre_norm
 
-        super(PETRTransformerDecoder, self).__init__(*args, **kwargs)
         self.return_intermediate = return_intermediate
         if post_norm_cfg is not None:
             self.post_norm = build_norm_layer(post_norm_cfg,
@@ -444,10 +468,10 @@ class PETRTemporalTransformer(BaseModule):
     def __init__(self, encoder=None, decoder=None, init_cfg=None, cross=False):
         super(PETRTemporalTransformer, self).__init__(init_cfg=init_cfg)
         if encoder is not None:
-            self.encoder = build_transformer_layer_sequence(encoder)
+            self.encoder = MODELS.build(encoder)
         else:
             self.encoder = None
-        self.decoder = build_transformer_layer_sequence(decoder)
+        self.decoder = MODELS.build(decoder)
         self.embed_dims = self.decoder.embed_dims
         self.cross = cross
 
@@ -613,7 +637,7 @@ class PETRTemporalDecoderLayer(BaseModule):
                     assert self.batch_first == attn_cfgs[index]['batch_first']
                 else:
                     attn_cfgs[index]['batch_first'] = self.batch_first
-                attention = build_attention(attn_cfgs[index])
+                attention = MODELS.build(attn_cfgs[index])
                 # Some custom attentions used as `self_attn`
                 # or `cross_attn` can have different behavior.
                 attention.operation_name = operation_name
