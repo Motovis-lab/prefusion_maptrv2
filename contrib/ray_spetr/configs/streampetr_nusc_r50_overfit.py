@@ -4,17 +4,14 @@ experiment_name = "stream_petr_nusc_r50"
 
 _base_ = "../../../configs/default_runtime.py"
 
-custom_imports = dict(imports=["prefusion", "contrib.petr", "mmdet"], allow_failed_imports=False)
+custom_imports = dict(imports=["prefusion", "contrib.petr", "mmdet", "contrib.ray_spetr"], allow_failed_imports=False)
 
 backend_args = None
-
-# Add this to enable unused parameter detection for DDP
-find_unused_parameters = True
 
 def _calc_grid_size(_range, _voxel_size, n_axis=3):
     return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
 
-batch_size = 2
+batch_size = 8
 num_epochs = 1000
 possible_group_sizes = [20]
 voxel_size = [0.2, 0.2, 8]
@@ -92,9 +89,8 @@ transformables = dict(
 train_dataset = dict(
     type="GroupBatchDataset",
     name="MvParkingTest",
-    data_root="/ssd4/datasets/nuScenes",
-    # info_path="/ssd4/datasets/nuScenes/nusc_train_info_separated.pkl",
-    info_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
+    data_root="/data/",
+    info_path="/data/nusc_scene0001_train_info_separated.pkl",
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
@@ -125,8 +121,8 @@ train_dataset = dict(
 val_dataset = dict(
     type="GroupBatchDataset",
     name="MvParkingTest",
-    data_root="/ssd4/datasets/nuScenes",
-    info_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
+    data_root="/data/",
+    info_path="/data/nusc_scene0001_train_info_separated.pkl",
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
@@ -152,8 +148,8 @@ val_dataset = dict(
 test_dataset = dict(
     type="GroupBatchDataset",
     name="MvParkingTest",
-    data_root="/ssd4/datasets/nuScenes",
-    info_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
+    data_root="/data/",
+    info_path="/data/nusc_scene0001_train_info_separated.pkl",
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
@@ -202,7 +198,7 @@ test_dataloader = dict(
 )
 
 model = dict(
-    type="StreamPETR",
+    type="RaySPETR",
     data_preprocessor=dict(
         type="FrameBatchMerger",
         device="cuda",
@@ -216,12 +212,12 @@ model = dict(
         frozen_stages=-1,
         norm_cfg=dict(type="BN2d", requires_grad=False),
         norm_eval=True,
-        with_cp=True,
+        with_cp=False,
         style="pytorch",
     ),
     img_neck=dict(type="mmdet3d.CPFPN", in_channels=[1024, 2048], out_channels=256, num_outs=2),
     roi_head=dict(
-        type="FocalHead",
+        type="RayFocalHead",
         num_classes=len(class_mapping),
         loss_cls2d=dict(
             type='mmdet.QualityFocalLoss',
@@ -242,7 +238,7 @@ model = dict(
         ),
     ),
     box_head=dict(
-        type='StreamPETRHead',
+        type='RaySPETRHead',
         num_classes=len(class_mapping),
         in_channels=256,
         num_query=644,
@@ -282,7 +278,7 @@ model = dict(
                         ],
                     feedforward_channels=2048,
                     ffn_dropout=0.1,
-                    with_cp=True,  ###use checkpoint to save memory
+                    with_cp=False,  ###use checkpoint to save memory
                     operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
                                      'ffn', 'norm')),
             )),
@@ -335,7 +331,7 @@ optim_wrapper = dict(
     type="OptimWrapper",
     optimizer=dict(
         type="AdamW",
-        lr=5e-5, # total lr per gpu lr is lr/n
+        lr=5e-4, # total lr per gpu lr is lr/n
         weight_decay=0.01,
     ),
     paramwise_cfg=dict(
@@ -372,11 +368,11 @@ custom_hooks = [
          det_anno_transformable_keys=["bbox_3d"],
          pre_conf_thresh=0.3),
 ]
-
+find_unused_parameters=True
 
 today = datetime.datetime.now().strftime("%m%d")
 
 work_dir = f'./work_dirs/{experiment_name}_{today}'
-# load_from = "./work_dirs/stream_petr_nusc_r50_0522/epoch_1.pth"
+load_from = "work_dirs/stream_petr_nusc_r50_0603/epoch_1000.pth"
 
 resume = False

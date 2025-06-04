@@ -3,6 +3,7 @@ import torch
 from mmdet.models.task_modules.samplers import BaseSampler, SamplingResult
 from prefusion.registry import DATA_SAMPLERS
 
+__all__ = ['PseudoSampler']
 
 @DATA_SAMPLERS.register_module()
 class PseudoSampler(BaseSampler):

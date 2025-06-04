@@ -11,7 +11,7 @@ from numpy.testing import assert_almost_equal
 
 from copious.io.fs import mktmpdir
 
-from contrib.cmt import LidarSweepsLoader
+from contrib.fastray_planar import LidarSweepsLoader
 from prefusion.dataset.index_info import IndexInfo
 from prefusion.dataset.transformable_loader import (
     CameraImageSetLoader,

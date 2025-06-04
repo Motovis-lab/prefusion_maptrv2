@@ -1,7 +1,7 @@
 default_scope = "prefusion"
 
 custom_imports = dict(
-    imports=["prefusion", "contrib.fastray_planar", "contrib.cmt"],
+    imports=["prefusion", "contrib.fastray_planar"],
     allow_failed_imports=False)
 
 ## camera and voxel feature configs

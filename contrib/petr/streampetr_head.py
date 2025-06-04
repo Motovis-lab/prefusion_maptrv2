@@ -13,7 +13,6 @@ from typing import List
 import torch
 import torch.nn as nn
 from mmcv.cnn import Linear
-from mmdet.models.task_modules import build_assigner
 from mmdet.utils.dist_utils import reduce_mean
 from mmdet.models.utils.misc import multi_apply
 from mmdet.models.layers.transformer.utils import inverse_sigmoid
@@ -23,7 +22,7 @@ from mmdet.utils import InstanceList, OptInstanceList
 
 from contrib.petr.positional_encoding import pos2posemb3d, pos2posemb1d, nerf_positional_encoding
 from contrib.petr.misc import normalize_bbox, bias_init_with_prob, MLN, topk_gather, transform_reference_points, memory_refresh, SELayer_Linear
-from prefusion.registry import MODELS, DATA_SAMPLERS
+from prefusion.registry import MODELS, DATA_SAMPLERS, TASK_UTILS
 
 
 __all__ = [ "StreamPETRHead" ]
@@ -153,7 +152,7 @@ class StreamPETRHead(AnchorFreeHead):
             assigner = train_cfg['assigner']
 
 
-            self.assigner = build_assigner(assigner)
+            self.assigner = TASK_UTILS.build(assigner)
             # DETR sampling=False, so use PseudoSampler
             sampler_cfg = dict(type='PseudoSamplerPetr')
             self.sampler = DATA_SAMPLERS.build(sampler_cfg)

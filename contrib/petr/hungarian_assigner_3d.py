@@ -3,12 +3,11 @@
 # Copyright (c) 2021 Wang, Yue
 # ------------------------------------------------------------------------
 import torch
-from mmdet.registry import TASK_UTILS
 from mmdet.models.task_modules.assigners import AssignResult, BaseAssigner
 from mmdet.models.task_modules import build_match_cost
 from contrib.petr.misc import normalize_bbox
 
-from prefusion.registry import MODELS
+from prefusion.registry import MODELS, TASK_UTILS
 
 try:
     from scipy.optimize import linear_sum_assignment
@@ -23,8 +22,8 @@ class HungarianAssigner3D(BaseAssigner):
                  iou_cost=dict(type='IoUCost', weight=0.0),
                  pc_range=None):
         self.cls_cost = MODELS.build(cls_cost)
-        self.reg_cost = build_match_cost(reg_cost)
-        self.iou_cost = build_match_cost(iou_cost)
+        self.reg_cost = TASK_UTILS.build(reg_cost)
+        self.iou_cost = TASK_UTILS.build(iou_cost)
         self.pc_range = pc_range
 
     def assign(self,

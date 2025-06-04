@@ -10,7 +10,7 @@ from prefusion import BaseModel
 from prefusion.registry import MODELS
 from contrib.petr.misc import locations
 
-__all__ = ["StreamPETR"]
+__all__ = ["StreamPETR", "FrameBatchMerger"]
 
 
 @MODELS.register_module()
@@ -66,7 +66,8 @@ class StreamPETR(BaseModel):
         position_level : int, optional
             用于选择 FPN 结果中的哪一个粒度的特征来做后续的 bbox 预测, by default 0
         """
-        super().__init__(data_preprocessor=data_preprocessor)
+        super().__init__()
+        self.data_preprocessor = MODELS.build(data_preprocessor)
         assert not any(m is None for m in [img_backbone, img_neck])
         self.img_backbone = MODELS.build(img_backbone)
         self.box_head = MODELS.build(box_head)
