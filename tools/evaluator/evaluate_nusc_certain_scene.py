@@ -36,10 +36,8 @@ def parse_args():
 
 def main(args):
     declare_vars_as_global(verbose=args.verbose)
-    if args.nusc_eval_set == "test":
-        nusc = NuScenes(version="v1.0-test", dataroot=args.nusc_data_root, verbose=g("verbose"))
-    else:
-        nusc = NuScenes(version="v1.0-trainval", dataroot=args.nusc_data_root, verbose=g("verbose"))
+    nusc_version = "v1.0-test" if args.nusc_eval_set == "test" else "v1.0-trainval"
+    nusc = NuScenes(version=nusc_version, dataroot=args.nusc_data_root, verbose=g("verbose"))
     sample_tokens = []
     scene_names = args.scene_names or getattr(splits, args.nusc_eval_set)
     
