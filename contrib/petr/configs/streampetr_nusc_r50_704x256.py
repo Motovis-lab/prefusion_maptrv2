@@ -4,7 +4,7 @@ experiment_name = "stream_petr_nusc_r50_704x256"
 
 _base_ = "../../../configs/default_runtime.py"
 
-custom_imports = dict(imports=["prefusion", "contrib.petr", "mmdet", "contrib.cmt"], allow_failed_imports=False)
+custom_imports = dict(imports=["prefusion", "contrib.petr", "mmdet"], allow_failed_imports=False)
 
 backend_args = None
 
