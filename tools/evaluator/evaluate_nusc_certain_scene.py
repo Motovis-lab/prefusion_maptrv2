@@ -5,6 +5,7 @@ from loguru import logger
 from nuscenes import NuScenes
 from nuscenes.eval.detection.evaluate import NuScenesEval
 from nuscenes.eval.detection.config import config_factory
+from nuscenes.utils import splits
 from copious.io.args import declare_vars_as_global, g
 from copious.io.fs import read_json, write_json, mktmpdir, ensured_path
 
@@ -15,7 +16,7 @@ def parse_args():
         "--nusc-data-root", type=Path, required=True, help="Input file path"
     )
     parser.add_argument(
-        "--scene-names", nargs="+", required=True, help="scene names, e.g.: scene-0001"
+        "--scene-names", nargs="*", help="scene names, e.g.: scene-0001"
     )
     parser.add_argument(
         "--model-infer-results",
@@ -35,9 +36,12 @@ def parse_args():
 
 def main(args):
     declare_vars_as_global(verbose=args.verbose)
-    nusc = NuScenes(version="v1.0-trainval", dataroot=args.nusc_data_root)
+    nusc_version = "v1.0-test" if args.nusc_eval_set == "test" else "v1.0-trainval"
+    nusc = NuScenes(version=nusc_version, dataroot=args.nusc_data_root, verbose=g("verbose"))
     sample_tokens = []
-    for scn_name in args.scene_names:
+    scene_names = args.scene_names or getattr(splits, args.nusc_eval_set)
+    
+    for scn_name in scene_names:
         _sample_tokens_in_scene = get_sample_tokens(nusc, scn_name)
         sample_tokens.extend(_sample_tokens_in_scene)
         if g("verbose"):

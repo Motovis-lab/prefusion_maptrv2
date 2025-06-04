@@ -30,13 +30,11 @@ NUSC_CAM_NAMES = [
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--nusc-version", default="v1.0-mini")
+    parser.add_argument("--nusc-data-set", default="train", choices=["train", "val", "test"])
     parser.add_argument("--nusc-data-root", type=Path, required=True)
     parser.add_argument("--info-pkl-save-dir", type=ensured_path, required=True)
     parser.add_argument("--info-pkl-filename-prefix", default="nusc")
-    parser.add_argument("--train-scenes", nargs="*", default=splits.train)
-    parser.add_argument("--val-scenes", nargs="*", default=splits.val)
-    parser.add_argument("--test-scenes", nargs="*", default=splits.test)
+    parser.add_argument("--scene-names", nargs="*")
     return edict({k: v for k, v in parser.parse_args()._get_kwargs()})
 
 
@@ -44,16 +42,12 @@ args = parse_arguments()
 
 
 def main():
-    nusc = NuScenes(version=args.nusc_version, dataroot=args.nusc_data_root, verbose=True)
+    nusc_version = "v1.0-test" if args.nusc_data_set == "test" else "v1.0-trainval"
+    scene_names = args.scene_names or getattr(splits, args.nusc_data_set)
+    nusc = NuScenes(version=nusc_version, dataroot=args.nusc_data_root, verbose=True)
     nusc_map = load_map_info(nusc)
-    if args.nusc_version == "v1.0-test":
-        test_infos = generate_info_pkl(nusc, nusc_map["test"], args.test_scenes)
-        save_pickle(test_infos, args.info_pkl_save_dir / f"{args.info_pkl_filename_prefix}_test_info.pkl")
-    elif args.nusc_version == "v1.0-trainval":
-        train_infos = generate_info_pkl(nusc, nusc_map["train"], args.train_scenes)
-        val_infos = generate_info_pkl(nusc, nusc_map["val"], args.val_scenes)
-        save_pickle(train_infos, args.info_pkl_save_dir / f"{args.info_pkl_filename_prefix}_train_info.pkl")
-        save_pickle(val_infos, args.info_pkl_save_dir / f"{args.info_pkl_filename_prefix}_val_info.pkl")
+    infos = generate_info_pkl(nusc, nusc_map[args.nusc_data_set], scene_names)
+    save_pickle(infos, args.info_pkl_save_dir / f"{args.info_pkl_filename_prefix}_{args.nusc_data_set}_info.pkl")
 
 
 def load_map_info(nusc: NuScenes):
