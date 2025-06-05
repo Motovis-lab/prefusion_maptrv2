@@ -259,7 +259,7 @@ model = dict(
     #     loss_centers2d=dict(type='mmdet.L1Loss', loss_weight=10.0),
     #     train_cfg=dict(
     #         assigner2d=dict(
-    #             type='mmdet.HungarianAssigner2D',
+    #             type='HungarianAssigner2D',
     #             cls_cost=dict(type='FocalLossCost', weight=2.),
     #             reg_cost=dict(type='mmdet.BBoxL1Cost', weight=5.0, box_format='xywh'),
     #             iou_cost=dict(type='mmdet.IoUCost', iou_mode='giou', weight=2.0),
