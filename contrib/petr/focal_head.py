@@ -9,6 +9,7 @@ from typing import List
 
 import numpy as np
 import torch
+import torch.amp
 import torch.nn as nn
 from mmdet.utils import InstanceList, OptInstanceList
 from mmdet.models.task_modules import build_assigner, build_sampler
@@ -604,8 +605,7 @@ class FocalHead(AnchorFreeHead):
         factor = bbox_pred.new_tensor([img_w, img_h, img_w, img_h]).unsqueeze(0)
         pos_gt_bboxes_normalized = sampling_result.pos_gt_bboxes / factor
         pos_gt_bboxes_targets = bbox_xyxy_to_cxcywh(pos_gt_bboxes_normalized)
-        bbox_targets[pos_inds] = pos_gt_bboxes_targets.to(dtype=torch.float16)
-
+        bbox_targets[pos_inds] = pos_gt_bboxes_targets.to(dtype=bbox_targets.dtype)
         # centers2d target
         centers2d_targets = bbox_pred.new_full((num_bboxes, 2), 0.0, dtype=torch.float32)
         if gt_bboxes.numel() == 0:

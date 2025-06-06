@@ -153,7 +153,7 @@ test_dataset = dict(
     type="GroupBatchDataset",
     name="MvParkingTest",
     data_root="/ssd4/datasets/nuScenes",
-    info_path="/ssd4/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
+    info_path="/ssd4/datasets/nuScenes/nusc_val_info_separated.pkl",
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
@@ -378,6 +378,6 @@ custom_hooks = [
 today = datetime.datetime.now().strftime("%m%d")
 
 work_dir = f'./work_dirs/{experiment_name}_{today}'
-# load_from = "./work_dirs/stream_petr_nusc_r50_0522/epoch_1.pth"
+load_from = "./ckpts/stream_petr_nusc_r50_0603_epoch_60.pth"  # 1600x928 with full augmentations.
 
 resume = False
