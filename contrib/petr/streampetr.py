@@ -135,7 +135,13 @@ class StreamPETR(BaseModel):
             logger.error(f"index_info: {index_info}")
             print(e)
             raise
-        outs = {k: v.float() if isinstance(v, torch.Tensor) else v for k, v in outs.items()}   # convert torch.float16 to torch.float32
+        # Only convert to float32 if the outputs are in fp16 but we're not using AMP
+        # This preserves precision consistency with the training context
+        if any(isinstance(v, torch.Tensor) and v.dtype == torch.float16 for v in outs.values()):
+            # Check if we're in AMP context by looking at current autocast state
+            if not torch.is_autocast_enabled():
+                # Not in AMP context but got FP16 outputs - this indicates a precision mismatch
+                outs = {k: v.float() if isinstance(v, torch.Tensor) and v.dtype == torch.float16 else v for k, v in outs.items()}
 
         # self.visualize_bbox3d(data, gt_bboxes_3d, outs, meta_info, ego_poses)
 
