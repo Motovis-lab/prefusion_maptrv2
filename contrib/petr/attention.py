@@ -56,14 +56,27 @@ class FlashAttention(nn.Module):
             kv: The tensor containing the key, and value. (B, S, 2, H, D) 
             key_padding_mask: a bool tensor of shape (B, S)
         """
-        q = q.to(dtype=torch.float16)
-        kv = kv.to(dtype=torch.float16)
-        assert q.dtype in [torch.float16, torch.bfloat16] and kv.dtype in [torch.float16, torch.bfloat16]
+        # Respect the current precision context instead of forcing FP16
+        if q.dtype == torch.float32 and kv.dtype == torch.float32:
+            # Keep FP32 when not using AMP
+            target_dtype = torch.float32
+        else:
+            # Use FP16 for mixed precision training
+            target_dtype = torch.float16
+            q = q.to(dtype=torch.float16)
+            kv = kv.to(dtype=torch.float16)
+
         assert q.is_cuda and kv.is_cuda
         assert q.shape[0] == kv.shape[0] and q.shape[-2] == kv.shape[-2] and q.shape[-1] == kv.shape[-1]
 
         batch_size = q.shape[0]
         seqlen_q, seqlen_k = q.shape[1], kv.shape[1]
+        
+        # FlashAttention may not support FP32, use fallback implementation
+        if target_dtype == torch.float32:
+            # Use standard PyTorch attention for FP32
+            return self._standard_attention(q, kv, key_padding_mask, causal)
+        
         if key_padding_mask is None:
             q, kv = rearrange(q, 'b s ... -> (b s) ...'), rearrange(kv, 'b s ... -> (b s) ...')
             max_sq, max_sk = seqlen_q, seqlen_k 
@@ -93,7 +106,43 @@ class FlashAttention(nn.Module):
             )
             output = rearrange(output_unpad, '(b s) ... -> b s ...', b=batch_size)
 
-        return output.to(dtype=torch.float32), None
+        # Return in the same dtype as input to maintain precision consistency
+        return output.to(dtype=target_dtype), None
+
+    def _standard_attention(self, q, kv, key_padding_mask=None, causal=False):
+        """Fallback standard attention implementation for FP32"""
+        batch_size, seqlen_q, num_heads, head_dim = q.shape
+        seqlen_k = kv.shape[1]
+        
+        # Split key and value from kv tensor
+        k = kv[:, :, 0, :, :]  # (B, S, H, D)
+        v = kv[:, :, 1, :, :]  # (B, S, H, D)
+        
+        # Compute attention scores
+        scores = torch.einsum('bqhd,bkhd->bhqk', q, k) / (head_dim ** 0.5)
+        
+        # Apply causal mask if needed
+        if causal:
+            mask = torch.triu(torch.ones(seqlen_q, seqlen_k, device=q.device), diagonal=1).bool()
+            scores.masked_fill_(mask.unsqueeze(0).unsqueeze(0), float('-inf'))
+        
+        # Apply key padding mask if provided
+        if key_padding_mask is not None:
+            # key_padding_mask: (B, S) -> (B, 1, 1, S)
+            key_padding_mask = key_padding_mask.unsqueeze(1).unsqueeze(1)
+            scores.masked_fill_(key_padding_mask, float('-inf'))
+        
+        # Apply softmax
+        attn_weights = torch.softmax(scores, dim=-1)
+        
+        # Apply dropout
+        if self.training and self.dropout_p > 0:
+            attn_weights = torch.dropout(attn_weights, self.dropout_p, train=True)
+        
+        # Apply attention to values
+        output = torch.einsum('bhqk,bkhd->bqhd', attn_weights, v)
+        
+        return output, None
 
 
 class FlashMHA(nn.Module):
