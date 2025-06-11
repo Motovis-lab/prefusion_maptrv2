@@ -7,12 +7,9 @@
 import random
 from typing import List
 
-import numpy as np
 import torch
-import torch.amp
 import torch.nn as nn
 from mmdet.utils import InstanceList, OptInstanceList
-from mmdet.models.task_modules import build_assigner, build_sampler
 from mmdet.utils.dist_utils import reduce_mean
 from mmdet.structures.bbox.transforms import bbox_cxcywh_to_xyxy, bbox_xyxy_to_cxcywh
 from mmdet.models.utils.misc import multi_apply

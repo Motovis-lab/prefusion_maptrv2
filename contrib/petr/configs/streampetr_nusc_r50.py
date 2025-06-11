@@ -220,7 +220,7 @@ model = dict(
         style="pytorch",
     ),
     img_neck=dict(type="mmdet3d.CPFPN", in_channels=[1024, 2048], out_channels=256, num_outs=2),
-    roi_head=dict(
+    img_roi_head=dict(
         type="FocalHead",
         num_classes=len(class_mapping),
         loss_cls2d=dict(
@@ -241,7 +241,7 @@ model = dict(
                 centers2d_cost=dict(type='BBox3DL1Cost', weight=10.0))
         ),
     ),
-    box_head=dict(
+    pts_bbox_head=dict(
         type='StreamPETRHead',
         num_classes=len(class_mapping),
         in_channels=256,

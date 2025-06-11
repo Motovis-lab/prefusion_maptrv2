@@ -1,6 +1,6 @@
 import datetime
 
-experiment_name = "stream_petr_nusc_r50"
+experiment_name = "stream_petr_nusc_r50_overfit"
 
 _base_ = "../../../configs/default_runtime.py"
 
@@ -109,7 +109,7 @@ train_dataset = dict(
     transformables=transformables,
     transforms=[
         dict(type='BGR2RGB'),
-        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
+        # dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
         # dict(type='RandomRotateSpace', angles=(0, 0, 90), prob_inverse_cameras_rotation=0),
         # dict(type='RandomMirrorSpace'),
         # dict(type='RandomImageISP', prob=0.1),
@@ -142,7 +142,7 @@ val_dataset = dict(
     transformables=transformables,
     transforms=[
         dict(type='BGR2RGB'),
-        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
+        # dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
     ],
     group_sampler=dict(type="IndexGroupSampler",
                         phase="val",
@@ -170,7 +170,7 @@ test_dataset = dict(
     transformables=transformables,
     transforms=[
         dict(type='BGR2RGB'),
-        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
+        # dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
     ],
     group_sampler=dict(type="SequentialSceneFrameGroupSampler",
                        phase="test_scene_by_scene"),
@@ -223,7 +223,7 @@ model = dict(
         style="pytorch",
     ),
     img_neck=dict(type="mmdet3d.CPFPN", in_channels=[1024, 2048], out_channels=256, num_outs=2),
-    roi_head=dict(
+    img_roi_head=dict(
         type="FocalHead",
         num_classes=len(class_mapping),
         loss_cls2d=dict(
@@ -244,7 +244,7 @@ model = dict(
                 centers2d_cost=dict(type='BBox3DL1Cost', weight=10.0))
         ),
     ),
-    box_head=dict(
+    pts_bbox_head=dict(
         type='StreamPETRHead',
         num_classes=len(class_mapping),
         in_channels=256,
@@ -360,7 +360,7 @@ param_scheduler = [
 visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"), dict(type="TensorboardVisBackend")])
 
 
-log_processor = dict(type='GroupAwareLogProcessor')
+log_processor = dict(type='GroupAwareLogProcessor', tabulate_ncols=4)
 
 default_hooks = dict(
     timer=dict(type="IterTimerHook"),
@@ -380,6 +380,6 @@ custom_hooks = [
 today = datetime.datetime.now().strftime("%m%d")
 
 work_dir = f'./work_dirs/{experiment_name}_{today}'
-# load_from = "./work_dirs/stream_petr_nusc_r50_0522/epoch_1.pth"
+load_from = "work_dirs/stream_petr_nusc_r50_overfit_0611/epoch_100.pth"
 
 resume = False
