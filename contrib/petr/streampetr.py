@@ -131,7 +131,7 @@ class StreamPETR(BaseModel):
         gt_labels = [m['bbox_3d']['classes'] for m in meta_info]
         gt_bboxes_3d = [b.reshape(0, 9) if len(b) == 0 else b for b in bbox_3d]  # 9 is hard coded here for: (x,y,z,l,w,h,yaw,vx,vy)
         try:
-            outs = self.pts_box_head(img_feats, location, img_metas, gt_bboxes_3d, gt_labels, topk_indexes=topk_indexes, **data)
+            outs = self.pts_bbox_head(img_feats, location, img_metas, gt_bboxes_3d, gt_labels, topk_indexes=topk_indexes, **data)
         except Exception as e:
             from loguru import logger
             logger.error(f"index_info: {index_info}")
@@ -148,7 +148,7 @@ class StreamPETR(BaseModel):
         # self.visualize_bbox3d(data, gt_bboxes_3d, outs, meta_info, ego_poses)
 
         if mode == 'tensor':
-            bbox_list = self.pts_box_head.get_bboxes(outs, img_metas)
+            bbox_list = self.pts_bbox_head.get_bboxes(outs, img_metas)
             bbox_results = [
                 bbox3d2result(bboxes, scores, labels)
                 for bboxes, scores, labels in bbox_list
@@ -158,7 +158,7 @@ class StreamPETR(BaseModel):
         if mode == "loss":
             loss_inputs = [gt_bboxes_3d, gt_labels, outs]
             try:
-                losses = self.pts_box_head.loss(*loss_inputs)
+                losses = self.pts_bbox_head.loss(*loss_inputs)
             except Exception as e:
                 from loguru import logger
                 logger.error(f"index_info: {index_info}")
@@ -176,7 +176,7 @@ class StreamPETR(BaseModel):
             return losses
         if mode == "predict":
             loss_inputs = [gt_bboxes_3d, gt_labels, outs]
-            losses = self.pts_box_head.loss(*loss_inputs)
+            losses = self.pts_bbox_head.loss(*loss_inputs)
             return (
                 *[{"name": k, "content": v.cpu() if isinstance(v, torch.Tensor) else v} for k, v in outs.items()],
                 BaseDataElement(loss=losses),
