@@ -1,3 +1,9 @@
+import torch
+from prefusion.registry import MODELS
+
+# Import pretrain models to register VoVNet  # noqa: F401
+import contrib.pretrain.models
+
 image_size = (1024, 1024)
 batch_augments = [dict(type='mmdet.BatchFixedSizePad', size=image_size)]
 
@@ -55,13 +61,9 @@ model_config = dict(
         max_per_img=100)
 )
 
-import torch
-from prefusion.registry import MODELS, DATASETS
-
 def test_front_model():
     # Create a dummy input tensor
     inputs = torch.randn(1, 3, 1024, 1024)
-    data_samples = [dict(img_path='dummy_path')]
     
     # Initialize the model
     backbone = MODELS.build(model_config.get('backbone'))  # type: ignore
@@ -78,4 +80,3 @@ def test_front_model():
     assert len(backbone_output) == 4, "backbone output should have 4 feature maps"
     assert len(neck_output) == 4, "neck output should have 4 feature maps"
     assert len(head_output) == 3, "head output should have 3 feature maps"
-    
