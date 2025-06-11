@@ -65,9 +65,7 @@ class FlashAttention(nn.Module):
             target_dtype = torch.float16
             q = q.to(dtype=torch.float16)
             kv = kv.to(dtype=torch.float16)
-        
-        if target_dtype == torch.float16:
-            assert q.dtype in [torch.float16, torch.bfloat16] and kv.dtype in [torch.float16, torch.bfloat16]
+
         assert q.is_cuda and kv.is_cuda
         assert q.shape[0] == kv.shape[0] and q.shape[-2] == kv.shape[-2] and q.shape[-1] == kv.shape[-1]
 
