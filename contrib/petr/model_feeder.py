@@ -57,6 +57,11 @@ class StreamPETRModelFeeder(BaseModelFeeder):
             for k, trnsfmb in processed_frame.items():
                 if isinstance(trnsfmb, CameraImageSet):
                     cam_ids, camera_images = zip(*trnsfmb.transformables.items())
+                    
+                    # exchange the order of cameras (CAM_BACK_RIGHT <=> CAM_FRONT_LEFT) to align with the original implementation of StreamPETR
+                    cam_ids = (cam_ids[0], cam_ids[1], cam_ids[5], cam_ids[3], cam_ids[4], cam_ids[2])
+                    camera_images = (camera_images[0], camera_images[1], camera_images[5], camera_images[3], camera_images[4], camera_images[2])
+
                     img_tensor = torch.vstack(
                         [(t.tensor["img"] * t.tensor["ego_mask"]).unsqueeze(0) for t in camera_images]
                     )
@@ -65,10 +70,7 @@ class StreamPETRModelFeeder(BaseModelFeeder):
                         "camera_ids": cam_ids,
                         "intrinsic": [self._intrinsic_param_to_4x4_mat(cam_im.intrinsic) for cam_im in camera_images],
                         "extrinsic": [rt2mat(*cam_im.extrinsic, as_homo=True) for cam_im in camera_images],
-                        "extrinsic_inv": [
-                            np.linalg.inv(rt2mat(*cam_im.extrinsic, as_homo=True))
-                            for cam_im in camera_images
-                        ],
+                        "extrinsic_inv": [np.linalg.inv(rt2mat(*cam_im.extrinsic, as_homo=True)) for cam_im in camera_images],
                     }
                     continue
                 if isinstance(trnsfmb, Bbox3D):

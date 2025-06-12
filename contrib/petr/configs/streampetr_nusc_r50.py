@@ -98,7 +98,7 @@ train_dataset = dict(
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
-        bbox_3d_pos_repr="bottom_center",
+        bbox_3d_pos_repr="cuboid_center",
         lidar_extrinsics=[
             [ 0.00203327,  0.99970406,  0.02424172,  0.943713  ],
             [-0.9999805 ,  0.00217566, -0.00584864,  0.        ],
@@ -130,7 +130,7 @@ val_dataset = dict(
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
-        bbox_3d_pos_repr="bottom_center",
+        bbox_3d_pos_repr="cuboid_center",
         lidar_extrinsics=[
             [ 0.00203327,  0.99970406,  0.02424172,  0.943713  ],
             [-0.9999805 ,  0.00217566, -0.00584864,  0.        ],
@@ -157,7 +157,7 @@ test_dataset = dict(
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
-        bbox_3d_pos_repr="bottom_center",
+        bbox_3d_pos_repr="cuboid_center",
         lidar_extrinsics=[
             [ 0.00203327,  0.99970406,  0.02424172,  0.943713  ],
             [-0.9999805 ,  0.00217566, -0.00584864,  0.        ],
@@ -371,6 +371,7 @@ default_hooks = dict(
 custom_hooks = [
     dict(type="DumpPETRDetectionAsNuscenesJsonHook",
          det_anno_transformable_keys=["bbox_3d"],
+         bbox_3d_pos_repr="cuboid_center",
          pre_conf_thresh=0.3),
 ]
 
