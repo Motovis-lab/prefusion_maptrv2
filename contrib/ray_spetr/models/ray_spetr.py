@@ -41,8 +41,8 @@ class RaySPETR(StreamPETR):
         img_feats = img_feats.reshape(B, N, *img_feats.shape[1:])
         location = self.prepare_location(img_feats, im_size)
 
-        if self.roi_head:
-            outs_roi = self.roi_head(location, img_feats)
+        if self.img_roi_head:
+            outs_roi = self.img_roi_head(location, img_feats)
         else:
             outs_roi = {'topk_indexes': None}
 
@@ -67,7 +67,7 @@ class RaySPETR(StreamPETR):
         gt_labels = [m['bbox_3d']['classes'] for m in meta_info]
         gt_bboxes_3d = [b.reshape(0, 9) if len(b) == 0 else b for b in bbox_3d]  # 9 is hard coded here for: (x,y,z,l,w,h,yaw,vx,vy)
         try:
-            outs = self.box_head(img_feats, location, img_metas, gt_bboxes_3d, gt_labels, topk_indexes=topk_indexes, centerness=outs_roi['sample_weight'], **data)
+            outs = self.pts_bbox_head(img_feats, location, img_metas, gt_bboxes_3d, gt_labels, topk_indexes=topk_indexes, centerness=outs_roi['sample_weight'], **data)
         except Exception as e:
             from loguru import logger
             logger.error(f"index_info: {index_info}")
@@ -78,7 +78,7 @@ class RaySPETR(StreamPETR):
         # self.visualize_bbox3d(data, gt_bboxes_3d, outs, meta_info, ego_poses)
 
         if mode == 'tensor':
-            bbox_list = self.box_head.get_bboxes(outs, img_metas)
+            bbox_list = self.pts_bbox_head.get_bboxes(outs, img_metas)
             bbox_results = [
                 bbox3d2result(bboxes, scores, labels)
                 for bboxes, scores, labels in bbox_list
@@ -88,25 +88,25 @@ class RaySPETR(StreamPETR):
         if mode == "loss":
             loss_inputs = [gt_bboxes_3d, gt_labels, outs]
             try:
-                losses = self.box_head.loss(*loss_inputs)
+                losses = self.pts_bbox_head.loss(*loss_inputs)
             except Exception as e:
                 from loguru import logger
                 logger.error(f"index_info: {index_info}")
                 print(e)
                 raise
-            if self.roi_head:
+            if self.img_roi_head:
                 gt_bboxes = [[boxes.to(device=_device, dtype=torch.float32) for boxes in batch]for batch in bbox_2d]
                 gt_labels = [[cls.to(device=_device, dtype=torch.int64) for cls in batch['bbox_2d']['classes']] for batch in meta_info]
                 centers2d = [[cnts.to(device=_device, dtype=torch.float32) for cnts in batch]for batch in bbox_center_2d]
                 dummy_depths = [[torch.tensor([], device=_device, dtype=torch.float32) for _ in m['bbox_2d']['classes']] for m in meta_info]
                 loss2d_inputs = [gt_bboxes, gt_labels, centers2d, dummy_depths, outs_roi, img_metas]
-                losses2d = self.roi_head.loss(*loss2d_inputs)
+                losses2d = self.img_roi_head.loss(*loss2d_inputs)
                 losses.update(losses2d)
 
             return losses
         if mode == "predict":
             loss_inputs = [gt_bboxes_3d, gt_labels, outs]
-            losses = self.box_head.loss(*loss_inputs)
+            losses = self.pts_bbox_head.loss(*loss_inputs)
             return (
                 *[{"name": k, "content": v.cpu() if isinstance(v, torch.Tensor) else v} for k, v in outs.items()],
                 BaseDataElement(loss=losses),

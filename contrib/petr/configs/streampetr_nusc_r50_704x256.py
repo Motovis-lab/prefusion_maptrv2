@@ -14,8 +14,8 @@ find_unused_parameters = True
 def _calc_grid_size(_range, _voxel_size, n_axis=3):
     return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
 
-batch_size = 8
-num_epochs = 60
+batch_size = 2
+num_epochs = 24
 possible_group_sizes = [8]
 voxel_size = [0.2, 0.2, 8]
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
@@ -98,7 +98,7 @@ train_dataset = dict(
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
-        bbox_3d_pos_repr="bottom_center",
+        bbox_3d_pos_repr="cuboid_center",
         lidar_extrinsics=[
             [ 0.00203327,  0.99970406,  0.02424172,  0.943713  ],
             [-0.9999805 ,  0.00217566, -0.00584864,  0.        ],
@@ -131,7 +131,7 @@ val_dataset = dict(
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
-        bbox_3d_pos_repr="bottom_center",
+        bbox_3d_pos_repr="cuboid_center",
         lidar_extrinsics=[
             [ 0.00203327,  0.99970406,  0.02424172,  0.943713  ],
             [-0.9999805 ,  0.00217566, -0.00584864,  0.        ],
@@ -159,7 +159,7 @@ test_dataset = dict(
     model_feeder=dict(
         type="StreamPETRModelFeeder",
         visible_range=point_cloud_range,
-        bbox_3d_pos_repr="bottom_center",
+        bbox_3d_pos_repr="cuboid_center",
         lidar_extrinsics=[
             [ 0.00203327,  0.99970406,  0.02424172,  0.943713  ],
             [-0.9999805 ,  0.00217566, -0.00584864,  0.        ],
@@ -178,7 +178,7 @@ test_dataset = dict(
 )
 
 train_dataloader = dict(
-    num_workers=3,
+    num_workers=2,
     persistent_workers=True,
     pin_memory=True,
     sampler=dict(type="DefaultSampler"),
@@ -223,7 +223,7 @@ model = dict(
         style="pytorch",
     ),
     img_neck=dict(type="mmdet3d.CPFPN", in_channels=[1024, 2048], out_channels=256, num_outs=2),
-    roi_head=dict(
+    img_roi_head=dict(
         type="FocalHead",
         num_classes=len(class_mapping),
         loss_cls2d=dict(
@@ -244,7 +244,7 @@ model = dict(
                 centers2d_cost=dict(type='BBox3DL1Cost', weight=10.0))
         ),
     ),
-    box_head=dict(
+    pts_bbox_head=dict(
         type='StreamPETRHead',
         num_classes=len(class_mapping),
         in_channels=256,
@@ -339,7 +339,7 @@ optim_wrapper = dict(
     type="OptimWrapper",
     optimizer=dict(
         type="AdamW",
-        lr=1e-4, # total lr per gpu lr is lr/n
+        lr=5e-5, # total lr per gpu lr is lr/n
         weight_decay=0.01,
     ),
     paramwise_cfg=dict(
@@ -361,7 +361,7 @@ param_scheduler = [
 visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"), dict(type="TensorboardVisBackend")])
 
 
-log_processor = dict(type='GroupAwareLogProcessor')
+log_processor = dict(type='GroupAwareLogProcessor', tabulate_ncols=4)
 
 default_hooks = dict(
     timer=dict(type="IterTimerHook"),
@@ -374,6 +374,7 @@ default_hooks = dict(
 custom_hooks = [
     dict(type="DumpPETRDetectionAsNuscenesJsonHook",
          det_anno_transformable_keys=["bbox_3d"],
+         bbox_3d_pos_repr="cuboid_center",
          pre_conf_thresh=0.3),
 ]
 

@@ -57,6 +57,11 @@ class StreamPETRModelFeeder(BaseModelFeeder):
             for k, trnsfmb in processed_frame.items():
                 if isinstance(trnsfmb, CameraImageSet):
                     cam_ids, camera_images = zip(*trnsfmb.transformables.items())
+                    
+                    # exchange the order of cameras (CAM_BACK_RIGHT <=> CAM_FRONT_LEFT) to align with the original implementation of StreamPETR
+                    cam_ids = (cam_ids[0], cam_ids[1], cam_ids[5], cam_ids[3], cam_ids[4], cam_ids[2])
+                    camera_images = (camera_images[0], camera_images[1], camera_images[5], camera_images[3], camera_images[4], camera_images[2])
+
                     img_tensor = torch.vstack(
                         [(t.tensor["img"] * t.tensor["ego_mask"]).unsqueeze(0) for t in camera_images]
                     )
@@ -65,10 +70,7 @@ class StreamPETRModelFeeder(BaseModelFeeder):
                         "camera_ids": cam_ids,
                         "intrinsic": [self._intrinsic_param_to_4x4_mat(cam_im.intrinsic) for cam_im in camera_images],
                         "extrinsic": [rt2mat(*cam_im.extrinsic, as_homo=True) for cam_im in camera_images],
-                        "extrinsic_inv": [
-                            np.linalg.inv(rt2mat(*cam_im.extrinsic, as_homo=True))
-                            for cam_im in camera_images
-                        ],
+                        "extrinsic_inv": [np.linalg.inv(rt2mat(*cam_im.extrinsic, as_homo=True)) for cam_im in camera_images],
                     }
                     continue
                 if isinstance(trnsfmb, Bbox3D):
@@ -188,12 +190,26 @@ class StreamPETRModelFeeder(BaseModelFeeder):
             _intr = (cam_intr[0, 2], cam_intr[1, 2], cam_intr[0, 0], cam_intr[1, 1])
             for bx_corners, bx, cls in zip(bboxes_3d_corners, bboxes_3d, classes_3d):
                 try:
-                    corners_on_img = pinhole_project(points3d_to_homo(bx_corners), _extr, _intr, im_size)
+                    # Use conservative=False and filter_outside_image=False to keep all projected corners
+                    # This allows corner_pts_to_img_bbox to properly handle the intersection
+                    corners_on_img = pinhole_project(points3d_to_homo(bx_corners), _extr, _intr, im_size, conservative=False, filter_outside_image=False)
                 except PointNotOnImageError:
+                    # Skip only if ALL corners are behind the camera
                     continue
                 
-                center2d = pinhole_project(points3d_to_homo(bx[:3][None, :]), _extr, _intr, im_size)[0]
+                # Always try to form 2D bbox from projected corners
                 bbox2d = corner_pts_to_img_bbox(corners_on_img, imsize=im_size)
+                
+                # Skip only if no intersection with image canvas (no visible part)
+                if bbox2d is None:
+                    continue
+                
+                # For center: try to project the 3D center, but if it's outside, use 2D bbox center
+                try:
+                    center2d = pinhole_project(points3d_to_homo(bx[:3][None, :]), _extr, _intr, im_size)[0]
+                except PointNotOnImageError:
+                    # If 3D center projects outside image, use center of the clipped 2D bbox
+                    center2d = np.array([(bbox2d[0] + bbox2d[2]) / 2, (bbox2d[1] + bbox2d[3]) / 2])
 
                 # FIXME: Visualize 2D boxes
                 # import cv2

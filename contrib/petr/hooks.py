@@ -55,7 +55,8 @@ def format_boxes_as_nuscenes_format(
     pred_scores: np.ndarray,
     pred_class_ids: np.ndarray,
     ego_pose: "EgoPose",
-    dictionary: list[str]
+    dictionary: list[str],
+    bbox_3d_pos_repr: str = "cuboid_center",
 ) -> List[Dict]:
     """Format predicted boxes as the format that Nuscenes Evaluator expcected in the global (world) coordsys.
 
@@ -97,7 +98,11 @@ def format_boxes_as_nuscenes_format(
         }
 
         # convert box location to world coord sys
-        T_e_b = rt2mat(R.from_euler("Z", [bx[6]], degrees=False).as_matrix(), bx[:3], as_homo=True)
+        if bbox_3d_pos_repr == "cuboid_center":
+            bx_translation = bx[:3]
+        elif bbox_3d_pos_repr == "bottom_center":
+            bx_translation = bx[:3] + np.array([0, 0, bx[5] / 2])
+        T_e_b = rt2mat(R.from_euler("Z", [bx[6]], degrees=False).as_matrix(), bx_translation, as_homo=True)
         T_w_e = rt2mat(ego_pose.rotation, ego_pose.translation, as_homo=True)
         T_w_b = T_w_e @ T_e_b
         formatted_bx.update(
@@ -138,11 +143,15 @@ class DumpPETRDetectionAsNuscenesJsonHook(Hook):
     def __init__(
         self,
         det_anno_transformable_keys: List[str],
+        bbox_3d_pos_repr: str = "cuboid_center",
         pre_conf_thresh: float = 0.3,
     ):
         super().__init__()
+        assert bbox_3d_pos_repr in ["cuboid_center", "bottom_center"], \
+            f"bbox_3d_pos_repr must be one of ['cuboid_center', 'bottom_center'], but got {bbox_3d_pos_repr}"
         self.pre_conf_thresh = pre_conf_thresh
         self.transformable_keys = det_anno_transformable_keys
+        self.bbox_3d_pos_repr = bbox_3d_pos_repr
         self.results = defaultdict(list)
 
     def after_test_iter(
@@ -161,7 +170,8 @@ class DumpPETRDetectionAsNuscenesJsonHook(Hook):
             pred_boxes = pred["bboxes_3d"].numpy()
             pred_scores = pred["scores_3d"].numpy()
             pred_labels = pred["labels_3d"].numpy()
-            nusc_fmt_boxes = format_boxes_as_nuscenes_format(token, pred_boxes, pred_scores, pred_labels, ego_pose, dictionary)
+            nusc_fmt_boxes = format_boxes_as_nuscenes_format(token, pred_boxes, pred_scores, pred_labels, ego_pose, dictionary, 
+                                                             bbox_3d_pos_repr=self.bbox_3d_pos_repr)
             self.results[token].extend(nusc_fmt_boxes)
 
     def after_test_epoch(self, runner, metrics: Optional[Dict[str, float]] = None) -> None:
