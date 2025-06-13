@@ -13,7 +13,7 @@ def K3x3(cx, cy, fx, fy):
 class PointNotOnImageError(Exception):
     pass
 
-def pinhole_project(points_homo: np.ndarray, extrinsic: Tuple[np.ndarray, np.ndarray], intrinsic: np.ndarray, im_size: Tuple[int, int], conservative=True) -> np.ndarray:
+def pinhole_project(points_homo: np.ndarray, extrinsic: Tuple[np.ndarray, np.ndarray], intrinsic: np.ndarray, im_size: Tuple[int, int], conservative=True, filter_outside_image=True) -> np.ndarray:
     """project 3d points onto image
 
     Parameters
@@ -28,6 +28,8 @@ def pinhole_project(points_homo: np.ndarray, extrinsic: Tuple[np.ndarray, np.nda
         (width, height)
     conservative : bool, optional
         _description_, by default True
+    filter_outside_image : bool, optional
+        whether to filter out points that project outside image bounds, by default True
 
     Returns
     -------
@@ -40,11 +42,12 @@ def pinhole_project(points_homo: np.ndarray, extrinsic: Tuple[np.ndarray, np.nda
     cam_coords = check_camera_coords_visibility_on_image(cam_coords, conservative)
     normalized_cam_coords = cam_coords[:, :2] / cam_coords[:, 2:3]
     im_coords = (cam_intr[:2, :2] @ normalized_cam_coords.T).T + cam_intr[:2, 2]
-    im_coords = check_im_coords_visibility_on_image(im_coords, im_size, conservative)
+    if filter_outside_image:
+        im_coords = check_im_coords_visibility_on_image(im_coords, im_size, conservative)
     return im_coords
 
 
-def fisheye_project(points_homo: np.ndarray, extrinsic: Tuple[np.ndarray, np.ndarray], intrinsic: np.ndarray, im_size: Tuple[int, int], conservative=True) -> np.ndarray:
+def fisheye_project(points_homo: np.ndarray, extrinsic: Tuple[np.ndarray, np.ndarray], intrinsic: np.ndarray, im_size: Tuple[int, int], conservative=True, filter_outside_image=True) -> np.ndarray:
     pp, focal, inv_poly = intrinsic[:2], intrinsic[2:4], intrinsic[4:]
     cam_extr = rt2mat(*extrinsic, as_homo=True)
     T_cam_ego = np.linalg.inv(cam_extr)
@@ -52,7 +55,8 @@ def fisheye_project(points_homo: np.ndarray, extrinsic: Tuple[np.ndarray, np.nda
     cam_coords = check_camera_coords_visibility_on_image(cam_coords, conservative)
     cam_model = FisheyeCameraModel(pp, focal, inv_poly, im_size, 180)
     im_coords = cam_model.project_points(cam_coords)
-    im_coords = check_im_coords_visibility_on_image(im_coords, im_size, conservative)
+    if filter_outside_image:
+        im_coords = check_im_coords_visibility_on_image(im_coords, im_size, conservative)
     return im_coords
 
 
@@ -98,13 +102,26 @@ def corner_pts_to_img_bbox(
         tuple [float]: Intersection of the convex hull of the 2D box
             corners and the image canvas.
     """
+    if len(corner_coords) < 1:
+        return None
+    
     polygon_from_2d_box = MultiPoint(corner_coords).convex_hull
     img_canvas = box(0, 0, imsize[0], imsize[1])
 
     if polygon_from_2d_box.intersects(img_canvas):
         img_intersection = polygon_from_2d_box.intersection(img_canvas)
-        intersection_coords = np.array(
-            [coord for coord in img_intersection.exterior.coords])
+        
+        # Handle different geometry types
+        if hasattr(img_intersection, 'exterior'):
+            # Polygon case
+            intersection_coords = np.array(
+                [coord for coord in img_intersection.exterior.coords])
+        elif hasattr(img_intersection, 'coords'):
+            # LineString or Point case
+            intersection_coords = np.array(list(img_intersection.coords))
+        else:
+            # Fallback: use original corner coordinates
+            intersection_coords = np.array(corner_coords)
 
         min_x = min(intersection_coords[:, 0])
         min_y = min(intersection_coords[:, 1])
