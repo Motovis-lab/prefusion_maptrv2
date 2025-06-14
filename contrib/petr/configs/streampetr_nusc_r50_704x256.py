@@ -110,6 +110,7 @@ train_dataset = dict(
     transforms=[
         dict(type='BGR2RGB'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
+        dict(type='RandomRenderExtrinsic'),
         dict(type='RandomRotateSpace', angles=(0, 0, 90), prob_inverse_cameras_rotation=0),
         dict(type='RandomMirrorSpace'),
         dict(type='RandomImageISP', prob=0.1),
