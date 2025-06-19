@@ -731,7 +731,7 @@ class PETRTemporalDecoderLayer(BaseModule):
                         f'operation_order {self.num_attn}'
 
         for layer in self.operation_order:
-            if layer == 'self_attn':
+            if layer == 'self_attn': # i.e. Hybrid Attention
                 if temp_memory is not None:
                     temp_key = temp_value = torch.cat([query, temp_memory], dim=0)
                     temp_pos = torch.cat([query_pos, temp_pos], dim=0)
