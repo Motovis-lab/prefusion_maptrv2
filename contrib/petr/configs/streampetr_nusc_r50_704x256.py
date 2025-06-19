@@ -14,9 +14,9 @@ find_unused_parameters = True
 def _calc_grid_size(_range, _voxel_size, n_axis=3):
     return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
 
-batch_size = 2
+batch_size = 4
 num_epochs = 24
-possible_group_sizes = [8]
+possible_group_sizes = [20]
 voxel_size = [0.2, 0.2, 8]
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_range = (point_cloud_range[2::3], point_cloud_range[0::3][::-1], point_cloud_range[1::3][::-1])
@@ -340,7 +340,7 @@ optim_wrapper = dict(
     type="OptimWrapper",
     optimizer=dict(
         type="AdamW",
-        lr=5e-5, # total lr per gpu lr is lr/n
+        lr=2.5e-5 * batch_size, # lr per gpu, if you have N GPUs, multiply this lr by N.
         weight_decay=0.01,
     ),
     paramwise_cfg=dict(
