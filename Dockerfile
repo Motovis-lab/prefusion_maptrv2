@@ -72,6 +72,7 @@ RUN pip install --no-cache-dir polars==1.28.0
 RUN pip install --no-cache-dir mmsegmentation==1.2.2
 RUN pip install --no-cache-dir ftfy==6.3.1
 RUN pip install --no-cache-dir regex==2024.11.6
+RUN pip install --no-cache-dir aim==3.29.1
 
 WORKDIR /workspace
 
