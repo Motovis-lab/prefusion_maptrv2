@@ -14,6 +14,7 @@ find_unused_parameters = True
 def _calc_grid_size(_range, _voxel_size, n_axis=3):
     return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
 
+num_gpus = 1
 batch_size = 4
 num_epochs = 24
 possible_group_sizes = [20]
@@ -110,7 +111,7 @@ train_dataset = dict(
     transforms=[
         dict(type='BGR2RGB'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
-        dict(type='RandomRenderExtrinsic'),
+        dict(type='RandomRenderExtrinsic', angles=[2, 2, 2]),
         dict(type='RandomRotateSpace', angles=(0, 0, 90), prob_inverse_cameras_rotation=0),
         dict(type='RandomMirrorSpace'),
         dict(type='RandomImageISP', prob=0.1),
@@ -340,7 +341,7 @@ optim_wrapper = dict(
     type="OptimWrapper",
     optimizer=dict(
         type="AdamW",
-        lr=2.5e-5 * batch_size, # lr per gpu, if you have N GPUs, multiply this lr by N.
+        lr=2.5e-5 * batch_size * num_gpus, # total lr = base_lr * batch_size * num_gpus.
         weight_decay=0.01,
     ),
     paramwise_cfg=dict(
@@ -359,10 +360,11 @@ param_scheduler = [
 ]
 
 
-visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"), dict(type="TensorboardVisBackend")])
+visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"),
+                                                   dict(type="AimVisBackend", init_kwargs=dict(repo="aim://47.116.121.11:5380"))])
 
 
-log_processor = dict(type='GroupAwareLogProcessor', tabulate_ncols=4)
+log_processor = dict(type='GroupAwareLogProcessor', tabulate_ncols=5)
 
 default_hooks = dict(
     timer=dict(type="IterTimerHook"),
