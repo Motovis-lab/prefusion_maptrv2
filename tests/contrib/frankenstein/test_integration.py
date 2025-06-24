@@ -28,7 +28,7 @@ def test_direct_generator_vs_integrated():
         'num_query': 100,
         'num_propagated': 256,
         'memory_len': 1024,
-        'scalar': 5,
+        'num_dn_groups': 5,
         'bbox_noise_scale': 0.4,
         'bbox_noise_trans': 0.0,
         'split': 0.5,
@@ -62,7 +62,8 @@ def test_direct_generator_vs_integrated():
     print(f"  - Attention mask shape: {standalone_result[1].shape}")
     print(f"  - Pad size: {standalone_result[2]['pad_size']}")
     
-    return True
+    # Test passes if we get to this point without errors
+    assert True
 
 
 if __name__ == "__main__":

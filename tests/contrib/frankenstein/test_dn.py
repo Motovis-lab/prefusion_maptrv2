@@ -153,7 +153,7 @@ class TestNoisyInstanceGenerator:
             'num_query': 100,
             'num_propagated': 256,
             'memory_len': 1024,
-            'scalar': 5,
+            'num_dn_groups': 5,
             'bbox_noise_scale': 0.4,
             'bbox_noise_trans': 0.0,
             'split': 0.5,
@@ -207,7 +207,7 @@ class TestNoisyInstanceGenerator:
         assert mask_dict is not None
         
         # Check shapes
-        expected_dn_size = max(len(gt) for gt in sample_data['gt_bboxes_3d']) * default_config['scalar']
+        expected_dn_size = max(len(gt) for gt in sample_data['gt_bboxes_3d']) * default_config['num_dn_groups']
         expected_total_queries = expected_dn_size + default_config['num_query']
         
         assert padded_reference_points.shape == (sample_data['batch_size'], expected_total_queries, 3)
@@ -254,19 +254,23 @@ class TestNoisyInstanceGenerator:
         # Should still work with empty GT
         assert padded_reference_points.shape == (1, 100, 3)  # Only original queries
         assert mask_dict['pad_size'] == 0
-    
+
     @pytest.mark.parametrize("seed", [42, 123, 456])
     def test_equivalence_with_original(self, default_config, sample_data, device, seed):
         """
         Test that NoisyInstanceGenerator produces identical results to original implementation.
-        
+
         This is the key test that verifies our refactoring is correct.
         """
         torch.manual_seed(seed)
-        
+
         # Create both implementations with identical configuration
         new_generator = NoisyInstanceGenerator(**default_config).to(device)
-        original_impl = OriginalDNImplementation(**default_config).to(device)
+        
+        # Convert config for original implementation (uses 'scalar' instead of 'num_dn_groups')
+        original_config = default_config.copy()
+        original_config['scalar'] = original_config.pop('num_dn_groups')
+        original_impl = OriginalDNImplementation(**original_config).to(device)
         
         # Test with DN enabled
         torch.manual_seed(seed)  # Reset seed for reproducible random operations
@@ -317,17 +321,17 @@ class TestNoisyInstanceGenerator:
         configs = [
             # Standard config
             {
-                'num_classes': 10, 'num_query': 100, 'scalar': 5,
+                'num_classes': 10, 'num_query': 100, 'num_dn_groups': 5,
                 'bbox_noise_scale': 0.4, 'split': 0.5
             },
             # No noise config
             {
-                'num_classes': 5, 'num_query': 50, 'scalar': 3,
+                'num_classes': 5, 'num_query': 50, 'num_dn_groups': 3,
                 'bbox_noise_scale': 0.0, 'split': 0.5
             },
             # High noise config
             {
-                'num_classes': 20, 'num_query': 200, 'scalar': 10,
+                'num_classes': 20, 'num_query': 200, 'num_dn_groups': 10,
                 'bbox_noise_scale': 1.0, 'split': 0.8
             }
         ]
@@ -359,7 +363,7 @@ class TestNoisyInstanceGenerator:
             assert padded_reference_points is not None
             assert attn_mask is not None
             assert mask_dict is not None
-            assert mask_dict['pad_size'] == 2 * full_config['scalar']
+            assert mask_dict['pad_size'] == 2 * full_config['num_dn_groups']
     
     def test_attention_mask_properties(self, default_config, sample_data, device):
         """Test specific properties of attention masks."""
@@ -385,20 +389,20 @@ class TestNoisyInstanceGenerator:
         # DN queries should have specific masking patterns
         max_gt_per_batch = max(len(gt) for gt in sample_data['gt_bboxes_3d'])
         
-        for i in range(default_config['scalar']):
+        for i in range(default_config['num_dn_groups']):
             start = i * max_gt_per_batch
             end = (i + 1) * max_gt_per_batch
             
-            if i < default_config['scalar'] - 1:
-                # Should not see later scalar copies
+            if i < default_config['num_dn_groups'] - 1:
+                # Should not see later copies
                 later_start = (i + 1) * max_gt_per_batch
                 assert torch.all(attn_mask[start:end, later_start:pad_size]), \
-                    f"Scalar copy {i} should not see later copies"
+                    f"Group {i} should not see later copies"
             
             if i > 0:
-                # Should not see earlier scalar copies
+                # Should not see earlier copies
                 assert torch.all(attn_mask[start:end, :start]), \
-                    f"Scalar copy {i} should not see earlier copies"
+                    f"Group {i} should not see earlier copies"
 
 
 def print_ground_truth_outputs():
