@@ -22,6 +22,7 @@ from mmdet.utils import InstanceList, OptInstanceList
 
 from contrib.petr.positional_encoding import pos2posemb3d, pos2posemb1d, nerf_positional_encoding
 from contrib.petr.misc import normalize_bbox, bias_init_with_prob, MLN, topk_gather, transform_reference_points, memory_refresh, SELayer_Linear
+from contrib.frankenstein.noisy_instance_generator import NoisyInstanceGenerator
 from prefusion.registry import MODELS, DATA_SAMPLERS, TASK_UTILS
 
 
@@ -233,6 +234,19 @@ class FrankenStreamPETRHead(AnchorFreeHead):
             coords_d = self.depth_start + bin_size * index
 
         self.coords_d = nn.Parameter(coords_d, requires_grad=False)
+
+        # Initialize the noisy instance generator for denoising training
+        self.noisy_instance_generator = NoisyInstanceGenerator(
+            num_classes=num_classes,
+            num_query=num_query,
+            num_propagated=num_propagated,
+            memory_len=memory_len,
+            scalar=scalar,
+            bbox_noise_scale=noise_scale,
+            bbox_noise_trans=noise_trans,
+            split=split,
+            pc_range=self.bbox_coder.pc_range
+        )
 
         self._init_layers()
         self.reset_memory()
@@ -464,86 +478,33 @@ class FrankenStreamPETRHead(AnchorFreeHead):
         return tgt, query_pos, reference_points, temp_memory, temp_pos, rec_ego_pose
 
     def prepare_for_dn(self, batch_size, reference_points, gt_bboxes_3d, gt_labels):
-        if self.training and self.with_dn:
-            known = [(torch.ones_like(t)).cuda() for t in gt_labels]
-            know_idx = known
-            unmask_bbox = unmask_label = torch.cat(known)
-            #gt_num
-            known_num = [t.size(0) for t in gt_bboxes_3d]
-
-            gt_labels = torch.cat([t for t in gt_labels])
-            boxes = torch.cat([t for t in gt_bboxes_3d])
-            batch_idx = torch.cat([torch.full((t.size(0), ), i) for i, t in enumerate(gt_bboxes_3d)])
-
-            known_indice = torch.nonzero(unmask_label + unmask_bbox)
-            known_indice = known_indice.view(-1)
-            # add noise
-            known_indice = known_indice.repeat(self.scalar, 1).view(-1)
-            known_labels = gt_labels.repeat(self.scalar, 1).view(-1).long().to(reference_points.device)
-            known_bid = batch_idx.repeat(self.scalar, 1).view(-1)
-            known_bboxs = boxes.repeat(self.scalar, 1).to(reference_points.device)
-            known_bbox_center = known_bboxs[:, :3].clone()
-            known_bbox_scale = known_bboxs[:, 3:6].clone()
-
-            if self.bbox_noise_scale > 0:
-                diff = known_bbox_scale / 2 + self.bbox_noise_trans
-                rand_prob = torch.rand_like(known_bbox_center) * 2 - 1.0
-                known_bbox_center += torch.mul(rand_prob,
-                                            diff) * self.bbox_noise_scale
-                known_bbox_center[..., 0:3] = (known_bbox_center[..., 0:3] - self.pc_range[0:3]) / (self.pc_range[3:6] - self.pc_range[0:3])
-
-                known_bbox_center = known_bbox_center.clamp(min=0.0, max=1.0)
-                mask = torch.norm(rand_prob, 2, 1) > self.split
-                known_labels[mask] = self.num_classes # discussion: https://github.com/exiawsh/StreamPETR/issues/233
-
-            single_pad = int(max(known_num))
-            pad_size = int(single_pad * self.scalar)
-            padding_bbox = torch.zeros(pad_size, 3).to(reference_points.device)
-            padded_reference_points = torch.cat([padding_bbox, reference_points], dim=0).unsqueeze(0).repeat(batch_size, 1, 1)
-
-            if len(known_num):
-                map_known_indice = torch.cat([torch.tensor(range(num)) for num in known_num])  # [1,2, 1,2,3]
-                map_known_indice = torch.cat([map_known_indice + single_pad * i for i in range(self.scalar)]).long()
-            if len(known_bid):
-                padded_reference_points[(known_bid.long(), map_known_indice)] = known_bbox_center.to(reference_points.device)
-
-            tgt_size = pad_size + self.num_query
-            attn_mask = torch.ones(tgt_size, tgt_size).to(reference_points.device) < 0
-            # match query cannot see the reconstruct
-            attn_mask[pad_size:, :pad_size] = True
-            # reconstruct cannot see each other
-            for i in range(self.scalar):
-                if i == 0:
-                    attn_mask[single_pad * i:single_pad * (i + 1), single_pad * (i + 1):pad_size] = True
-                if i == self.scalar - 1:
-                    attn_mask[single_pad * i:single_pad * (i + 1), :single_pad * i] = True
-                else:
-                    attn_mask[single_pad * i:single_pad * (i + 1), single_pad * (i + 1):pad_size] = True
-                    attn_mask[single_pad * i:single_pad * (i + 1), :single_pad * i] = True
-
-            # update dn mask for temporal modeling
-            query_size = pad_size + self.num_query + self.num_propagated
-            tgt_size = pad_size + self.num_query + self.memory_len
-            temporal_attn_mask = torch.ones(query_size, tgt_size).to(reference_points.device) < 0
-            temporal_attn_mask[:attn_mask.size(0), :attn_mask.size(1)] = attn_mask
-            temporal_attn_mask[pad_size:, :pad_size] = True
-            attn_mask = temporal_attn_mask
-
-            mask_dict = {
-                'known_indice': torch.as_tensor(known_indice).long(),
-                'batch_idx': torch.as_tensor(batch_idx).long(),
-                'map_known_indice': torch.as_tensor(map_known_indice).long(),
-                'known_lbs_bboxes': (known_labels, known_bboxs),
-                'know_idx': know_idx,
-                'pad_size': pad_size
-            }
-
-        else:
-            padded_reference_points = reference_points.unsqueeze(0).repeat(batch_size, 1, 1)
-            attn_mask = None
-            mask_dict = None
-
-        return padded_reference_points, attn_mask, mask_dict
+        """
+        Prepare denoising (DN) queries for training.
+        
+        This method uses the NoisyInstanceGenerator to create noisy versions of
+        ground truth instances for denoising training, which helps improve model
+        convergence in DETR-like architectures.
+        
+        Args:
+            batch_size (int): Number of samples in the batch
+            reference_points (torch.Tensor): Reference points for queries [num_query, 3]
+            gt_bboxes_3d (List[torch.Tensor]): Ground truth 3D bboxes for each batch
+            gt_labels (List[torch.Tensor]): Ground truth labels for each batch
+            
+        Returns:
+            Tuple containing:
+            - padded_reference_points (torch.Tensor): Reference points with DN padding
+            - attn_mask (Optional[torch.Tensor]): Attention mask for DN queries
+            - mask_dict (Optional[Dict]): Dictionary containing DN metadata
+        """
+        return self.noisy_instance_generator.generate_noisy_instances(
+            batch_size=batch_size,
+            reference_points=reference_points,
+            gt_bboxes_3d=gt_bboxes_3d,
+            gt_labels=gt_labels,
+            training=self.training,
+            with_dn=self.with_dn
+        )
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
                               missing_keys, unexpected_keys, error_msgs):
