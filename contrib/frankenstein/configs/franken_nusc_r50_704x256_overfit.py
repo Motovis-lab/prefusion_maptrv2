@@ -117,7 +117,7 @@ train_dataset = dict(
         # dict(type='RandomSetExtrinsicParam', prob=0.1, angle=1, translation=0.02)
     ],
     group_sampler=dict(type="IndexGroupSampler",
-                        phase="train",
+                        phase="val",
                         possible_group_sizes=possible_group_sizes,
                         possible_frame_intervals=[1]),
     batch_size=batch_size,
@@ -254,15 +254,15 @@ model = dict(
         num_propagated=256,
         with_ego_pos=True,
         match_with_velo=False,
-        scalar=10, ##noise groups
-        noise_scale = 1.0,
-        dn_weight= 1.0, ##dn loss weight
-        split = 0.75, ###positive rate
+        num_dn_groups=10, ##noise groups
+        noise_scale=1.0,
+        dn_weight=1.0, ##dn loss weight
+        split=0.75, ###positive rate
         LID=True,
         with_position=True,
         code_size=10, # x, y, z, l, w, h, sin(yaw), cos(yaw), Vx, Vy
         position_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
-        code_weights = [2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+        code_weights=[2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
         transformer=dict(
             type='PETRTemporalTransformer',
             decoder=dict(

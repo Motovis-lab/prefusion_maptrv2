@@ -25,7 +25,7 @@ class NoisyInstanceGenerator(nn.Module):
         num_query (int): Number of object queries
         num_propagated (int): Number of propagated queries from memory
         memory_len (int): Length of memory buffer
-        scalar (int): Number of noisy copies to create for each GT bbox
+        num_dn_groups (int): Number of noisy copies to create for each GT bbox
         bbox_noise_scale (float): Scale factor for bbox center noise
         bbox_noise_trans (float): Translation offset for noise
         split (float): Threshold for determining noisy vs clean labels
@@ -38,7 +38,7 @@ class NoisyInstanceGenerator(nn.Module):
         num_query: int = 100,
         num_propagated: int = 256,
         memory_len: int = 1024,
-        scalar: int = 5,
+        num_dn_groups: int = 5,
         bbox_noise_scale: float = 0.4,
         bbox_noise_trans: float = 0.0,
         split: float = 0.5,
@@ -49,7 +49,7 @@ class NoisyInstanceGenerator(nn.Module):
         self.num_query = num_query
         self.num_propagated = num_propagated
         self.memory_len = memory_len
-        self.scalar = scalar
+        self.num_dn_groups = num_dn_groups
         self.bbox_noise_scale = bbox_noise_scale
         self.bbox_noise_trans = bbox_noise_trans
         self.split = split
@@ -88,9 +88,9 @@ class NoisyInstanceGenerator(nn.Module):
         
         # Step 1: Create validity masks for GT instances
         gt_validity_masks = self._create_gt_validity_masks(gt_labels)
-        gt_counts_per_batch = [t.size(0) for t in gt_bboxes_3d]
+        gt_counts_in_the_batch = [t.size(0) for t in gt_bboxes_3d]
         
-        # Step 2: Concatenate all GT data across batches
+        # Step 2: Concatenate all GT data across samples in a batch
         all_gt_labels = torch.cat(gt_labels)
         all_gt_bboxes = torch.cat(gt_bboxes_3d)
         batch_indices = self._create_batch_indices(gt_bboxes_3d)
@@ -101,11 +101,11 @@ class NoisyInstanceGenerator(nn.Module):
         )
         
         # Step 4: Create padded reference points
-        max_gt_per_batch = max(gt_counts_per_batch) if gt_counts_per_batch else 0
-        dn_pad_size = max_gt_per_batch * self.scalar
+        max_gt_per_batch = max(gt_counts_in_the_batch) if gt_counts_in_the_batch else 0
+        dn_pad_size = max_gt_per_batch * self.num_dn_groups
         padded_reference_points = self._create_padded_reference_points(
             reference_points, batch_size, dn_pad_size, 
-            noisy_data, gt_counts_per_batch, max_gt_per_batch
+            noisy_data, gt_counts_in_the_batch, max_gt_per_batch
         )
         
         # Step 5: Create attention masks
@@ -115,7 +115,7 @@ class NoisyInstanceGenerator(nn.Module):
         
         # Step 6: Create metadata dictionary
         mask_dict = self._create_mask_dict(
-            noisy_data, batch_indices, gt_counts_per_batch, 
+            noisy_data, batch_indices, gt_counts_in_the_batch, 
             max_gt_per_batch, gt_validity_masks, dn_pad_size
         )
         
@@ -154,10 +154,10 @@ class NoisyInstanceGenerator(nn.Module):
         valid_indices = torch.nonzero(valid_gt_mask).view(-1)
         
         # Repeat indices and data for multiple noisy copies
-        repeated_indices = valid_indices.repeat(self.scalar, 1).view(-1)
-        repeated_labels = all_gt_labels.repeat(self.scalar, 1).view(-1).long().to(device)
-        repeated_batch_idx = batch_indices.repeat(self.scalar, 1).view(-1)
-        repeated_bboxes = all_gt_bboxes.repeat(self.scalar, 1).to(device)
+        repeated_indices = valid_indices.repeat(self.num_dn_groups, 1).view(-1)
+        repeated_labels = all_gt_labels.repeat(self.num_dn_groups, 1).view(-1).long().to(device)
+        repeated_batch_idx = batch_indices.repeat(self.num_dn_groups, 1).view(-1)
+        repeated_bboxes = all_gt_bboxes.repeat(self.num_dn_groups, 1).to(device)
         
         # Extract center and scale for noise generation
         noisy_centers = repeated_bboxes[:, :3].clone()
@@ -238,15 +238,15 @@ class NoisyInstanceGenerator(nn.Module):
         max_gt_per_batch: int
     ) -> torch.Tensor:
         """Create mapping from flattened indices to padded positions."""
-        # Create base mapping for one scalar copy
+        # Create base mapping for one num_dn_groups copy
         base_mapping = torch.cat([
             torch.tensor(range(num)) for num in gt_counts_per_batch
         ])
         
-        # Extend mapping for all scalar copies
+        # Extend mapping for all num_dn_groups copies
         position_mapping = torch.cat([
             base_mapping + max_gt_per_batch * i 
-            for i in range(self.scalar)
+            for i in range(self.num_dn_groups)
         ]).long()
         
         return position_mapping
@@ -265,15 +265,15 @@ class NoisyInstanceGenerator(nn.Module):
         # Regular queries cannot see DN queries
         attn_mask[dn_pad_size:, :dn_pad_size] = True
         
-        # DN queries from different scalar copies cannot see each other
-        for i in range(self.scalar):
+        # DN queries from different num_dn_groups copies cannot see each other
+        for i in range(self.num_dn_groups):
             start_idx = max_gt_per_batch * i
             end_idx = max_gt_per_batch * (i + 1)
             
             if i == 0:
                 # First copy cannot see later copies
                 attn_mask[start_idx:end_idx, end_idx:dn_pad_size] = True
-            elif i == self.scalar - 1:
+            elif i == self.num_dn_groups - 1:
                 # Last copy cannot see earlier copies
                 attn_mask[start_idx:end_idx, :start_idx] = True
             else:

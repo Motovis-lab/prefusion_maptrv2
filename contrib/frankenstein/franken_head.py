@@ -97,13 +97,13 @@ class FrankenStreamPETRHead(AnchorFreeHead):
                  depth_step=0.8,
                  depth_num=64,
                  LID=False,
-                 depth_start = 1,
+                 depth_start=1,
                  position_range=[-65, -65, -8.0, 65, 65, 8.0],
-                 scalar = 5,
-                 noise_scale = 0.4,
-                 noise_trans = 0.0,
-                 dn_weight = 1.0,
-                 split = 0.5,
+                 num_dn_groups=5,
+                 noise_scale=0.4,
+                 noise_trans=0.0,
+                 dn_weight=1.0,
+                 split=0.5,
                  init_cfg=None,
                  normedlinear=False,
                  **kwargs):
@@ -179,7 +179,7 @@ class FrankenStreamPETRHead(AnchorFreeHead):
         self.depth_start = depth_start
         self.stride=stride
 
-        self.scalar = scalar
+        self.num_dn_groups = num_dn_groups
         self.bbox_noise_scale = noise_scale
         self.bbox_noise_trans = noise_trans
         self.dn_weight = dn_weight
@@ -241,7 +241,7 @@ class FrankenStreamPETRHead(AnchorFreeHead):
             num_query=num_query,
             num_propagated=num_propagated,
             memory_len=memory_len,
-            scalar=scalar,
+            num_dn_groups=num_dn_groups,
             bbox_noise_scale=noise_scale,
             bbox_noise_trans=noise_trans,
             split=split,
