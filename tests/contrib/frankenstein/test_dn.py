@@ -15,7 +15,7 @@ import torch.nn as nn
 from typing import List
 
 # Import the new implementation
-from contrib.frankenstein.noisy_instance_generator import NoisyInstanceGenerator
+from contrib.frankenstein.noisy_instance_generator.streampetr import StreamPETRNoisyInstanceGenerator
 
 
 class OriginalDNImplementation(nn.Module):
@@ -188,7 +188,7 @@ class TestNoisyInstanceGenerator:
     
     def test_basic_functionality(self, default_config, sample_data, device):
         """Test basic functionality of NoisyInstanceGenerator."""
-        generator = NoisyInstanceGenerator(**default_config).to(device)
+        generator = StreamPETRNoisyInstanceGenerator(**default_config).to(device)
         
         result = generator.generate_noisy_instances(
             sample_data['batch_size'],
@@ -215,7 +215,7 @@ class TestNoisyInstanceGenerator:
     
     def test_non_dn_mode(self, default_config, sample_data, device):
         """Test behavior when DN is disabled."""
-        generator = NoisyInstanceGenerator(**default_config).to(device)
+        generator = StreamPETRNoisyInstanceGenerator(**default_config).to(device)
         
         result = generator.generate_noisy_instances(
             sample_data['batch_size'],
@@ -234,7 +234,7 @@ class TestNoisyInstanceGenerator:
     
     def test_empty_gt_data(self, default_config, device):
         """Test behavior with empty GT data."""
-        generator = NoisyInstanceGenerator(**default_config).to(device)
+        generator = StreamPETRNoisyInstanceGenerator(**default_config).to(device)
         
         reference_points = torch.rand(100, 3, device=device)
         empty_gt_bboxes = [torch.empty(0, 10, device=device)]
@@ -265,7 +265,7 @@ class TestNoisyInstanceGenerator:
         torch.manual_seed(seed)
 
         # Create both implementations with identical configuration
-        new_generator = NoisyInstanceGenerator(**default_config).to(device)
+        new_generator = StreamPETRNoisyInstanceGenerator(**default_config).to(device)
         
         # Convert config for original implementation (uses 'scalar' instead of 'num_dn_groups')
         original_config = default_config.copy()
@@ -347,7 +347,7 @@ class TestNoisyInstanceGenerator:
                 **config
             }
             
-            generator = NoisyInstanceGenerator(**full_config).to(device)
+            generator = StreamPETRNoisyInstanceGenerator(**full_config).to(device)
             
             # Create sample data
             reference_points = torch.rand(full_config['num_query'], 3, device=device)
@@ -369,7 +369,7 @@ class TestNoisyInstanceGenerator:
     
     def test_attention_mask_properties(self, default_config, sample_data, device):
         """Test specific properties of attention masks."""
-        generator = NoisyInstanceGenerator(**default_config).to(device)
+        generator = StreamPETRNoisyInstanceGenerator(**default_config).to(device)
         
         result = generator.generate_noisy_instances(
             sample_data['batch_size'],

@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
 import torch
 import pytest
-from contrib.frankenstein.noisy_instance_generator import NoisyInstanceGenerator
+from contrib.frankenstein.noisy_instance_generator.streampetr import StreamPETRNoisyInstanceGenerator
 
 
 def test_direct_generator_vs_integrated():
@@ -48,7 +48,7 @@ def test_direct_generator_vs_integrated():
     ]
     
     # Create standalone generator
-    generator = NoisyInstanceGenerator(**config).to(device)
+    generator = StreamPETRNoisyInstanceGenerator(**config).to(device)
     
     # Test with same seed
     torch.manual_seed(42)

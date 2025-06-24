@@ -22,7 +22,7 @@ from mmdet.utils import InstanceList, OptInstanceList
 
 from contrib.petr.positional_encoding import pos2posemb3d, pos2posemb1d, nerf_positional_encoding
 from contrib.petr.misc import normalize_bbox, bias_init_with_prob, MLN, topk_gather, transform_reference_points, memory_refresh, SELayer_Linear
-from contrib.frankenstein.noisy_instance_generator import NoisyInstanceGenerator
+from contrib.frankenstein.noisy_instance_generator.streampetr import StreamPETRNoisyInstanceGenerator
 from prefusion.registry import MODELS, DATA_SAMPLERS, TASK_UTILS
 
 
@@ -236,7 +236,7 @@ class FrankenStreamPETRHead(AnchorFreeHead):
         self.coords_d = nn.Parameter(coords_d, requires_grad=False)
 
         # Initialize the noisy instance generator for denoising training
-        self.noisy_instance_generator = NoisyInstanceGenerator(
+        self.noisy_instance_generator = StreamPETRNoisyInstanceGenerator(
             num_classes=num_classes,
             num_query=num_query,
             num_propagated=num_propagated,
