@@ -22,7 +22,6 @@ from mmdet.utils import InstanceList, OptInstanceList
 
 from contrib.petr.positional_encoding import pos2posemb3d, pos2posemb1d, nerf_positional_encoding
 from contrib.petr.misc import normalize_bbox, bias_init_with_prob, MLN, topk_gather, transform_reference_points, memory_refresh, SELayer_Linear
-from contrib.frankenstein.noisy_instance_generator.streampetr import StreamPETRNoisyInstanceGenerator
 from prefusion.registry import MODELS, DATA_SAMPLERS, TASK_UTILS
 
 
@@ -70,6 +69,7 @@ class FrankenStreamPETRHead(AnchorFreeHead):
                  memory_len=1024,
                  topk_proposals=256,
                  num_propagated=256,
+                 noisy_instance_generator=None,
                  with_dn=True,
                  with_ego_pos=True,
                  match_with_velo=True,
@@ -164,7 +164,7 @@ class FrankenStreamPETRHead(AnchorFreeHead):
         self.memory_len = memory_len
         self.topk_proposals = topk_proposals
         self.num_propagated = num_propagated
-        self.with_dn = with_dn
+        self.with_dn = noisy_instance_generator is None
         self.with_ego_pos = with_ego_pos
         self.match_with_velo = match_with_velo
         self.num_reg_fcs = num_reg_fcs
@@ -236,17 +236,7 @@ class FrankenStreamPETRHead(AnchorFreeHead):
         self.coords_d = nn.Parameter(coords_d, requires_grad=False)
 
         # Initialize the noisy instance generator for denoising training
-        self.noisy_instance_generator = StreamPETRNoisyInstanceGenerator(
-            num_classes=num_classes,
-            num_query=num_query,
-            num_propagated=num_propagated,
-            memory_len=memory_len,
-            num_dn_groups=num_dn_groups,
-            bbox_noise_scale=noise_scale,
-            bbox_noise_trans=noise_trans,
-            noise_corruption_threshold=noise_corruption_threshold,
-            pc_range=self.bbox_coder.pc_range
-        )
+        self.noisy_instance_generator = TASK_UTILS.build(noisy_instance_generator)
 
         self._init_layers()
         self.reset_memory()

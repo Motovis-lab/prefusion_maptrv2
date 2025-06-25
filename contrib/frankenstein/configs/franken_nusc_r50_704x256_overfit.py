@@ -22,9 +22,28 @@ point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_range = (point_cloud_range[2::3], point_cloud_range[0::3][::-1], point_cloud_range[1::3][::-1])
 grid_size = _calc_grid_size(point_cloud_range, voxel_size)
 
+# StreamPETR Settings
+num_query = 644
+num_propagated = 256
+memory_len = 1024
+
 # 1600 x 900, 1408 x 512, 1056 x 384, 704 x 256
 resolution_pv = (704, 256)
 
+# camera_intrinsic_configs is calculated by the following code snippet
+# H, W = 900, 1600
+# new_H, new_W = 320, 880
+# for cam_name in NUSC_CAM_NAMES:
+#     intr = nusc.get("calibrated_sensor", nusc.get("sample_data", first_sample['data'][cam_name])['calibrated_sensor_token'])['camera_intrinsic']
+#     fx, fy, cx, cy = intr[0][0], intr[1][1], intr[0][2], intr[1][2]
+#     scale = new_W / W
+#     new_fx = fx * scale
+#     new_fy = fy * scale
+#     new_cx = cx * scale
+#     top_to_crop = H * scale - new_H
+#     cy_if_no_crop = cy * scale
+#     new_cy = cy_if_no_crop - top_to_crop
+#     print((f"{cam_name}=" + "{:.3f}, " * 4).format(new_cx, new_cy, new_fx, new_fy))
 camera_resolution_configs=dict(
     CAM_FRONT=resolution_pv,
     CAM_FRONT_RIGHT=resolution_pv,
@@ -111,7 +130,7 @@ train_dataset = dict(
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
         # dict(type='RandomRenderExtrinsic'),
         # dict(type='RandomRotateSpace', angles=(0, 0, 90), prob_inverse_cameras_rotation=0),
-        # dict(type='RandomMirrorSpace'),
+        dict(type='RandomMirrorSpace', prob=1.0),
         # dict(type='RandomImageISP', prob=0.1),
         # dict(type='RandomSetIntrinsicParam', prob=0.1, jitter_ratio=0.01),
         # dict(type='RandomSetExtrinsicParam', prob=0.1, angle=1, translation=0.02)
@@ -248,16 +267,25 @@ model = dict(
         type='FrankenStreamPETRHead',
         num_classes=len(class_mapping),
         in_channels=256,
-        num_query=644,
-        memory_len=1024,
+        num_query=num_query,
+        memory_len=memory_len,
         topk_proposals=256,
-        num_propagated=256,
+        num_propagated=num_propagated,
         with_ego_pos=True,
         match_with_velo=False,
-        num_dn_groups=10, ##noise groups
-        noise_scale=1.0,
+        noisy_instance_generator=dict(
+            type='StreamPETRNoisyInstanceGenerator',
+            num_classes=len(class_mapping),
+            num_query=num_query,
+            num_propagated=num_propagated,
+            memory_len=memory_len,
+            num_dn_groups=10, # number of noise groups
+            bbox_noise_scale=1.0, # scale of noise applied to the bbox centers
+            bbox_noise_trans=0.0, # translation offset for noise
+            noise_corruption_threshold=0.75, # threshold for noise magnitude
+            pc_range=point_cloud_range,
+        ),
         dn_weight=1.0, ##dn loss weight
-        noise_corruption_threshold=0.75, ###positive rate
         LID=True,
         with_position=True,
         code_size=10, # x, y, z, l, w, h, sin(yaw), cos(yaw), Vx, Vy

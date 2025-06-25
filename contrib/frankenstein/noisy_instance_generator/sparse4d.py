@@ -18,11 +18,11 @@ import torch.nn as nn
 
 from prefusion.registry import TASK_UTILS
 
-__all__ = ["StreamPETRNoisyInstanceGenerator"]
+__all__ = ["Sparse4DNoisyInstanceGenerator"]
 
 
 @TASK_UTILS.register_module()
-class StreamPETRNoisyInstanceGenerator(nn.Module):
+class Sparse4DNoisyInstanceGenerator(nn.Module):
     """
     Generates noisy instances for denoising training in DETR-like models.
     
@@ -246,7 +246,7 @@ class StreamPETRNoisyInstanceGenerator(nn.Module):
         scales: torch.Tensor,
         labels: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Add Gaussian noise to bbox centers.
+        """Add Gaussian noise to bbox centers.ext
         
         WHY this noise strategy works:
         - Size-proportional noise ensures smaller objects get smaller perturbations
