@@ -1,6 +1,6 @@
 import datetime
 
-experiment_name = "franken_nusc_r50_704x256_overfit"
+experiment_name = "franken_nusc_r50_704x256"
 
 _base_ = "../../../configs/default_runtime.py"
 
@@ -15,8 +15,8 @@ def _calc_grid_size(_range, _voxel_size, n_axis=3):
     return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
 
 batch_size = 2
-num_epochs = 1000
-possible_group_sizes = [20]
+num_epochs = 24
+possible_group_sizes = [8]
 voxel_size = [0.2, 0.2, 8]
 point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_range = (point_cloud_range[2::3], point_cloud_range[0::3][::-1], point_cloud_range[1::3][::-1])
@@ -93,7 +93,8 @@ train_dataset = dict(
     type="GroupBatchDataset",
     name="MvParkingTest",
     data_root="/data/datasets/nuScenes",
-    info_path="/data/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
+    info_path="/data/datasets/nuScenes/nusc_train_info_separated.pkl",
+    # info_path="/data/datasets/nuScenes/nusc_scene1087_train_info_separated.pkl",
     model_feeder=dict(
         type="FrankenStreamPETRModelFeeder",
         visible_range=point_cloud_range,
@@ -109,15 +110,15 @@ train_dataset = dict(
     transforms=[
         dict(type='BGR2RGB'),
         dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
-        # dict(type='RandomRenderExtrinsic'),
-        # dict(type='RandomRotateSpace', angles=(0, 0, 90), prob_inverse_cameras_rotation=0),
-        # dict(type='RandomMirrorSpace'),
-        # dict(type='RandomImageISP', prob=0.1),
-        # dict(type='RandomSetIntrinsicParam', prob=0.1, jitter_ratio=0.01),
-        # dict(type='RandomSetExtrinsicParam', prob=0.1, angle=1, translation=0.02)
+        dict(type='RandomRenderExtrinsic'),
+        dict(type='RandomRotateSpace', angles=(0, 0, 90), prob_inverse_cameras_rotation=0),
+        dict(type='RandomMirrorSpace'),
+        dict(type='RandomImageISP', prob=0.1),
+        dict(type='RandomSetIntrinsicParam', prob=0.1, jitter_ratio=0.01),
+        dict(type='RandomSetExtrinsicParam', prob=0.1, angle=1, translation=0.02)
     ],
     group_sampler=dict(type="IndexGroupSampler",
-                        phase="val",
+                        phase="train",
                         possible_group_sizes=possible_group_sizes,
                         possible_frame_intervals=[1]),
     batch_size=batch_size,
@@ -155,7 +156,7 @@ test_dataset = dict(
     type="GroupBatchDataset",
     name="MvParkingTest",
     data_root="/data/datasets/nuScenes",
-    info_path="/data/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
+    info_path="/data/datasets/nuScenes/nusc_val_info_separated.pkl",
     model_feeder=dict(
         type="FrankenStreamPETRModelFeeder",
         visible_range=point_cloud_range,
@@ -178,8 +179,8 @@ test_dataset = dict(
 )
 
 train_dataloader = dict(
-    num_workers=0,
-    persistent_workers=False,
+    num_workers=2,
+    persistent_workers=True,
     pin_memory=True,
     sampler=dict(type="DefaultSampler"),
     collate_fn=dict(type="collate_dict"),
@@ -255,14 +256,14 @@ model = dict(
         with_ego_pos=True,
         match_with_velo=False,
         num_dn_groups=10, ##noise groups
-        noise_scale=1.0,
-        dn_weight=1.0, ##dn loss weight
-        noise_corruption_threshold=0.75, ###positive rate
+        noise_scale = 1.0,
+        dn_weight= 1.0, ##dn loss weight
+        noise_corruption_threshold = 0.75, ###positive rate
         LID=True,
         with_position=True,
         code_size=10, # x, y, z, l, w, h, sin(yaw), cos(yaw), Vx, Vy
         position_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
-        code_weights=[2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+        code_weights = [2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
         transformer=dict(
             type='PETRTemporalTransformer',
             decoder=dict(
@@ -352,8 +353,8 @@ optim_wrapper = dict(
 
 ## scheduler configs
 param_scheduler = [
-    dict(type='LinearLR', start_factor=0.1, end_factor=1, by_epoch=False, begin=0, end=300), # warmup
-    dict(type='CosineAnnealingLR', by_epoch=False, begin=300, eta_min=1e-5)     # main LR Scheduler
+    dict(type='LinearLR', start_factor=0.1, end_factor=1, by_epoch=False, begin=0, end=1000), # warmup
+    dict(type='CosineAnnealingLR', by_epoch=False, begin=1000, eta_min=1e-5)     # main LR Scheduler
     # dict(type='PolyLR', by_epoch=False, begin=0, eta_min=0, power=1.0)     # main LR Scheduler
 ]
 
@@ -361,13 +362,13 @@ param_scheduler = [
 visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"), dict(type="TensorboardVisBackend")])
 
 
-log_processor = dict(type='GroupAwareLogProcessor', tabulate_ncols=5)
+log_processor = dict(type='GroupAwareLogProcessor', tabulate_ncols=4)
 
 default_hooks = dict(
     timer=dict(type="IterTimerHook"),
     logger=dict(type="LoggerHook", interval=50),
     param_scheduler=dict(type="ParamSchedulerHook"),
-    checkpoint=dict(type="CheckpointHook", interval=100, save_best="accuracy", rule="greater"),
+    checkpoint=dict(type="CheckpointHook", interval=1, save_best="accuracy", rule="greater"),
     sampler_seed=dict(type="DistSamplerSeedHook"),
 )
 

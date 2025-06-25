@@ -1,8 +1,8 @@
 """
 Pytest tests for NoisyInstanceGenerator and prepare_for_dn functionality.
 
-This test suite verifies that the refactored NoisyInstanceGenerator produces
-identical outputs to the original prepare_for_dn implementation.
+This test suite verifies that the refactored NoisyInstanceGenerator 
+produces identical outputs to the original prepare_for_dn implementation.
 """
 
 import sys
@@ -156,7 +156,7 @@ class TestNoisyInstanceGenerator:
             'num_dn_groups': 5,
             'bbox_noise_scale': 0.4,
             'bbox_noise_trans': 0.0,
-            'split': 0.5,
+            'noise_corruption_threshold': 0.5,
             'pc_range': [-65, -65, -8.0, 65, 65, 8.0]
         }
     
@@ -270,6 +270,8 @@ class TestNoisyInstanceGenerator:
         # Convert config for original implementation (uses 'scalar' instead of 'num_dn_groups')
         original_config = default_config.copy()
         original_config['scalar'] = original_config.pop('num_dn_groups')
+        original_config['split'] = original_config.pop('noise_corruption_threshold')
+        # Keep the new parameter name for the original implementation too
         original_impl = OriginalDNImplementation(**original_config).to(device)
         
         # Test with DN enabled
@@ -322,17 +324,17 @@ class TestNoisyInstanceGenerator:
             # Standard config
             {
                 'num_classes': 10, 'num_query': 100, 'num_dn_groups': 5,
-                'bbox_noise_scale': 0.4, 'split': 0.5
+                'bbox_noise_scale': 0.4, 'noise_corruption_threshold': 0.5
             },
             # No noise config
             {
                 'num_classes': 5, 'num_query': 50, 'num_dn_groups': 3,
-                'bbox_noise_scale': 0.0, 'split': 0.5
+                'bbox_noise_scale': 0.0, 'noise_corruption_threshold': 0.5
             },
             # High noise config
             {
                 'num_classes': 20, 'num_query': 200, 'num_dn_groups': 10,
-                'bbox_noise_scale': 1.0, 'split': 0.8
+                'bbox_noise_scale': 1.0, 'noise_corruption_threshold': 0.8
             }
         ]
         
@@ -423,7 +425,7 @@ def print_ground_truth_outputs():
         'scalar': 5,
         'bbox_noise_scale': 0.4,
         'bbox_noise_trans': 0.0,
-        'split': 0.5,
+        'noise_corruption_threshold': 0.5,
         'pc_range': [-65, -65, -8.0, 65, 65, 8.0]
     }
     

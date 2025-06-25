@@ -31,7 +31,7 @@ def test_direct_generator_vs_integrated():
         'num_dn_groups': 5,
         'bbox_noise_scale': 0.4,
         'bbox_noise_trans': 0.0,
-        'split': 0.5,
+        'noise_corruption_threshold': 0.5,
         'pc_range': [-65, -65, -8.0, 65, 65, 8.0]
     }
     

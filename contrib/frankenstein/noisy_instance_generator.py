@@ -41,7 +41,8 @@ class NoisyInstanceGenerator(nn.Module):
         num_dn_groups (int): Number of noisy copies to create for each GT bbox (typically 5)
         bbox_noise_scale (float): Scale factor for bbox center noise (controls corruption level)
         bbox_noise_trans (float): Translation offset for noise (adds diversity to noise patterns)
-        split (float): Threshold for determining noisy vs clean labels (prevents over-corruption)
+        noise_corruption_threshold (float): Threshold for noise magnitude - instances with noise 
+            above this level are treated as background to prevent over-corruption
         pc_range (List[float]): Point cloud range [x_min, y_min, z_min, x_max, y_max, z_max]
     """
     
@@ -54,7 +55,7 @@ class NoisyInstanceGenerator(nn.Module):
         num_dn_groups: int = 5,
         bbox_noise_scale: float = 0.4,
         bbox_noise_trans: float = 0.0,
-        split: float = 0.5,
+        noise_corruption_threshold: float = 0.5,
         pc_range: List[float] = [-65, -65, -8.0, 65, 65, 8.0]
     ):
         super().__init__()
@@ -65,7 +66,7 @@ class NoisyInstanceGenerator(nn.Module):
         self.num_dn_groups = num_dn_groups
         self.bbox_noise_scale = bbox_noise_scale
         self.bbox_noise_trans = bbox_noise_trans
-        self.split = split
+        self.noise_corruption_threshold = noise_corruption_threshold
         
         # WHY register as buffer: pc_range needs to be moved to the same device as the model
         # but shouldn't be updated during training (it's a constant defining the coordinate space)
@@ -256,9 +257,9 @@ class NoisyInstanceGenerator(nn.Module):
         centers = centers.clamp(min=0.0, max=1.0)
         
         # Mark heavily noised instances as background class
-        # WHY: If noise is too large (L2 norm > split threshold), the instance becomes
+        # WHY: If noise is too large (L2 norm > noise_corruption_threshold), the instance becomes
         # so corrupted it's better to treat it as background rather than the original class
-        noise_magnitude_mask = torch.norm(random_noise, 2, 1) > self.split
+        noise_magnitude_mask = torch.norm(random_noise, 2, 1) > self.noise_corruption_threshold
         labels[noise_magnitude_mask] = self.num_classes
         
         return centers, labels

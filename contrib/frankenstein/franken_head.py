@@ -103,7 +103,7 @@ class FrankenStreamPETRHead(AnchorFreeHead):
                  noise_scale=0.4,
                  noise_trans=0.0,
                  dn_weight=1.0,
-                 split=0.5,
+                 noise_corruption_threshold=0.5,
                  init_cfg=None,
                  normedlinear=False,
                  **kwargs):
@@ -183,7 +183,7 @@ class FrankenStreamPETRHead(AnchorFreeHead):
         self.bbox_noise_scale = noise_scale
         self.bbox_noise_trans = noise_trans
         self.dn_weight = dn_weight
-        self.split = split
+        self.noise_corruption_threshold = noise_corruption_threshold
 
         self.act_cfg = transformer.get('act_cfg',
                                        dict(type='ReLU', inplace=True))
@@ -244,7 +244,7 @@ class FrankenStreamPETRHead(AnchorFreeHead):
             num_dn_groups=num_dn_groups,
             bbox_noise_scale=noise_scale,
             bbox_noise_trans=noise_trans,
-            split=split,
+            noise_corruption_threshold=noise_corruption_threshold,
             pc_range=self.bbox_coder.pc_range
         )
 
@@ -858,7 +858,7 @@ class FrankenStreamPETRHead(AnchorFreeHead):
         # classification loss
         cls_scores = cls_scores.reshape(-1, self.cls_out_channels)
         # construct weighted avg_factor to match with the official DETR repo
-        cls_avg_factor = num_total_pos * 3.14159 / 6 * self.split * self.split  * self.split ### positive rate
+        cls_avg_factor = num_total_pos * 3.14159 / 6 * self.noise_corruption_threshold * self.noise_corruption_threshold * self.noise_corruption_threshold ### positive rate
         if self.sync_cls_avg_factor:
             cls_avg_factor = reduce_mean(
                 cls_scores.new_tensor([cls_avg_factor]))
