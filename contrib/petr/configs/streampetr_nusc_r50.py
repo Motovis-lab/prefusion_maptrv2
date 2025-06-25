@@ -22,38 +22,6 @@ point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
 voxel_range = (point_cloud_range[2::3], point_cloud_range[0::3][::-1], point_cloud_range[1::3][::-1])
 grid_size = _calc_grid_size(point_cloud_range, voxel_size)
 
-# 1600 x 900, 1408 x 512, 1056 x 384, 704 x 256
-# resolution_pv = (880, 320)
-
-# camera_resolution_configs=dict(
-#     CAM_FRONT=resolution_pv,
-#     CAM_FRONT_RIGHT=resolution_pv,
-#     CAM_BACK_RIGHT=resolution_pv,
-#     CAM_BACK=resolution_pv,
-#     CAM_BACK_LEFT=resolution_pv,
-#     CAM_FRONT_LEFT=resolution_pv)
-
-# camera_intrinsic_configs_top_crop = dict(
-#     CAM_FRONT=[454.623, 83.492, 689.047, 689.047],
-#     CAM_FRONT_RIGHT=[449.784, 73.575, 691.212, 691.212],
-#     CAM_BACK_RIGHT=[453.957, 79.401, 687.480, 687.480],
-#     CAM_BACK=[471.778, 87.287, 438.290, 438.290],
-#     CAM_BACK_LEFT=[456.267, 81.942, 690.242, 690.242],
-#     CAM_FRONT_LEFT=[454.983, 73.004, 691.824, 691.824],
-# )
-
-# # new_cy = cy_if_no_crop - to_crop / 2
-# camera_intrinsic_configs_center_crop = dict(
-#     CAM_FRONT=[454.623, 170.992, 689.047, 689.047],
-#     CAM_FRONT_RIGHT=[449.784, 161.075, 691.212, 691.212],
-#     CAM_BACK_RIGHT=[453.957, 166.901, 687.480, 687.480],
-#     CAM_BACK=[471.778, 174.787, 438.290, 438.290],
-#     CAM_BACK_LEFT=[456.267, 169.442, 690.242, 690.242],
-#     CAM_FRONT_LEFT=[454.983, 160.504, 691.824, 691.824],
-# )
-
-# camera_intrinsic_configs = camera_intrinsic_configs_center_crop
-
 class_mapping = dict(
     car=["vehicle.car"],
     truck=["vehicle.truck"],
