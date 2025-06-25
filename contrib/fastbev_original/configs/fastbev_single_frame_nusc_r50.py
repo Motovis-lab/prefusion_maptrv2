@@ -62,7 +62,7 @@ camera_resolution_configs=dict(
 # H, W = 900, 1600
 # new_H, new_W = 320, 880
 # for cam_name in NUSC_CAM_NAMES:
-#     intr = nusc.get("calibrated_sensor", nusc.get("sample_data", first_sample['data'][cam_name])['calibrated_sensor_token'])['camera_intrinsic']
+#     intr = nusc.get("calibrated_sensor", nusc.get("sample_data", cur_sample['data'][cam_name])['calibrated_sensor_token'])['camera_intrinsic']
 #     fx, fy, cx, cy = intr[0][0], intr[1][1], intr[0][2], intr[1][2]
 #     scale = new_W / W
 #     new_fx = fx * scale
