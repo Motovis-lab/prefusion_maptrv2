@@ -1,9 +1,167 @@
 import numpy as np
 
 from prefusion.dataset.transform import (
-    CameraImage, RandomRotateSpace, RandomMirrorSpace,
+    CameraImage, RandomRotateSpace, RandomMirrorSpace, RandomSetIntrinsicParam, 
     RenderIntrinsic, RenderExtrinsic, RenderVirtualCamera, RandomRenderExtrinsic,
+    RandomSetExtrinsicParam,
 )
+
+
+def test_random_set_intrinsic_param_no_shared_instance():
+    """Test that RandomSetIntrinsicParam doesn't cause multiple CameraImage objects 
+    to share the same instance when calling set_intrinsic_param.
+    
+    This is a unit test that mocks CameraImage.set_intrinsic_param to simulate
+    the worst-case scenario where it directly stores the passed intrinsic parameter.
+    This should ensure that each camera gets its own copy of the intrinsic parameters.
+    """
+    # Create two CameraImage objects
+    camera1 = CameraImage(
+        name="camera1",
+        cam_id='VCAMERA_TEST1',
+        cam_type='PerspectiveCamera', 
+        img=np.zeros((64, 64, 3), dtype=np.uint8), 
+        ego_mask=np.zeros((64, 64), dtype=np.uint8), 
+        extrinsic=(np.eye(3), np.array([0, 0, 0])),
+        intrinsic=[32, 32, 32, 32]
+    )
+    
+    camera2 = CameraImage(
+        name="camera2",
+        cam_id='VCAMERA_TEST2',
+        cam_type='PerspectiveCamera', 
+        img=np.zeros((64, 64, 3), dtype=np.uint8), 
+        ego_mask=np.zeros((64, 64), dtype=np.uint8), 
+        extrinsic=(np.eye(3), np.array([0, 0, 0])),
+        intrinsic=[32, 32, 32, 32]
+    )
+    
+    # Mock set_intrinsic_param to directly store the passed intrinsic (worst case scenario)
+    def mock_set_intrinsic_param(self, intrinsic, **kwargs):
+        # Simulate the worst case: directly store the passed intrinsic list
+        # This exposes shared instance issues if RandomSetIntrinsicParam passes the same list
+        self.stored_intrinsic = intrinsic
+        return self
+    
+    # Apply the mock to both cameras
+    camera1.set_intrinsic_param = mock_set_intrinsic_param.__get__(camera1, CameraImage)
+    camera2.set_intrinsic_param = mock_set_intrinsic_param.__get__(camera2, CameraImage)
+    
+    # Apply RandomSetIntrinsicParam transform
+    transform = RandomSetIntrinsicParam(
+        prob=1.0,  # Always apply jittering
+        jitter_ratio=0.1  # 10% jitter ratio
+    )
+    
+    # Apply transform to both cameras
+    transform(camera1, camera2, seeds={'frame': 42, 'batch': 142, 'group': 1142})
+    
+    # Verify that both cameras have intrinsic parameters
+    assert hasattr(camera1, 'stored_intrinsic')
+    assert hasattr(camera2, 'stored_intrinsic') 
+    assert camera1.stored_intrinsic is not None
+    assert camera2.stored_intrinsic is not None
+    
+    # The critical test: verify that they don't share the same instance
+    # Each camera should have its own copy of the intrinsic list
+    assert camera1.stored_intrinsic is not camera2.stored_intrinsic, (
+        "Multiple CameraImage objects should not share "
+        "the same intrinsic instance. Each should have its own copy."
+    )
+    
+    # Additional verification: modifying one shouldn't affect the other
+    original_value = camera2.stored_intrinsic[0]
+    camera1.stored_intrinsic[0] = 999
+    
+    # If they don't share the same instance, camera2 should be unchanged
+    assert camera2.stored_intrinsic[0] == original_value, (
+        "Modifying one camera's intrinsic should not affect another camera's intrinsic"
+    )
+
+
+def test_random_set_extrinsic_param_no_shared_instance():
+    """Test that RandomSetExtrinsicParam doesn't cause multiple CameraImage objects 
+    to share the same instance when calling set_extrinsic_param.
+    
+    This is a unit test that mocks CameraImage.set_extrinsic_param to simulate
+    the worst-case scenario where it directly stores the passed extrinsic parameter.
+    This should ensure that each camera gets its own copy of the extrinsic parameters.
+    """
+    # Create two CameraImage objects
+    camera1 = CameraImage(
+        name="camera1",
+        cam_id='VCAMERA_TEST1',
+        cam_type='PerspectiveCamera', 
+        img=np.zeros((64, 64, 3), dtype=np.uint8), 
+        ego_mask=np.zeros((64, 64), dtype=np.uint8), 
+        extrinsic=(np.eye(3), np.array([0, 0, 0])),
+        intrinsic=[32, 32, 32, 32]
+    )
+    
+    camera2 = CameraImage(
+        name="camera2",
+        cam_id='VCAMERA_TEST2',
+        cam_type='PerspectiveCamera', 
+        img=np.zeros((64, 64, 3), dtype=np.uint8), 
+        ego_mask=np.zeros((64, 64), dtype=np.uint8), 
+        extrinsic=(np.eye(3), np.array([0, 0, 0])),
+        intrinsic=[32, 32, 32, 32]
+    )
+    
+    # Mock set_extrinsic_param to directly store the passed extrinsic (worst case scenario)
+    def mock_set_extrinsic_param(self, extrinsic, **kwargs):
+        # Simulate the worst case: directly store the passed extrinsic list
+        # This exposes shared instance issues if RandomSetExtrinsicParam passes the same list
+        self.stored_extrinsic = extrinsic
+        return self
+    
+    # Apply the mock to both cameras
+    camera1.set_extrinsic_param = mock_set_extrinsic_param.__get__(camera1, CameraImage)
+    camera2.set_extrinsic_param = mock_set_extrinsic_param.__get__(camera2, CameraImage)
+    
+    # Apply RandomSetExtrinsicParam transform
+    transform = RandomSetExtrinsicParam(
+        prob=1.0,  # Always apply jittering
+        angle=1.0,  # 1 degree angle jitter
+        translation=0.01  # 0.01m translation jitter
+    )
+    
+    # Apply transform to both cameras
+    transform(camera1, camera2, seeds={'frame': 42, 'batch': 142, 'group': 1142})
+    
+    # Verify that both cameras have extrinsic parameters
+    assert hasattr(camera1, 'stored_extrinsic')
+    assert hasattr(camera2, 'stored_extrinsic') 
+    assert camera1.stored_extrinsic is not None
+    assert camera2.stored_extrinsic is not None
+    
+    # The critical test: verify that they don't share the same instance
+    # Each camera should have its own copy of the extrinsic list
+    assert camera1.stored_extrinsic is not camera2.stored_extrinsic, (
+        "Multiple CameraImage objects should not share "
+        "the same extrinsic instance. Each should have its own copy."
+    )
+    
+    # Additional verification: check the rotation matrices and translation vectors are different objects
+    new_R1, new_t1 = camera1.stored_extrinsic
+    new_R2, new_t2 = camera2.stored_extrinsic
+    
+    assert new_R1 is not new_R2, (
+        "Rotation matrices should be different objects for different cameras"
+    )
+    
+    assert new_t1 is not new_t2, (
+        "Translation vectors should be different objects for different cameras"
+    )
+    
+    # Additional verification: modifying one shouldn't affect the other
+    original_value = new_R2[0, 0]
+    new_R1[0, 0] = 999
+    
+    # If they don't share the same instance, camera2 should be unchanged
+    assert new_R2[0, 0] == original_value, (
+        "Modifying one camera's extrinsic should not affect another camera's extrinsic"
+    )
 
 
 def test_render_intrinsic_no_shared_instance():
