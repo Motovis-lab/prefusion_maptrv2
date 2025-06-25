@@ -1,0 +1,391 @@
+import datetime
+
+experiment_name = "franken_nusc_r50_704x256"
+
+_base_ = "../../../configs/default_runtime.py"
+
+custom_imports = dict(imports=["prefusion", "contrib.frankenstein", "mmdet"], allow_failed_imports=False)
+
+backend_args = None
+
+# Add this to enable unused parameter detection for DDP
+find_unused_parameters = True
+
+def _calc_grid_size(_range, _voxel_size, n_axis=3):
+    return [(_range[n_axis+i] - _range[i]) // _voxel_size[i] for i in range(n_axis)]
+
+batch_size = 2
+num_epochs = 24
+possible_group_sizes = [8]
+voxel_size = [0.2, 0.2, 8]
+point_cloud_range = [-51.2, -51.2, -5.0, 51.2, 51.2, 3.0]
+voxel_range = (point_cloud_range[2::3], point_cloud_range[0::3][::-1], point_cloud_range[1::3][::-1])
+grid_size = _calc_grid_size(point_cloud_range, voxel_size)
+
+# 1600 x 900, 1408 x 512, 1056 x 384, 704 x 256
+resolution_pv = (704, 256)
+
+camera_resolution_configs=dict(
+    CAM_FRONT=resolution_pv,
+    CAM_FRONT_RIGHT=resolution_pv,
+    CAM_BACK_RIGHT=resolution_pv,
+    CAM_BACK=resolution_pv,
+    CAM_BACK_LEFT=resolution_pv,
+    CAM_FRONT_LEFT=resolution_pv)
+
+# H, W = 900, 1600
+# new_H, new_W = 256, 704
+# for cam_name in NUSC_CAM_NAMES:
+#     intr = nusc.get("calibrated_sensor", nusc.get("sample_data", cur_sample['data'][cam_name])['calibrated_sensor_token'])['camera_intrinsic']
+#     fx, fy, cx, cy = intr[0][0], intr[1][1], intr[0][2], intr[1][2]
+#     scale = new_W / W
+#     new_fx = fx * scale
+#     new_fy = fy * scale
+#     new_cx = cx * scale
+#     top_to_crop = H * scale - new_H
+#     cy_if_no_crop = cy * scale
+#     new_cy = cy_if_no_crop - top_to_crop
+#     print((f"{cam_name}=" + "{:.3f}, " * 4).format(new_cx, new_cy, new_fx, new_fy))
+camera_intrinsic_configs_top_crop = dict(
+    CAM_FRONT=[359.157, 76.263, 557.224, 557.224], 
+    CAM_FRONT_RIGHT=[355.506, 77.947, 554.773, 554.773], 
+    CAM_BACK_RIGHT=[355.191, 80.526, 554.186, 554.186], 
+    CAM_BACK=[364.857, 71.983, 356.057, 356.057], 
+    CAM_BACK_LEFT=[348.530, 76.821, 552.966, 552.966], 
+    CAM_FRONT_LEFT=[363.711, 71.091, 559.943, 559.943], 
+)
+
+camera_intrinsic_configs = camera_intrinsic_configs_top_crop
+
+class_mapping = dict(
+    car=["vehicle.car"],
+    truck=["vehicle.truck"],
+    construction_vehicle=["vehicle.construction"],
+    bus=["vehicle.bus.bendy", "vehicle.bus.rigid"],
+    trailer=["vehicle.trailer"],
+    barrier=['movable_object.barrier'],
+    motorcycle=["vehicle.motorcycle"],
+    bicycle=["vehicle.bicycle"],
+    pedestrian=["human.pedestrian.adult" ,"human.pedestrian.child" ,"human.pedestrian.construction_worker" ,"human.pedestrian.police_officer"],
+    traffic_cone=["movable_object.trafficcone"],
+)
+
+transformables = dict(
+    sample_token=dict(type='Variable', loader=dict(type="VariableLoader", variable_key="sample_token")),
+    camera_images=dict(
+        type="CameraImageSet",
+        loader=dict(type="NuscenesCameraImageSetLoader"),
+        tensor_smith=dict(
+            type="DivisibleCameraImageTensor",
+            means=[123.675, 116.280, 103.530],
+            stds=[58.395, 57.120, 57.375],
+            image_size_divisor=32,
+            image_pad_value=0.0)),
+    ego_poses=dict(type='EgoPoseSet'),
+    bbox_3d=dict(
+        type='Bbox3D',
+        loader=dict(
+            type="AdvancedBbox3DLoader",
+            class_mapping=class_mapping,
+        ),
+        tensor_smith=dict(type='Bbox3DBasic', classes=list(class_mapping.keys()), voxel_range=voxel_range)
+    ),
+)
+
+train_dataset = dict(
+    type="GroupBatchDataset",
+    name="MvParkingTest",
+    data_root="/data/datasets/nuScenes",
+    info_path="/data/datasets/nuScenes/nusc_train_info_separated.pkl",
+    # info_path="/data/datasets/nuScenes/nusc_scene1087_train_info_separated.pkl",
+    model_feeder=dict(
+        type="FrankenStreamPETRModelFeeder",
+        visible_range=point_cloud_range,
+        bbox_3d_pos_repr="cuboid_center",
+        lidar_extrinsics=[
+            [ 0.00203327,  0.99970406,  0.02424172,  0.943713  ],
+            [-0.9999805 ,  0.00217566, -0.00584864,  0.        ],
+            [-0.00589965, -0.02422936,  0.99968904,  1.84023   ],
+            [ 0.        ,  0.        ,  0.        ,  1.        ]
+        ],
+    ),
+    transformables=transformables,
+    transforms=[
+        dict(type='BGR2RGB'),
+        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
+        dict(type='RandomRenderExtrinsic'),
+        dict(type='RandomRotateSpace', angles=(0, 0, 90), prob_inverse_cameras_rotation=0),
+        dict(type='RandomMirrorSpace'),
+        dict(type='RandomImageISP', prob=0.1),
+        dict(type='RandomSetIntrinsicParam', prob=0.1, jitter_ratio=0.01),
+        dict(type='RandomSetExtrinsicParam', prob=0.1, angle=1, translation=0.02)
+    ],
+    group_sampler=dict(type="IndexGroupSampler",
+                        phase="train",
+                        possible_group_sizes=possible_group_sizes,
+                        possible_frame_intervals=[1]),
+    batch_size=batch_size,
+)
+
+val_dataset = dict(
+    type="GroupBatchDataset",
+    name="MvParkingTest",
+    data_root="/data/datasets/nuScenes",
+    info_path="/data/datasets/nuScenes/nusc_scene0001_train_info_separated.pkl",
+    model_feeder=dict(
+        type="FrankenStreamPETRModelFeeder",
+        visible_range=point_cloud_range,
+        bbox_3d_pos_repr="cuboid_center",
+        lidar_extrinsics=[
+            [ 0.00203327,  0.99970406,  0.02424172,  0.943713  ],
+            [-0.9999805 ,  0.00217566, -0.00584864,  0.        ],
+            [-0.00589965, -0.02422936,  0.99968904,  1.84023   ],
+            [ 0.        ,  0.        ,  0.        ,  1.        ]
+        ],
+    ),
+    transformables=transformables,
+    transforms=[
+        dict(type='BGR2RGB'),
+        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
+    ],
+    group_sampler=dict(type="IndexGroupSampler",
+                        phase="val",
+                        possible_group_sizes=possible_group_sizes,
+                        possible_frame_intervals=[1]),
+    batch_size=batch_size,
+)
+
+test_dataset = dict(
+    type="GroupBatchDataset",
+    name="MvParkingTest",
+    data_root="/data/datasets/nuScenes",
+    info_path="/data/datasets/nuScenes/nusc_val_info_separated.pkl",
+    model_feeder=dict(
+        type="FrankenStreamPETRModelFeeder",
+        visible_range=point_cloud_range,
+        bbox_3d_pos_repr="cuboid_center",
+        lidar_extrinsics=[
+            [ 0.00203327,  0.99970406,  0.02424172,  0.943713  ],
+            [-0.9999805 ,  0.00217566, -0.00584864,  0.        ],
+            [-0.00589965, -0.02422936,  0.99968904,  1.84023   ],
+            [ 0.        ,  0.        ,  0.        ,  1.        ]
+        ],
+    ),
+    transformables=transformables,
+    transforms=[
+        dict(type='BGR2RGB'),
+        dict(type='RenderIntrinsic', resolutions=camera_resolution_configs, intrinsics=camera_intrinsic_configs),
+    ],
+    group_sampler=dict(type="SequentialSceneFrameGroupSampler",
+                       phase="test_scene_by_scene"),
+    batch_size=1,
+)
+
+train_dataloader = dict(
+    num_workers=2,
+    persistent_workers=True,
+    pin_memory=True,
+    sampler=dict(type="DefaultSampler"),
+    collate_fn=dict(type="collate_dict"),
+    dataset=train_dataset,
+)
+
+val_dataloader = dict(
+    num_workers=0,
+    sampler=dict(type="DefaultSampler"),
+    collate_fn=dict(type="collate_dict"),
+    dataset=val_dataset,
+    persistent_workers=False,
+    pin_memory=True,
+)
+
+test_dataloader = dict(
+    num_workers=0,
+    sampler=dict(type="DefaultSampler", shuffle=False),
+    collate_fn=dict(type="collate_dict"),
+    dataset=test_dataset,
+    persistent_workers=False,
+    pin_memory=True,
+)
+
+model = dict(
+    type="FrankenStreamPETR",
+    data_preprocessor=dict(
+        type="FrameBatchMerger",
+        device="cuda",
+    ),
+    img_backbone=dict(
+        pretrained="torchvision://resnet50",
+        type="mmdet.ResNet",
+        depth=50,
+        num_stages=4,
+        out_indices=(2, 3),
+        frozen_stages=-1,
+        norm_cfg=dict(type="BN2d", requires_grad=False),
+        norm_eval=True,
+        with_cp=True,
+        style="pytorch",
+    ),
+    img_neck=dict(type="mmdet3d.CPFPN", in_channels=[1024, 2048], out_channels=256, num_outs=2),
+    img_roi_head=dict(
+        type="FocalHead",
+        num_classes=len(class_mapping),
+        loss_cls2d=dict(
+            type='mmdet.QualityFocalLoss',
+            use_sigmoid=True,
+            beta=2.0,
+            loss_weight=2.0),
+        loss_centerness=dict(type='mmdet.GaussianFocalLoss', reduction='mean', loss_weight=1.0),
+        loss_bbox2d=dict(type='mmdet.L1Loss', loss_weight=5.0),
+        loss_iou2d=dict(type='mmdet.GIoULoss', loss_weight=2.0),
+        loss_centers2d=dict(type='mmdet.L1Loss', loss_weight=10.0),
+        train_cfg=dict(
+            assigner2d=dict(
+                type='HungarianAssigner2D',
+                cls_cost=dict(type='FocalLossCost', weight=2.),
+                reg_cost=dict(type='BBoxL1Cost', weight=5.0, box_format='xywh'),
+                iou_cost=dict(type='IoUCost', iou_mode='giou', weight=2.0),
+                centers2d_cost=dict(type='BBox3DL1Cost', weight=10.0))
+        ),
+    ),
+    pts_bbox_head=dict(
+        type='FrankenStreamPETRHead',
+        num_classes=len(class_mapping),
+        in_channels=256,
+        num_query=644,
+        memory_len=1024,
+        topk_proposals=256,
+        num_propagated=256,
+        with_ego_pos=True,
+        match_with_velo=False,
+        num_dn_groups=10, ##noise groups
+        noise_scale = 1.0,
+        dn_weight= 1.0, ##dn loss weight
+        noise_corruption_threshold = 0.75, ###positive rate
+        LID=True,
+        with_position=True,
+        code_size=10, # x, y, z, l, w, h, sin(yaw), cos(yaw), Vx, Vy
+        position_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
+        code_weights = [2.0, 2.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+        transformer=dict(
+            type='PETRTemporalTransformer',
+            decoder=dict(
+                type='PETRTransformerDecoder',
+                return_intermediate=True,
+                num_layers=6,
+                transformerlayers=dict(
+                    type='PETRTemporalDecoderLayer',
+                    attn_cfgs=[
+                        dict(
+                            type='MultiheadAttention',
+                            embed_dims=256,
+                            num_heads=8,
+                            dropout=0.1),
+                        dict(
+                            type='PETRMultiheadFlashAttention',
+                            embed_dims=256,
+                            num_heads=8,
+                            dropout=0.1),
+                        ],
+                    feedforward_channels=2048,
+                    ffn_dropout=0.1,
+                    # with_cp=True,  ###use checkpoint to save memory
+                    with_cp=True,  ### prevent DDP error
+                    operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
+                                     'ffn', 'norm')),
+            )),
+        bbox_coder=dict(
+            type='NMSFreeCoder',
+            post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
+            pc_range=point_cloud_range,
+            max_num=300,
+            voxel_size=voxel_size,
+            num_classes=len(class_mapping)),
+        loss_cls=dict(
+            type='mmdet.FocalLoss',
+            use_sigmoid=True,
+            gamma=2.0,
+            alpha=0.25,
+            loss_weight=2.0),
+        loss_bbox=dict(type='mmdet.L1Loss', loss_weight=0.25),
+        loss_iou=dict(type='mmdet.GIoULoss', loss_weight=0.0),
+        train_cfg=dict(
+            grid_size=grid_size,
+            voxel_size=voxel_size,
+            point_cloud_range=point_cloud_range,
+            out_size_factor=4,
+            assigner=dict(
+                type="HungarianAssigner3D",
+                cls_cost=dict(type="FocalLossCost", weight=2.0),
+                reg_cost=dict(type="BBox3DL1Cost", weight=0.25),
+                iou_cost=dict(type="IoUCost", weight=0.0 ),  # Fake cost. This is just to make it compatible with DETR head.
+                pc_range=point_cloud_range,
+            ),
+        ),
+    ),
+)
+
+val_evaluator = dict(type="AccuracyPetr")
+test_evaluator = dict(type="AccuracyPetr")
+
+
+env_cfg = dict(
+    cudnn_benchmark=False,
+    mp_cfg=dict(mp_start_method="fork", opencv_num_threads=0),
+    dist_cfg=dict(backend="nccl"),
+)
+
+train_cfg = dict(type="GroupBatchTrainLoop", max_epochs=num_epochs, val_interval=-1)  # -1 note don't eval
+val_cfg = dict(type="GroupBatchValLoop")
+test_cfg = dict(type="GroupBatchInferLoop")
+
+optim_wrapper = dict(
+    type="OptimWrapper",
+    optimizer=dict(
+        type="AdamW",
+        lr=5e-5, # total lr per gpu lr is lr/n
+        weight_decay=0.01,
+    ),
+    paramwise_cfg=dict(
+        custom_keys={
+            "img_backbone": dict(lr_mult=0.25),  # 0.25 only for Focal-PETR with R50-in1k pretrained weights
+        }
+    ),
+    clip_grad=dict(max_norm=35, norm_type=2),
+)
+
+## scheduler configs
+param_scheduler = [
+    dict(type='LinearLR', start_factor=0.1, end_factor=1, by_epoch=False, begin=0, end=1000), # warmup
+    dict(type='CosineAnnealingLR', by_epoch=False, begin=1000, eta_min=1e-5)     # main LR Scheduler
+    # dict(type='PolyLR', by_epoch=False, begin=0, eta_min=0, power=1.0)     # main LR Scheduler
+]
+
+
+visualizer = dict(type="Visualizer", vis_backends=[dict(type="LocalVisBackend"), dict(type="TensorboardVisBackend")])
+
+
+log_processor = dict(type='GroupAwareLogProcessor', tabulate_ncols=4)
+
+default_hooks = dict(
+    timer=dict(type="IterTimerHook"),
+    logger=dict(type="LoggerHook", interval=50),
+    param_scheduler=dict(type="ParamSchedulerHook"),
+    checkpoint=dict(type="CheckpointHook", interval=1, save_best="accuracy", rule="greater"),
+    sampler_seed=dict(type="DistSamplerSeedHook"),
+)
+
+custom_hooks = [
+    dict(type="DumpPETRDetectionAsNuscenesJsonHook",
+         det_anno_transformable_keys=["bbox_3d"],
+         bbox_3d_pos_repr="cuboid_center",
+         pre_conf_thresh=0.3),
+]
+
+
+today = datetime.datetime.now().strftime("%m%d")
+
+work_dir = f'./work_dirs/{experiment_name}_{today}'
+# load_from = "./work_dirs/stream_petr_nusc_r50_0522/epoch_1.pth"
+
+resume = False

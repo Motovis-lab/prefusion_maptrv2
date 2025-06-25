@@ -185,4 +185,5 @@ tools/gene_nusc_occ
 mprofile*
 mprof*
 output/
-.github/*.prompt.md
+.github/*instructions.md
+eval_results
