@@ -30,11 +30,19 @@ memory_len = 1024
 # 1600 x 900, 1408 x 512, 1056 x 384, 704 x 256
 resolution_pv = (704, 256)
 
+camera_resolution_configs=dict(
+    CAM_FRONT=resolution_pv,
+    CAM_FRONT_RIGHT=resolution_pv,
+    CAM_BACK_RIGHT=resolution_pv,
+    CAM_BACK=resolution_pv,
+    CAM_BACK_LEFT=resolution_pv,
+    CAM_FRONT_LEFT=resolution_pv)
+
 # camera_intrinsic_configs is calculated by the following code snippet
 # H, W = 900, 1600
-# new_H, new_W = 320, 880
+# new_H, new_W = 256, 704
 # for cam_name in NUSC_CAM_NAMES:
-#     intr = nusc.get("calibrated_sensor", nusc.get("sample_data", first_sample['data'][cam_name])['calibrated_sensor_token'])['camera_intrinsic']
+#     intr = nusc.get("calibrated_sensor", nusc.get("sample_data", cur_sample['data'][cam_name])['calibrated_sensor_token'])['camera_intrinsic']
 #     fx, fy, cx, cy = intr[0][0], intr[1][1], intr[0][2], intr[1][2]
 #     scale = new_W / W
 #     new_fx = fx * scale
@@ -44,31 +52,13 @@ resolution_pv = (704, 256)
 #     cy_if_no_crop = cy * scale
 #     new_cy = cy_if_no_crop - top_to_crop
 #     print((f"{cam_name}=" + "{:.3f}, " * 4).format(new_cx, new_cy, new_fx, new_fy))
-camera_resolution_configs=dict(
-    CAM_FRONT=resolution_pv,
-    CAM_FRONT_RIGHT=resolution_pv,
-    CAM_BACK_RIGHT=resolution_pv,
-    CAM_BACK=resolution_pv,
-    CAM_BACK_LEFT=resolution_pv,
-    CAM_FRONT_LEFT=resolution_pv)
-
 camera_intrinsic_configs_top_crop = dict(
-    CAM_FRONT=[454.623, 83.492, 689.047, 689.047],
-    CAM_FRONT_RIGHT=[449.784, 73.575, 691.212, 691.212],
-    CAM_BACK_RIGHT=[453.957, 79.401, 687.480, 687.480],
-    CAM_BACK=[471.778, 87.287, 438.290, 438.290],
-    CAM_BACK_LEFT=[456.267, 81.942, 690.242, 690.242],
-    CAM_FRONT_LEFT=[454.983, 73.004, 691.824, 691.824],
-)
-
-# new_cy = cy_if_no_crop - to_crop / 2
-camera_intrinsic_configs_center_crop = dict(
-    CAM_FRONT=[454.623, 170.992, 689.047, 689.047],
-    CAM_FRONT_RIGHT=[449.784, 161.075, 691.212, 691.212],
-    CAM_BACK_RIGHT=[453.957, 166.901, 687.480, 687.480],
-    CAM_BACK=[471.778, 174.787, 438.290, 438.290],
-    CAM_BACK_LEFT=[456.267, 169.442, 690.242, 690.242],
-    CAM_FRONT_LEFT=[454.983, 160.504, 691.824, 691.824],
+    CAM_FRONT=[359.157, 76.263, 557.224, 557.224], 
+    CAM_FRONT_RIGHT=[355.506, 77.947, 554.773, 554.773], 
+    CAM_BACK_RIGHT=[355.191, 80.526, 554.186, 554.186], 
+    CAM_BACK=[364.857, 71.983, 356.057, 356.057], 
+    CAM_BACK_LEFT=[348.530, 76.821, 552.966, 552.966], 
+    CAM_FRONT_LEFT=[363.711, 71.091, 559.943, 559.943], 
 )
 
 camera_intrinsic_configs = camera_intrinsic_configs_top_crop
