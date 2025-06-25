@@ -1473,9 +1473,9 @@ RandomImEqualize = random_transform_class_factory("RandomImEqualize", "imequaliz
 
 ToTensor = deterministic_transform_class_factory("ToTensor", "to_tensor")
 
-#######################
-# Customed Transforms #
-#######################
+#########################
+# Customized Transforms #
+#########################
 class RandomSetIntrinsicParam(RandomTransform):
 
     def __init__(self, *, prob: float = 0.2, jitter_ratio: float = 0.01, scope: str = "transformable", **kwargs):
@@ -1505,12 +1505,12 @@ class RandomSetIntrinsicParam(RandomTransform):
             if isinstance(transformable, CameraTransformable):
                 _seeds = dict(**seeds, transformable=make_seed(seeds["frame"], i))
                 new_intrinsic = [self.random_pick_param(_seeds, param) for param in transformable.intrinsic]
-                transformable.set_intrinsic_param(new_intrinsic)
+                transformable.set_intrinsic_param(new_intrinsic) # NOTE: Must provide new object (with newly allocated memory)
             elif isinstance(transformable, (CameraImageSet, CameraSegMaskSet, CameraDepthSet)):
                 for t in transformable.transformables.values():
                     _seeds = dict(**seeds, transformable=make_seed(seeds["frame"], i))
                     new_intrinsic = [self.random_pick_param(_seeds, param) for param in t.intrinsic]
-                    t.set_intrinsic_param(new_intrinsic)
+                    t.set_intrinsic_param(new_intrinsic) # NOTE: Must provide new object (with newly allocated memory)
         return transformables
 
 
@@ -1562,7 +1562,7 @@ class RandomSetExtrinsicParam(RandomTransform):
                 R, t = transformable.extrinsic
                 new_R = delta_R @ R
                 new_t = delta_t + t
-                transformable.set_extrinsic_param([new_R, new_t])
+                transformable.set_extrinsic_param([new_R, new_t]) # NOTE: Must provide new object (with newly allocated memory)
             elif isinstance(transformable, (CameraImageSet, CameraSegMaskSet, CameraDepthSet)):
                 for t_sub in transformable.transformables.values():
                     _seeds = dict(**seeds, transformable=make_seed(seeds['frame'], i))
@@ -1570,7 +1570,7 @@ class RandomSetExtrinsicParam(RandomTransform):
                     R, t = t_sub.extrinsic
                     new_R = delta_R @ R
                     new_t = delta_t + t
-                    t_sub.set_extrinsic_param([new_R, new_t])
+                    t_sub.set_extrinsic_param([new_R, new_t]) # NOTE: Must provide new object (with newly allocated memory)
         return transformables
 
 
@@ -1690,6 +1690,9 @@ class RenderIntrinsic(Transform):
                         intrinsic = self.intrinsics[cam_id]
                         if intrinsic == 'default':
                             intrinsic = self._get_default_intrinsic(resolution, t.cam_type)
+                        else:
+                            # Create a copy to avoid sharing the same instance between different CameraImage objects of the same camera_id
+                            intrinsic = list(intrinsic)
                         t.render_intrinsic(resolution, intrinsic)
             elif isinstance(transformable, (CameraImage, CameraSegMask, CameraDepth)):
                 cam_id = transformable.cam_id
@@ -1698,6 +1701,9 @@ class RenderIntrinsic(Transform):
                     intrinsic = self.intrinsics[cam_id]
                     if intrinsic == 'default':
                         intrinsic = self._get_default_intrinsic(resolution, transformable.cam_type)
+                    else:
+                        # Create a copy to avoid sharing the same instance between different CameraImage objects of the same camera_id
+                        intrinsic = list(intrinsic)
                     transformable.render_intrinsic(resolution, intrinsic)
         return transformables
 
@@ -1733,11 +1739,17 @@ class RenderExtrinsic(Transform):
                 for t in transformable.transformables.values():
                     cam_id = t.cam_id
                     if cam_id in self.cam_ids:
-                        t.render_extrinsic(self.del_extrinsics[cam_id])
+                        # Create a copy to avoid sharing the same instance between different CameraImage objects of the same camera_id
+                        del_R, del_t = self.del_extrinsics[cam_id]
+                        extrinsic_copy = (del_R.copy(), del_t.copy())
+                        t.render_extrinsic(extrinsic_copy)
             elif isinstance(transformable, (CameraImage, CameraSegMask, CameraDepth)):
                 cam_id = transformable.cam_id
                 if cam_id in self.cam_ids:
-                    transformable.render_extrinsic(self.del_extrinsics[cam_id])
+                    # Create a copy to avoid sharing the same instance between different CameraImage objects of the same camera_id
+                    del_R, del_t = self.del_extrinsics[cam_id]
+                    extrinsic_copy = (del_R.copy(), del_t.copy())
+                    transformable.render_extrinsic(extrinsic_copy)
         return transformables
 
 
@@ -1898,7 +1910,9 @@ class RandomMirrorSpace(RandomTransform):
     def _apply(self, *transformables, seeds=None, **kwargs):
         for transformable in transformables:
             if transformable is not None:
-                transformable.flip_3d(self.flip_mat)
+                # Create a copy to avoid sharing the same instance between different transformables
+                flip_mat_copy = self.flip_mat.copy()
+                transformable.flip_3d(flip_mat_copy)
         
         return transformables
 
