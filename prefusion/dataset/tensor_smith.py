@@ -2,10 +2,10 @@ import cv2
 import torch
 import numba
 import numpy as np
-
+import os
 from typing import Tuple, Dict, Union, Iterable
 from torch import Tensor
-
+from skimage.measure import label
 from prefusion.registry import TENSOR_SMITHS
 from .utils import (
     expand_line_2d, _sign, INF_DIST,
@@ -17,7 +17,7 @@ from .transform import (
     CameraImage, CameraSegMask, CameraDepth,
     Bbox3D, Polyline3D, OccSdfBev, ParkingSlot3D
 )
-
+from PIL import Image
 __all__ = [
     "CameraImageTensor", 
     "CameraDepthTensor", 
@@ -31,6 +31,9 @@ __all__ = [
     "PlanarPolyline3D", 
     "PlanarPolygon3D", 
     "PlanarParkingSlot3D",
+    "PlanarBbox3D_pin",
+    "PlanarPolyline3D_laneline",
+    "PlanarPolyline3D_laneline_mul"    
 ]
 
 
@@ -41,7 +44,26 @@ class TensorSmith:
     def reverse(self, tensor_dict):
         raise NotImplementedError
 
+def save_tensor_channels(tensor, prefix):
+    """
+    将形如 [C,H,W] 或 [1,C,H,W] 的 tensor 各通道保存为灰度图片
+    """
+    if tensor.ndim == 4:
+        tensor = tensor.squeeze(0)
+    assert tensor.ndim == 3, f"{prefix}: shape must be [C,H,W]"
 
+    for i in range(tensor.shape[0]):
+        img = tensor[i]
+
+        # 归一化到 [0,255]
+        img_min, img_max = img.min(), img.max()
+        if img_max > img_min:
+            img = (img - img_min) / (img_max - img_min)
+        img = (img * 255).clip(0, 255).astype(np.uint8)
+
+        fname = f"./debug/{prefix}_ch{i:02d}.png"
+        Image.fromarray(img).save(fname)
+    print(f"✅ Saved {tensor.shape[0]} {prefix} images to ./debug/")
 
 
 @TENSOR_SMITHS.register_module()
@@ -99,6 +121,16 @@ def get_bev_intrinsics(voxel_shape, voxel_range):
 
     return cx, cy, fx, fy
 
+def detect_corners_with_score(corner_mask, score_mask,ratio=2):
+
+	labelled_1, labels_1 = label(corner_mask, return_num=True)        
+
+	points1 = []
+	for i in range(labels_1):
+		coord = np.round(np.mean(np.where(labelled_1 == i+1), axis=1)[::-1]).astype(np.uint16)
+		coord = np.append(coord/ratio, score_mask[coord[1], coord[0]])
+		points1.append(coord)
+	return np.reshape(np.array(points1), [-1,3])
 
 class PlanarTensorSmith(TensorSmith):
     def __init__(self, voxel_shape: tuple, voxel_range: Tuple[list, list, list]):
@@ -123,12 +155,37 @@ class PlanarTensorSmith(TensorSmith):
         self.points_grid_bev = np.float32([yy, xx])
 
 
-def is_in_bbox3d(delta_ij, sizes, xvec, yvec, zvec, min_radius=0):
-    return all([
-        np.linalg.norm(delta_ij * xvec) < max(min_radius, 0.5 * sizes[0]),
-        np.linalg.norm(delta_ij * yvec) < max(min_radius, 0.5 * sizes[1]),
-        np.linalg.norm(delta_ij * zvec) < max(min_radius, 0.5 * sizes[2])
-    ])
+# def is_in_bbox3d(delta_ij, sizes, xvec, yvec, zvec, min_radius=0):
+#     return all([
+#         np.linalg.norm(delta_ij * xvec) < max(min_radius, 0.5 * sizes[0]),
+#         np.linalg.norm(delta_ij * yvec) < max(min_radius, 0.5 * sizes[1]),
+#         np.linalg.norm(delta_ij * zvec) < max(min_radius, 0.5 * sizes[2])
+#     ])
+
+def is_in_bbox3d(delta_ij, sizes, xvec, yvec, zvec, min_radius=0.0, tol=0.0, eps=1e-9):
+    """
+    delta_ij: 3,
+    sizes: [sx, sy, sz]  # 分别是 x/y/z 方向的全长(或边长)，此处按你的代码取 0.5*sizes[k] 作为半边长
+    xvec,yvec,zvec: 3,   # 期望为互相正交的单位向量；若不确定，这里会先单位化
+    """
+    # 单位化以防上游不是单位向量
+    x = xvec / (np.linalg.norm(xvec) + eps)
+    y = yvec / (np.linalg.norm(yvec) + eps)
+    z = zvec / (np.linalg.norm(zvec) + eps)
+    # 轴向投影（真正的“坐标值”）
+    px = np.dot(delta_ij, x)
+    py = np.dot(delta_ij, y)
+    pz = np.dot(delta_ij, z)
+    # 半边长阈值（给定最小半径保护）
+    hx = max(min_radius, 0.5 * float(sizes[0]))
+    hy = max(min_radius, 0.5 * float(sizes[1]))
+    hz = max(min_radius, 0.5 * float(sizes[2]))
+    # 盒内判定（加上可选容差）
+    inside_x = abs(px) <= hx + tol
+    inside_y = abs(py) <= hy + tol
+    inside_z = abs(pz) <= hz + tol
+    return bool(inside_x and inside_y and inside_z)
+
 
 
 @TENSOR_SMITHS.register_module()
@@ -1194,6 +1251,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
         class_inds = []
         attr_lists = []
         attr_available = 'attrs' in transformable.dictionary
+
         for element in transformable.elements:
             if element['class'] in transformable.dictionary['classes']:
                 # unit vector of z_axis of the box
@@ -1262,22 +1320,47 @@ class PlanarCylinder3D(PlanarTensorSmith):
             'cen': torch.tensor(cen_im, dtype=torch.float32),
             'reg': torch.tensor(reg_im, dtype=torch.float32)
         }
+
+        # print(seg_im.shape)
+        # print(cen_im.shape)
+        # print(reg_im.shape)
+
+
+
+        # save_tensor_channels(seg_im, "seg")
+        # save_tensor_channels(cen_im, "cen")
+        # save_tensor_channels(reg_im, "reg")
+
+        # assert 0
         return tensor_data
-        
-    
-    @staticmethod
-    def _is_in_cylinder3d(delta_ij, sizes, zvec):
-        zvec_vertical = np.array([0, zvec[2], -zvec[1]])
-        zvec_vertical /= np.linalg.norm(zvec_vertical)
-        return all([
-            np.linalg.norm(delta_ij * zvec_vertical) < sizes[0],
-            np.linalg.norm(delta_ij * zvec) < 0.5 * sizes[1]
-        ])
 
     
+    # @staticmethod
+    # def _is_in_cylinder3d(delta_ij, sizes, zvec):
+    #     zvec_vertical = np.array([0, zvec[2], -zvec[1]])
+    #     zvec_vertical /= np.linalg.norm(zvec_vertical)
+    #     return all([
+    #         np.linalg.norm(delta_ij * zvec_vertical) < sizes[0],
+    #         np.linalg.norm(delta_ij * zvec) < 0.5 * sizes[1]
+    #     ])
+    @staticmethod
+    def _is_in_cylinder3d(delta_ij, sizes, zvec):
+        r, h = sizes
+        z_hat = zvec / (np.linalg.norm(zvec) + 1e-6)
+        axial = abs(np.dot(delta_ij, z_hat))                  # 沿z轴方向的距离
+        radial = np.linalg.norm(delta_ij - axial * z_hat)     # 去掉轴向分量后的径向距离
+        return (radial < r) and (axial < 0.5 * h)
+    
+
     def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_zvecs):
         scores = seg_scores * cen_scores
+
         ranked_inds = np.argsort(scores)[::-1]
+        # print(f"seg_scores: {seg_scores}")
+        # print(f"cen_scores: {cen_scores}")  
+        # print(f"ranked_inds: {ranked_inds}")
+        # assert 0
+
         kept_groups = []
         kept_inds = []
         # group inds
@@ -1299,8 +1382,10 @@ class PlanarCylinder3D(PlanarTensorSmith):
         ## get mean bbox in group
         _, _, fx, fy = self.bev_intrinsics
         pred_cylinders = []
+        # print(f"kept_groups: {len(kept_groups)}")
         for group in kept_groups:
             # use score weighted mean
+            # print(group)
             score_sum = scores[group].sum() + 1e-6
             mean_classes = (seg_classes[:, group] * scores[group][None]).sum(1) / score_sum
             # get mean_unit_zvec
@@ -1313,6 +1398,7 @@ class PlanarCylinder3D(PlanarTensorSmith):
             mean_center = (centers[:, group] * scores[group][None]).sum(1) / score_sum
             if self.use_bottom_center:
                 mean_center = mean_center + 0.5 * mean_unit_zvec * mean_size[1]
+            
             cylinder_3d = {
                 'confs': mean_classes,
                 'area_score': area_score,
@@ -1322,7 +1408,9 @@ class PlanarCylinder3D(PlanarTensorSmith):
                 'zvec': mean_unit_zvec,
                 'translation': mean_center
             }
+            # print(f"cylinder_3d: {cylinder_3d}")
             pred_cylinders.append(cylinder_3d)
+        # assert 0
         return pred_cylinders
     
     
@@ -1564,14 +1652,29 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
         return xvecs, yvecs
         
     
+    # @staticmethod
+    # def _is_in_cylinder3d(delta_ij, sizes, xvec, yvec, zvec):
+    #     return all([
+    #         np.linalg.norm(delta_ij * xvec) < sizes[0],
+    #         np.linalg.norm(delta_ij * yvec) < sizes[0],
+    #         np.linalg.norm(delta_ij * zvec) < 0.5 * sizes[1]
+    #     ])
+    
     @staticmethod
-    def _is_in_cylinder3d(delta_ij, sizes, xvec, yvec, zvec):
-        return all([
-            np.linalg.norm(delta_ij * xvec) < sizes[0],
-            np.linalg.norm(delta_ij * yvec) < sizes[0],
-            np.linalg.norm(delta_ij * zvec) < 0.5 * sizes[1]
-        ])
-
+    def _is_in_cylinder3d(delta_ij, sizes, xvec, yvec, zvec, tol=0.0, eps=1e-9):
+        # 归一化三个轴（若上游已保证是单位向量，可去掉这三行）
+        x = xvec / (np.linalg.norm(xvec) + eps)
+        y = yvec / (np.linalg.norm(yvec) + eps)
+        z = zvec / (np.linalg.norm(zvec) + eps)
+        r, h = float(sizes[0]), float(sizes[1])
+        # 分别投影到局部坐标轴（点积）
+        px = np.dot(delta_ij, x)   # 沿 x 轴的坐标
+        py = np.dot(delta_ij, y)   # 沿 y 轴的坐标
+        pz = np.dot(delta_ij, z)   # 沿 z 轴的坐标
+        # 圆柱判定：横截面半径 & 轴向高度
+        radial_ok = np.hypot(px, py) <= (r + tol)          # √(px^2 + py^2) <= r
+        axial_ok  = abs(pz)         <= (0.5 * h + tol)     # |pz| <= h/2
+        return all([radial_ok, axial_ok])
     
     def _group_nms(self, seg_scores, cen_scores, seg_classes, centers, sizes, unit_zvecs, vecs_yaw, velocities):
         scores = seg_scores * cen_scores
@@ -1656,6 +1759,7 @@ class PlanarOrientedCylinder3D(PlanarTensorSmith):
         cen_pred = tensor_dict['cen'].detach().cpu().numpy()
         reg_pred = tensor_dict['reg'].detach().cpu().numpy()
         ## pickup obj points
+        # print(f"seg_pred: {seg_pred.max()}")
         valid_points_map = seg_pred[0] > self.reverse_pre_conf
         # valid postions
         valid_points_bev = self.points_grid_bev[:, valid_points_map]
@@ -2146,6 +2250,974 @@ class PlanarPolyline3D(PlanarTensorSmith):
             polylines_3d.append(polyline_3d.T)
         return polylines_3d
 
+@TENSOR_SMITHS.register_module()
+class PlanarPolyline3D_laneline(PlanarTensorSmith):
+    
+    def __init__(self, 
+                 voxel_shape: tuple, 
+                 voxel_range: Tuple[list, list, list],
+                 reverse_pre_conf: float=0.5,
+                 reverse_group_dist_thresh: float=0.5,
+                 reverse_link_max_adist: float=1.5,
+                 cell_stride: int = 1):
+        """
+        Parameters
+        ----------
+        voxel_shape : tuple
+        voxel_range : Tuple[List]
+        reverse_pre_conf : float
+        reverse_group_dist_thresh : float
+        reverse_link_max_adist : float
+        cell_stride : int
+            Stride for lane cell maps in pixels.
+
+        Examples
+        --------
+        - voxel_shape=(6, 320, 160)
+        - voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        - Z, X, Y = voxel_shape
+
+        """
+        super().__init__(voxel_shape, voxel_range)
+        self.reverse_pre_conf = reverse_pre_conf
+        self.reverse_group_dist_thresh = reverse_group_dist_thresh
+        self.reverse_link_max_adist = reverse_link_max_adist
+        self.cell_stride = cell_stride
+        
+        
+    def __call__(self, transformable: Polyline3D):
+        """
+        Parameters
+        ----------
+        transformable : Polyline3D
+
+        Returns
+        -------
+        tensor_dict : dict
+
+        Notes
+        -----
+        ```
+        seg_im  # 分割图
+        reg_im  # 回归图
+            0: dist_im  # 每个分割图上的点到最近线段的垂直距离
+            1,2: vert_vec_im  # 每个分割图上的点到最近线段的向量
+            3,4,5: abs_dir_im  # 每个分割图上的点所在线段的广义单位方向，|nx|, |ny|, nx * ny
+            6 height_im # 每个分割图上的点的高度分布图
+        lanecls
+        laneloc
+        laneloc[ci, cj] = [
+            (ix1 - ci*stride) / stride,  # x1_rel
+            (iy1 - cj*stride) / stride,  # y1_rel
+            (ix2 - ci*stride) / stride,  # x2_rel
+            (iy2 - cj*stride) / stride,  # y2_rel
+            ]
+        ```
+        """
+        Z, X, Y = self.voxel_shape
+        # print("z, x, y:", Z, X, Y)
+        cx, cy, fx, fy = self.bev_intrinsics
+        # print("cx, cy, fx, fy:", cx, cy, fx, fy)
+        points_grid_bev = self.points_grid_bev
+        # print("points_grid_bev:", points_grid_bev.shape)
+
+        polylines = []
+        class_inds = []
+        attr_lists = []
+        attr_available = 'attrs' in transformable.dictionary
+
+        for element in transformable.elements:
+            # print("Element class:", element['class'])
+            if element['class'] in transformable.dictionary['classes']:
+            # if element['class'] in extended_classes:
+                points = element['points']
+                # import pdb; pdb.set_trace()
+
+                # 自车像素
+                polylines.append(np.array([
+                    points[..., 1] * fy + cy,  # fy:一米在像素图上占多少像素  # 图像坐标系的x
+                    points[..., 0] * fx + cx,   # fx:一米在像素图上占多少像素  # 图像坐标系的y
+                    points[..., 2]
+                ]).T)
+                # print("polylines:", polylines)
+                # assert False
+                class_inds.append(transformable.dictionary['classes'].index(element['class']))
+                # class_inds.append(extended_classes.index(element['class']))
+                attr_ind_list = []
+                if 'attr' in element and attr_available:
+                    element_attrs = element['attr']
+                    for attr in element_attrs:
+                        if attr in transformable.dictionary['attrs']:
+                            attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
+                attr_lists.append(attr_ind_list)
+                # TODO: add ignore_mask according to ignore classes and attrs
+        # print("polylines:", polylines)
+
+        polylines_lane_2d = [poly[:, [0,1]] for poly in polylines] 
+        # print("polylines_lane_2d:", polylines_lane_2d)
+        # assert False
+        num_class_channels = len(transformable.dictionary['classes'])
+        if attr_available:
+            num_attr_channels = len(transformable.dictionary['attrs'])
+        else:
+            num_attr_channels = 0
+        seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
+
+        line_ims = []
+        dist_ims = []
+        vec_ims = []
+        dir_ims = []
+        height_ims = []
+
+        linewidth = int(max(0.51, abs(fx * 0.2)))
+
+        for polyline, class_ind, attr_list in zip(polylines, class_inds, attr_lists):
+            for line_3d in zip(polyline[:-1], polyline[1:]):
+                line_3d = np.float32(line_3d)
+                line_bev = line_3d[:, :2]
+                # get line dir
+                line_dir = line_bev[1] - line_bev[0]
+                line_length = np.linalg.norm(line_dir)
+                if line_length < 1e-3:
+                    continue
+                line_dir /= line_length
+                # expand line to polygon
+                polygon = expand_line_2d(line_bev, radius=linewidth)
+                polygon_int = np.round(polygon).astype(int)
+                # seg_bev_im
+                cv2.fillPoly(seg_im[0], [polygon_int], 1)
+                cv2.fillPoly(seg_im[1 + class_ind], [polygon_int], 1)
+                for attr_ind in attr_list:
+                    cv2.fillPoly(seg_im[1 + num_class_channels + attr_ind], [polygon_int], 1)
+                # line segment
+                line_im = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [polygon_int], 1)
+                line_ims.append(line_im)
+                # line direction regressions
+                line_dir_vert = line_dir[::-1] * [1, -1]
+                vec_map = vec_point2line_along_direction(points_grid_bev, line_bev, line_dir_vert)
+                dist_im = line_im * np.linalg.norm(vec_map, axis=0) + (1 - line_im) * INF_DIST
+                vec_im = line_im * vec_map
+                abs_dir_im = line_im * np.float32([
+                    np.abs(line_dir[0]),
+                    np.abs(line_dir[1]),
+                    line_dir[0] * line_dir[1]
+                ])[..., None, None]
+                dist_ims.append(dist_im)
+                vec_ims.append(vec_im)
+                dir_ims.append(abs_dir_im)
+                # height map
+                h2s = (line_3d[1, 2] - line_3d[0, 2]) / max(1e-3, line_length)
+                height_im =  line_3d[0, 2] + h2s * line_im * np.linalg.norm(
+                    points_grid_bev + vec_map - line_bev[0][..., None, None], axis=0
+                )
+                height_ims.append(height_im)
+        if len(dist_ims) > 0:
+            index_im = np.argmin(np.array(dist_ims), axis=0)
+            vec_im = choose_index(index_im, vec_ims)
+            dist_im = choose_index(index_im, dist_ims)
+            dir_im = choose_index(index_im, dir_ims)
+            height_im = choose_index(index_im, height_ims)
+        else:
+            vec_im = np.zeros((2, X, Y), dtype=np.float32)
+            dist_im = np.zeros((X, Y), dtype=np.float32)
+            dir_im = np.zeros((3, X, Y), dtype=np.float32)
+            height_im = np.zeros((X, Y), dtype=np.float32)
+
+        reg_im = np.concatenate([
+            seg_im[:1] * dist_im[None],
+            vec_im,
+            dir_im,
+            height_im[None]
+        ], axis=0)
+        # TODO: add ignore_seg_mask according to ignore classes and attrs
+        # print("X, Y:", X, Y)
+        lanecls, laneloc = polyline_to_cell_maps_hashmap_angle(polylines_lane_2d, (X, Y), self.cell_stride)
+
+
+        tensor_data = {
+            # 'seg': torch.tensor(seg_im, dtype=torch.float32),
+            # 'reg': torch.tensor(reg_im, dtype=torch.float32),
+            'lanecls': torch.tensor(lanecls, dtype=torch.uint8),
+            'laneloc': torch.tensor(laneloc, dtype=torch.float32),
+            # 'lanematch': torch.tensor(lanematch, dtype=torch.int32),
+        }
+
+        return tensor_data
+
+
+    @staticmethod
+    @numba.njit
+    def _group_points(dst_points, seg_scores, dist_thresh):
+        ranked_ind = np.argsort(seg_scores)[::-1]
+        kept_groups = []
+        kept_inds = []
+
+        for i in ranked_ind:
+            if i not in kept_inds:
+                point_i = dst_points[:, i]
+                kept_inds.append(i)
+                grouped_inds = [i]
+                kept_groups.append(grouped_inds)
+                for j in ranked_ind:
+                    if j not in kept_inds:
+                        point_j = dst_points[:, j]
+                        dist_ij = np.linalg.norm(point_i - point_j)
+                        if dist_ij <= dist_thresh:
+                            kept_inds.append(j)
+                            grouped_inds.append(j)
+
+        return kept_groups
+
+    def _link_line_points(self, fused_points, fused_vecs, max_adist):
+        points_ind = np.arange(fused_points.shape[1])
+        # get groups of line segments
+        line_segments = []
+        kept_inds = {}
+
+        for i in points_ind:
+            if i not in kept_inds:
+                kept_inds[i] = 1
+                grouped_inds = [i]
+                line_segments.append(grouped_inds)
+                # go forward if direction is similar
+                point_i_forward = fused_points[:, i]
+                abs_vec_i_forward = fused_vecs[:, i]
+                oriented_point_i_forward = [point_i_forward, abs_vec_i_forward]
+                vec_i_forward = np.float32([abs_vec_i_forward[0], abs_vec_i_forward[1] * abs_vec_i_forward[2], 0])
+                adist_forward_max_ind = i
+                while True:
+                    adist_forward_max = max_adist
+                    for j in points_ind:
+                        if j not in kept_inds:
+                            point_j = fused_points[:, j]
+                            abs_vec_j = fused_vecs[:, j]
+                            oriented_point_j = [point_j, abs_vec_j]
+                            point_vec = point_j - point_i_forward
+                            ward = fast_inner_product(point_vec, vec_i_forward) # np.sum(point_vec * vec_i_forward)
+                            if ward > 0:
+                                adist_ij = _angle_hook_dist(oriented_point_i_forward, oriented_point_j, disth_thresh=max_adist)
+                                if adist_ij < adist_forward_max:
+                                    adist_forward_max = adist_ij
+                                    adist_forward_max_ind = j
+                    if adist_forward_max >= max_adist:
+                        break
+                    grouped_inds.append(adist_forward_max_ind)
+                    kept_inds[adist_forward_max_ind] = 1
+                    point_i_forward_old = point_i_forward
+                    point_i_forward = fused_points[:, adist_forward_max_ind]
+                    abs_vec_i_forward = fused_vecs[:, adist_forward_max_ind]
+                    oriented_point_i_forward = [point_i_forward, abs_vec_i_forward]
+                    vec_i_forward = np.float32([abs_vec_i_forward[0], abs_vec_i_forward[1] * abs_vec_i_forward[2], 0])
+                    # if np.sum(vec_i_forward * (point_i_forward - point_i_forward_old)) <= 0:
+                    if fast_inner_product(vec_i_forward, (point_i_forward - point_i_forward_old)) <= 0:
+                        vec_i_forward *= -1
+                    
+                # go backward if direction is opposite
+                point_i_backward = fused_points[:, i]
+                abs_vec_i_backward = fused_vecs[:, i]
+                oriented_point_i_backward = [point_i_backward, abs_vec_i_backward]
+                vec_i_backward = np.float32([abs_vec_i_backward[0], abs_vec_i_backward[1] * abs_vec_i_backward[2], 0])
+                adist_backward_max_ind = i
+                while True:
+                    adist_backward_max = max_adist
+                    for j in points_ind:
+                        if j not in kept_inds:
+                            point_j = fused_points[:, j]
+                            abs_vec_j = fused_vecs[:, j]
+                            oriented_point_j = [point_j, abs_vec_j]
+                            point_vec = point_j - point_i_backward
+                            ward = fast_inner_product(point_vec, vec_i_backward) # np.sum(point_vec * vec_i_backward)
+                            if ward <= 0:
+                                adist_ij = _angle_hook_dist(oriented_point_i_backward, oriented_point_j, disth_thresh=max_adist)
+                                if adist_ij < adist_backward_max:
+                                    adist_backward_max = adist_ij
+                                    adist_backward_max_ind = j
+                    if adist_backward_max >= max_adist:
+                        break
+                    grouped_inds.insert(0, adist_backward_max_ind)
+                    kept_inds[adist_backward_max_ind] = 1
+                    point_i_backward_old = point_i_backward
+                    point_i_backward = fused_points[:, adist_backward_max_ind]
+                    abs_vec_i_backward = fused_vecs[:, adist_backward_max_ind]
+                    oriented_point_i_backward = [point_i_backward, abs_vec_i_backward]
+                    vec_i_backward = np.float32([abs_vec_i_backward[0], abs_vec_i_backward[1] * abs_vec_i_backward[2], 0])
+                    # if np.sum(vec_i_backward * (point_i_backward - point_i_backward_old)) > 0:
+                    if fast_inner_product(vec_i_backward, (point_i_backward - point_i_backward_old)) > 0:
+                        vec_i_backward *= -1
+        
+        # remove isolated points
+        selected_line_segments = []
+        for segment in line_segments:
+            if len(segment) > 2:
+                selected_line_segments.append(segment)
+
+        return selected_line_segments
+
+
+    def reverse(self, tensor_dict):
+        """
+        Parameters
+        ----------
+        tensor_dict : dict
+
+        Notes
+        -----
+        ```
+        seg_im  # 分割图
+        reg_im  # 回归图
+            0: dist_im  # 每个分割图上的点到最近线段的垂直距离
+            1,2: vert_vec_im  # 每个分割图上的点到最近线段的向量
+            3,4,5: abs_dir_im  # 每个分割图上的点所在线段的广义单位方向，|nx|, |ny|, nx * ny
+            6 height_im # 每个分割图上的点的高度分布图
+        lanecls  # lanecls map
+        laneloc  # laneloc map
+        ```
+        """
+        
+        # seg_pred = tensor_dict['seg'].detach().cpu().numpy()
+        # reg_pred = tensor_dict['reg'].detach().cpu().numpy()
+
+        # ## pickup line points
+        # valid_points_map = seg_pred[0] > self.reverse_pre_conf
+        # # line point postions
+        # valid_points_bev = self.points_grid_bev[:, valid_points_map]
+        # # pickup scores
+        # seg_scores = seg_pred[0][valid_points_map]
+        # seg_classes = seg_pred[:, valid_points_map]
+        # # pickup regressions
+        # reg_values = reg_pred[:, valid_points_map]
+        # # get vertical vectors of line points
+        # vert_vecs = np.float32([reg_values[4], - reg_values[3] * _sign(reg_values[5])])
+        # vert_vecs *= _sign(np.sum(vert_vecs * reg_values[1:3], axis=0))
+        # # get precise points, vector of directions, and heights of line
+        # # dst_points = valid_points_bev + reg_values[0] * vert_vecs
+        # dst_points = np.concatenate([
+        #     valid_points_bev + reg_values[0] * vert_vecs,
+        #     reg_values[6][None]
+        # ])
+        # dst_vecs =  reg_values[3:6]
+        
+        # ## fuse points, group nms
+        # # group points
+        # kept_groups = self._group_points(dst_points, seg_scores, self.reverse_group_dist_thresh)
+        # # fuse points in one group
+        # fused_classes = []
+        # fused_points = []
+        # fused_vecs = []
+        # for g in kept_groups:
+        #     weights = seg_scores[g]
+        #     total_weight = weights.sum()
+        #     mean_classes = (seg_classes[:, g] * weights[None]).sum(axis=-1) / total_weight
+        #     mean_point = (dst_points[:, g] * weights[None]).sum(axis=-1) / total_weight
+        #     mean_vec = (dst_vecs[:, g] * weights[None]).sum(axis=-1) / total_weight
+        #     fused_classes.append(mean_classes)
+        #     fused_points.append(mean_point)
+        #     fused_vecs.append(mean_vec)
+        # fused_classes = np.float32(fused_classes).T
+        # fused_points = np.float32(fused_points).T
+        # fused_vecs = np.float32(fused_vecs).T
+
+        # if len(fused_classes) == 0:
+        #     return []
+        
+        # ## link all points and get 3d polylines
+        # line_segments = self._link_line_points(fused_points, fused_vecs, self.reverse_link_max_adist)
+        cx, cy, fx, fy = self.bev_intrinsics
+            
+        # === 1) 从 lanecls+laneloc 构建每个格子的小线段 ===
+
+        def build_polylines_points_from_lanecls_angle(
+                lanecls: np.ndarray,
+                laneloc: np.ndarray,
+                stride: int,
+                cx: float, cy: float,
+                fx: float, fy: float
+            ) -> tuple[list[np.ndarray], list[np.ndarray]]:
+            """
+            根据 lanecls 和 laneloc 生成每个格子的线段端点对（度量坐标）。
+            适配新的 laneloc 6 通道：[x_low, x_high, y_low, y_high, sin(2θ), cos(2θ)]
+
+            参数：
+            - lanecls: (H, W, 1) 或 (H, W)，>0 表示该 cell 有线段
+            - laneloc: (H, W, 6)，每个 cell 存 [x_low, x_high, y_low, y_high, sin2θ, cos2θ]，均为 cell 内归一化
+            - stride: 每个 cell 的像素边长
+            - cx, cy, fx, fy: 相机参数，用于像素→度量坐标转换（与原函数一致）
+
+            返回：
+            - polylines_points: List[np.ndarray]，每个元素 shape=(2,2)，
+                format=[(u1_metric, v1_metric), (u2_metric, v2_metric)]
+            - polylines_labels: 与每条线段对应的类别标签
+            """
+            H, W = lanecls.shape[:2]
+            polylines_points: list[np.ndarray] = []
+            # polylines_labels: list[np.ndarray] = []
+
+            cls_mask = lanecls[..., 0] if lanecls.ndim == 3 else lanecls
+
+            for i in range(H):
+                for j in range(W):
+                    if cls_mask[i, j] > 0:
+                        x_low, x_high, y_low, y_high, s2, c2 = laneloc[i, j]
+
+                        # 由 sin(2θ), cos(2θ) 恢复 θ（弧度，范围 0~π）
+                        # 先做单位化以防数值漂移
+                        n = math.hypot(float(s2), float(c2))
+                        if n > 1e-12:
+                            s2n, c2n = float(s2) / n, float(c2) / n
+                        else:
+                            # 退化：默认 θ=0°
+                            s2n, c2n = 0.0, 1.0
+                        theta = 0.5 * math.atan2(s2n, c2n)  # θ ∈ (-π/2, π/2]，但无向修改到 [0,π)
+                        if theta < 0:
+                            theta += math.pi  # 映射到 [0, π)
+
+                        # 根据规则选择端点对
+                        if theta < (0.5 * math.pi):  # θ < 90°
+                            x1r, y1r = x_low,  y_low
+                            x2r, y2r = x_high, y_high
+                        else:                        # θ ≥ 90°
+                            x1r, y1r = x_low,  y_high
+                            x2r, y2r = x_high, y_low
+                        # theta = 0.5 * math.atan2(s2n, c2n)  # (-90°,90°]
+
+                        # if theta >= 0:   # 0~90°
+                        #     # 相当于几何角度 < 90°
+                        #     p1 = (x_low,  y_high)
+                        #     p2 = (x_high, y_low)
+                        # else:            # -90~0 → 映射到 90~180
+                        #     # 相当于几何角度 ≥ 90°
+                        #     p1 = (x_low,  y_low)
+                        #     p2 = (x_high, y_high)
+
+
+                        # 当前 cell 左上角像素坐标
+                        base_y, base_x = i * stride, j * stride
+
+                        # 还原像素坐标（与原函数一致：先 y 再 x）
+                        y1_img = base_y + y1r * stride
+                        x1_img = base_x + x1r * stride
+                        y2_img = base_y + y2r * stride
+                        x2_img = base_x + x2r * stride
+
+                        # 像素 → 度量坐标（与原函数一致的模型）
+                        y1 = (x1_img - cy) / fy
+                        x1 = (y1_img - cx) / fx
+                        y2 = (x2_img - cy) / fy
+                        x2 = (y2_img - cx) / fx
+
+                        polylines_points.append([(x1, y1), (x2, y2)])
+                        # polylines_labels.append(cls_mask[i, j])
+
+            return polylines_points
+
+
+
+        # ========================================
+        # print("shape of tensor_dict['lanecls'].cpu().numpy():", tensor_dict['lanecls'].cpu().numpy().shape)
+        # print("shape of tensor_dict['laneloc'].cpu().numpy():", tensor_dict['laneloc'].cpu().numpy().shape)
+        lanecls    = tensor_dict['lanecls'].cpu().numpy()[0]       # (80, 60)
+        laneloc    = tensor_dict['laneloc'].cpu().numpy().transpose(1, 2, 0)  # (80, 60, 4)
+        # lanecls    = tensor_dict['lanecls'].cpu().numpy()[..., 0]   # (H, W)
+        # laneloc    = tensor_dict['laneloc'].cpu().numpy()          # (H, W, 4)
+        # match_map  = tensor_dict['lanematch'].cpu().numpy()        # (H, W)
+        # print("shape of lanecls:", lanecls.shape)
+        # print("shape of laneloc:", laneloc.shape)
+        # assert False
+        stride     = self.cell_stride
+        if lanecls.sum() <= 0:
+            # 如果 lanecls 全为 0，直接返回空列表
+            return None
+        # polylines_2d_ori = build_polylines_2d_from_match(lanecls, laneloc, match_map, stride)
+        # polylines_points = build_polylines_points_from_lanecls(lanecls, laneloc, stride, cx, cy, fx, fy)
+        polylines_points = build_polylines_points_from_lanecls_angle(
+            lanecls, laneloc, stride, cx, cy, fx, fy)
+
+        return polylines_points    # polylines_3d, polylines_points
+    
+
+
+@TENSOR_SMITHS.register_module()
+class PlanarPolyline3D_laneline_mul(PlanarTensorSmith):
+    
+    def __init__(self, 
+                 voxel_shape: tuple, 
+                 voxel_range: Tuple[list, list, list],
+                 reverse_pre_conf: float=0.5,
+                 reverse_group_dist_thresh: float=0.5,
+                 reverse_link_max_adist: float=1.5,
+                 cell_stride: int = 1,
+                 mode: str = 'obstacle',
+                 class_number: int = 26):
+        """
+        Parameters
+        ----------
+        voxel_shape : tuple
+        voxel_range : Tuple[List]
+        reverse_pre_conf : float
+        reverse_group_dist_thresh : float
+        reverse_link_max_adist : float
+        cell_stride : int
+            Stride for lane cell maps in pixels.
+
+        Examples
+        --------
+        - voxel_shape=(6, 320, 160)
+        - voxel_range=([-0.5, 2.5], [36, -12], [12, -12])
+        - Z, X, Y = voxel_shape
+
+        """
+        super().__init__(voxel_shape, voxel_range)
+        self.reverse_pre_conf = reverse_pre_conf
+        self.reverse_group_dist_thresh = reverse_group_dist_thresh
+        self.reverse_link_max_adist = reverse_link_max_adist
+        self.cell_stride = cell_stride
+        self.mode = mode
+        self.class_number = class_number
+
+    def __call__(self, transformable: Polyline3D):
+        """
+        Parameters
+        ----------
+        transformable : Polyline3D
+
+        Returns
+        -------
+        tensor_dict : dict
+
+        Notes
+        -----
+        ```
+        seg_im  # 分割图
+        reg_im  # 回归图
+            0: dist_im  # 每个分割图上的点到最近线段的垂直距离
+            1,2: vert_vec_im  # 每个分割图上的点到最近线段的向量
+            3,4,5: abs_dir_im  # 每个分割图上的点所在线段的广义单位方向，|nx|, |ny|, nx * ny
+            6 height_im # 每个分割图上的点的高度分布图
+        lanecls
+        laneloc
+        laneloc[ci, cj] = [
+            (ix1 - ci*stride) / stride,  # x1_rel
+            (iy1 - cj*stride) / stride,  # y1_rel
+            (ix2 - ci*stride) / stride,  # x2_rel
+            (iy2 - cj*stride) / stride,  # y2_rel
+            ]
+        ```
+        """
+        Z, X, Y = self.voxel_shape
+        # print("z, x, y:", Z, X, Y)
+        cx, cy, fx, fy = self.bev_intrinsics
+        # print("cx, cy, fx, fy:", cx, cy, fx, fy)
+        points_grid_bev = self.points_grid_bev
+        # print("points_grid_bev:", points_grid_bev.shape)
+
+        polylines = []
+        class_inds = []
+        attr_lists = []
+        attr_available = 'attrs' in transformable.dictionary
+
+        for element in transformable.elements:
+            # print("Element class:", element['class'])
+            if element['class'] in transformable.dictionary['classes']:
+            # if element['class'] in extended_classes:
+                points = element['points']
+                # import pdb; pdb.set_trace()
+
+                # 自车像素
+                polylines.append(np.array([
+                    points[..., 1] * fy + cy,  # fy:一米在像素图上占多少像素  # 图像坐标系的x
+                    points[..., 0] * fx + cx,   # fx:一米在像素图上占多少像素  # 图像坐标系的y
+                    points[..., 2]
+                ]).T)
+                # print("polylines:", polylines)
+                # assert False
+                class_inds.append(transformable.dictionary['classes'].index(element['class']))
+                # class_inds.append(extended_classes.index(element['class']))
+                # class_inds.append(element['class'])
+                # print("element['class']:", element['class'])
+                # print("class_inds:", class_inds)
+
+                # attr_ind_list = []
+                # if 'attr' in element and attr_available:
+                #     element_attrs = element['attr']
+                #     for attr in element_attrs:
+                #         if attr in transformable.dictionary['attrs']:
+                #             attr_ind_list.append(transformable.dictionary['attrs'].index(attr))
+                # attr_lists.append(attr_ind_list)
+                # TODO: add ignore_mask according to ignore classes and attrs
+        # print("polylines:", polylines)
+
+        polylines_lane_2d = [poly[:, [0,1]] for poly in polylines] 
+        # print("polylines_lane_2d:", polylines_lane_2d)
+        # assert False
+        num_class_channels = len(transformable.dictionary['classes'])
+        if attr_available:
+            num_attr_channels = len(transformable.dictionary['attrs'])
+        else:
+            num_attr_channels = 0
+        seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
+
+        # line_ims = []
+        # dist_ims = []
+        # vec_ims = []
+        # dir_ims = []
+        # height_ims = []
+
+        # linewidth = int(max(0.51, abs(fx * 0.2)))
+
+        # for polyline, class_ind, attr_list in zip(polylines, class_inds, attr_lists):
+        #     for line_3d in zip(polyline[:-1], polyline[1:]):
+        #         line_3d = np.float32(line_3d)
+        #         line_bev = line_3d[:, :2]
+        #         # get line dir
+        #         line_dir = line_bev[1] - line_bev[0]
+        #         line_length = np.linalg.norm(line_dir)
+        #         if line_length < 1e-3:
+        #             continue
+        #         line_dir /= line_length
+        #         # expand line to polygon
+        #         polygon = expand_line_2d(line_bev, radius=linewidth)
+        #         polygon_int = np.round(polygon).astype(int)
+        #         # seg_bev_im
+        #         cv2.fillPoly(seg_im[0], [polygon_int], 1)
+        #         cv2.fillPoly(seg_im[1 + class_ind], [polygon_int], 1)
+        #         for attr_ind in attr_list:
+        #             cv2.fillPoly(seg_im[1 + num_class_channels + attr_ind], [polygon_int], 1)
+        #         # line segment
+        #         line_im = cv2.fillPoly(np.zeros((X, Y), dtype=np.float32), [polygon_int], 1)
+        #         line_ims.append(line_im)
+        #         # line direction regressions
+        #         line_dir_vert = line_dir[::-1] * [1, -1]
+        #         vec_map = vec_point2line_along_direction(points_grid_bev, line_bev, line_dir_vert)
+        #         dist_im = line_im * np.linalg.norm(vec_map, axis=0) + (1 - line_im) * INF_DIST
+        #         vec_im = line_im * vec_map
+        #         abs_dir_im = line_im * np.float32([
+        #             np.abs(line_dir[0]),
+        #             np.abs(line_dir[1]),
+        #             line_dir[0] * line_dir[1]
+        #         ])[..., None, None]
+        #         dist_ims.append(dist_im)
+        #         vec_ims.append(vec_im)
+        #         dir_ims.append(abs_dir_im)
+        #         # height map
+        #         h2s = (line_3d[1, 2] - line_3d[0, 2]) / max(1e-3, line_length)
+        #         height_im =  line_3d[0, 2] + h2s * line_im * np.linalg.norm(
+        #             points_grid_bev + vec_map - line_bev[0][..., None, None], axis=0
+        #         )
+        #         height_ims.append(height_im)
+        # if len(dist_ims) > 0:
+        #     index_im = np.argmin(np.array(dist_ims), axis=0)
+        #     vec_im = choose_index(index_im, vec_ims)
+        #     dist_im = choose_index(index_im, dist_ims)
+        #     dir_im = choose_index(index_im, dir_ims)
+        #     height_im = choose_index(index_im, height_ims)
+        # else:
+        #     vec_im = np.zeros((2, X, Y), dtype=np.float32)
+        #     dist_im = np.zeros((X, Y), dtype=np.float32)
+        #     dir_im = np.zeros((3, X, Y), dtype=np.float32)
+        #     height_im = np.zeros((X, Y), dtype=np.float32)
+
+        # reg_im = np.concatenate([
+        #     seg_im[:1] * dist_im[None],
+        #     vec_im,
+        #     dir_im,
+        #     height_im[None]
+        # ], axis=0)
+        # TODO: add ignore_seg_mask according to ignore classes and attrs
+        # print("X, Y:", X, Y)
+        mode = self.mode
+        class_number = self.class_number
+        lanecls, laneloc = polyline_to_cell_maps_hashmap_label_angle(polylines_lane_2d, (X, Y), self.cell_stride, class_inds, mode, class_number)
+
+        tensor_data = {
+            # 'seg': torch.tensor(seg_im, dtype=torch.float32),
+            # 'reg': torch.tensor(reg_im, dtype=torch.float32),
+            'lanecls': torch.tensor(lanecls, dtype=torch.uint8),
+            'laneloc': torch.tensor(laneloc, dtype=torch.float32),
+            # 'lanematch': torch.tensor(lanematch, dtype=torch.int32),
+        }
+
+        return tensor_data
+
+
+    @staticmethod
+    @numba.njit
+    def _group_points(dst_points, seg_scores, dist_thresh):
+        ranked_ind = np.argsort(seg_scores)[::-1]
+        kept_groups = []
+        kept_inds = []
+
+        for i in ranked_ind:
+            if i not in kept_inds:
+                point_i = dst_points[:, i]
+                kept_inds.append(i)
+                grouped_inds = [i]
+                kept_groups.append(grouped_inds)
+                for j in ranked_ind:
+                    if j not in kept_inds:
+                        point_j = dst_points[:, j]
+                        dist_ij = np.linalg.norm(point_i - point_j)
+                        if dist_ij <= dist_thresh:
+                            kept_inds.append(j)
+                            grouped_inds.append(j)
+
+        return kept_groups
+
+    def _link_line_points(self, fused_points, fused_vecs, max_adist):
+        points_ind = np.arange(fused_points.shape[1])
+        # get groups of line segments
+        line_segments = []
+        kept_inds = {}
+
+        for i in points_ind:
+            if i not in kept_inds:
+                kept_inds[i] = 1
+                grouped_inds = [i]
+                line_segments.append(grouped_inds)
+                # go forward if direction is similar
+                point_i_forward = fused_points[:, i]
+                abs_vec_i_forward = fused_vecs[:, i]
+                oriented_point_i_forward = [point_i_forward, abs_vec_i_forward]
+                vec_i_forward = np.float32([abs_vec_i_forward[0], abs_vec_i_forward[1] * abs_vec_i_forward[2], 0])
+                adist_forward_max_ind = i
+                while True:
+                    adist_forward_max = max_adist
+                    for j in points_ind:
+                        if j not in kept_inds:
+                            point_j = fused_points[:, j]
+                            abs_vec_j = fused_vecs[:, j]
+                            oriented_point_j = [point_j, abs_vec_j]
+                            point_vec = point_j - point_i_forward
+                            ward = fast_inner_product(point_vec, vec_i_forward) # np.sum(point_vec * vec_i_forward)
+                            if ward > 0:
+                                adist_ij = _angle_hook_dist(oriented_point_i_forward, oriented_point_j, disth_thresh=max_adist)
+                                if adist_ij < adist_forward_max:
+                                    adist_forward_max = adist_ij
+                                    adist_forward_max_ind = j
+                    if adist_forward_max >= max_adist:
+                        break
+                    grouped_inds.append(adist_forward_max_ind)
+                    kept_inds[adist_forward_max_ind] = 1
+                    point_i_forward_old = point_i_forward
+                    point_i_forward = fused_points[:, adist_forward_max_ind]
+                    abs_vec_i_forward = fused_vecs[:, adist_forward_max_ind]
+                    oriented_point_i_forward = [point_i_forward, abs_vec_i_forward]
+                    vec_i_forward = np.float32([abs_vec_i_forward[0], abs_vec_i_forward[1] * abs_vec_i_forward[2], 0])
+                    # if np.sum(vec_i_forward * (point_i_forward - point_i_forward_old)) <= 0:
+                    if fast_inner_product(vec_i_forward, (point_i_forward - point_i_forward_old)) <= 0:
+                        vec_i_forward *= -1
+                    
+                # go backward if direction is opposite
+                point_i_backward = fused_points[:, i]
+                abs_vec_i_backward = fused_vecs[:, i]
+                oriented_point_i_backward = [point_i_backward, abs_vec_i_backward]
+                vec_i_backward = np.float32([abs_vec_i_backward[0], abs_vec_i_backward[1] * abs_vec_i_backward[2], 0])
+                adist_backward_max_ind = i
+                while True:
+                    adist_backward_max = max_adist
+                    for j in points_ind:
+                        if j not in kept_inds:
+                            point_j = fused_points[:, j]
+                            abs_vec_j = fused_vecs[:, j]
+                            oriented_point_j = [point_j, abs_vec_j]
+                            point_vec = point_j - point_i_backward
+                            ward = fast_inner_product(point_vec, vec_i_backward) # np.sum(point_vec * vec_i_backward)
+                            if ward <= 0:
+                                adist_ij = _angle_hook_dist(oriented_point_i_backward, oriented_point_j, disth_thresh=max_adist)
+                                if adist_ij < adist_backward_max:
+                                    adist_backward_max = adist_ij
+                                    adist_backward_max_ind = j
+                    if adist_backward_max >= max_adist:
+                        break
+                    grouped_inds.insert(0, adist_backward_max_ind)
+                    kept_inds[adist_backward_max_ind] = 1
+                    point_i_backward_old = point_i_backward
+                    point_i_backward = fused_points[:, adist_backward_max_ind]
+                    abs_vec_i_backward = fused_vecs[:, adist_backward_max_ind]
+                    oriented_point_i_backward = [point_i_backward, abs_vec_i_backward]
+                    vec_i_backward = np.float32([abs_vec_i_backward[0], abs_vec_i_backward[1] * abs_vec_i_backward[2], 0])
+                    # if np.sum(vec_i_backward * (point_i_backward - point_i_backward_old)) > 0:
+                    if fast_inner_product(vec_i_backward, (point_i_backward - point_i_backward_old)) > 0:
+                        vec_i_backward *= -1
+        
+        # remove isolated points
+        selected_line_segments = []
+        for segment in line_segments:
+            if len(segment) > 2:
+                selected_line_segments.append(segment)
+
+        return selected_line_segments
+
+
+    def reverse(self, tensor_dict):
+        """
+        Parameters
+        ----------
+        tensor_dict : dict
+
+        Notes
+        -----
+        ```
+        seg_im  # 分割图
+        reg_im  # 回归图
+            0: dist_im  # 每个分割图上的点到最近线段的垂直距离
+            1,2: vert_vec_im  # 每个分割图上的点到最近线段的向量
+            3,4,5: abs_dir_im  # 每个分割图上的点所在线段的广义单位方向，|nx|, |ny|, nx * ny
+            6 height_im # 每个分割图上的点的高度分布图
+        lanecls  # lanecls map
+        laneloc  # laneloc map
+        ```
+        """
+        cx, cy, fx, fy = self.bev_intrinsics
+        # === 1) 从 lanecls+laneloc 构建每个格子的小线段 ===
+
+        def build_polylines_points_from_lanecls(
+                lanecls: np.ndarray,
+                laneloc: np.ndarray,
+                stride: int,
+                cx: float, cy: float,
+                fx: float, fy: float
+            ) -> tuple[list[np.ndarray], list[np.ndarray]]:
+            """
+            根据 lanecls 和 laneloc 生成每个格子的线段端点对（度量坐标），
+            只返回 polylines_points 列表。
+            
+            参数：
+            - lanecls: (H, W, 1)，>0 表示该 cell 有线段
+            - laneloc: 形状 (H, W, 4)，每个 cell 存 [x1_norm, y1_norm, x2_norm, y2_norm]
+            - stride: 每个 cell 对应的像素边长
+            - cx, cy, fx, fy: 相机参数，用于像素→度量坐标转换
+            返回：
+            - polylines_points: List[np.ndarray]，每个元素是 shape=(2,2) 的 array，
+                format=[(u1_metric, v1_metric), (u2_metric, v2_metric)]
+            """
+            H, W = lanecls.shape[:2]
+            polylines_points = []
+            polylines_labels = []
+            cls_mask = lanecls[..., 0] if lanecls.ndim == 3 else lanecls
+
+            for i in range(H):
+                for j in range(W):
+                    if cls_mask[i, j] > 0:
+                        x1r, y1r, x2r, y2r = laneloc[i, j]
+                        base_y, base_x = i * stride, j * stride
+
+                        # 像素坐标下的端点
+                        y1_img = base_y + y1r * stride
+                        x1_img = base_x + x1r * stride
+                        y2_img = base_y + y2r * stride
+                        x2_img = base_x + x2r * stride
+                        # print(f"Cell ({i}, {j}): ({x1_img}, {y1_img}), ({x2_img}, {y2_img})")
+
+                        # 转换为度量坐标
+                        # print(f"cx, cy, fx, fy: {cx}, {cy}, {fx}, {fy}")
+                        y1 = (x1_img - cy) / fy
+                        x1 = (y1_img - cx) / fx
+                        y2 = (x2_img - cy) / fy
+                        x2 = (y2_img - cx) / fx
+                        # print(f"Cell ({i}, {j}) metric: ({x1}, {y1}), ({x2}, {y2})")
+                        polylines_points.append([(x1, y1), (x2, y2)])
+                        polylines_labels.append(cls_mask[i, j])
+            # assert False
+
+            return polylines_points, polylines_labels
+        
+        def build_polylines_points_from_lanecls_angle(
+                lanecls: np.ndarray,
+                laneloc: np.ndarray,
+                stride: int,
+                cx: float, cy: float,
+                fx: float, fy: float
+            ) -> tuple[list[np.ndarray], list[np.ndarray]]:
+            """
+            根据 lanecls 和 laneloc 生成每个格子的线段端点对（度量坐标）。
+            
+            参数：
+            - lanecls: (H, W, 1) 或 (H, W)，>0 表示该 cell 有线段
+            - laneloc: 形状 (H, W, 6)，每个 cell 存 [x_low, x_high, y_low, y_high, sin2θ, cos2θ]
+                    这里的坐标均为 cell 内归一化到 [0,1]
+            - stride: 每个 cell 的像素边长
+            - cx, cy, fx, fy: 相机参数，用于像素→度量坐标转换
+
+            返回：
+            - polylines_points: List[np.ndarray]，每个元素 shape=(2,2)，
+                format=[(u1_metric, v1_metric), (u2_metric, v2_metric)]
+            - polylines_labels: 与每条线段对应的类别标签
+            """
+            H, W = lanecls.shape[:2]
+            polylines_points: list[np.ndarray] = []
+            polylines_labels: list[np.ndarray] = []
+
+            cls_mask = lanecls[..., 0] if lanecls.ndim == 3 else lanecls
+
+            for i in range(H):
+                for j in range(W):
+                    if cls_mask[i, j] > 0:
+                        x_low, x_high, y_low, y_high, s2, c2 = laneloc[i, j]
+
+                        # --- 恢复 θ 并映射到 [0, π) ---
+                        n = math.hypot(float(s2), float(c2))
+                        if n > 1e-12:
+                            s2n, c2n = float(s2) / n, float(c2) / n
+                        else:
+                            s2n, c2n = 0.0, 1.0  # 退化：默认 0°
+                        theta = 0.5 * math.atan2(s2n, c2n)   # (-π/2, π/2]
+                        if theta < 0:
+                            theta += math.pi                 # [0, π)
+
+                        # --- 按规则选择端点对 ---
+                        if theta < (0.5 * math.pi):  # θ < 90°
+                            x1r, y1r = x_low,  y_low
+                            x2r, y2r = x_high, y_high
+                        else:                        # θ ≥ 90°
+                            x1r, y1r = x_low,  y_high
+                            x2r, y2r = x_high, y_low
+
+                        # --- 归一坐标 → 像素坐标 ---
+                        base_y, base_x = i * stride, j * stride
+                        y1_img = base_y + y1r * stride
+                        x1_img = base_x + x1r * stride
+                        y2_img = base_y + y2r * stride
+                        x2_img = base_x + x2r * stride
+
+                        # --- 像素 → 度量坐标（保持与你原函数一致的换算）---
+                        y1 = (x1_img - cy) / fy
+                        x1 = (y1_img - cx) / fx
+                        y2 = (x2_img - cy) / fy
+                        x2 = (y2_img - cx) / fx
+
+                        polylines_points.append([(x1, y1), (x2, y2)])
+                        polylines_labels.append(cls_mask[i, j])
+
+            return polylines_points, polylines_labels
+
+        # ========================================
+        lanecls    = tensor_dict['lanecls'].cpu().numpy()[0]       # (80, 60)
+        laneloc    = tensor_dict['laneloc'].cpu().numpy().transpose(1, 2, 0)  # (80, 60, 5)
+
+        stride     = self.cell_stride
+        if lanecls.sum() <= 0:
+            # 如果 lanecls 全为 0，直接返回空列表
+            return None
+        # polylines_points, polylines_labels = build_polylines_points_from_lanecls(lanecls, laneloc, stride, cx, cy, fx, fy)
+        # ==== CHANGED: 现在函数内部会解 Hesse 并返回标签
+        polylines_points, polylines_labels = build_polylines_points_from_lanecls_angle(
+            lanecls, laneloc, stride, cx, cy, fx, fy
+        )
+        return polylines_points, polylines_labels
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 @numba.jit(nopython=True)
 def fast_norm(x):
@@ -2417,6 +3489,7 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
         bool
             _description_
         """
+        cx, cy, fx, fy = self.bev_intrinsics
         if len(slot_points_3d) != 4:
             return False
         vec_01 = slot_points_3d[1] - slot_points_3d[0]
@@ -2435,8 +3508,13 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
         # check z range
         if np.any(slot_points_3d[:, 2] < self.voxel_range[0][0]):
             return False
-        if np.any(slot_points_3d[:, 2] > self.voxel_range[0][1]):
+        if np.any(slot_points_3d[:, 2] > (self.voxel_range[0][1]-1)):  # slot can't be higher than 2meters so 3-1=2
             return False
+        # check xy range
+        if np.any(slot_points_3d[0:2, 0] > -(self.voxel_range[1][0]-self.voxel_range[1][1])*fx) or np.any(slot_points_3d[0:2, 0] < 0):
+            return False
+        if np.any(slot_points_3d[0:2, 1] > -(self.voxel_range[2][0]-self.voxel_range[2][1])*fy) or np.any(slot_points_3d[0:2, 1] < 0):
+            return False       
 
         return True
 
@@ -2453,16 +3531,49 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
         reg_im = np.zeros((14, X, Y), dtype=np.float32)
         cen_im = np.zeros((1, X, Y), dtype=np.float32)
 
+        pts_im = np.zeros((4, X*2, Y*2), dtype=np.float32)
+        pin_im = np.zeros((1, X*2, Y*2), dtype=np.float32)
         for element in transformable.elements:
             slot_points_3d = (np.float32(element['points']) * [[fx, fy, 1]] + [[cx, cy, 0]])
             if not self._valid_slot(slot_points_3d):
                 continue
             entrance_length = np.linalg.norm(element['points'][1] - element['points'][0])
             side_length = np.linalg.norm(element['points'][3] - element['points'][0])
+
+            #For IPM style corner orders
+            slot_points_bev_IPM = slot_points_3d[..., [1, 0]]
+            slot_points_bev_int_IPM = np.round(slot_points_bev_IPM).astype(int)
+
             if entrance_length > side_length:
                 slot_points_3d = slot_points_3d[[1, 2, 3, 0]]
             slot_points_bev = slot_points_3d[..., [1, 0]]
             slot_points_bev_int = np.round(slot_points_bev).astype(int)
+
+            # # corner 1
+            radius = 3
+            slot_points_xy = slot_points_bev_int_IPM[0:1, :2]
+            for corner in slot_points_xy:
+                # pts_im[0] = draw_labelmap_gaussian(pts_im[0], tuple(np.round(corner * 2).astype(int)), sigma=sigma,radius=radius, type='Gaussian', factor=1)
+                cv2.circle(pts_im[0], tuple(np.round(corner * 2).astype(int)), radius, 1, -1)
+
+            # # corner 2
+            slot_points_xy = slot_points_bev_int_IPM[1:2, :2]
+            for corner in slot_points_xy:
+                # print(corner*2,radius)
+                cv2.circle(pts_im[1], tuple(np.round(corner * 2).astype(int)), radius, 1, -1)
+
+            # # corner 3
+            slot_points_xy = slot_points_bev_int_IPM[2:3, :2]
+            for corner in slot_points_xy:
+                # pts_im[0] = draw_labelmap_gaussian(pts_im[0], tuple(np.round(corner * 2).astype(int)), sigma=sigma,radius=radius, type='Gaussian', factor=1)
+                cv2.circle(pts_im[2], tuple(np.round(corner * 2).astype(int)), radius, 1, -1)
+
+            # # corner 4
+            slot_points_xy = slot_points_bev_int_IPM[3:4, :2]
+            for corner in slot_points_xy:
+                # print(corner*2,radius)
+                cv2.circle(pts_im[3], tuple(np.round(corner * 2).astype(int)), radius, 1, -1)
+
 
             # define short side and long side on bev
             short_sides = np.float32([
@@ -2636,7 +3747,9 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
             'reg': torch.cat([
                 torch.tensor(reg_im),
                 torch.tensor(height_map)
-            ])
+            ]),
+            'pts': torch.tensor(pts_im),
+            'pin': torch.tensor(pin_im),
         }
         
         return tensor_data
@@ -2751,6 +3864,22 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
         cen_pred = tensor_dict['cen'].detach().cpu().numpy()
         seg_pred = tensor_dict['seg'].detach().cpu().numpy()
         reg_pred = tensor_dict['reg'].detach().cpu().numpy()
+        heatmap  = tensor_dict['pts'].detach().cpu().numpy() 
+
+        # get pts points
+        prob_thres=0.5
+        heatmap=heatmap.transpose(1,2,0)
+        slot1=heatmap[:,:,0]
+        slot1_bins = (slot1 > prob_thres).astype(np.uint8)
+        # cv2.imwrite('output_images/1.jpg',slot1_bins*255)
+        # assert 0
+        slot1_pts = detect_corners_with_score(slot1_bins, slot1,2)
+        # print(slot1_pts)
+        slot1_pts = slot1_pts
+        # slot2=heatmap[:,:,1]
+        # slot2_bins = (slot2 > prob_thres).astype(np.uint8)
+        # slot2_pts = detect_corners_with_score(slot2_bins, slot2,2)
+        # slot2_pts = slot2_pts
 
         # get valid_points
         valid_points_map = cen_pred[0] > self.reverse_pre_conf
@@ -2892,8 +4021,26 @@ class PlanarParkingSlot3D(PlanarTensorSmith):
             conf = mean_slot_3d[:, 3].mean()
             if conf > self.reverse_conf_thresh:
                 mean_slots_3d.append(mean_slot_3d)
-        
-        return mean_slots_3d
+        mean_pts_3d = []
+        for point in slot1_pts:
+            mean_pts_3d.append([(point[1] - cx) / fx, 
+                                 (point[0] - cy) / fy, 
+                                 0, 
+                                 point[2],
+                                 1])
+        # for point in slot2_pts:
+        #     mean_pts_3d.append([(point[1] - cx) / fx, 
+        #                          (point[0] - cy) / fy, 
+        #                          height, 
+        #                          point[2],
+        #                          2])
+        mean_pts_3d = np.float32(mean_pts_3d)
+
+
+
+
+        return mean_slots_3d,mean_pts_3d
+
 
 
 
@@ -2967,3 +4114,140 @@ class PlanarPolyline3DSeg(PlanarTensorSmith):
         return tensor_data
 
 
+@TENSOR_SMITHS.register_module()
+class PlanarBbox3D_pin(PlanarBbox3D):
+
+    def __call__(self, transformable: Bbox3D):
+        """
+        transformable Bbox3D
+        ---------
+        elements: List[dict]
+        a list of boxes. Each element is a dict of box having the following format
+        ```
+        elements[0] = {
+            'class': 'class.vehicle.passenger_car',
+            'attr': [
+                'attr.time_varying.object.state.stationary',
+                'attr.vehicle.is_trunk_open.false',
+                'attr.vehicle.is_door_open.false'
+            ],
+            'size': [4.6486, 1.9505, 1.5845],
+            'rotation': array([
+                [ 0.93915682, -0.32818596, -0.10138267],
+                [ 0.32677338,  0.94460343, -0.03071667],
+                [ 0.1058472 , -0.00428138,  0.99437319]
+            ]),
+            'translation': array([[-15.70570354], [ 11.88484971], [ -0.61029085]]), # NOTE: it is a column vector
+            'track_id': '10035_0', # NOT USED
+            'velocity': array([[0.], [0.], [0.]]) # NOTE: it is a column vector
+        }
+        ```
+        dictionary: dict
+            following format
+            ```dictionary = {'classes': ['car', 'bus', 'pedestrain', ...], 'attrs': []}
+            ```
+        flip_aware_class_pairs: List[tuple]
+            list of class pairs that are flip-aware
+            flip_aware_class_pairs = [('left_arrow', 'right_arrow')]
+        
+        Return
+        ------
+        tensor_smith: TensorSmith, optional
+            a tensor smith object, providing ToTensor for the transformable, by default None
+        """
+        # attr_available = 'attrs' in transformable.dictionary
+        # num_class_channels = len(transformable.dictionary['classes'])
+        # if attr_available:
+        #     num_attr_channels = len(transformable.dictionary['attrs'])
+        # else:
+        #     num_attr_channels = 0
+        # # maybe later, think about overlapped objects
+        # seg_im = np.zeros((1 + num_class_channels + num_attr_channels, X, Y), dtype=np.float32)
+        # cen_im = np.zeros((1, X, Y), dtype=np.float32)
+        # ## tensor
+        # tensor_data = {
+        #     'seg': torch.tensor(seg_im, dtype=torch.float32),
+        #     'cen': torch.tensor(cen_im, dtype=torch.float32),
+        #     'reg': torch.tensor(reg_im, dtype=torch.float32)
+        # }
+        return []
+    
+    def reverse(self, tensor_dict):
+        """
+        Parameters
+        ----------
+        tensor_dict : dict
+        ```
+        {
+            'seg': torch.Tensor,
+            'cen': torch.Tensor,
+            'reg': torch.Tensor
+        }
+        ```
+
+        Notes
+        -----
+        ```
+        seg_im  # 分割图
+        cen_im  # 中心图
+        reg_im  # 回归图
+            0, 1: center x y, bev coords
+            2: center z, ego coords
+            3, 4, 5: size (l, w, h), ego coords
+            6, 7, 8: unit xvec, ego coords
+            9, 10, 11, 12, 13: absolute xvec, ego coords
+            14, 15, 16: abs roll angle of yvec and xvec_bev_vertial, intrinsic rotation
+            17, 18, 19: velocity, ego coords, TODO: should be converted to ego coords, currently world coords            
+        ```
+        """
+        seg_pred = tensor_dict['seg'].detach().cpu().numpy()
+        cen_pred = tensor_dict['cen'].detach().cpu().numpy()
+        reg_pred = tensor_dict['reg'].detach().cpu().numpy()
+        ## pickup bbox points
+        valid_points_map = seg_pred[0] > self.reverse_pre_conf 
+        # valid postions
+        valid_points_bev = self.points_grid_bev[:, valid_points_map]
+        # pickup scores and classes
+        seg_scores = seg_pred[0][valid_points_map]
+        cen_scores = cen_pred[0][valid_points_map]
+        seg_classes = seg_pred[:, valid_points_map]
+        # pickup regressions
+        reg_values = reg_pred[:, valid_points_map]
+        # 0, 1, 2: centers in ego coords
+        cx, cy, fx, fy = self.bev_intrinsics
+        center_xs = (valid_points_bev[1] + reg_values[1] - cx) / fx
+        center_ys = (valid_points_bev[0] + reg_values[0] - cy) / fy
+        center_zs = reg_values[2]
+        centers = np.array([center_xs, center_ys, center_zs])
+        # 3, 4, 5: sizes in ego coords
+        sizes = reg_values[[3, 4, 5]]
+        # infer unit xvecs from absolute xvecs and ref_unit xvecs
+        # 6, 7, 8: reference unit xvecs in ego coords
+        ref_unit_xvecs = reg_values[[6, 7, 8]]
+        # 9, 10, 11, 12, 13: absolute unit xvecs in ego coords
+        abs_unit_xvecs = reg_values[[9, 10, 11, 12, 13]]
+        # calculte unit xvecs
+        unit_xvecs_x = abs_unit_xvecs[0]
+        unit_xvecs_y = abs_unit_xvecs[1] * _sign(abs_unit_xvecs[3])
+        unit_xvecs_z = abs_unit_xvecs[2] * _sign(abs_unit_xvecs[4])
+        unit_xvecs = np.array([unit_xvecs_x, unit_xvecs_y, unit_xvecs_z])
+        sign_xvecs = _sign(unit_xvecs * ref_unit_xvecs)
+        unit_xvecs *= sign_xvecs
+        # 14, 15, 16: roll angles
+        cos_rolls = reg_values[14]
+        sin_rolls = reg_values[15] * _sign(reg_values[16])
+        roll_vecs = np.array([cos_rolls, sin_rolls])
+        roll_vecs /= np.maximum(np.linalg.norm(roll_vecs), 1e-6)
+        # 17, 18, 19: velocities
+        if self.has_velocity:
+            velocities = reg_values[[17, 18, 19]]
+        else:
+            velocities = None
+        
+        ## group nms
+        boxes_3d = self._group_nms(
+            seg_scores, cen_scores, seg_classes, 
+            centers, sizes, unit_xvecs, roll_vecs, velocities,
+        )
+
+        return boxes_3d

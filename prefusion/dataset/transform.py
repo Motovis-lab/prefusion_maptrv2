@@ -20,6 +20,60 @@ from copious.cv.geometry import Box3d as CopiousBox3d
 from prefusion.registry import TRANSFORMS, TRANSFORMABLES
 from prefusion.dataset.utils import make_seed
 
+from typing import Optional
+import numpy as np
+from PIL import Image
+import cv2
+import torch
+import torch.nn as nn
+import numpy as np
+
+def adjust_hue(img: np.ndarray,
+               hue_factor: float,
+               backend: Optional[str] = None) -> np.ndarray:
+    """Adjust hue of an image without uint8-negative casting issues (NumPy 2.x safe).
+
+    Args:
+        img (ndarray): 输入图像（BGR 排列，H×W×3 或灰度 H×W）。
+        hue_factor (float): 色相平移量，范围 [-0.5, 0.5]，0.5/-0.5 ≈ 180°。
+        backend (str | None): 'cv2' 或 'pillow'。None 则使用全局 imread_backend。
+
+    Returns:
+        ndarray: 色相调整后的图像（保持原 dtype）。
+    """
+
+    if not (-0.5 <= hue_factor <= 0.5):
+        raise ValueError(f'hue_factor:{hue_factor} is not in [-0.5, 0.5].')
+    if not (isinstance(img, np.ndarray) and (img.ndim in {2, 3})):
+        raise TypeError('img should be ndarray with dim=[2 or 3].')
+
+    # 灰度图直接返回（不含色相）
+    if img.ndim == 2 or (img.ndim == 3 and img.shape[2] == 1):
+        return img
+
+    shift = int(round(hue_factor * 255))  # HSV_FULL 的 H 取值为 0..255，需对 256 取模
+    mod = 256
+
+
+    dtype = img.dtype
+    img_u8 = img.astype(np.uint8, copy=False)
+    # 使用 HSV_FULL（H ∈ [0,255]）
+    hsv_img = cv2.cvtColor(img_u8, cv2.COLOR_BGR2HSV_FULL)
+    h, s, v = cv2.split(hsv_img)
+
+    # 安全加法，避免 np.uint8(负数) 在 NumPy 2.x 报错
+    h = (h.astype(np.int16) + shift) % mod
+    h = h.astype(np.uint8)
+
+    hsv_img = cv2.merge([h, s, v])
+    out = cv2.cvtColor(hsv_img, cv2.COLOR_HSV2BGR_FULL)
+
+    # 保持原 dtype
+    if out.dtype != dtype:
+        out = out.astype(dtype, copy=False)
+    return out
+
+
 
 if TYPE_CHECKING:
     from .tensor_smith import TensorSmith
@@ -346,7 +400,9 @@ class CameraImage(CameraTransformable):
         return self
     
     def adjust_hue(self, hue=1, **kwargs):
-        self.img = mmcv.adjust_hue(self.img, hue_factor=hue)
+        # print(self.img.shape, self.img.min(), self.img.max())
+        # self.img = mmcv.adjust_hue(self.img, hue_factor=hue)
+        self.img = adjust_hue(self.img, hue_factor=hue)
         return self
     
     def adjust_sharpness(self, sharpness=1, **kwargs):
@@ -437,7 +493,15 @@ class CameraImage(CameraTransformable):
             ego_mask=self.ego_mask
         )
         camera_new.extrinsic = (camera_new.extrinsic[0], self.extrinsic[1])
+        src_camera_mask = camera_old.get_camera_mask()
+        # print(self.img.shape,src_camera_mask.shape)
+        # try:
+        # import sys
+        # print(sys.path)
         self.img, self.ego_mask = vc.render_image(self.img, camera_old, camera_new)
+        # print(self.img.shape,self.ego_mask.shape)
+        # except Exception as e:
+        #     print(self.img.shape,camera_old.resolution,camera_new.resolution)
         self.extrinsic = camera_new.extrinsic
         self.intrinsic = camera_new.intrinsic
         self.cam_type = camera_new.__class__.__name__
@@ -1045,7 +1109,128 @@ class ParkingSlot3D(SpatialTransformable):
         self.dictionary = dictionary
         self.tensor_smith = tensor_smith
         self.remove_elements_not_recognized_by_dictionary()
-    
+    @staticmethod
+    def _norm01(val, a, b):
+        """支持 a>b 的区间，稳健归一化到 [0,1]。"""
+        lo, hi = (a, b) if a <= b else (b, a)
+        denom = max(hi - lo, 1e-6)
+        return (val - lo) / denom
+
+    def to_query_embedding(
+        self,
+        embed_dim: int,
+        num_point_queries: int,
+        voxel_range: Tuple[Tuple[float, float], Tuple[float, float], Tuple[float, float]],
+        device: torch.device = torch.device("cpu"),
+        batch_size: int = 1,
+        combine_mode: str = "sum",  # 'sum' (MapTRv2 论文公式) 或 'concat'
+    ):
+        """
+        将单帧 BEV GT(停车位多边形)转换为 MapTRv2 decoder 可用的层级 query：
+        - 返回已经带 batch 维度的 query: (num_query, bs, embed_dim)
+        - reference_points 对齐到每个点级 query: (bs, num_query, 4)
+
+        Args:
+            embed_dim:   query embedding 维度(如 256)
+            num_point_queries: 每实例固定的点级 query 数(如 6；不足做 padding)
+            voxel_range: ((z_min,z_max),(x_min,x_max),(y_min,y_max)) 物理范围
+            device:      torch 设备
+            batch_size:  解码器批量维度(bsz)，单帧可设 1
+            combine_mode:'sum' 或 'concat'；'sum' 对应论文 q_ij = q_i + q_j
+
+        Returns:
+            query:             (num_query, bs, embed_dim)
+            reference_points:  (bs, num_query, 4)  # (x_norm, y_norm, w_norm, h_norm)
+            valid_mask:        (bs, num_query) True=真实点, False=padding
+            meta:
+              - map_inst2query_idx: (num_instances,) 每个实例在 query 中的起始下标
+              - shape_info: dict，便于后续解码 (num_instances, num_point_queries, ...)
+        """
+        instances = self.elements
+        num_instances = len(instances)
+
+        # === 建议把这些投影层移动到你的模型 __init__ 里 ===
+        instance_proj = nn.Linear(3, embed_dim).to(device)
+        point_proj    = nn.Linear(3, embed_dim).to(device)
+        concat_proj   = nn.Linear(embed_dim * 2, embed_dim).to(device)  # 仅当 combine_mode='concat' 用
+
+        # 预分配
+        total_queries = num_instances * num_point_queries
+        # 先做“无 batch”的容器，稍后再扩到 (num_query, bs, embed_dim)
+        hier_query_no_bs   = torch.zeros((total_queries, embed_dim), device=device)
+        valid_mask_no_bs   = torch.zeros((total_queries,), dtype=torch.bool, device=device)
+        ref_points_no_bs   = torch.zeros((total_queries, 4), device=device)  # 每个点级 query 一份 ref
+
+        (z_min, z_max), (x_min, x_max), (y_min, y_max) = voxel_range
+
+        # 记录每实例的 query 起始下标（便于回溯 instance→query 范围）
+        map_inst2query_idx = torch.zeros((num_instances,), dtype=torch.long, device=device)
+
+        q_ptr = 0  # 当前写入的 query 索引
+        for i, inst in enumerate(instances):
+            pts = np.asarray(inst["points"], dtype=np.float32)  # (P,3)
+            P   = pts.shape[0]
+            # 几何中心/宽高（用 x,y）
+            center = pts[:, :2].mean(axis=0)    # (2,)
+            width  = (pts[:, 0].max() - pts[:, 0].min())
+            height = (pts[:, 1].max() - pts[:, 1].min())
+
+            # 归一化到 [0,1]（支持区间颠倒）
+            x_norm = self._norm01(center[0], x_min, x_max)
+            y_norm = self._norm01(center[1], y_min, y_max)
+            w_norm = self._norm01(width,      0.0,  abs(x_max - x_min))
+            h_norm = self._norm01(height,     0.0,  abs(y_max - y_min))
+
+            # 实例级 embedding
+            inst_feat = torch.tensor([center[0], center[1], 0.0], device=device)
+            q_ins     = instance_proj(inst_feat)  # (embed_dim,)
+
+            map_inst2query_idx[i] = q_ptr  # 记录该实例对应的 query 起点
+
+            # 为该实例生成 num_point_queries 个点级 query
+            for j in range(num_point_queries):
+                if j < P:
+                    # 真实点
+                    pt_xyz     = torch.tensor(pts[j, :3], device=device)
+                    q_pt       = point_proj(pt_xyz)  # (embed_dim,)
+
+                    if combine_mode == "sum":
+                        q_ij = q_ins + q_pt
+                    elif combine_mode == "concat":
+                        q_ij = concat_proj(torch.cat([q_ins, q_pt], dim=-1))
+                    else:
+                        raise ValueError(f"Unknown combine_mode={combine_mode}")
+
+                    hier_query_no_bs[q_ptr] = q_ij
+                    valid_mask_no_bs[q_ptr] = True
+                else:
+                    # padding 点（留零；mask=False）
+                    # 仍需要一个 reference_points 占位，使用实例中心/宽高
+                    pass
+
+                # 为该“点级 query”写入同一份 ref (可用中心+宽高；或你改成 per-point ref)
+                ref_points_no_bs[q_ptr, :] = torch.tensor(
+                    [x_norm, y_norm, w_norm, h_norm], device=device
+                )
+                q_ptr += 1
+
+        # 把“无 batch”数据扩展成 (num_query, bs, embed_dim) & (bs, num_query, 4)
+        query = hier_query_no_bs.unsqueeze(1).expand(-1, batch_size, -1).contiguous()           # (Q, B, C)
+        reference_points = ref_points_no_bs.unsqueeze(0).expand(batch_size, -1, -1).contiguous()# (B, Q, 4)
+        valid_mask = valid_mask_no_bs.unsqueeze(0).expand(batch_size, -1).contiguous()          # (B, Q)
+
+        shape_info = dict(
+            num_instances=num_instances,
+            num_point_queries=num_point_queries,
+            num_query=total_queries,
+            embed_dim=embed_dim,
+        )
+
+        return query, reference_points, valid_mask, {
+            "map_inst2query_idx": map_inst2query_idx,  # 每个实例在 query 里的起点
+            "shape_info": shape_info,
+        } 
+     
     def remove_elements_not_recognized_by_dictionary(self):
         full_set_of_classes = {c for c in self.dictionary['classes']}
         for i in range(len(self.elements) - 1, -1, -1):
@@ -1058,7 +1243,7 @@ class ParkingSlot3D(SpatialTransformable):
                     f"points: {self.elements[i]['points']}",
                     f"\ntrack_id: {self.elements[i]['track_id']}\n" if 'track_id' in self.elements[i] else '',
                 ])
-                warnings.warn(warning_str, UserWarning)
+                # warnings.warn(warning_str, UserWarning)
                 del self.elements[i]
     
 
@@ -1809,6 +1994,7 @@ class RenderVirtualCamera(Transform):
                 for t_sub in transformable.transformables.values():
                     cam_id = t_sub.cam_id
                     if cam_id in self.cam_ids:
+                        # print(f'Rendering camera {cam_id}')
                         t_sub.render_camera(self.cameras[cam_id])
             elif isinstance(transformable, (CameraImage, CameraSegMask, CameraDepth)):
                 cam_id = transformable.cam_id

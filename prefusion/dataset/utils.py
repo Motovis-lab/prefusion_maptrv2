@@ -255,8 +255,15 @@ def approx_equal(a, b, eps=1e-4):
 
 class PolarDict:
     def __init__(self, data: dict, *, separator: str = "/", **kwargs):
+        # print(data)
         self.data = pl.json_normalize(data, separator=separator, **kwargs)
-    
+        # try:
+        #     self.data = pl.json_normalize(data, separator=separator, **kwargs)
+        # except Exception as e:
+        #     # print("Error in json_normalize:", e)
+        #     print("data ===", data, 'finish ===')
+        #     raise
+
     def __getitem__(self, key):
         return self.data[key][0]
     
@@ -288,7 +295,15 @@ class PolarDict:
 
 def load_frame_info(path: Union[Path, str]) -> PolarDict:
     info = mmengine.load(path)
-    frame_info = PolarDict({scene_id: scene_data['frame_info'] for scene_id, scene_data in info.items()}) # PolarDict transforms nested dict to flattened dict (sep='/')
+    try:
+        frame_info = PolarDict({scene_id: scene_data['frame_info'] for scene_id, scene_data in info.items()}) # PolarDict transforms nested dict to flattened dict (sep='/')
+    except Exception as e:
+        # print("Error in json_normalize:", e)
+        print(path)
+        print("info.items() ===", info.items(), 'finish ===')
+        raise
+
+    
     return frame_info
 
 

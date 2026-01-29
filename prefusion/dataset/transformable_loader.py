@@ -122,7 +122,8 @@ class CameraSetLoader(TransformableLoader):
         super().__init__(data_root)
         self.camera_mapping = camera_mapping
 
-
+import random
+import os
 @TRANSFORMABLE_LOADERS.register_module()
 class CameraImageSetLoader(CameraSetLoader):
     def load(self, name: str, frame_info: PolarDict, frame_data: Dict[str, Dict], index_info: "IndexInfo", tensor_smith: Optional[TensorSmith] = None, **kwargs) -> CameraImageSet:
@@ -133,18 +134,30 @@ class CameraImageSetLoader(CameraSetLoader):
             self.camera_mapping = {}
             for cam_id in frame_data["camera_image"]:
                 self.camera_mapping[cam_id] = cam_id
+        use_render_aug = random.random()
         for cam_id in self.camera_mapping:
             cam_id_ori = self.camera_mapping[cam_id]
             if cam_id_ori in frame_data["camera_image"]:
                 # need to get the real
+                img_path = self.data_root / frame_data["camera_image"][cam_id_ori]
+                ego_mask_path = self.data_root / f"ego_mask/{cam_id_ori}.png"
+                if 'scene' in str(img_path):
+                    ego_mask_path = Path(str(ego_mask_path).replace('mv-4d-annotation', 'mv-4d-annotation-3DGS'))
+                    # print(ego_mask_path)
+                render_img_path = Path(str(img_path).replace('mv-4d-annotation', 'mv-4d-annotation-virtual'))
+                render_img_path = Path(str(render_img_path).replace('mv4d_local', 'mv4d_local_ws_Single'))
+                if use_render_aug < 0.3 and os.path.exists(render_img_path):
+                    img_path = render_img_path
+                    # print(img_path)
                 camera_images[cam_id] = CameraImage(
                     name=f"{name}:{cam_id}",
                     cam_id=cam_id,
                     cam_type=calib[cam_id_ori]["camera_type"],
-                    img=mmcv.imread(self.data_root / frame_data["camera_image"][cam_id_ori]),
-                    ego_mask=read_ego_mask(self.data_root / scene_data["camera_mask"][cam_id_ori]),
+                    # img=mmcv.imread(self.data_root / frame_data["camera_image"][cam_id_ori]),
+                    img=mmcv.imread(img_path),
+                    ego_mask=read_ego_mask(ego_mask_path),
                     extrinsic=list(np.array(p) for p in calib[cam_id_ori]["extrinsic"]),
-                    intrinsic=np.array(calib[cam_id_ori]["intrinsic"]),
+                    intrinsic=np.array(calib[cam_id_ori]["intrinsic"])[[2, 3, 0, 1, 4, 5, 6, 7]],
                     tensor_smith=tensor_smith,
                 )
         return CameraImageSet(name, camera_images)

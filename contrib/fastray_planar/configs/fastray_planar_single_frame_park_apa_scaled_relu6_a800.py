@@ -173,8 +173,8 @@ if debug_mode:
     num_workers = 0
     transforms = [virtual_camera_transform]
 else:
-    batch_size = 16
-    num_workers = 9
+    batch_size = 8
+    num_workers = 10
     transforms = [
         # dict(type='RandomRenderExtrinsic'),
         virtual_camera_transform,
@@ -249,8 +249,8 @@ transformables=dict(
 train_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='../MV4D_12V3L',
-    info_path='../MV4D_12V3L/mv_4d_infos_train_filtered.pkl',
+    data_root='/mnt/disk1/Motovis_Dataset/mv-4d-annotation/mv4d_local',
+    info_path='/mnt/disk1/Motovis_Dataset/mv-4d-annotation/mv4d_local/fb_train_20250929_clean.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
         voxel_feature_config=voxel_feature_config,
@@ -280,8 +280,8 @@ train_dataset = dict(
 val_dataset = dict(
     type='GroupBatchDataset',
     name="demo_parking",
-    data_root='../MV4D_12V3L',
-    info_path='../MV4D_12V3L/mv_4d_infos_20231029_195612.pkl',
+    data_root='/mnt/disk1/Motovis_Dataset/mv-4d-annotation/mv4d_local',
+    info_path='/mnt/disk1/Motovis_Dataset/mv-4d-annotation/mv4d_local/fb_train_20250929_clean.pkl',
     # info_path='../MV4D-PARKING/mv_4d_infos_val.pkl',
     model_feeder=dict(
         type="FastRayPlanarModelFeeder",
@@ -697,7 +697,7 @@ env_cfg = dict(
 )
 
 
-work_dir = "./work_dirs/fastray_planar_single_frame_park_apa_0125"
+work_dir = "./work_dirs/fastray_planar_single_frame_park_apa_0929_debug"
 # load_from = "./work_dirs/collected_models/vovnet_fpn_pretrain.pth"
-load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_0109/epoch_14.pth"
+# load_from = "./work_dirs/fastray_planar_multi_frame_cat_park_apa_0109/epoch_14.pth"
 resume = False

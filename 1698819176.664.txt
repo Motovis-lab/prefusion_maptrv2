@@ -1,0 +1,24 @@
+{
+    "camera_image": {
+        "camera1": "20231101_140916_1698819077564_1698819197564/camera/camera1/1698819176.664.jpg",
+        "camera5": "20231101_140916_1698819077564_1698819197564/camera/camera5/1698819176.664.jpg",
+        "camera8": "20231101_140916_1698819077564_1698819197564/camera/camera8/1698819176.664.jpg",
+        "camera11": "20231101_140916_1698819077564_1698819197564/camera/camera11/1698819176.664.jpg",
+        "VCAMERA_FISHEYE_BACK": "20231101_140916_1698819077564_1698819197564/camera/VCAMERA_FISHEYE_BACK/1698819176.664.jpg",
+        "VCAMERA_FISHEYE_LEFT": "20231101_140916_1698819077564_1698819197564/camera/VCAMERA_FISHEYE_LEFT/1698819176.664.jpg",
+        "VCAMERA_FISHEYE_FRONT": "20231101_140916_1698819077564_1698819197564/camera/VCAMERA_FISHEYE_FRONT/1698819176.664.jpg",
+        "VCAMERA_FISHEYE_RIGHT": "20231101_140916_1698819077564_1698819197564/camera/VCAMERA_FISHEYE_RIGHT/1698819176.664.jpg"
+    },
+    "3d_boxes": [
+        {
+            "class": "class.vehicle.passenger_car",
+            "attr": {
+                "attr.vehicle.is_door_open": "attr.vehicle.is_door_open.false",
+                "attr.vehicle.is_trunk_open": "attr.vehicle.is_trunk_open.false"
+            },
+            "size": [
+                4.695,
+                1.9953,
+                1.4359
+            ],
+            "rotation": 
